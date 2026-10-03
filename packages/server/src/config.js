@@ -1,0 +1,103 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(here, '../../..');
+
+// Load .env from the repo root if present (Node's built-in loader).
+try {
+  process.loadEnvFile(path.join(repoRoot, '.env'));
+} catch {
+  // no .env file - rely on real environment variables
+}
+
+const env = process.env;
+const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
+
+/**
+ * Bump this whenever chunking, prompts, schemas or the memory design change.
+ * Every generated output is tagged with it so we know which approach made it.
+ */
+export const PIPELINE_VERSION = 2;
+
+const DEFAULT_MODEL = env.MODEL || 'claude-opus-5-5';
+
+export const config = {
+  host: env.HOST || '127.0.0.1',
+  port: num(env.PORT, 4400),
+  dataDir: path.resolve(repoRoot, env.DATA_DIR || 'data'),
+  maxUploadBytes: num(env.MAX_UPLOAD_MB, 50) * 1024 * 1024,
+
+  llm: {
+    // 'claude-code' (your Claude subscription, via Claude Code on this machine) or 'api' (ANTHROPIC_API_KEY).
+    provider: env.LLM_PROVIDER || 'claude-code',
+    // Per-task model + effort. All tasks use the same model unless overridden.
+    tasks: {
+      archivist: { model: env.MODEL_ARCHIVIST || DEFAULT_MODEL, effort: env.EFFORT_ARCHIVIST || 'high' },
+      qa: { model: env.MODEL_QA || DEFAULT_MODEL, effort: env.EFFORT_QA || 'medium' },
+    },
+    // API provider only: re-run refused requests on Anthropic's recommended fallback model.
+    fallbacks: env.LLM_FALLBACKS !== 'off',
+    // USD per million tokens (API provider). Used for cost logging and the spending cap.
+    pricing: {
+      'claude-opus-5-5': { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
+      'claude-sonnet-5-5': { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 },
+      'claude-haiku-4-5': { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 },
+    },
+  },
+
+  pipeline: {
+    chunkTargetTokens: num(env.CHUNK_TARGET_TOKENS, 1200),
+    chunkOverlapUtterances: num(env.CHUNK_OVERLAP_UTTERANCES, 2),
+  },
+
+  archivist: {
+    // Generous: processing time doesn't matter, thoroughness does.
+    maxToolCalls: num(env.ARCHIVIST_MAX_TOOL_CALLS, 250),
+    maxCostUsd: num(env.ARCHIVIST_MAX_COST_USD, 25),
+    maxToolResultTokens: num(env.ARCHIVIST_MAX_TOOL_RESULT_TOKENS, 8000),
+    // Transcripts up to this size are given in full; longer ones are read in parts.
+    inlineTranscriptTokens: num(env.ARCHIVIST_INLINE_TRANSCRIPT_TOKENS, 200_000),
+  },
+
+  kb: {
+    // Pinned records are shown with every question, so they share a budget.
+    pinnedTokens: num(env.KB_PINNED_TOKENS, 6000),
+    maxRecordTokens: num(env.KB_MAX_RECORD_TOKENS, 4000),
+  },
+
+  notes: {
+    // Notes written before this hour count towards the previous day's session.
+    rolloverHour: num(env.NOTES_ROLLOVER_HOUR, 6),
+  },
+
+  embeddings: {
+    // 'local' (transformers.js, runs on this machine) or 'none' (keyword search only).
+    provider: env.EMBEDDINGS || 'local',
+    model: env.EMBEDDING_MODEL || 'Xenova/all-MiniLM-L6-v2',
+  },
+
+  qa: {
+    maxToolCalls: num(env.QA_MAX_TOOL_CALLS, 12),
+    maxToolResultTokens: num(env.QA_MAX_TOOL_RESULT_TOKENS, 2500),
+    // Search results included with the question before the model is called (0 to disable).
+    preSearchTokens: num(env.QA_PRESEARCH_TOKENS, 3000),
+    maxCostUsd: num(env.QA_MAX_COST_USD, 0.5),
+    historyTurns: num(env.QA_HISTORY_TURNS, 3),
+    questionsPerUserPerHour: num(env.QA_RATE_PER_HOUR, 30),
+  },
+
+  // Applies to the API provider only (Claude Code runs on the subscription).
+  monthlySpendCapUsd: num(env.MONTHLY_SPEND_CAP_USD, 50),
+};
+
+export const paths = {
+  archive: path.join(config.dataDir, 'archive'),
+  db: path.join(config.dataDir, 'dndapp.sqlite'),
+  models: path.join(config.dataDir, 'models'),
+};
+
+/** Rough token estimate (~4 chars per token for English). */
+export function estimateTokens(text) {
+  return Math.ceil((text?.length ?? 0) / 4);
+}

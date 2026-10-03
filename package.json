@@ -1,0 +1,18 @@
+{
+  "name": "dndapp",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "start": "npm run start -w @dndapp/server",
+    "dev": "npm run dev -w @dndapp/server",
+    "test": "npm test --workspaces --if-present",
+    "admin": "npm run admin -w @dndapp/server --",
+    "rebuild": "npm run rebuild -w @dndapp/server --"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
