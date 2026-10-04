@@ -8,6 +8,9 @@ import { json } from './db/index.js';
 export class NotFoundError extends Error {}
 export class BadRequestError extends Error {}
 
+/** Names (accounts, campaigns): trimmed, with runs of spaces collapsed. Web pages show "a  b" as "a b", so stored names must match what people see. */
+export const cleanName = (s) => String(s ?? '').trim().replace(/\s+/g, ' ');
+
 const slugify = (s) =>
   s
     .toLowerCase()
@@ -40,8 +43,16 @@ export function createStore({ db, archive, config }) {
     getCampaign,
 
     createCampaign(name) {
+      name = cleanName(name);
+      if (!name) throw new BadRequestError('A campaign name is required');
+      // Players pick campaigns by name, so two with the same name would be confusing.
+      if (db.prepare('SELECT 1 FROM campaigns WHERE name = ? COLLATE NOCASE').get(name)) {
+        throw Object.assign(new Error(`There is already a campaign called "${name}"`), { statusCode: 409 });
+      }
       let slug = slugify(name);
-      for (let i = 2; db.prepare('SELECT 1 FROM campaigns WHERE slug = ?').get(slug); i++) {
+      // Never reuse a slug that has an archive folder, even a deleted campaign's.
+      const taken = (s) => db.prepare('SELECT 1 FROM campaigns WHERE slug = ?').get(s) || archive.hasCampaign(s);
+      for (let i = 2; taken(slug); i++) {
         slug = `${slugify(name)}-${i}`;
       }
       const created_at = new Date().toISOString();
@@ -50,6 +61,21 @@ export function createStore({ db, archive, config }) {
         .prepare('INSERT INTO campaigns (slug, name, created_at) VALUES (?, ?, ?)')
         .run(slug, name, created_at);
       return getCampaign(Number(lastInsertRowid));
+    },
+
+    /**
+     * Delete a campaign from the database: its sessions, knowledge base, notes,
+     * conversations and memberships go with it (foreign-key cascades). The
+     * archive folder is kept and marked deleted, so it isn't restored.
+     */
+    deleteCampaign(campaignId, { deletedBy } = {}) {
+      const c = getCampaign(campaignId);
+      if (db.prepare("SELECT 1 FROM jobs WHERE campaign_id = ? AND status IN ('queued', 'running')").get(campaignId)) {
+        throw new BadRequestError('This campaign has processing in progress. Wait for it to finish, then delete it.');
+      }
+      archive.markDeleted(c.slug, { id: c.id, name: c.name, deleted_at: new Date().toISOString(), deleted_by: deletedBy ?? null });
+      db.prepare('DELETE FROM campaigns WHERE id = ?').run(campaignId);
+      return c;
     },
 
     /** Everyone in the campaign, with role, character and transcript speaker names. */
@@ -212,8 +238,13 @@ export function createStore({ db, archive, config }) {
       const restored = [];
       db.transaction(() => {
         if (!db.prepare('SELECT 1 FROM users LIMIT 1').get()) {
-          const ins = db.prepare('INSERT INTO users (id, name, token_hash, is_admin, revoked_at, created_at) VALUES (?, ?, ?, ?, ?, ?)');
-          for (const u of archive.readAccounts()) ins.run(u.id, u.name, u.token_hash, u.is_admin, u.revoked_at, u.created_at);
+          // Archives from before passwords (token_hash only) restore without a password; the admin sets one.
+          const ins = db.prepare(
+            'INSERT INTO users (id, name, password_hash, must_change_password, is_admin, revoked_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          );
+          for (const u of archive.readAccounts()) {
+            ins.run(u.id, u.name, u.password_hash ?? null, u.must_change_password ? 1 : 0, u.is_admin, u.revoked_at, u.created_at);
+          }
         }
         for (const entry of archive.readAll()) {
           const { campaign, sessions, members, speakers, glossary, corrections, playerNotes } = entry;

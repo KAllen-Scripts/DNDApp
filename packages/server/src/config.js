@@ -23,10 +23,23 @@ export const PIPELINE_VERSION = 2;
 const DEFAULT_MODEL = env.MODEL || 'claude-opus-5-5';
 
 export const config = {
+  // The address players open in their browser. THE one place the public URL is set
+  // (placeholder until the domain is bought). The web page itself uses relative
+  // paths, so it works at whatever address the server is reached on.
+  publicUrl: env.PUBLIC_URL || 'https://dnd.example.xyz',
   host: env.HOST || '127.0.0.1',
   port: num(env.PORT, 4400),
   dataDir: path.resolve(repoRoot, env.DATA_DIR || 'data'),
+  // The player web page, served by this server at "/".
+  webDir: path.resolve(repoRoot, env.WEB_DIR || 'packages/web/public'),
   maxUploadBytes: num(env.MAX_UPLOAD_MB, 50) * 1024 * 1024,
+
+  auth: {
+    // A login ends after this many days without being used.
+    loginDays: num(env.LOGIN_DAYS, 30),
+    // Failed logins allowed per name in 15 minutes.
+    maxFailedLogins: num(env.MAX_FAILED_LOGINS, 10),
+  },
 
   llm: {
     // 'claude-code' (your Claude subscription, via Claude Code on this machine) or 'api' (ANTHROPIC_API_KEY).

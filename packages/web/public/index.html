@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Campaign Memory</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <!-- Login -->
+  <main id="login-view" class="login" hidden>
+    <form id="login-form" class="card login-card" autocomplete="on">
+      <img src="icon.svg" alt="" class="login-icon">
+      <h1>Campaign Memory</h1>
+      <p class="muted">Log in with the name and password you were given.</p>
+      <label>Name
+        <input name="name" autocomplete="username" required autofocus>
+      </label>
+      <label>Password
+        <input name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <p id="login-error" class="error" role="alert" hidden></p>
+      <button type="submit" class="primary">Log in</button>
+    </form>
+  </main>
+
+  <!-- Change your password (forced when the admin requires it) -->
+  <main id="password-view" class="login" hidden>
+    <form id="password-form" class="card login-card" autocomplete="on">
+      <img src="icon.svg" alt="" class="login-icon">
+      <h1>Choose a new password</h1>
+      <p id="password-reason" class="muted"></p>
+      <input type="text" name="username" autocomplete="username" hidden>
+      <label>Current password
+        <input name="current" type="password" autocomplete="current-password" required>
+      </label>
+      <label>New password <span class="muted small">(at least 6 characters)</span>
+        <input name="next" type="password" autocomplete="new-password" minlength="6" required>
+      </label>
+      <label>New password again
+        <input name="again" type="password" autocomplete="new-password" minlength="6" required>
+      </label>
+      <p id="password-error" class="error" role="alert" hidden></p>
+      <button type="submit" class="primary">Save new password</button>
+      <button type="button" id="password-cancel" class="ghost">Cancel</button>
+      <button type="button" class="ghost logout">Log out</button>
+    </form>
+  </main>
+
+  <!-- Choose a campaign (after logging in, if you're in more than one) -->
+  <main id="campaign-view" class="login" hidden>
+    <div class="card login-card">
+      <img src="icon.svg" alt="" class="login-icon">
+      <h1 id="campaign-hello">Hi</h1>
+      <form id="campaign-form" class="campaign-form">
+        <label>Which campaign are you playing?
+          <select id="campaign-pick"></select>
+        </label>
+        <button type="submit" class="primary">Continue</button>
+      </form>
+      <p id="no-campaigns" class="muted" hidden>You haven't been added to any campaigns yet. Ask the admin to add you.</p>
+      <button class="ghost logout">Log out</button>
+    </div>
+  </main>
+
+  <!-- Admin screen (admin login only; filled in by admin.js) -->
+  <div id="admin-view" class="admin" hidden>
+    <header class="topbar">
+      <div class="who"><strong>Server admin</strong> <span id="admin-name" class="muted"></span></div>
+      <button class="ghost change-password">Change password</button>
+      <button class="ghost logout">Log out</button>
+    </header>
+    <p id="admin-message" class="banner" role="status" hidden></p>
+    <p class="muted small admin-intro">This login is only for managing the server. To play, create a player account for yourself below and log in with that.</p>
+
+    <section class="card admin-section">
+      <h2>Accounts</h2>
+      <form id="add-user-form" class="inline-form">
+        <input name="name" placeholder="Name they log in with" autocomplete="off" required>
+        <input name="password" placeholder="Password (6+ characters)" autocomplete="new-password" minlength="6" required>
+        <div id="add-user-campaigns" class="add-access"></div>
+        <label class="check"><input type="checkbox" name="must_change" checked> Must change password at next login</label>
+        <button type="submit" class="primary">Add account</button>
+      </form>
+      <div class="table-wrap"><table id="users-table"></table></div>
+    </section>
+
+    <section class="card admin-section">
+      <h2>Campaigns</h2>
+      <form id="add-campaign-form" class="inline-form">
+        <input name="name" placeholder="New campaign name" autocomplete="off" required>
+        <button type="submit" class="primary">Create campaign</button>
+      </form>
+    </section>
+    <div id="campaigns" class="campaign-list"></div>
+  </div>
+
+  <!-- Player app -->
+  <div id="app-view" hidden>
+    <header class="topbar">
+      <div class="who">
+        <strong id="campaign-name"></strong>
+        <span id="character" class="muted"></span>
+        <button id="switch-campaign" class="link" hidden>Switch campaign</button>
+      </div>
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="ask" aria-selected="true">Ask</button>
+        <button role="tab" data-tab="notes" aria-selected="false">Notes</button>
+      </nav>
+      <button class="ghost change-password">Change password</button>
+      <button class="ghost logout">Log out</button>
+    </header>
+
+    <!-- Ask -->
+    <section id="tab-ask" class="panel">
+      <div class="panel-head">
+        <select id="conversation-select" aria-label="Past questions">
+          <option value="">New conversation</option>
+        </select>
+        <button id="new-conversation" class="ghost">New</button>
+      </div>
+      <div id="thread" class="thread" aria-live="polite">
+        <p class="empty muted">Ask anything about the campaign. Answers only use what your character knows, with links back to the session.</p>
+      </div>
+      <form id="ask-form" class="composer">
+        <textarea name="question" rows="2" maxlength="2000" placeholder="How much do we still owe Brother Hal?" required></textarea>
+        <button type="submit" class="primary">Ask</button>
+      </form>
+    </section>
+
+    <!-- Notes -->
+    <section id="tab-notes" class="panel" hidden>
+      <form id="note-form" class="composer note-composer">
+        <textarea name="text" rows="3" maxlength="10000" placeholder="Jot something down. Only you can see your notes." required></textarea>
+        <div class="composer-row">
+          <span class="muted small">Ctrl+Enter to save. Saved to today's session.</span>
+          <button type="submit" class="primary">Save note</button>
+        </div>
+      </form>
+      <div id="notes" class="notes"></div>
+    </section>
+  </div>
+</body>
+</html>

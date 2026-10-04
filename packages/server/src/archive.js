@@ -1,7 +1,7 @@
 /**
  * The archive: the permanent source of truth, stored as plain files.
  *
- *   <root>/_server/accounts.json       users (with token hashes) - so tokens and
+ *   <root>/_server/accounts.json       users (with password hashes) - so accounts and
  *                                       note ownership survive losing the database
  *   <root>/<campaign-slug>/
  *     campaign.json
@@ -14,6 +14,8 @@
  *       transcript.txt                 byte-for-byte as uploaded, read-only
  *       meta.json                      number, title, played_on, sha256
  *     outputs/v<pipeline>/<timestamp>-<run>/  knowledge-base snapshot + journal per run
+ *     deleted.json                     only if the admin deleted the campaign: it is then
+ *                                       skipped by restore, but every file is kept
  *
  * The app never modifies or deletes archived content (the "current"
  * speakers/glossary/members/accounts files are replaced, with history kept
@@ -78,6 +80,15 @@ export function createArchive(root) {
       if (!fs.existsSync(file)) writeJson(file, campaign);
     },
 
+    /** True if a campaign folder already uses this slug (including deleted campaigns). */
+    hasCampaign: (slug) => fs.existsSync(campaignDir(slug)),
+
+    /** Mark a campaign deleted. Adds deleted.json; nothing in the folder is changed or removed. */
+    markDeleted(slug, info) {
+      const file = path.join(campaignDir(slug), 'deleted.json');
+      if (!fs.existsSync(file)) writeJson(file, info);
+    },
+
     saveMembers: (slug, members) => writeJson(path.join(campaignDir(slug), 'members.json'), members),
 
     /**
@@ -135,7 +146,7 @@ export function createArchive(root) {
       for (const slug of fs.readdirSync(root)) {
         if (slug.startsWith('_')) continue;
         const campaign = readJson(path.join(campaignDir(slug), 'campaign.json'), null);
-        if (!campaign) continue;
+        if (!campaign || fs.existsSync(path.join(campaignDir(slug), 'deleted.json'))) continue;
         const sessionsDir = path.join(campaignDir(slug), 'sessions');
         const sessions = fs.existsSync(sessionsDir)
           ? fs

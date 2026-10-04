@@ -17,7 +17,7 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const db = openDb(paths.db);
   const archive = createArchive(paths.archive);
   const store = createStore({ db, archive, config });
-  const auth = createAuth({ db, archive });
+  const auth = createAuth({ db, archive, ...config.auth });
   llm ??= createLLM({ db, config });
   if (embedder === undefined) {
     embedder = await createEmbedder({ ...config.embeddings, cacheDir: paths.models });

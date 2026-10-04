@@ -1,17 +1,25 @@
 // Manual end-to-end privacy scenario against a REAL running server (uses real AI calls).
-// Fresh data dir, then: npm run admin -- init "Privacy Test" "Host"  (prints the admin token)
+// Fresh data dir, then: npm run admin -- init "Host" "host-password"   (setup creates campaign 1 and the accounts)
 // Phases, in order: setup, upload1, (wait for status: ready), upload2, (wait), kb, ask
-//   node drive.mjs <adminToken> <phase>        env DND_SERVER overrides http://127.0.0.1:4400/campaigns/1
+//   node drive.mjs <adminName> <adminPassword> <phase>   env DND_SERVER overrides http://127.0.0.1:4400
 // Expected: Sam (Thorin) is told 10 gp is still owed and sees his own note clues; Alex (Lyra, absent
 // from session 2) is told 20 gp, sees only the ash whisper, and cannot learn what was in the mill.
 
-const [token, phase] = process.argv.slice(2);
-const base = process.env.DND_SERVER ?? 'http://127.0.0.1:4400/campaigns/1';
+const [adminName, adminPassword, phase] = process.argv.slice(2);
+const server = process.env.DND_SERVER ?? 'http://127.0.0.1:4400';
+const base = `${server}/campaigns/1`;
+const login = async (name, password) => {
+  const res = await fetch(`${server}/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, password }) });
+  const j = await res.json();
+  if (!res.ok) throw new Error(`login ${name}: ${j.error}`);
+  return j.token;
+};
+const token = await login(adminName, adminPassword);
 const fs = await import('node:fs');
 const dir = new URL('.', import.meta.url);
 const state = fs.existsSync(new URL('state.json', dir)) ? JSON.parse(fs.readFileSync(new URL('state.json', dir))) : {};
 const call = async (method, path, body, as = token, raw = false) => {
-  const res = await fetch(base + path, { method, headers: { authorization: `Bearer ${as}`, ...(body && { 'content-type': typeof body === 'string' ? 'text/plain' : 'application/json' }) }, body: typeof body === 'string' ? body : body && JSON.stringify(body) });
+  const res = await fetch((path.startsWith('/admin') ? server : base) + path, { method, headers: { authorization: `Bearer ${as}`, ...(body && { 'content-type': typeof body === 'string' ? 'text/plain' : 'application/json' }) }, body: typeof body === 'string' ? body : body && JSON.stringify(body) });
   if (raw) return res.text();
   const j = await res.json();
   if (!res.ok) throw new Error(`${method} ${path}: ${JSON.stringify(j)}`);
@@ -20,12 +28,22 @@ const call = async (method, path, body, as = token, raw = false) => {
 const save = () => fs.writeFileSync(new URL('state.json', dir), JSON.stringify(state, null, 2));
 
 if (phase === 'setup') {
-  const sam = await call('POST', '/members', { name: 'Sam', character_name: 'Thorin' });
-  const alex = await call('POST', '/members', { name: 'Alex', character_name: 'Lyra' });
-  state.sam = { id: sam.user.id, token: sam.token };
-  state.alex = { id: alex.user.id, token: alex.token };
+  const campaign = await call('POST', '/admin/campaigns', { name: 'Privacy Test' });
+  if (campaign.id !== 1) throw new Error('Use a fresh data dir: this script expects campaign 1');
+  const account = async (name, password, role, character_name = null) => {
+    const user = await call('POST', '/admin/users', { name, password });
+    await call('PUT', `/admin/campaigns/1/members/${user.id}`, { role, character_name });
+    return user;
+  };
+  const dm = await account('Dee', 'dee-password', 'dm');
+  const samUser = await account('Sam', 'sam-password', 'player', 'Thorin');
+  const alexUser = await account('Alex', 'alex-password', 'player', 'Lyra');
+  const sam = { user: samUser, token: await login('Sam', 'sam-password') };
+  const alex = { user: alexUser, token: await login('Alex', 'alex-password') };
+  state.sam = { id: sam.user.id, password: 'sam-password' };
+  state.alex = { id: alex.user.id, password: 'alex-password' };
   await call('PUT', '/speakers', [
-    { speaker: 'KennyDM', display_name: 'DM', user_id: 1 },
+    { speaker: 'KennyDM', display_name: 'DM', user_id: dm.id },
     { speaker: 'SamPlays', display_name: 'Thorin (Sam)', user_id: sam.user.id },
     { speaker: 'AlexR', display_name: 'Lyra (Alex)', user_id: alex.user.id },
   ]);
@@ -55,6 +73,7 @@ if (phase === 'ask') {
     ['sam', 'Is there anything suspicious about Brother Hal?'],
     ['alex', 'What was in the mill?'],
   ];
+  for (const who of ['sam', 'alex']) state[who].token = await login(who, state[who].password);
   for (const [who, q] of qs) {
     const t0 = Date.now();
     const body = await call('POST', '/ask', { question: q }, state[who].token, true);

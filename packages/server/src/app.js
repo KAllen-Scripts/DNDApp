@@ -2,6 +2,8 @@
  * HTTP API. Clients only display what these endpoints return and send what
  * players type; all processing happens on this server.
  */
+import fs from 'node:fs';
+import path from 'node:path';
 import Fastify from 'fastify';
 import { z, ZodError } from 'zod';
 import { formatTimestamp, parseTimestamp, parseTranscript, formatUtterance } from '@dndapp/shared';
@@ -43,9 +45,37 @@ function openSse(request, reply) {
   };
 }
 
+const CONTENT_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.json': 'application/json',
+};
+
+/**
+ * Serve the web page's files (no build step). Each file gets its own public
+ * route, so nothing outside the folder can be requested; "/" is index.html.
+ */
+function serveWebPage(app, dir) {
+  if (!dir || !fs.existsSync(dir)) return;
+  for (const name of fs.readdirSync(dir, { recursive: true })) {
+    const file = path.join(dir, name);
+    const type = CONTENT_TYPES[path.extname(file)];
+    if (!type || !fs.statSync(file).isFile()) continue;
+    const url = '/' + name.split(path.sep).join('/');
+    const send = async (request, reply) =>
+      reply.type(type).header('Cache-Control', 'no-cache').header('X-Content-Type-Options', 'nosniff').send(fs.readFileSync(file));
+    app.get(url, { config: { public: true } }, send);
+    if (url === '/index.html') app.get('/', { config: { public: true } }, send);
+  }
+}
+
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date like 2026-10-03');
 
-export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, config, logger = true }) {
+export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, config, logger = true }) {
   const app = Fastify({ logger, bodyLimit: config.maxUploadBytes });
 
   app.setErrorHandler((err, request, reply) => {
@@ -66,10 +96,20 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, config, logg
   // ---------- auth ----------
 
   app.decorateRequest('user', null);
+  // While someone must change their password, their login can do nothing else.
+  const ALLOWED_BEFORE_PASSWORD_CHANGE = new Set(['/me', '/logout', '/account/password']);
+
   app.addHook('onRequest', async (request) => {
     if (request.routeOptions.config?.public) return;
     request.user = auth.authenticate(request.headers.authorization);
+    if (request.user.must_change_password && !ALLOWED_BEFORE_PASSWORD_CHANGE.has(request.routeOptions.url)) {
+      throw new AuthError('You need to choose a new password before you can continue.', 403);
+    }
   });
+
+  function requireAdmin(request) {
+    if (!request.user.is_admin) throw new AuthError('Only the admin can do that', 403);
+  }
 
   /** Load campaign + check membership. */
   function access(request, { dm = false } = {}) {
@@ -90,6 +130,24 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, config, logg
 
   app.get('/health', { config: { public: true } }, async () => ({ ok: true }));
 
+  /** Log in with the name and password the admin set. Returns a token for the Authorization header. */
+  app.post('/login', { config: { public: true } }, async (request) => {
+    const { name, password } = z.object({ name: z.string().min(1).max(100), password: z.string().min(1).max(200) }).parse(request.body);
+    return auth.login(name, password);
+  });
+
+  app.post('/logout', { config: { public: true } }, async (request) => {
+    auth.logout(request.headers.authorization);
+    return { ok: true };
+  });
+
+  /** Change your own password: { current_password, new_password }. Other devices are logged out. */
+  app.post('/account/password', async (request) => {
+    const body = z.object({ current_password: z.string().max(200), new_password: z.string().max(200) }).parse(request.body);
+    await auth.changeOwnPassword(request.user.id, request.headers.authorization, body.current_password, body.new_password);
+    return { ok: true };
+  });
+
   app.get('/me', async (request) => ({
     user: request.user,
     campaigns: db
@@ -100,17 +158,180 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, config, logg
       .all(request.user.id),
   }));
 
-  app.post('/campaigns', async (request) => {
-    if (!request.user.is_admin) throw new AuthError('Only the server admin can create campaigns', 403);
-    const { name } = z.object({ name: z.string().min(1).max(100) }).parse(request.body);
-    const campaign = store.createCampaign(name);
-    auth.addMember(campaign.id, request.user.id, 'dm');
-    return campaign;
-  });
-
   app.get('/campaigns/:cid', async (request) => {
     const { campaign, role, membership } = access(request);
     return { campaign, role, character_name: membership?.character_name ?? null };
+  });
+
+  // ---------- admin (accounts, campaigns, who's in which campaign) ----------
+  // The admin login is for managing the server. To play, the admin makes
+  // themselves a separate player account like anyone else's.
+
+  const userId = (request) => {
+    const uid = Number(request.params.uid);
+    if (!db.prepare('SELECT 1 FROM users WHERE id = ?').get(uid)) throw new NotFoundError('No such account');
+    return uid;
+  };
+  const notSelf = (request, uid, what) => {
+    if (uid === request.user.id) throw new BadRequestError(`You can't ${what} your own admin account`);
+  };
+
+  app.get('/admin/users', async (request) => {
+    requireAdmin(request);
+    const memberships = db
+      .prepare('SELECT m.user_id, m.campaign_id, c.name AS campaign, m.role, m.character_name FROM memberships m JOIN campaigns c ON c.id = m.campaign_id ORDER BY c.name')
+      .all();
+    return db
+      .prepare(
+        `SELECT u.id, u.name, u.is_admin, u.revoked_at, u.created_at, u.password_hash IS NOT NULL AS has_password, u.must_change_password,
+           (SELECT COUNT(*) FROM logins l WHERE l.user_id = u.id) AS logins,
+           (SELECT MAX(last_used_at) FROM logins l WHERE l.user_id = u.id) AS last_seen
+         FROM users u ORDER BY u.is_admin DESC, u.name COLLATE NOCASE`,
+      )
+      .all()
+      .map((u) => ({ ...u, has_password: !!u.has_password, campaigns: memberships.filter((m) => m.user_id === u.id) }));
+  });
+
+  const CAMPAIGN_ACCESS = z
+    .array(
+      z.object({
+        campaign_id: z.number().int(),
+        role: z.enum(['dm', 'player']).default('player'),
+        character_name: z.string().trim().max(100).nullish(),
+      }),
+    )
+    .refine((list) => new Set(list.map((m) => m.campaign_id)).size === list.length, 'each campaign may only be listed once');
+
+  const checkCampaigns = (list) => list.forEach((m) => store.getCampaign(m.campaign_id));
+
+  /** Create an account, optionally with the campaigns it can access. */
+  app.post('/admin/users', async (request, reply) => {
+    requireAdmin(request);
+    const { name, password, campaigns, must_change_password } = z
+      .object({
+        name: z.string().trim().min(1).max(100),
+        password: z.string().max(200),
+        campaigns: CAMPAIGN_ACCESS.default([]),
+        must_change_password: z.boolean().default(false),
+      })
+      .parse(request.body);
+    checkCampaigns(campaigns);
+    const user = await auth.createUser(name, { password, mustChange: must_change_password });
+    auth.setCampaigns(user.id, campaigns);
+    reply.status(201);
+    return user;
+  });
+
+  /** Set exactly which campaigns an account can access (and its role/character in each). */
+  app.put('/admin/users/:uid/campaigns', async (request) => {
+    requireAdmin(request);
+    const uid = userId(request);
+    if (db.prepare('SELECT is_admin FROM users WHERE id = ?').get(uid).is_admin) {
+      throw new BadRequestError("The admin login isn't in campaigns. Make a separate player account to play.");
+    }
+    const { campaigns } = z.object({ campaigns: CAMPAIGN_ACCESS }).parse(request.body);
+    checkCampaigns(campaigns);
+    auth.setCampaigns(uid, campaigns);
+    return db.prepare('SELECT campaign_id, role, character_name FROM memberships WHERE user_id = ? ORDER BY campaign_id').all(uid);
+  });
+
+  /** Set a password. Logs the account out everywhere and unblocks it. */
+  app.put('/admin/users/:uid/password', async (request) => {
+    requireAdmin(request);
+    const { password, must_change_password } = z
+      .object({ password: z.string().max(200), must_change_password: z.boolean().default(false) })
+      .parse(request.body);
+    await auth.setPassword(userId(request), password, { mustChange: must_change_password });
+    return { ok: true };
+  });
+
+  /** Turn "must change password at next login" on or off. */
+  app.put('/admin/users/:uid/must-change-password', async (request) => {
+    requireAdmin(request);
+    const { must_change_password } = z.object({ must_change_password: z.boolean() }).parse(request.body);
+    auth.setMustChange(userId(request), must_change_password);
+    return { ok: true };
+  });
+
+  app.post('/admin/users/:uid/logout', async (request) => {
+    requireAdmin(request);
+    auth.logoutEverywhere(userId(request));
+    return { ok: true };
+  });
+
+  app.post('/admin/users/:uid/block', async (request) => {
+    requireAdmin(request);
+    const uid = userId(request);
+    notSelf(request, uid, 'block');
+    auth.revoke(uid);
+    return { ok: true };
+  });
+
+  app.post('/admin/users/:uid/unblock', async (request) => {
+    requireAdmin(request);
+    auth.unblock(userId(request));
+    return { ok: true };
+  });
+
+  app.delete('/admin/users/:uid', async (request) => {
+    requireAdmin(request);
+    const uid = userId(request);
+    notSelf(request, uid, 'delete');
+    auth.deleteUser(uid);
+    return { ok: true };
+  });
+
+  app.get('/admin/campaigns', async (request) => {
+    requireAdmin(request);
+    const members = db
+      .prepare(
+        `SELECT m.campaign_id, u.id AS user_id, u.name, u.revoked_at, m.role, m.character_name
+         FROM memberships m JOIN users u ON u.id = m.user_id ORDER BY m.role, u.name COLLATE NOCASE`,
+      )
+      .all();
+    return db
+      .prepare('SELECT c.id, c.name, c.created_at, (SELECT COUNT(*) FROM sessions s WHERE s.campaign_id = c.id) AS sessions FROM campaigns c ORDER BY c.name')
+      .all()
+      .map((c) => ({ ...c, members: members.filter((m) => m.campaign_id === c.id) }));
+  });
+
+  app.post('/admin/campaigns', async (request, reply) => {
+    requireAdmin(request);
+    const { name } = z.object({ name: z.string().trim().min(1).max(100) }).parse(request.body);
+    reply.status(201);
+    return store.createCampaign(name);
+  });
+
+  /**
+   * Delete a campaign and everything in it from the database. Its archive
+   * folder is kept (marked deleted) and can be recovered by hand.
+   */
+  app.delete('/admin/campaigns/:cid', async (request) => {
+    requireAdmin(request);
+    const c = store.deleteCampaign(Number(request.params.cid), { deletedBy: request.user.id });
+    search?.invalidate(c.id);
+    return { deleted: c.id, name: c.name };
+  });
+
+  /** Add someone to a campaign, or change their role (e.g. make them the DM) or character. */
+  app.put('/admin/campaigns/:cid/members/:uid', async (request) => {
+    requireAdmin(request);
+    const cid = store.getCampaign(Number(request.params.cid)).id;
+    const uid = userId(request);
+    const { role, character_name } = z
+      .object({ role: z.enum(['dm', 'player']), character_name: z.string().trim().max(100).nullish() })
+      .parse(request.body);
+    auth.addMember(cid, uid, role, character_name || null);
+    return auth.membership(cid, uid);
+  });
+
+  app.delete('/admin/campaigns/:cid/members/:uid', async (request) => {
+    requireAdmin(request);
+    const cid = store.getCampaign(Number(request.params.cid)).id;
+    const uid = userId(request);
+    if (!auth.membership(cid, uid)) throw new NotFoundError('Not in this campaign');
+    auth.removeMember(cid, uid);
+    return { ok: true };
   });
 
   // ---------- members (DM) ----------
@@ -123,34 +344,6 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, config, logg
          WHERE m.campaign_id = ? ORDER BY m.role, u.name`,
       )
       .all(cid);
-  });
-
-  app.post('/campaigns/:cid/members', async (request) => {
-    const { cid } = access(request, { dm: true });
-    const body = z
-      .object({
-        name: z.string().min(1).max(100),
-        role: z.enum(['dm', 'player']).default('player'),
-        character_name: z.string().max(100).nullish(),
-      })
-      .parse(request.body);
-    const { user, token } = auth.createUser(body.name);
-    auth.addMember(cid, user.id, body.role, body.character_name ?? null);
-    return { user, token, note: 'Give this token to the player. It is only shown once.' };
-  });
-
-  app.post('/campaigns/:cid/members/:uid/reset-token', async (request) => {
-    const { cid } = access(request, { dm: true });
-    if (!auth.membership(cid, Number(request.params.uid))) throw new NotFoundError('Member not found');
-    return { token: auth.resetToken(Number(request.params.uid)) };
-  });
-
-  app.delete('/campaigns/:cid/members/:uid', async (request) => {
-    const { cid } = access(request, { dm: true });
-    const uid = Number(request.params.uid);
-    if (!auth.membership(cid, uid)) throw new NotFoundError('Member not found');
-    auth.revoke(uid);
-    return { revoked: uid };
   });
 
   // ---------- speaker map & glossary (DM) ----------
@@ -421,6 +614,8 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, config, logg
         .get(cid),
     };
   });
+
+  serveWebPage(app, config.webDir);
 
   return app;
 }

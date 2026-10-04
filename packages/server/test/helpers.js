@@ -171,6 +171,9 @@ export function createFakeAnthropic(script) {
 
 export { msg as fakeMessage };
 
+/** Password given to every test account. */
+export const PASSWORD = 'correct horse';
+
 /**
  * A campaign with a DM (Kenny) and two players: Sam (Thorin) and Alex (Lyra),
  * with the speaker map linking transcript names to their accounts.
@@ -186,12 +189,17 @@ export async function setup({ llm = createFakeLLM(), config = {} } = {}) {
   const ctx = await createContext({ config: cfg, paths, llm, embedder: fakeEmbedder, log: { error() {} } });
   const app = buildApp({ ...ctx, logger: false });
 
-  const { user: dm, token } = ctx.auth.createUser('Kenny', { isAdmin: true });
+  // Accounts are created as the admin would, then logged in like the web page does.
+  const account = async (name, opts = {}) => {
+    await ctx.auth.createUser(name, { password: PASSWORD, ...opts });
+    return ctx.auth.login(name, PASSWORD);
+  };
+  const { user: dm, token } = await account('Kenny', { isAdmin: true });
   const campaign = ctx.store.createCampaign('Test Campaign');
   ctx.auth.addMember(campaign.id, dm.id, 'dm');
-  const sam = ctx.auth.createUser('Sam');
+  const sam = await account('Sam');
   ctx.auth.addMember(campaign.id, sam.user.id, 'player', 'Thorin');
-  const alex = ctx.auth.createUser('Alex');
+  const alex = await account('Alex');
   ctx.auth.addMember(campaign.id, alex.user.id, 'player', 'Lyra');
   ctx.store.setSpeakers(campaign.id, [
     { speaker: 'KennyDM', display_name: 'DM', user_id: dm.id },

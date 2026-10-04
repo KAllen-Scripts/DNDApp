@@ -1,0 +1,6 @@
+{
+  "name": "@dndapp/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Player web page. Plain static files in public/, served by @dndapp/server at /. No build step."
+}

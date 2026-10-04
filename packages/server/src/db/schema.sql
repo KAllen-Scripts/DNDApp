@@ -1,4 +1,4 @@
--- DNDApp schema (version 2: AI-managed knowledge base).
+-- DNDApp schema (version 4: "must change password at next login").
 --
 -- Kinds of tables:
 --   SOURCE  - mirrors of what's in the archive folder (campaigns, accounts,
@@ -19,13 +19,15 @@ CREATE TABLE IF NOT EXISTS campaigns (
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- People log in with name + password. The server admin sets passwords.
 CREATE TABLE IF NOT EXISTS users (
-  id          INTEGER PRIMARY KEY,
-  name        TEXT NOT NULL,
-  token_hash  TEXT NOT NULL UNIQUE,
-  is_admin    INTEGER NOT NULL DEFAULT 0,
-  revoked_at  TEXT,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  id             INTEGER PRIMARY KEY,
+  name           TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  password_hash  TEXT,            -- scrypt; NULL = can't log in until the admin sets one
+  must_change_password INTEGER NOT NULL DEFAULT 0,  -- set by the admin; cleared when they choose a new one
+  is_admin       INTEGER NOT NULL DEFAULT 0,
+  revoked_at     TEXT,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS memberships (
@@ -178,6 +180,14 @@ CREATE TRIGGER IF NOT EXISTS docs_au AFTER UPDATE OF title, text ON docs BEGIN
 END;
 
 -- ---------- OPERATIONAL ----------
+
+-- Logged-in browsers. Not archived: after losing the database, people log in again.
+CREATE TABLE IF NOT EXISTS logins (
+  token_hash    TEXT PRIMARY KEY,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  last_used_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 CREATE TABLE IF NOT EXISTS jobs (
   id           INTEGER PRIMARY KEY,

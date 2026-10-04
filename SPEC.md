@@ -1,37 +1,38 @@
 # DNDApp — Project Spec
 
-> Status: v0.5 (2026-10-04). Server built and tested end to end with real AI calls, including the archivist and privacy. Electron client not started.
+> Status: v0.7 (2026-10-04). Server built and tested end to end with real AI calls, including the archivist and privacy. Web page served by the server: name + password logins (with admin-forced password changes), multiple campaigns, a player view (ask, notes) and an admin screen (accounts, campaigns, roles). No DM/host screens yet.
 > This is the source of truth for scope and design. Update it when decisions change. For the history of changes and where work left off, see [HANDOFF.md](HANDOFF.md).
 
 ## 1. Overview
 
 DNDApp is a campaign-memory tool for a D&D group.
 
-1. During a session (played over Discord), players use the **Electron app** to **take private notes**. Each note is sent to the server and archived immediately.
+1. During a session (played over Discord), players use the **web page** (served by the DNDApp server) to **take private notes**. Each note is sent to the server and archived immediately.
 2. The session is recorded, and separate speech-to-text software produces **one timestamped transcript**.
-3. The transcript is uploaded **with the date it was played** (currently by any account with the `dm` role or the server admin). The server archives it permanently. Then an AI **archivist** reads the transcript plus that date's player notes and updates the campaign's **knowledge base**. The archivist has full authority over the knowledge base and organises it however it judges best, including **who knows what**.
-4. Players use the app to **ask questions** ("How much do we still owe Brother Hal?"). Answers cite the session and timestamp, and only use what that player's character should know.
+3. The transcript is uploaded **with the date it was played** (currently through the API, by any account with the `dm` role or the admin login; there's no upload screen yet). The server archives it permanently. Then an AI **archivist** reads the transcript plus that date's player notes and updates the campaign's **knowledge base**. The archivist has full authority over the knowledge base and organises it however it judges best, including **who knows what**.
+4. Players use the web page to **ask questions** ("How much do we still owe Brother Hal?"). Answers cite the session and timestamp, and only use what that player's character should know.
 
-The app's two core functions are **asking questions** and **taking notes during the session**. The UI isn't designed yet.
+The app's two core functions are **asking questions** and **taking notes during the session**. A basic UI for both exists (§3.3); it will be refined with real use.
 
 This is a personal project for a small group of friends. It is not sold and players don't pay for it.
 
 **People and roles:**
-- **Host / project owner (Kenny):** runs the server on his machine and owns the server admin account. He is **not** the DM.
-- **DM:** a separate person, with role `dm` in the campaign. The DM's role and permissions will be designed later; for now the `dm` role has the permissions described in this spec.
-- **Players:** role `player`.
+- **Host / project owner (Kenny):** runs the server on his machine and owns the admin login (management only). He is **not** the DM. He plays through a separate, ordinary player account.
+- **Admin login:** for managing the server only (accounts, campaigns, roles). It isn't in any campaign. It also passes DM checks in the API, so transcripts can be uploaded before DM screens exist.
+- **DM:** a separate person, with role `dm` in a campaign (set on the admin screen). The DM's role and permissions will be designed later; for now the `dm` role has the permissions described in this spec. The DM can't manage accounts.
+- **Players:** role `player`. One account can be in several campaigns, with a different role and character in each.
 
 Hard design problems:
 
 - **Scale over time.** By session 200 the transcripts won't fit in any context window. Answers come from an AI-maintained knowledge base plus targeted search, never the whole history (§5).
 - **Being able to start over.** Everything except the archive can be thrown away and regenerated from it (§4.3).
-- **Who knows what.** Players miss sessions, get whispered secrets, and keep private notes. Q&A must not leak (§5.4).
+- **Who knows what.** Players miss sessions, get whispered secrets, and keep private notes. Q&A must not leak (§5.5), and campaigns must not mix (§5.4).
 
 ## 2. Constraints
 
-- **All JavaScript.** Node.js for the server, Electron for clients. Plain JS (ES modules), with JSDoc types where useful. npm packages are welcome.
+- **All JavaScript.** Node.js for the server; a plain web page (HTML/CSS/JS, no build step) for players. Plain JS (ES modules), with JSDoc types where useful. npm packages are welcome.
 - **Self-hosted.** The server runs on the host's own machine (Kenny's). No cloud backend of our own.
-- **Thin clients.** The Electron apps only talk to the DNDApp server. They send what players type (questions, notes) and display results. They never process, index or store campaign data, and never call the AI.
+- **Thin client.** The web page only talks to the DNDApp server. It sends what players type (questions, notes) and displays results. It never processes, indexes or stores campaign data (only the login token, in the browser), and never calls the AI.
 - **Archive first.** Transcripts, player notes, DM corrections and accounts are archived as plain files and never modified. Everything else is derived and can be regenerated.
 - **The AI owns the knowledge base.** No human reads it directly, so it doesn't need to be human-friendly. The archivist can create, restructure, merge and delete freely.
 - **Claude via the host's Claude Code.** By default all AI work runs through Claude Code on the host (Claude Agent SDK), using the host's Claude subscription. The Anthropic API is a config switch away (§3.5).
@@ -40,7 +41,7 @@ Hard design problems:
 ## 3. Architecture
 
 ```
- During the session:  player app ── POST /notes ──►  archive + private search index
+ During the session:  web page ── POST /notes ──►  archive + private search index
  After the session:   transcript + date ── upload ──►  archive
                                                          │
                                        job queue ── archivist agent (full write access)
@@ -49,7 +50,7 @@ Hard design problems:
                                                          ▼
                                                    knowledge base (records with known_by)
                                                          │
- Any time:            player app ── POST /ask ──►  Q&A agent (read-only, filtered to the asker)
+ Any time:            web page ── POST /ask ──►  Q&A agent (read-only, filtered to the asker)
 ```
 
 ### 3.1 Repo layout (npm workspaces)
@@ -57,15 +58,15 @@ Hard design problems:
 ```
 DNDApp/
   packages/
-    shared/    transcript parser, citation format (used by server and client)
+    shared/    transcript parser, citation format
     server/
       src/
         app.js            HTTP routes
         context.js        wires everything together
         config.js         all settings (env vars), PIPELINE_VERSION
         archive.js        archive files
-        store.js          source data (archive first, then DB mirror): sessions, notes, corrections, restore
-        auth.js           tokens, memberships (also archived)
+        store.js          source data (archive first, then DB mirror): campaigns (create/delete), sessions, notes, corrections, restore
+        auth.js           accounts, passwords, logins, must-change-password, memberships (accounts archived)
         jobs.js           background queue: ingest, correct, rebuild
         search.js         hybrid keyword + vector search with per-viewer visibility
         embeddings.js     local embedding model
@@ -74,9 +75,11 @@ DNDApp/
         kb/               store.js (knowledge-base records, journal), archivist.js (agent + tools)
         pipeline/         prepare.js (speakers, glossary, chunking), ingest.js (attendance, indexing, archivist run)
         qa/               agent.js, tools.js
-        cli/              admin.js, rebuild.js
+        cli/              admin.js (init, set-password, list), rebuild.js
       test/               offline tests (fake AI); fixtures/privacy-scenario/ = manual real-AI scenario
-    client/    Electron app (not started)
+    web/public/  the web page, served by the server at / (no build step):
+                 index.html, app.js (login, password, campaign picker, Ask, Notes), admin.js (admin screen),
+                 api.js (requests, SSE, element helper), style.css, icon.svg
   SPEC.md  HANDOFF.md  README.md  AGENTS.md  CLAUDE.md
 ```
 
@@ -86,17 +89,22 @@ DNDApp/
 - **SQLite** (`better-sqlite3`), one file. FTS5 for keyword search; vectors as blobs, searched by brute force in memory.
 - One background job at a time, in order (the archivist builds each session on the last). Interrupted jobs resume after a restart.
 
-### 3.3 Client (Electron)
+### 3.3 Web page
 
-- One app for everyone; features depend on role (DM or player).
-- **Core player features:** ask questions (streamed answers with clickable citations); take notes during the current session.
-- **DM / host features** (split between DM and host to be decided with the DM role): upload transcripts with date; speaker map (linking transcript names to accounts); glossary; members/invites; corrections; answer the archivist's questions; job progress.
-- Connects by server URL + token; a pure front end (no local data, no AI calls).
+Electron was dropped (owner's call: overkill, since there's a server and an address anyway). Players open the server's address in a browser.
+
+- Static files in `packages/web/public`, served by the server at `/` (each file gets its own public route; everything else needs a login). Same origin as the API, so no CORS, and all API calls use relative paths: the page works at any address.
+- **Login:** name + password set by the admin (§7). The token is kept in the browser's localStorage; a 401 sends the player back to the login screen.
+- **Passwords:** if the admin requires it, a "Choose a new password" screen comes straight after login and can't be skipped (the server enforces it too). "Change password" in the header lets anyone change theirs at any time.
+- **Campaign choice:** after logging in, someone in several campaigns picks one from a dropdown (last choice pre-selected); in one campaign, they go straight in. The choice holds for that browser tab (survives reloads; a new visit asks again). "Switch campaign" in the header goes back to the picker. Ask, Notes and past conversations all belong to the chosen campaign.
+- **Admin screen** (admin login only, instead of Ask/Notes): accounts (add with the campaigns they can access, "Edit campaigns" to change that later, set password, require a new password at next login, log out everywhere, block/unblock, delete if unused), campaigns (each a colour-coded card; create with a unique name, delete with typed-name confirmation; add people as player or DM, change roles and characters, remove). Messages appear as a toast that's always on screen. The admin login is for management only and isn't in any campaign; an admin who plays uses a separate, ordinary player account (§5.5 applies to it like anyone else).
+- **Player view:** ask questions (streamed answers, a status line while it searches, clickable citations that jump to the quoted transcript lines, past conversations, follow-ups); take notes (saved to today's session, listed by session date). Works on phones; light and dark themes.
+- **Not built yet: DM / host features** (split between DM and host to be decided with the DM role): upload transcripts with date; speaker map (linking transcript names to accounts); glossary; corrections; answer the archivist's questions; job progress.
 - On each `turn` event from `/ask`, replace displayed text rather than appending.
 
 ### 3.4 Networking
 
-**Decision: Cloudflare Tunnel** with a cheap domain (e.g. a numbers-only `.xyz`, ~$1/year), using Cloudflare's free plan. `cloudflared` on the host connects out to Cloudflare: no port forwarding, no static IP, home IP hidden. The server listens only on `127.0.0.1`. Every request except `/health` needs a token. HTTPS JSON plus SSE for job progress and streamed answers.
+**Decision: Cloudflare Tunnel** with a cheap domain (e.g. a numbers-only `.xyz`, ~$1/year), using Cloudflare's free plan. `cloudflared` on the host connects out to Cloudflare: no port forwarding, no static IP, home IP hidden. The server listens only on `127.0.0.1`. Every request except `/health`, `/login` and the web page's files needs a login. **`PUBLIC_URL`** (config/`.env`) is the single place the public address is set; it's a placeholder until the domain is bought. HTTPS JSON plus SSE for job progress and streamed answers.
 
 Rejected: Tailscale (each player installs it), port forwarding (CGNAT, exposes home IP), SSH (would give players host access).
 
@@ -142,7 +150,7 @@ Also accepted: `[MM:SS]`, fractional seconds, no brackets, `0:01:30 - Name: text
 
 | Table | Kind | Purpose |
 |---|---|---|
-| `campaigns`, `users`, `memberships` | source | Campaigns, accounts (hashed tokens), role + character per campaign. |
+| `campaigns`, `users`, `memberships` | source | Campaigns (unique name), accounts (unique name, scrypt password hash, `must_change_password`), role + character per campaign. |
 | `speakers`, `glossary` | source | As above. |
 | `sessions` | source | Number, date played, checksum, processing status. |
 | `player_notes` | source | Private notes with author and session date. |
@@ -152,13 +160,14 @@ Also accepted: `[MM:SS]`, fractional seconds, no brackets, `0:01:30 - Name: text
 | `kb_journal` | derived | Every knowledge-base change, with the run and reason. |
 | `dm_questions` | derived | Questions the archivist left for the DM. |
 | `docs` (+ `docs_fts`) | derived | Search index: transcript chunks, knowledge-base records, player notes, each with `visible_to`. |
+| `logins` | operational | Logged-in browsers (hashed tokens, last used). Not archived. |
 | `jobs`, `llm_usage`, `conversations`, `qa_log` | operational | Queue, AI usage/timing, Q&A history. |
 
 ### 4.3 Archive, restore and rebuild
 
 ```
 data/archive/
-  _server/accounts.json                users incl. token hashes (tokens survive DB loss)
+  _server/accounts.json                users incl. password hashes (passwords survive DB loss)
   <campaign>/
     campaign.json, members.json
     speakers.json, glossary.json      (+ history/)
@@ -166,8 +175,10 @@ data/archive/
     player-notes/<YYYY-MM-DD>.jsonl   append-only
     sessions/0001/transcript.txt      read-only, sha256 in meta.json
     outputs/v<PIPELINE_VERSION>/<timestamp>-<run>/report.json, journal.json, knowledge_base.json, questions.json
+    deleted.json                      only if the admin deleted the campaign (restore skips it; nothing else is touched)
 ```
 
+- **Deleting a campaign** removes it and everything derived or mirrored from it from the database (foreign-key cascades), but never touches the archive: the folder gets `deleted.json` and restore skips it. New campaigns never reuse an existing archive folder's slug. Undo by hand: remove the marker, restart, rebuild.
 - A transcript can never be replaced (different bytes for an existing session number → 409).
 - **Restore:** on start-up, accounts, campaigns, members, sessions, speakers, glossary, corrections and notes missing from the database are restored from the archive, and notes are re-indexed. Then run a rebuild to regenerate the knowledge base.
 - **Rebuild:** `npm run rebuild -- --campaign <id> --yes` (or `POST /rebuild`) wipes all derived data, re-indexes notes, then replays every session in order, each correction right after the session it was made against. The archivist is non-deterministic, so a rebuild gives an equivalent knowledge base, not an identical one.
@@ -209,7 +220,11 @@ Per DM correction (job `correct`): the archivist gets the correction and its sta
 
 Streaming events (`POST /campaigns/:cid/ask`, SSE): `conversation`, `turn`, `tool`, `text`, `done`, `error`.
 
-### 5.4 Privacy (primitive version)
+### 5.4 Campaigns are separate
+
+Every campaign has its own sessions, transcripts, knowledge base (and archivist guide), player notes, speaker map, glossary, corrections, DM questions and conversations. Every query is scoped by `campaign_id`; knowledge-base records are fetched with `id AND campaign_id`, so even a wrong id can't reach another campaign. Q&A only runs for a member of the campaign it was asked in, and the prompt names that campaign and the asker's character in it. A test asks in a second campaign with every tool and checks nothing from the first appears.
+
+### 5.5 Privacy (primitive version)
 
 Who-knows-what is decided by the archivist and enforced by the server:
 
@@ -224,7 +239,7 @@ The archivist's rules: openly happened → attendees (everyone if all attended);
 
 **Deferred:** the archivist currently includes the DM in `known_by` for records built from a player's private note, so the DM can learn note contents through Q&A or the debug view. The DM role is being designed later (owner's instruction: leave it for now). More privacy work is planned.
 
-### 5.5 Performance
+### 5.6 Performance
 
 - Q&A latency matters; processing time doesn't (project owner's decision).
 - Measured with the real archivist knowledge base: 5–10s per question, most answered without any tool calls thanks to pinned records and pre-search. First text ~1.5–2s (earlier measurement).
@@ -235,7 +250,11 @@ The archivist's rules: openly happened → attendees (everyone if all attended);
 
 ### 6.1 Built
 
-- [x] Accounts with tokens, DM/player roles, invites, revocation; archived.
+- [x] Accounts with name + password (set by the admin), logins, DM/player roles, block/unblock; archived.
+- [x] "Must change password at next login" (admin's choice, server-enforced); anyone can change their own password.
+- [x] Multiple campaigns: kept separate everywhere; an account can be in several; players choose after logging in.
+- [x] Admin screen on the web page: accounts, campaign access, roles; create and delete campaigns (archive kept).
+- [x] Basic player web page: log in, choose campaign, ask questions, take notes.
 - [x] Transcript upload with date; archived; processed in the background with progress; retry.
 - [x] Private player notes during the session; archived; searchable by their author immediately.
 - [x] Archivist with full authority over the knowledge base, its own guide, journal, and snapshots.
@@ -248,7 +267,8 @@ The archivist's rules: openly happened → attendees (everyone if all attended);
 ### 6.2 Next
 
 - [ ] Real transcript from the recorder.
-- [ ] Electron client (notes + questions first).
+- [ ] DM / host features on the web page (upload, speaker map, glossary, corrections, archivist questions, job progress).
+- [ ] Try the web page with the players on a real session.
 - [ ] Cloudflare Tunnel set up on the host.
 
 ### 6.3 Later
@@ -259,9 +279,12 @@ The archivist's rules: openly happened → attendees (everyone if all attended);
 
 ## 7. Security & cost controls
 
-- Tokens are random, stored hashed, shown once, revocable. Role checks are server-side.
+- **Accounts:** no self sign-up. The server admin creates accounts, sets passwords and assigns roles on the admin screen (`/admin/*` routes, admin login only); the DM role can't. The console only does `init` (create the admin login), `set-password` (recovery) and `list`. Accounts with history can only be blocked, not deleted (the archive refers to them by id). Names are unique (ignoring case). Passwords: at least 6 characters, stored as scrypt hashes, never in plain text, including the archive.
+- **Must change password at next login** (`users.must_change_password`, schema v4): set by the admin (default on for new accounts in the UI; optional on resets; toggle per account). While set, the server only allows `/me`, `/logout` and `POST /account/password` for that login (403 otherwise), so it can't be skipped by the client. The player gives their current password and a different new one; this clears the flag and ends their other logins. `POST /account/password` also works any time ("Change password" in the header).
+- **Logins:** `POST /login` returns a random token (stored hashed in `logins`). It lasts `LOGIN_DAYS` (30) since last use; logging out ends it; a password set by the admin, or a block, ends all of that account's logins (changing your own ends all but the current one). After `MAX_FAILED_LOGINS` (10) wrong passwords for a name in 15 minutes, that name is refused for a while. Unknown names take as long as wrong passwords, so names can't be probed by timing.
+- Role checks are server-side. Account and campaign names are cleaned (trimmed, repeated spaces collapsed) so stored names match what the page shows.
 - AI credentials exist only on the server. Claude Code runs are locked down (§3.5).
-- Privacy filtering is enforced in the server's tools and endpoints, not left to the model's discretion (§5.4).
+- Privacy filtering is enforced in the server's tools and endpoints, not left to the model's discretion (§5.4, §5.5).
 - Per-player Q&A rate limit; tool-call and cost caps per question and per archivist run; monthly spending cap on the API provider. Every AI call is logged in `llm_usage`.
 - Back up `data/archive/`. The database can be rebuilt from it.
 
@@ -270,7 +293,7 @@ The archivist's rules: openly happened → attendees (everyone if all attended);
 1. ✅ Foundation. 2. ✅ Ingestion. 3. ✅ Memory. 4. ✅ Q&A.
 5. ✅ **AI-managed knowledge base**: archivist, player notes, privacy, corrections and questions.
 6. **Real data**: a real transcript; check the parser, the archivist's output, and timings at realistic size.
-7. **Client**: Electron app.
+7. **Client**: web page. Player view ✅ (login, campaign choice, questions, notes); admin screen ✅; DM/host screens next.
 8. **Hosting**: domain, Cloudflare Tunnel, packaging, player setup guide.
 
 ## 9. Open questions

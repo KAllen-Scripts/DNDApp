@@ -5,7 +5,7 @@ import Database from 'better-sqlite3';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 4;
 
 /**
  * @param {string} file  path to the SQLite file, or ':memory:'
@@ -30,7 +30,18 @@ function migrateBeforeSchema(db) {
   const version = db.pragma('user_version', { simple: true });
   const has = (table) => !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table);
   if (version >= SCHEMA_VERSION || !has('campaigns')) return;
+  if (version < 2) migrateV1(db, has);
+  if (version < 3) migrateV2(db);
+  if (version < 4) migrateV3(db);
+}
 
+/** v3 -> v4: the admin can make someone change their password at their next login. */
+function migrateV3(db) {
+  const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  if (!cols.includes('must_change_password')) db.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0');
+}
+
+function migrateV1(db, has) {
   // v1 -> v2: fixed notes/entity pipeline replaced by the AI-managed knowledge base.
   db.exec(`
     DROP TRIGGER IF EXISTS docs_ai; DROP TRIGGER IF EXISTS docs_ad; DROP TRIGGER IF EXISTS docs_au;
@@ -50,6 +61,37 @@ function migrateBeforeSchema(db) {
   addColumn('qa_log', 'duration_ms', 'INTEGER');
   addColumn('qa_log', 'first_text_ms', 'INTEGER');
   if (has('sessions')) db.exec("UPDATE sessions SET status = 'archived', pipeline_version = NULL, played_on = COALESCE(played_on, date(created_at))");
+}
+
+/**
+ * v2 -> v3: per-user tokens replaced by name + password logins. Rebuilds the
+ * users table (same ids). Existing accounts have no password until the admin
+ * sets one with `npm run admin -- set-password`.
+ */
+function migrateV2(db) {
+  const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  if (!cols.includes('token_hash')) return;
+  const dupes = db.prepare('SELECT name FROM users GROUP BY name COLLATE NOCASE HAVING COUNT(*) > 1').all();
+  if (dupes.length) {
+    throw new Error(`Can't upgrade the database: account names must be unique, but these are used twice: ${dupes.map((d) => d.name).join(', ')}. Rename one in the users table first.`);
+  }
+  db.pragma('foreign_keys = OFF');
+  db.transaction(() => {
+    db.exec(`
+      CREATE TABLE users_v3 (
+        id             INTEGER PRIMARY KEY,
+        name           TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        password_hash  TEXT,
+        is_admin       INTEGER NOT NULL DEFAULT 0,
+        revoked_at     TEXT,
+        created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO users_v3 (id, name, is_admin, revoked_at, created_at) SELECT id, name, is_admin, revoked_at, created_at FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_v3 RENAME TO users;
+    `);
+  })();
+  db.pragma('foreign_keys = ON');
 }
 
 /** Delete all derived data for one campaign. */
