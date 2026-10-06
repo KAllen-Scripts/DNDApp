@@ -1,6 +1,7 @@
 /**
- * The Sheet tab: the player's character sheet, laid out like the official
- * 5e sheet (core stats, then details, then spells).
+ * The Sheet tab: the player's character sheet. The parts of the sheet are
+ * built as blocks, and the layout chosen under Look arranges them (like the
+ * official 5e sheet by default; see LAYOUTS).
  *
  * Automatic values come from the shared rules (./shared/sheet.js, the same
  * code the server uses). Anything the player types into an automatic box is
@@ -8,7 +9,7 @@
  * never changed by the rules. Every change is saved to the server shortly
  * after typing stops.
  */
-import { api, h } from './api.js';
+import { api, h, storage } from './api.js';
 import {
   ABILITIES, ABILITY_NAMES, SKILLS, CLASSES, RACES, BACKGROUNDS, ALIGNMENTS, SCHOOLS,
   computeSheet, coerceDerived, formatBonus, normalizeSheet, normalizeSpell,
@@ -25,6 +26,7 @@ const state = {
   sheet: null,
   version: 0,
   calc: null,
+  layout: null, // the layout the sheet was last drawn in
   renders: [], // functions that refresh automatic values
   dirty: false,
   saving: false,
@@ -223,11 +225,368 @@ function field(path, { label, kind = 'text', placeholder = '', list, cls = '', n
   return el;
 }
 
-const labelled = (text, control, cls = '') => h('label', { class: `fld ${cls}` }, control, h('span', { class: 'fld-label' }, text));
+/**
+ * Round tick boxes counting up to a number kept at `path` (death saves, spell
+ * slots used): ticking the third sets 3, unticking it sets 2. `count` is a
+ * number or a function, so the boxes follow the automatic slot count.
+ */
+function pips(path, label, count, max = 20) {
+  const wrap = h('span', { class: 'pips' });
+  state.renders.push(() => {
+    const n = Math.max(0, Math.min(max, Number(typeof count === 'function' ? count() : count) || 0));
+    if (wrap.childElementCount !== n) {
+      wrap.replaceChildren(...Array.from({ length: n }, (_, i) => {
+        const b = h('input', { type: 'checkbox', 'aria-label': `${label} ${i + 1}` });
+        b.addEventListener('change', () => {
+          setPath(state.sheet, path, b.checked ? i + 1 : i);
+          changed();
+        });
+        return b;
+      }));
+    }
+    const used = getPath(state.sheet, path) ?? 0;
+    wrap.querySelectorAll('input').forEach((b, i) => (b.checked = i < used));
+  });
+  return wrap;
+}
+
+// ---------- building blocks ----------
+//
+// Every part of the sheet is a block built by one function below. Layouts
+// (further down) arrange the same blocks in different ways, and style.css
+// gives them all the same measurements, so boxes line up in any layout.
+
+const lbl = (text) => h('span', { class: 'lbl' }, text);
+/** A field with its label underneath, like the printed sheet. */
+const labelled = (text, control, cls = '') => h('label', { class: `fld ${cls}` }, control, lbl(text));
+/** A titled box. */
 const box = (title, cls, ...children) => h('section', { class: `sh-box ${cls}` }, title && h('h3', {}, title), ...children);
+/** A value with its label underneath (armour class, hit points, spell save DC...). */
+const stat = (control, label, cls = '') => h('label', { class: `stat ${cls}` }, control, lbl(label));
+/** A one-line box, lined up with the save and skill lists: a value, then what it is. */
+const line = (control, label, cls = '') => h('label', { class: `sh-line ${cls}` }, h('span'), h('span', { class: 'line-val' }, control), lbl(label));
+const col = (...blocks) => h('div', { class: 'sh-col' }, blocks);
+const row = (name, ...children) => h('div', { class: `sh-row row-${name}` }, children);
+const section = (title, ...content) => h('details', { class: 'sh-section', open: true }, h('summary', {}, title), ...content);
+const removeButton = (title, onclick) => h('button', { type: 'button', class: 'icon-x', title, 'aria-label': title, onclick }, '×');
+const addButton = (text, onclick) => h('button', { type: 'button', class: 'add-row', onclick }, `+ ${text}`);
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 function datalist(id, options) {
   return h('datalist', { id }, options.map((o) => h('option', { value: o })));
+}
+
+// Header: name, classes and the other details at the top of the sheet.
+
+function header() {
+  // "High Elf · Wizard 5 / Fighter 1 · Level 6", under the name.
+  const summary = h('p', { class: 'summary' });
+  state.renders.push(() => {
+    const classes = state.sheet.classes.filter((c) => c.name.trim()).map((c) => `${c.name.trim()} ${c.level}`).join(' / ');
+    summary.textContent = [state.sheet.race.trim(), classes, `Level ${state.calc.level}`].filter(Boolean).join(' · ');
+  });
+  return h('header', { class: 'sh-head' },
+    h('section', { class: 'sh-box name-box' }, field('name', { label: 'Character name', cls: 'big' }), lbl('Character name'), summary),
+    infoBox(),
+  );
+}
+
+function infoBox() {
+  const classes = h('div', { class: 'sh-table classes' });
+  const drawClasses = () => {
+    const several = state.sheet.classes.length > 1;
+    classes.replaceChildren(
+      h('div', { class: 'tr th' }, lbl('Class'), lbl('Subclass'), lbl('Level'), h('span')),
+      ...state.sheet.classes.map((c, i) =>
+        h('div', { class: 'tr' },
+          field(`classes.${i}.name`, { label: 'Class', list: 'dl-classes' }),
+          field(`classes.${i}.subclass`, { label: 'Subclass' }),
+          field(`classes.${i}.level`, { label: 'Level', kind: 'int', cls: 'num' }),
+          several ? removeButton('Remove this class', () => { state.sheet.classes.splice(i, 1); drawClasses(); changed(); }) : h('span'),
+        ),
+      ),
+      addButton('Add a class (multiclass)', () => { state.sheet.classes.push({ name: '', subclass: '', level: 1 }); drawClasses(); changed(); }),
+    );
+  };
+  drawClasses();
+  const level = h('output', { class: 'readout', title: 'Worked out from your class levels' });
+  state.renders.push(() => (level.textContent = state.calc.level));
+  return h('section', { class: 'sh-box info-box' },
+    classes,
+    h('div', { class: 'info-grid' },
+      labelled('Background', field('background', { label: 'Background', list: 'dl-backgrounds' })),
+      labelled('Race', field('race', { label: 'Race', list: 'dl-races' })),
+      labelled('Alignment', field('alignment', { label: 'Alignment', list: 'dl-alignments' })),
+      labelled('Player name', field('player_name', { label: 'Player name' })),
+      labelled('Experience points', field('xp', { label: 'Experience points' })),
+      labelled('Character level', level),
+    ),
+  );
+}
+
+// Abilities, saves and skills.
+
+const SKILLS_BY_ABILITY = Object.fromEntries(ABILITIES.map((a) => [a, Object.keys(SKILLS).filter((k) => SKILLS[k].ability === a)]));
+const PROF = { none: 'Not proficient', proficient: 'Proficient', expertise: 'Expertise (double proficiency)' };
+const NEXT_PROF = { none: 'proficient', proficient: 'expertise', expertise: 'none' };
+
+/** The six ability tiles: name, modifier (big) and score. */
+function abilityTiles() {
+  return h('div', { class: 'abilities' },
+    ABILITIES.map((a) =>
+      h('div', { class: 'ability' },
+        lbl(ABILITY_NAMES[a]),
+        auto(`mod.${a}`, { kind: 'bonus', label: `${ABILITY_NAMES[a]} modifier`, cls: 'mod' }),
+        field(`abilities.${a}`, { label: `${ABILITY_NAMES[a]} score`, kind: 'int', cls: 'score' }),
+      ),
+    ),
+  );
+}
+
+/** One ability with its saving throw and skills underneath (like the 2024 sheet). */
+function abilityGroup(a) {
+  const score = field(`abilities.${a}`, { label: `${ABILITY_NAMES[a]} score`, kind: 'int', cls: 'score' });
+  score.title = 'Score';
+  return h('section', { class: 'sh-box ability-group' },
+    h('div', { class: 'ability-head' },
+      h('h3', {}, ABILITY_NAMES[a]),
+      auto(`mod.${a}`, { kind: 'bonus', label: `${ABILITY_NAMES[a]} modifier`, cls: 'mod' }),
+      score,
+    ),
+    h('ul', { class: 'checklist' }, saveRow(a, 'Saving throw'), SKILLS_BY_ABILITY[a].map((k) => skillRow(k, false))),
+  );
+}
+
+function saveRow(a, name = ABILITY_NAMES[a]) {
+  return h('li', {},
+    autoCheck(`save_prof.${a}`, `Proficient in ${ABILITY_NAMES[a]} saves`),
+    auto(`save.${a}`, { kind: 'bonus', label: `${ABILITY_NAMES[a]} save` }),
+    h('span', { class: 'row-name' }, name),
+  );
+}
+
+function skillRow(k, withAbility = true) {
+  const { name, ability } = SKILLS[k];
+  const mark = h('button', { type: 'button', class: 'prof-mark' });
+  const paint = () => {
+    const p = state.sheet.skills[k] ?? 'none';
+    mark.dataset.prof = p;
+    mark.title = `${PROF[p]}. Click to change.`;
+    mark.setAttribute('aria-label', `${name}: ${PROF[p]}`);
+  };
+  mark.addEventListener('click', () => {
+    const next = NEXT_PROF[state.sheet.skills[k] ?? 'none'];
+    if (next === 'none') delete state.sheet.skills[k];
+    else state.sheet.skills[k] = next;
+    paint();
+    changed();
+  });
+  paint();
+  return h('li', {},
+    mark,
+    auto(`skill.${k}`, { kind: 'bonus', label: name }),
+    h('span', { class: 'row-name' }, name, withAbility && h('span', { class: 'muted small' }, ` (${cap(ability)})`)),
+  );
+}
+
+const saves = () => box('Saving throws', 'saves', h('ul', { class: 'checklist' }, ABILITIES.map((a) => saveRow(a))));
+const skills = () => box('Skills', 'skills', h('ul', { class: 'checklist' }, Object.keys(SKILLS).map((k) => skillRow(k))), h('div', { class: 'list-foot' }, legend(), jack()));
+/** The skill marks explained, and Jack of All Trades (for layouts without a Skills box). */
+const skillNotes = () => box(null, 'skill-notes', legend(), jack());
+
+const legend = () =>
+  h('p', { class: 'legend' }, ['none', 'proficient', 'expertise'].map((p) => h('span', {}, h('i', { class: 'mark', 'data-prof': p }), p)));
+const jack = () =>
+  h('label', { class: 'jack' }, autoCheck('jack_of_all_trades', 'Jack of All Trades'), h('span', {}, 'Jack of All Trades: half proficiency on other checks'));
+
+function inspiration() {
+  const tick = h('input', { type: 'checkbox', checked: state.sheet.inspiration, onchange: (e) => { state.sheet.inspiration = e.target.checked; changed(); } });
+  return line(tick, 'Inspiration', 'inspiration');
+}
+const proficiency = () => line(auto('proficiency_bonus', { kind: 'bonus', label: 'Proficiency bonus' }), 'Proficiency bonus');
+const passive = () => line(auto('passive_perception', { label: 'Passive Wisdom (Perception)' }), 'Passive Wisdom (Perception)');
+
+/** Ability tiles beside inspiration, proficiency, saves and skills: the left of the official sheet. */
+const core = () => h('div', { class: 'core' }, abilityTiles(), h('div', { class: 'core-stack' }, inspiration(), proficiency(), saves(), skills()));
+
+// Combat.
+
+const vitals = () =>
+  h('div', { class: 'vitals' },
+    stat(auto('ac', { label: 'Armour class' }), 'Armour class', 'big'),
+    stat(auto('initiative', { kind: 'bonus', label: 'Initiative' }), 'Initiative', 'big'),
+    stat(auto('speed', { label: 'Speed (feet)' }), 'Speed', 'big'),
+  );
+
+const hp = () =>
+  box('Hit points', 'hp',
+    h('div', { class: 'tiles' },
+      stat(field('hp.current', { label: 'Current hit points', kind: 'int', nullable: true }), 'Current', 'hp-current'),
+      stat(auto('hp_max', { label: 'Hit point maximum' }), 'Maximum'),
+      stat(field('hp.temp', { label: 'Temporary hit points', kind: 'int', nullable: true }), 'Temporary'),
+    ),
+  );
+
+const hitDice = () =>
+  box('Hit dice', 'hd',
+    h('div', { class: 'tiles' },
+      stat(auto('hit_dice', { kind: 'text', label: 'Hit dice' }), 'Total'),
+      stat(field('hit_dice_used', { label: 'Hit dice used', kind: 'int' }), 'Used'),
+    ),
+  );
+
+const deathSaves = () =>
+  box('Death saves', 'death',
+    h('div', { class: 'ds' },
+      ['successes', 'failures'].map((kind) => h('div', { class: `ds-row ds-${kind}` }, h('span', {}, cap(kind)), pips(`death_saves.${kind}`, cap(kind), 3))),
+    ),
+  );
+
+const combat = () => h('div', { class: 'combat' }, vitals(), hp(), h('div', { class: 'pair' }, hitDice(), deathSaves()));
+
+function attacks() {
+  const list = h('div', { class: 'sh-table attacks' });
+  const draw = () => {
+    list.replaceChildren(
+      ...(state.sheet.attacks.length ? [h('div', { class: 'tr th' }, lbl('Name'), lbl('Atk bonus'), lbl('Damage / type'), h('span'))] : []),
+      ...state.sheet.attacks.map((_, i) =>
+        h('div', { class: 'tr' },
+          field(`attacks.${i}.name`, { label: 'Attack name', placeholder: 'Name' }),
+          field(`attacks.${i}.bonus`, { label: 'Attack bonus', placeholder: '+0', cls: 'num' }),
+          field(`attacks.${i}.damage`, { label: 'Damage and type', placeholder: 'Damage / type' }),
+          removeButton('Remove this attack', () => { state.sheet.attacks.splice(i, 1); draw(); changed(); }),
+        ),
+      ),
+      addButton('Add an attack', () => { state.sheet.attacks.push({ name: '', bonus: '', damage: '', notes: '' }); draw(); changed(); }),
+    );
+  };
+  draw();
+  return box('Attacks & spellcasting', 'attacks-box', list);
+}
+
+// Everything else.
+
+const COIN_NAMES = { cp: 'Copper', sp: 'Silver', ep: 'Electrum', gp: 'Gold', pp: 'Platinum' };
+const equipment = () =>
+  box('Equipment', 'equipment',
+    h('div', { class: 'coins' }, Object.entries(COIN_NAMES).map(([c, name]) => labelled(c.toUpperCase(), field(`coins.${c}`, { label: `${name} pieces`, kind: 'int' })))),
+    field('equipment', { label: 'Equipment', kind: 'longtext', rows: 8 }),
+  );
+
+/** A box that's just a titled text area. */
+const text = (key, title, rows, cls = '') => box(title, cls, field(key, { label: title, kind: 'longtext', rows }));
+
+const TRAITS = { personality: 'Personality traits', ideals: 'Ideals', bonds: 'Bonds', flaws: 'Flaws' };
+const traits = () => h('div', { class: 'traits' }, Object.entries(TRAITS).map(([k, title]) => text(k, title, 3)));
+const features = () => text('features', 'Features & traits', 12);
+const proficiencies = () => text('proficiencies_languages', 'Other proficiencies & languages', 5);
+
+function details() {
+  return h('div', { class: 'sh-details' },
+    h('section', { class: 'sh-box looks' }, ['age', 'height', 'weight', 'eyes', 'skin', 'hair'].map((k) => labelled(cap(k), field(k, { label: cap(k) })))),
+    h('div', { class: 'details-grid' },
+      text('appearance', 'Character appearance', 5, 'd-appearance'),
+      text('backstory', 'Character backstory', 12, 'd-backstory'),
+      text('allies', 'Allies & organisations', 5, 'd-allies'),
+      text('treasure', 'Treasure', 4, 'd-treasure'),
+      text('additional_features', 'Additional features & traits', 5, 'd-additional'),
+    ),
+  );
+}
+
+// ---------- layouts ----------
+//
+// Chosen under Look (data-sheet-layout on #tab-sheet). Each returns the rows
+// below the header; the column widths and how they fold up on narrow
+// screens are in themes.css. Every column stretches to the tallest one in its
+// row, and its last block grows to fill, so the bottoms line up.
+
+const pages = () => [section('Character details', details()), section('Spells', spells())];
+
+const LAYOUTS = {
+  // The official 2014 sheet: three columns, then details and spells.
+  classic: () => [
+    row('classic', col(core(), passive(), proficiencies()), col(combat(), attacks(), equipment()), col(traits(), features())),
+    ...pages(),
+  ],
+  // What you need in a fight across the top.
+  combat: () => [
+    row('combat', col(combat()), col(attacks()), col(equipment())),
+    row('stats', col(core(), passive(), proficiencies()), col(traits(), features())),
+    ...pages(),
+  ],
+  // Like the 2024 sheet: each ability holds its saving throw and skills.
+  abilities: () => [
+    row('vitals', vitals(), hp(), hitDice(), deathSaves()),
+    row('abilities',
+      col(proficiency(), inspiration(), ...['str', 'dex', 'con'].map((a) => abilityGroup(a)), skillNotes(), passive(), proficiencies()),
+      col(...['int', 'wis', 'cha'].map((a) => abilityGroup(a))),
+      col(attacks(), features()),
+      col(traits(), equipment()),
+    ),
+    ...pages(),
+  ],
+  // Like the sheets in apps: abilities and vitals across the top, the rest in tabs.
+  tabs: () => [
+    row('strip', abilityTiles()),
+    row('vitals', vitals(), hp(), hitDice(), deathSaves()),
+    row('tabs',
+      col(proficiency(), inspiration(), saves(), passive(), proficiencies()),
+      col(skills()),
+      col(tabbed([
+        ['actions', 'Actions', attacks],
+        ['spells', 'Spells', spells],
+        ['inventory', 'Inventory', equipment],
+        ['features', 'Features & traits', features],
+        ['background', 'Background', () => [traits(), details()]],
+      ])),
+    ),
+  ],
+  // Everything in one scrolling column.
+  single: () => [
+    row('single', col(core(), passive(), combat(), attacks(), equipment(), proficiencies(), traits(), features())),
+    ...pages(),
+  ],
+};
+
+const currentLayout = () => {
+  const layout = $('#tab-sheet')?.dataset.sheetLayout;
+  return Object.hasOwn(LAYOUTS, layout) ? layout : 'classic';
+};
+
+const TAB_KEY = 'dndapp.sheetTab';
+
+/** Tabs: [key, title, build] each. The open tab is remembered in this browser. */
+function tabbed(tabs) {
+  let current = storage.get(TAB_KEY);
+  if (!tabs.some(([key]) => key === current)) current = tabs[0][0];
+  const buttons = [];
+  const panels = [];
+  const select = (key, focus = false) => {
+    current = key;
+    storage.set(TAB_KEY, key);
+    tabs.forEach(([k], i) => {
+      buttons[i].setAttribute('aria-selected', String(k === key));
+      buttons[i].tabIndex = k === key ? 0 : -1;
+      panels[i].hidden = k !== key;
+      if (k === key && focus) buttons[i].focus();
+    });
+  };
+  for (const [key, title, build] of tabs) {
+    const id = `sheet-tab-${key}`;
+    buttons.push(h('button', { type: 'button', role: 'tab', id: `${id}-button`, 'aria-controls': id, onclick: () => select(key) }, title));
+    panels.push(h('div', { class: 'sh-tabpanel', role: 'tabpanel', id, 'aria-labelledby': `${id}-button` }, build()));
+  }
+  const bar = h('div', { class: 'sh-tabbar', role: 'tablist', 'aria-label': 'Sheet sections' }, buttons);
+  bar.addEventListener('keydown', (e) => {
+    const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const i = tabs.findIndex(([k]) => k === current);
+    select(tabs[(i + step + tabs.length) % tabs.length][0], true);
+  });
+  select(current);
+  return h('div', { class: 'sh-tabs' }, bar, panels);
 }
 
 // ---------- the sheet ----------
@@ -235,198 +594,24 @@ function datalist(id, options) {
 function render() {
   state.renders = [];
   state.calc = computeSheet(state.sheet);
-  const root = $('#sheet');
-  root.replaceChildren(
+  state.layout = currentLayout();
+  $('#sheet').replaceChildren(
     datalist('dl-races', RACES),
     datalist('dl-classes', Object.values(CLASSES).map((c) => c.name)),
     datalist('dl-backgrounds', BACKGROUNDS),
     datalist('dl-alignments', ALIGNMENTS),
     datalist('dl-schools', SCHOOLS),
     header(),
-    h('div', { class: 'sh-grid' },
-      h('div', { class: 'sh-col' }, abilities()),
-      h('div', { class: 'sh-col' }, combat(), attacks(), equipment()),
-      h('div', { class: 'sh-col' }, personality(), features()),
-    ),
-    details(),
-    spellcasting(),
+    ...LAYOUTS[state.layout](),
   );
   refresh();
 }
 
-function header() {
-  const classes = h('div', { class: 'classes' });
-  const drawClasses = () => {
-    classes.replaceChildren(
-      ...state.sheet.classes.map((c, i) =>
-        h('div', { class: 'class-row' },
-          field(`classes.${i}.name`, { label: 'Class', list: 'dl-classes', placeholder: 'Class' }),
-          field(`classes.${i}.subclass`, { label: 'Subclass', placeholder: 'Subclass' }),
-          field(`classes.${i}.level`, { label: 'Level', kind: 'int', cls: 'num' }),
-          state.sheet.classes.length > 1 &&
-            h('button', { type: 'button', class: 'ghost icon', title: 'Remove this class', onclick: () => { state.sheet.classes.splice(i, 1); drawClasses(); changed(); } }, '×'),
-        ),
-      ),
-      h('button', { type: 'button', class: 'link', onclick: () => { state.sheet.classes.push({ name: '', subclass: '', level: 1 }); drawClasses(); changed(); } }, '+ Add a class (multiclass)'),
-    );
-  };
-  drawClasses();
-  const level = h('span', { class: 'muted small' });
-  state.renders.push(() => (level.textContent = `Character level ${state.calc.level}`));
-  return h('header', { class: 'sh-head' },
-    labelled('Character name', field('name', { label: 'Character name', cls: 'big' }), 'name-fld'),
-    h('div', { class: 'sh-head-grid' },
-      h('div', { class: 'fld class-fld' }, classes, h('span', { class: 'fld-label' }, 'Class & level · ', level)),
-      labelled('Background', field('background', { label: 'Background', list: 'dl-backgrounds' })),
-      labelled('Player name', field('player_name', { label: 'Player name' })),
-      labelled('Race', field('race', { label: 'Race', list: 'dl-races' })),
-      labelled('Alignment', field('alignment', { label: 'Alignment', list: 'dl-alignments' })),
-      labelled('Experience points', field('xp', { label: 'Experience points' })),
-    ),
-  );
-}
-
-function abilities() {
-  const scores = h('div', { class: 'abilities' },
-    ABILITIES.map((a) =>
-      h('div', { class: 'ability' },
-        h('span', { class: 'ability-name' }, ABILITY_NAMES[a]),
-        auto(`mod.${a}`, { kind: 'bonus', label: `${ABILITY_NAMES[a]} modifier`, cls: 'mod' }),
-        field(`abilities.${a}`, { label: `${ABILITY_NAMES[a]} score`, kind: 'int', cls: 'score' }),
-      ),
-    ),
-  );
-  const insp = h('input', { type: 'checkbox', checked: state.sheet.inspiration, onchange: (e) => { state.sheet.inspiration = e.target.checked; changed(); } });
-  const saves = ABILITIES.map((a) =>
-    h('li', {}, autoCheck(`save_prof.${a}`, `Proficient in ${ABILITY_NAMES[a]} saves`), auto(`save.${a}`, { kind: 'bonus', label: `${ABILITY_NAMES[a]} save`, cls: 'small-auto' }), h('span', {}, ABILITY_NAMES[a])),
-  );
-  const skills = Object.entries(SKILLS).map(([k, { name, ability }]) => {
-    const marks = { undefined: '○', proficient: '●', expertise: '◆' };
-    const titles = { undefined: 'Not proficient', proficient: 'Proficient', expertise: 'Expertise (double proficiency)' };
-    const mark = h('button', { type: 'button', class: 'prof-mark' });
-    const paint = () => {
-      const p = state.sheet.skills[k];
-      mark.textContent = marks[p];
-      mark.title = `${titles[p]}. Click to change.`;
-      mark.setAttribute('aria-label', `${name}: ${titles[p]}`);
-    };
-    mark.addEventListener('click', () => {
-      const next = { undefined: 'proficient', proficient: 'expertise', expertise: undefined }[state.sheet.skills[k]];
-      if (next) state.sheet.skills[k] = next;
-      else delete state.sheet.skills[k];
-      paint();
-      changed();
-    });
-    paint();
-    return h('li', {}, mark, auto(`skill.${k}`, { kind: 'bonus', label: name, cls: 'small-auto' }), h('span', {}, name, h('span', { class: 'muted small' }, ` (${ability.charAt(0).toUpperCase() + ability.slice(1)})`)));
-  });
-  return h('div', { class: 'sh-stats' },
-    scores,
-    h('div', { class: 'sh-stack' },
-      h('div', { class: 'pill-row' }, h('label', { class: 'pill-box' }, insp, h('span', {}, 'Inspiration'))),
-      h('div', { class: 'pill-row' }, auto('proficiency_bonus', { kind: 'bonus', label: 'Proficiency bonus', cls: 'small-auto' }), h('span', {}, 'Proficiency bonus')),
-      box('Saving throws', 'list-box', h('ul', { class: 'checklist' }, saves)),
-      box('Skills', 'list-box', h('ul', { class: 'checklist' }, skills),
-        h('p', { class: 'muted small legend' }, '○ none · ● proficient · ◆ expertise'),
-        h('div', { class: 'pill-row small-text' }, autoCheck('jack_of_all_trades', 'Jack of All Trades'), h('span', {}, 'Jack of All Trades (half proficiency on other checks)')),
-      ),
-      h('div', { class: 'pill-row' }, auto('passive_perception', { label: 'Passive Wisdom (Perception)', cls: 'small-auto' }), h('span', {}, 'Passive Wisdom (Perception)')),
-      box('Other proficiencies & languages', '', field('proficiencies_languages', { label: 'Other proficiencies and languages', kind: 'longtext', rows: 5 })),
-    ),
-  );
-}
-
-function combat() {
-  const deathSaves = (kind, label) =>
-    h('div', { class: 'death-row' }, h('span', {}, label),
-      [1, 2, 3].map((n) => {
-        const b = h('input', { type: 'checkbox', 'aria-label': `${label} ${n}`, checked: state.sheet.death_saves[kind] >= n });
-        b.addEventListener('change', () => {
-          state.sheet.death_saves[kind] = b.checked ? n : n - 1;
-          b.parentElement.querySelectorAll('input').forEach((x, i) => (x.checked = i < state.sheet.death_saves[kind]));
-          changed();
-        });
-        return b;
-      }));
-  return box(null, 'combat',
-    h('div', { class: 'big-three' },
-      h('div', { class: 'stat' }, auto('ac', { label: 'Armour class' }), h('span', {}, 'Armour class')),
-      h('div', { class: 'stat' }, auto('initiative', { kind: 'bonus', label: 'Initiative' }), h('span', {}, 'Initiative')),
-      h('div', { class: 'stat' }, auto('speed', { label: 'Speed (feet)' }), h('span', {}, 'Speed')),
-    ),
-    h('div', { class: 'hp' },
-      h('div', { class: 'hp-max' }, h('span', {}, 'Hit point maximum'), auto('hp_max', { label: 'Hit point maximum', cls: 'small-auto' })),
-      labelled('Current hit points', field('hp.current', { label: 'Current hit points', kind: 'int', nullable: true, cls: 'big-num' })),
-      labelled('Temporary hit points', field('hp.temp', { label: 'Temporary hit points', kind: 'int', nullable: true, cls: 'num' })),
-    ),
-    h('div', { class: 'hd-death' },
-      h('div', { class: 'hd' },
-        h('div', { class: 'pill-row' }, h('span', {}, 'Hit dice'), auto('hit_dice', { kind: 'text', label: 'Hit dice', cls: 'text-auto' })),
-        labelled('Used', field('hit_dice_used', { label: 'Hit dice used', kind: 'int', cls: 'num' }), 'inline'),
-      ),
-      h('div', { class: 'death' }, h('span', { class: 'fld-label' }, 'Death saves'), deathSaves('successes', 'Successes'), deathSaves('failures', 'Failures')),
-    ),
-  );
-}
-
-function attacks() {
-  const list = h('div', { class: 'attacks' });
-  const draw = () => {
-    list.replaceChildren(
-      ...(state.sheet.attacks.length ? [h('div', { class: 'attack-row attack-head' }, h('span', {}, 'Name'), h('span', {}, 'Atk bonus'), h('span', {}, 'Damage / type'), h('span', {}))] : []),
-      ...state.sheet.attacks.map((_, i) =>
-        h('div', { class: 'attack-row' },
-          field(`attacks.${i}.name`, { label: 'Attack name' }),
-          field(`attacks.${i}.bonus`, { label: 'Attack bonus' }),
-          field(`attacks.${i}.damage`, { label: 'Damage and type' }),
-          h('button', { type: 'button', class: 'ghost icon', title: 'Remove', onclick: () => { state.sheet.attacks.splice(i, 1); draw(); changed(); } }, '×'),
-        ),
-      ),
-      h('button', { type: 'button', class: 'link', onclick: () => { state.sheet.attacks.push({ name: '', bonus: '', damage: '', notes: '' }); draw(); changed(); } }, '+ Add an attack'),
-    );
-  };
-  draw();
-  return box('Attacks & spellcasting', '', list);
-}
-
-function equipment() {
-  return box('Equipment', '',
-    h('div', { class: 'coins' }, ['cp', 'sp', 'ep', 'gp', 'pp'].map((c) => labelled(c.toUpperCase(), field(`coins.${c}`, { label: c.toUpperCase(), kind: 'int', cls: 'num' })))),
-    field('equipment', { label: 'Equipment', kind: 'longtext', rows: 8 }),
-  );
-}
-
-function personality() {
-  return h('div', { class: 'traits' },
-    ['personality', 'ideals', 'bonds', 'flaws'].map((k) =>
-      box({ personality: 'Personality traits', ideals: 'Ideals', bonds: 'Bonds', flaws: 'Flaws' }[k], '', field(k, { label: k, kind: 'longtext', rows: 3 })),
-    ),
-  );
-}
-
-function features() {
-  return box('Features & traits', '', field('features', { label: 'Features and traits', kind: 'longtext', rows: 16 }));
-}
-
-function details() {
-  return h('details', { class: 'sh-section', open: true },
-    h('summary', {}, 'Character details'),
-    h('div', { class: 'sh-details' },
-      h('div', { class: 'looks' }, ['age', 'height', 'weight', 'eyes', 'skin', 'hair'].map((k) => labelled(k.charAt(0).toUpperCase() + k.slice(1), field(k, { label: k })))),
-      h('div', { class: 'sh-grid two' },
-        box('Character appearance', '', field('appearance', { label: 'Appearance', kind: 'longtext', rows: 6 })),
-        box('Allies & organisations', '', field('allies', { label: 'Allies and organisations', kind: 'longtext', rows: 6 })),
-        box('Character backstory', '', field('backstory', { label: 'Backstory', kind: 'longtext', rows: 10 })),
-        box('Additional features & traits', '', field('additional_features', { label: 'Additional features and traits', kind: 'longtext', rows: 10 })),
-        box('Treasure', '', field('treasure', { label: 'Treasure', kind: 'longtext', rows: 4 })),
-      ),
-    ),
-  );
-}
-
 // ---------- spells ----------
 
-function spellcasting() {
+const ORDINALS = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];
+
+function spells() {
   const classPick = h('select', { 'aria-label': 'Spellcasting class' });
   const paintClassPick = () => {
     const names = [...new Set(state.sheet.classes.map((c) => c.name.trim()).filter(Boolean))];
@@ -454,45 +639,35 @@ function spellcasting() {
     abilityReset.title = 'You chose this yourself. Click to use the automatic one.';
   });
 
-  const slots = h('div', { class: 'slots' },
-    [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) =>
-      h('div', { class: 'slot' },
-        h('span', { class: 'slot-level' }, LEVEL_NAMES[n].replace(' level', '')),
-        h('span', { class: 'fld-label' }, 'Total'),
-        auto(`slots.${n}`, { label: `${LEVEL_NAMES[n]} slots`, cls: 'small-auto' }),
-        h('span', { class: 'fld-label' }, 'Used'),
-        field(`spellcasting.slots_used.${n}`, { label: `${LEVEL_NAMES[n]} slots used`, kind: 'int', nullable: true, cls: 'num' }),
-      ),
-    ),
-  );
+  const slotTile = (n) => {
+    const tile = h('div', { class: 'slot' },
+      h('span', { class: 'slot-level' }, ORDINALS[n]),
+      auto(`slots.${n}`, { label: `${LEVEL_NAMES[n]} slots` }),
+      pips(`spellcasting.slots_used.${n}`, `${LEVEL_NAMES[n]} slot used`, () => state.calc.values[`slots.${n}`]),
+    );
+    state.renders.push(() => tile.classList.toggle('none', !state.calc.values[`slots.${n}`]));
+    return tile;
+  };
   const pact = h('div', { class: 'slot pact' },
-    h('span', { class: 'slot-level' }, 'Pact Magic'),
-    h('span', { class: 'fld-label' }, 'Slots'),
-    auto('pact_slots', { label: 'Pact Magic slots', cls: 'small-auto' }),
-    h('span', { class: 'fld-label' }, 'Slot level'),
-    auto('pact_level', { label: 'Pact slot level', cls: 'small-auto' }),
-    h('span', { class: 'fld-label' }, 'Used'),
-    field('spellcasting.pact_used', { label: 'Pact slots used', kind: 'int', cls: 'num' }),
+    h('span', { class: 'slot-level' }, 'Pact magic'),
+    h('div', { class: 'pact-nums' }, stat(auto('pact_slots', { label: 'Pact Magic slots' }), 'Slots'), stat(auto('pact_level', { label: 'Pact slot level' }), 'Slot level')),
+    pips('spellcasting.pact_used', 'Pact slot used', () => state.calc.values.pact_slots, 10),
   );
-  state.renders.push(() => {
-    pact.hidden = !state.calc.values.pact_slots && !('pact_slots' in state.sheet.overrides);
-    slots.querySelectorAll('.slot').forEach((el, i) => el.classList.toggle('none', !state.calc.values[`slots.${i + 1}`]));
-  });
+  state.renders.push(() => (pact.hidden = !state.calc.values.pact_slots && !('pact_slots' in state.sheet.overrides)));
 
   const list = h('div', { class: 'spell-list' });
   const drawList = () => list.replaceChildren(...spellGroups(drawList));
   drawList();
 
-  return h('details', { class: 'sh-section', open: true },
-    h('summary', {}, 'Spells'),
+  return h('div', { class: 'sh-spells' },
     h('div', { class: 'spell-head' },
-      labelled('Spellcasting class', classPick),
-      labelled('Spellcasting ability', abilityWrap),
-      h('div', { class: 'stat' }, auto('spell_dc', { label: 'Spell save DC' }), h('span', {}, 'Spell save DC')),
-      h('div', { class: 'stat' }, auto('spell_attack', { kind: 'bonus', label: 'Spell attack bonus' }), h('span', {}, 'Spell attack bonus')),
+      stat(classPick, 'Spellcasting class', 'pick'),
+      stat(abilityWrap, 'Spellcasting ability', 'pick'),
+      stat(auto('spell_dc', { label: 'Spell save DC' }), 'Spell save DC', 'big'),
+      stat(auto('spell_attack', { kind: 'bonus', label: 'Spell attack bonus' }), 'Spell attack bonus', 'big'),
     ),
-    slots,
-    pact,
+    h('div', { class: 'slots' }, [1, 2, 3, 4, 5, 6, 7, 8, 9].map(slotTile), pact),
+    h('p', { class: 'muted small slot-help' }, 'Slots per long rest are worked out for you (type a number to change one). Tick a circle when you use a slot.'),
     addSpell(drawList),
     list,
   );
@@ -648,6 +823,10 @@ function refreshSummary(card, spell) {
 // ---------- upload and download ----------
 
 export function initSheetActions() {
+  // A new layout chosen under Look: draw the sheet again in it.
+  new MutationObserver(() => state.sheet && currentLayout() !== state.layout && render())
+    .observe($('#tab-sheet'), { attributes: true, attributeFilter: ['data-sheet-layout'] });
+
   const fileInput = $('#sheet-file');
   $('#sheet-upload').addEventListener('click', () => {
     if (state.version && !confirm('Uploading a sheet replaces the one here. Carry on?')) return;

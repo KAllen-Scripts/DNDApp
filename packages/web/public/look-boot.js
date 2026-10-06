@@ -17,7 +17,7 @@
     density: ['cozy', 'compact', 'roomy'],
     chat: ['bubbles', 'script', 'letters', 'terminal'],
     sheetStyle: ['match', 'official', 'grimoire', 'cards', 'blueprint', 'terminal'],
-    sheetLayout: ['classic', 'combat', 'single'],
+    sheetLayout: ['classic', 'combat', 'abilities', 'tabs', 'single'],
   };
   var DEFAULTS = { theme: 'tavern', layout: 'classic', density: 'cozy', chat: 'bubbles', sheetStyle: 'match', sheetLayout: 'classic' };
 

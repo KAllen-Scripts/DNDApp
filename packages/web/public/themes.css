@@ -228,9 +228,10 @@
 :root[data-theme="neon"] h1, :root[data-theme="neon"] .chat-title { text-shadow: 0 0 6px #48f0ff, 0 0 18px rgb(72 240 255 / 0.6); }
 :root[data-theme="neon"] .a { border-color: rgb(255 47 185 / 0.45); }
 
-:root[data-theme="pixel"] :is(.card, .a, .q, button, input, textarea, select, .chats, .tabs, .tabs button, .sh-box, .ability, .stat, .slot, .look-card, .chat-row, .chat-open, .cite, .look-dialog, .evidence pre) {
+:root[data-theme="pixel"] :is(.card, .a, .q, button, input, textarea, select, .chats, .tabs, .tabs button, .sh-box, .sh-line, .ability, .stat, .slot, details.spell, .readout, .look-card, .chat-row, .chat-open, .cite, .look-dialog, .evidence pre) {
   border-radius: 0 !important;
 }
+:root[data-theme="pixel"] .prof-mark::before, :root[data-theme="pixel"] .mark { border-radius: 0; }
 :root[data-theme="pixel"] :is(.a, .card, .chats, .look-card) { border-width: 3px; }
 :root[data-theme="pixel"] button:not(.icon-btn, .cite, .link, .chat-open, .prof-mark, .reset, [role="tab"]) { border-width: 3px; box-shadow: 3px 3px 0 #000; text-transform: uppercase; }
 :root[data-theme="pixel"] button:not(.icon-btn, .cite, .link, .chat-open):active { transform: translate(3px, 3px); box-shadow: none; }
@@ -372,6 +373,8 @@
 
 /* =====================================================================
    5. Character sheet styles (#tab-sheet[data-sheet-style], or a preview)
+   The cards each style draws: .sh-box, .sh-line, .ability, .vitals .stat,
+   .spell-head .stat, .slot and details.spell. Labels are .lbl and h3.
    ===================================================================== */
 
 /* Official: paper and black ink, labels under the boxes like the printed sheet. */
@@ -381,17 +384,15 @@
   --accent: #7a1212; --accent-text: #fff; --cite: #eee; --radius: 8px; --shadow: none;
   color-scheme: light; color: var(--text); background: #fbfaf6; text-shadow: none;
 }
-[data-sheet-style="official"] :is(.sh-box, .sh-head-grid, .stat, .hp, .hd, .death, .slot, details.spell) { border: 2px solid var(--border); }
-[data-sheet-style="official"] .sh-box { display: flex; flex-direction: column; }
-[data-sheet-style="official"] .sh-box > h3 { order: 99; margin: 0.45rem 0 0; color: #111; }
-[data-sheet-style="official"] :is(.sheet h3, .fld-label, .ability-name, .stat > span:last-child) { font-family: "Arial Narrow", "Roboto Condensed", Arial, sans-serif; color: #111; }
-[data-sheet-style="official"] .ability {
-  border: 2px solid #111; border-radius: 12px 12px 40% 40% / 12px 12px 22% 22%; padding-bottom: 0;
-}
-[data-sheet-style="official"] .ability input.score { border: 2px solid #111; background: #fff; margin-bottom: -0.7rem; position: relative; }
-[data-sheet-style="official"] .abilities { gap: 1.1rem; padding-bottom: 0.7rem; }
-[data-sheet-style="official"] .sh-head input.big { font-family: "Bookman Old Style", "Palatino Linotype", Georgia, serif; border-width: 0 0 2px; border-radius: 0; background: transparent; }
-[data-sheet-style="official"] .sh-section { background: #f1f0ec; border: 2px solid #111; }
+[data-sheet-style="official"] :is(.sh-box, .sh-line, .ability, .vitals .stat, .spell-head .stat, .slot, details.spell) { border: 2px solid var(--border); }
+[data-sheet-style="official"] .sh-box > h3 { order: 99; margin: 0.5rem 0 0; }
+[data-sheet-style="official"] :is(.sheet h3, .lbl) { font-family: "Arial Narrow", "Roboto Condensed", Arial, sans-serif; color: #111; }
+[data-sheet-style="official"] .sh-line { border-radius: 999px; }
+[data-sheet-style="official"] .ability { border-radius: 12px 12px 40% 40% / 12px 12px 22% 22%; padding-bottom: 0; }
+[data-sheet-style="official"] .ability input.score { position: relative; margin-bottom: -0.8rem; border: 2px solid #111; background: #fff; }
+[data-sheet-style="official"] .abilities { row-gap: 1.2rem; padding-bottom: 0.8rem; }
+[data-sheet-style="official"] .name-box input.big { font-family: "Bookman Old Style", "Palatino Linotype", Georgia, serif; border-bottom-color: #111; }
+[data-sheet-style="official"] :is(.sh-section > summary, .sh-tabbar) { border-bottom-color: #111; }
 
 /* Grimoire: parchment pages bound in leather and gold. */
 [data-sheet-style="grimoire"] {
@@ -405,13 +406,21 @@
     linear-gradient(160deg, #4a2a17, #2a160c 75%);
 }
 [data-sheet-style="grimoire"] .sheet { color: var(--text); }
-[data-sheet-style="grimoire"] :is(.sh-box, .ability, .stat, .sh-head-grid, .slot, details.spell, .sh-section) {
+[data-sheet-style="grimoire"] :is(.sh-box, .sh-line, .ability, .vitals .stat, .spell-head .stat, .slot, details.spell) {
   border: 3px double #b8933f; box-shadow: inset 0 0 18px rgb(120 80 20 / 0.18), 0 2px 6px rgb(0 0 0 / 0.35);
 }
-[data-sheet-style="grimoire"] :is(.sheet h3, .fld-label, .ability-name) { font-family: "Palatino Linotype", "Book Antiqua", Georgia, serif; font-variant: small-caps; color: #7a4e10; letter-spacing: 0.08em; }
-[data-sheet-style="grimoire"] .sh-head input.big { font-family: "Trajan Pro", "Palatino Linotype", Georgia, serif; color: #f6d27a; background: transparent; border: none; border-bottom: 2px solid #b8933f; border-radius: 0; text-shadow: 0 1px 0 #000; }
-[data-sheet-style="grimoire"] .sheet-bar button { color: #f0dcb0; border-color: #b8933f; }
-[data-sheet-style="grimoire"] .sheet-bar #sheet-status, [data-sheet-style="grimoire"] .name-fld .fld-label { color: #d9c08a; }
+[data-sheet-style="grimoire"] :is(.sheet h3, .lbl) { font-family: "Palatino Linotype", "Book Antiqua", Georgia, serif; color: #7a4e10; letter-spacing: 0.08em; }
+/* The name is tooled into the leather cover. */
+[data-sheet-style="grimoire"] .sh-box.name-box { background: none; border: none; box-shadow: none; }
+[data-sheet-style="grimoire"] .name-box input.big { font-family: "Trajan Pro", "Palatino Linotype", Georgia, serif; color: #f6d27a; border-bottom-color: #b8933f; text-shadow: 0 1px 0 #000; }
+[data-sheet-style="grimoire"] :is(.name-box .lbl, .name-box .summary, .spell-group h4 .muted) { color: #d9c08a; }
+/* Text that sits straight on the leather. */
+[data-sheet-style="grimoire"] :is(.sh-section > summary, .sh-tabbar button, .spell-group h4, .slot-help, .add-spell .muted, .spell-list > p) { color: #f0dcb0; }
+[data-sheet-style="grimoire"] :is(.sh-section > summary, .sh-tabbar) { border-bottom-color: #b8933f; }
+[data-sheet-style="grimoire"] .sh-section > summary::before { color: #f6d27a; }
+[data-sheet-style="grimoire"] .sh-tabbar button[aria-selected="true"] { color: #f6d27a; border-bottom-color: #f6d27a; }
+[data-sheet-style="grimoire"] :is(.sheet-bar button, .add-spell button.ghost) { color: #f0dcb0; border-color: #b8933f; }
+[data-sheet-style="grimoire"] .sheet-bar #sheet-status { color: #d9c08a; }
 
 /* Index cards pinned to a corkboard. */
 [data-sheet-style="cards"] {
@@ -424,19 +433,27 @@
     radial-gradient(rgb(255 255 255 / 0.13) 1px, transparent 1.5px) 3px 4px / 9px 9px,
     #c19566;
 }
-[data-sheet-style="cards"] :is(.sh-box, .ability, .sh-head-grid, .sh-section) {
+[data-sheet-style="cards"] :is(.sh-box, .sh-line, .ability, .vitals .stat, .spell-head .stat, .slot) {
   position: relative; border: none; border-radius: 2px; box-shadow: 0 3px 8px rgb(0 0 0 / 0.28);
   background: repeating-linear-gradient(#fffef8 0 1.45rem, #dfe9f5 1.45rem calc(1.45rem + 1px));
 }
-[data-sheet-style="cards"] :is(.sh-box, .ability):nth-child(odd) { transform: rotate(-0.6deg); }
-[data-sheet-style="cards"] :is(.sh-box, .ability):nth-child(even) { transform: rotate(0.5deg); }
-[data-sheet-style="cards"] :is(.sh-box, .sh-head-grid, .sh-section)::before {
+[data-sheet-style="cards"] :is(.sh-box, .sh-line, .ability, .vitals .stat):nth-child(odd) { transform: rotate(-0.5deg); }
+[data-sheet-style="cards"] :is(.sh-box, .sh-line, .ability, .vitals .stat):nth-child(even) { transform: rotate(0.4deg); }
+[data-sheet-style="cards"] .sh-box::before {
   content: ""; position: absolute; top: -6px; left: 50%; width: 13px; height: 13px; border-radius: 50%;
   background: radial-gradient(circle at 35% 35%, #ff8a80, #c62828); box-shadow: 0 2px 2px rgb(0 0 0 / 0.35);
 }
-[data-sheet-style="cards"] .sheet h3 { font-family: "Segoe Print", "Bradley Hand", "Comic Neue", cursive; text-transform: none; letter-spacing: 0; font-size: 0.95rem; color: #c62828; border-bottom: 1px solid #f2a7a7; }
-[data-sheet-style="cards"] .sheet-bar { background: rgb(255 254 246 / 0.9); padding: 0.4rem 0.6rem; border-radius: 4px; box-shadow: 0 2px 6px rgb(0 0 0 / 0.2); }
-[data-sheet-style="cards"] .sheet :is(input, textarea, select) { background: transparent; }
+[data-sheet-style="cards"] .sh-box > h3 { font-family: "Segoe Print", "Bradley Hand", "Comic Neue", cursive; text-transform: none; letter-spacing: 0; font-size: 0.95rem; color: #c62828; border-bottom: 1px solid #f2a7a7; }
+[data-sheet-style="cards"] .sheet :is(input:not([type=checkbox]), textarea, select) { background: transparent; }
+[data-sheet-style="cards"] .add-spell :is(input, button.ghost) { background: #fffef6; }
+/* Text on the cork gets a strip of paper. */
+[data-sheet-style="cards"] :is(.sh-section > summary, .sh-tabbar, .spell-group h4, .slot-help, .add-spell .muted, .spell-list > p, .sheet-bar) {
+  background: rgb(255 254 246 / 0.94); border-radius: 2px; box-shadow: 0 2px 6px rgb(0 0 0 / 0.2);
+}
+[data-sheet-style="cards"] .sh-section > summary { padding: 0.35rem 0.7rem; border-bottom: none; }
+[data-sheet-style="cards"] .sh-tabbar { padding: 0 0.3rem; border-bottom: none; }
+[data-sheet-style="cards"] :is(.spell-group h4, .slot-help, .add-spell .muted, .spell-list > p) { width: fit-content; padding: 0.15rem 0.5rem; }
+[data-sheet-style="cards"] .sheet-bar { padding: 0.4rem 0.6rem; }
 
 /* Blueprint: white lines on blue grid paper. */
 [data-sheet-style="blueprint"] {
@@ -451,11 +468,11 @@
     linear-gradient(90deg, rgb(255 255 255 / 0.06) 1px, transparent 1px) 0 0 / 20px 20px,
     #0b3d91;
 }
-[data-sheet-style="blueprint"] :is(.sheet h3, .fld-label, .ability-name, .stat > span:last-child, .sh-head input.big) {
+[data-sheet-style="blueprint"] :is(.sheet h3, .lbl, .name-box input.big) {
   font-family: Bahnschrift, "DIN Alternate", "Arial Narrow", sans-serif; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text);
 }
-[data-sheet-style="blueprint"] .sheet :is(input, textarea, select) { background: transparent; border-width: 0 0 1px; border-radius: 0; border-color: rgb(234 242 255 / 0.5); }
-[data-sheet-style="blueprint"] :is(.sh-box, .ability, .stat, .sh-head-grid) { border-style: solid; border-width: 1.5px; position: relative; }
+[data-sheet-style="blueprint"] .sheet :is(input:not([type=checkbox]), textarea, select) { background: transparent; border-width: 0 0 1px; border-radius: 0; border-color: rgb(234 242 255 / 0.5); }
+[data-sheet-style="blueprint"] :is(.sh-box, .sh-line, .ability, .vitals .stat, .spell-head .stat, .slot) { position: relative; border-width: 1.5px; }
 [data-sheet-style="blueprint"] .sh-box::after { content: "+"; position: absolute; top: -0.6rem; right: -0.35rem; color: var(--accent); font-weight: 700; }
 [data-sheet-style="blueprint"] .sheet-bar button { color: var(--text); }
 
@@ -470,34 +487,62 @@
 }
 [data-sheet-style="terminal"] .sheet h3::before { content: "[ "; }
 [data-sheet-style="terminal"] .sheet h3::after { content: " ]"; }
-[data-sheet-style="terminal"] :is(.sheet h3, .fld-label, .ability-name, .stat > span:last-child) { color: var(--accent); }
+[data-sheet-style="terminal"] :is(.sheet h3, .lbl) { color: var(--accent); }
 [data-sheet-style="terminal"] .sheet-bar button { color: var(--text); }
 
+/* Your own values stay marked in every style. */
+[data-sheet-style] .sheet .auto.mine input { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+
 /* =====================================================================
-   6. Character sheet layouts
+   6. Character sheet layouts (#tab-sheet[data-sheet-layout])
+   sheet.js arranges the blocks into rows (.row-*) of columns; these set
+   the columns, and how they fold up as the sheet gets narrower. Widths are
+   the sheet's own (the "sheet" container), so the page layout doesn't matter.
    ===================================================================== */
 
-/* Combat first: the combat column becomes a strip across the top, with big numbers. */
-[data-sheet-layout="combat"] .sh-grid { grid-template-columns: minmax(0, 1.15fr) minmax(0, 2fr); }
-[data-sheet-layout="combat"] .sh-grid > .sh-col:nth-child(2) { order: -1; grid-column: 1 / -1; grid-row: auto; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
-[data-sheet-layout="combat"] .sh-grid > .sh-col:first-child { grid-row: auto; }
-[data-sheet-layout="combat"] .big-three .stat .auto input { font-size: 2.2rem; width: 5.4rem; }
-[data-sheet-layout="combat"] .hp input.big-num { font-size: 2rem; }
-[data-sheet-layout="combat"] .combat { border-color: var(--accent); }
-@media (max-width: 1100px) {
-  [data-sheet-layout="combat"] .sh-grid > .sh-col:nth-child(2) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  [data-sheet-layout="combat"] .sh-grid > .sh-col:nth-child(2) > .combat { grid-column: 1 / -1; }
+.row-classic, .row-combat { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr); }
+.row-stats { grid-template-columns: minmax(0, 1.25fr) minmax(0, 2fr); }
+.row-stats .traits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.row-vitals { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); }
+.row-abilities { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.row-strip .abilities { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.row-tabs { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr); }
+
+@container sheet (max-width: 1000px) {
+  .row-classic, .row-combat { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); }
+  .row-stats { grid-template-columns: minmax(0, 1.4fr) minmax(0, 2fr); }
+  .row-vitals, .row-abilities, .row-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .row-tabs > .sh-col:last-child { grid-column: 1 / -1; }
+  .row-strip .abilities { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
-@media (max-width: 760px) {
-  [data-sheet-layout="combat"] .sh-grid { grid-template-columns: minmax(0, 1fr); }
-  [data-sheet-layout="combat"] .sh-grid > .sh-col:nth-child(2) { grid-template-columns: minmax(0, 1fr); }
+/* Two columns: the first column down the left; on the right the second and
+   third (or, in three columns, the second plus the traits, with features
+   across the bottom, which keeps the two sides about the same height). */
+@container sheet (min-width: 641px) and (max-width: 860px) {
+  .row-classic, .row-combat, .row-stats { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+  :is(.row-classic, .row-combat) > .sh-col:first-child { grid-row: span 2; }
+  .row-stats .traits { grid-template-columns: minmax(0, 1fr); }
+  .row-classic > .sh-col:nth-child(3) { display: contents; }
+  .row-classic > .sh-col:nth-child(3) > .traits { grid-column: 2; }
+  .row-classic > .sh-col:nth-child(3) > :last-child { grid-column: 1 / -1; }
+}
+@container sheet (max-width: 640px) {
+  :is(.row-classic, .row-combat, .row-stats, .row-abilities, .row-tabs) { grid-template-columns: minmax(0, 1fr); }
+}
+@container sheet (max-width: 420px) {
+  .row-vitals { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* Combat first: the fight numbers, big. */
+[data-sheet-layout="combat"] .row-combat .stat.big .auto input { width: 5.4rem; height: 3.1rem; font-size: 2.2rem; }
+[data-sheet-layout="combat"] .row-combat .hp-current input { height: 3.1rem; font-size: 2.1rem; }
+[data-sheet-layout="combat"] .row-combat :is(.vitals .stat, .hp) { border-color: var(--accent); }
+
+/* By ability: INT, WIS and CHA share the column's spare room. */
+.row-abilities > .sh-col:nth-child(2) > .ability-group { flex-grow: 1; }
+
 /* One column: easy to scroll through, e.g. on a tablet at the table. */
-[data-sheet-layout="single"] .sheet { max-width: 46rem; margin: 0 auto; width: 100%; }
-[data-sheet-layout="single"] :is(.sh-grid, .sh-grid.two, .sh-head) { grid-template-columns: minmax(0, 1fr); }
-[data-sheet-layout="single"] .sh-grid > .sh-col:first-child { grid-row: auto; }
-[data-sheet-layout="single"] .sh-head-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+[data-sheet-layout="single"] .sheet { width: 100%; max-width: 46rem; margin: 0 auto; }
 
 /* =====================================================================
    7. The Look dialog and its previews
@@ -569,6 +614,21 @@
 .sheet-combat .d1 { display: block; top: 18px; left: 5%; width: 90%; height: 16px; background: var(--accent); }
 .sheet-combat .d2, .sheet-combat .d3 { display: block; top: 38px; bottom: 6px; }
 .sheet-combat .d2 { left: 5%; width: 32%; } .sheet-combat .d3 { left: 40%; width: 55%; }
+.sheet-abilities .d0 { display: block; top: 6px; left: 5%; width: 90%; height: 7px; }
+.sheet-abilities .d1 { display: block; top: 17px; left: 5%; width: 90%; height: 9px; background: var(--accent); }
+.sheet-abilities .d2, .sheet-abilities .d3, .sheet-abilities .d4, .sheet-abilities .d5, .sheet-abilities .d6, .sheet-abilities .d7 { display: block; width: 20%; height: 11px; }
+.sheet-abilities .d2, .sheet-abilities .d3, .sheet-abilities .d4 { left: 5%; }
+.sheet-abilities .d5, .sheet-abilities .d6, .sheet-abilities .d7 { left: 28%; }
+.sheet-abilities .d2, .sheet-abilities .d5 { top: 30px; } .sheet-abilities .d3, .sheet-abilities .d6 { top: 44px; } .sheet-abilities .d4, .sheet-abilities .d7 { top: 58px; }
+.sheet-abilities .d8 { display: block; top: 30px; bottom: 3px; left: 51%; width: 44%; opacity: 0.45; }
+.sheet-tabs .d0 { display: block; top: 6px; left: 5%; width: 90%; height: 7px; }
+.sheet-tabs .d1 { display: block; top: 17px; left: 5%; width: 90%; height: 10px; }
+.sheet-tabs .d2 { display: block; top: 31px; bottom: 6px; left: 5%; width: 20%; }
+.sheet-tabs .d3 { display: block; top: 31px; bottom: 6px; left: 28%; width: 20%; }
+.sheet-tabs .d4 { display: block; top: 31px; left: 51%; width: 14%; height: 5px; background: var(--accent); }
+.sheet-tabs .d5 { display: block; top: 31px; left: 67%; width: 12%; height: 5px; }
+.sheet-tabs .d6 { display: block; top: 31px; left: 81%; width: 14%; height: 5px; }
+.sheet-tabs .d7 { display: block; top: 39px; bottom: 6px; left: 51%; width: 44%; opacity: 0.45; }
 .sheet-single .d0 { display: block; top: 6px; left: 30%; width: 40%; height: 8px; }
 .sheet-single .d1, .sheet-single .d2, .sheet-single .d3 { display: block; left: 30%; width: 40%; height: 13px; }
 .sheet-single .d1 { top: 18px; } .sheet-single .d2 { top: 35px; } .sheet-single .d3 { top: 52px; }
@@ -592,15 +652,18 @@
 .sheet-preview { height: 104px; overflow: hidden; padding: 9px 8px; border-radius: 8px; border: 1px solid var(--border); }
 .sheet-preview .sheet { padding: 0; gap: 0; }
 .sheet-preview .sp-row { display: grid; grid-template-columns: 4.4rem minmax(0, 1fr); gap: 8px; align-items: start; }
+.sheet-preview .sp-side { display: grid; gap: 6px; }
 .sheet-preview .ability { padding: 3px 2px 4px; gap: 1px; }
-.sheet-preview .ability-name { font-size: 0.5rem; }
-.sheet-preview .ability .mod input { width: 2.8rem; font-size: 1.05rem; padding: 0; }
-.sheet-preview .ability input.score { width: 2.2rem; font-size: 0.7rem; padding: 0; }
-.sheet-preview .sh-box { padding: 4px 6px; }
-.sheet-preview .sh-box > h3 { font-size: 0.55rem; margin-bottom: 2px; }
-.sheet-preview .stat { padding: 2px; }
-.sheet-preview .stat .auto input { width: 2.8rem; font-size: 1.05rem; padding: 0; }
-.sheet-preview .stat > span:last-child { font-size: 0.5rem; }
+.sheet-preview .ability > .lbl { font-size: 0.5rem; }
+.sheet-preview .ability .mod input { width: 2.8rem; height: 1.6rem; font-size: 1.05rem; }
+.sheet-preview input.score { width: 2.2rem; height: 1.1rem; font-size: 0.7rem; }
+.sheet-preview .vitals { grid-template-columns: minmax(0, 1fr); }
+.sheet-preview .vitals .stat { padding: 2px; gap: 1px; }
+.sheet-preview .stat.big .auto input { width: 2.8rem; height: 1.6rem; font-size: 1.05rem; }
+.sheet-preview .stat > .lbl { font-size: 0.5rem; }
+.sheet-preview .sh-line { min-height: 0; padding: 3px 6px; grid-template-columns: 0 1.9rem minmax(0, 1fr); column-gap: 5px; }
+.sheet-preview .sh-line .auto input { width: 1.9rem; height: 1.15rem; font-size: 0.65rem; }
+.sheet-preview .sh-line > .lbl { font-size: 0.5rem; }
 .sheet-preview input { pointer-events: none; }
 
 /* =====================================================================
@@ -614,8 +677,8 @@
     --accent: #000; --accent-text: #fff; --cite: #eee; --bg-art: none; --shadow: none; color-scheme: light;
   }
   #tab-sheet[data-sheet-style] { background: #fff !important; color: #000; text-shadow: none !important; }
-  #tab-sheet :is(.sh-box, .ability, .sh-head-grid, .sh-section) { transform: none !important; box-shadow: none !important; }
-  #tab-sheet :is(.sh-box, .sh-head-grid, .sh-section)::before { display: none !important; }
+  #tab-sheet :is(.sh-box, .sh-line, .ability, .stat, .slot) { transform: none !important; box-shadow: none !important; }
+  #tab-sheet .sh-box::before, #tab-sheet .sh-box::after { display: none !important; }
   .look-dialog { display: none; }
 }
 

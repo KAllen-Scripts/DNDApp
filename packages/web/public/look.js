@@ -53,6 +53,8 @@ const SHEET_STYLES = {
 const SHEET_LAYOUTS = {
   classic: ['Three columns', 'Laid out like the official sheet.'],
   combat: ['Combat first', 'AC, HP and attacks across the top, big.'],
+  abilities: ['By ability', 'Like the 2024 sheet: each ability holds its save and skills.'],
+  tabs: ['Tabs', 'Like the apps: stats up top, the rest in tabs.'],
   single: ['One column', 'Everything in a single scrolling column.'],
 };
 
@@ -77,7 +79,7 @@ const themePreview = (key) =>
     el('div', { class: 'tp-btn' }),
   );
 
-const diagram = (kind, key) => el('div', { class: `diagram ${kind}-${key}`, 'aria-hidden': 'true' }, ...Array.from({ length: 6 }, (_, i) => el('i', { class: `d${i}` })));
+const diagram = (kind, key) => el('div', { class: `diagram ${kind}-${key}`, 'aria-hidden': 'true' }, ...Array.from({ length: 9 }, (_, i) => el('i', { class: `d${i}` })));
 
 const densityPreview = (key) => el('div', { class: `density-preview dp-${key}`, 'aria-hidden': 'true' }, 'Aa');
 
@@ -89,15 +91,20 @@ const chatPreview = (key) =>
     ),
   );
 
-const sheetPreview = (key) =>
-  el('div', { class: 'sheet-preview', 'data-sheet-style': key, 'aria-hidden': 'true' },
+const sheetPreview = (key) => {
+  const value = (v, cls = '') => el('input', { class: cls, value: v, readonly: '', tabindex: '-1' });
+  return el('div', { class: 'sheet-preview', 'data-sheet-style': key, 'aria-hidden': 'true' },
     el('div', { class: 'sheet' },
       el('div', { class: 'sp-row' },
-        el('div', { class: 'ability' }, el('span', { class: 'ability-name' }, 'Strength'), el('span', { class: 'auto mod' }, el('input', { value: '+3', readonly: '', tabindex: '-1' })), el('input', { class: 'score', value: '16', readonly: '', tabindex: '-1' })),
-        el('div', { class: 'sh-box' }, el('h3', {}, 'Armour'), el('div', { class: 'stat' }, el('span', { class: 'auto' }, el('input', { value: '15', readonly: '', tabindex: '-1' })), el('span', {}, 'AC'))),
+        el('div', { class: 'ability' }, el('span', { class: 'lbl' }, 'Strength'), el('span', { class: 'auto mod' }, value('+3')), value('16', 'score')),
+        el('div', { class: 'sp-side' },
+          el('div', { class: 'vitals' }, el('div', { class: 'stat big' }, el('span', { class: 'auto' }, value('15')), el('span', { class: 'lbl' }, 'Armour class'))),
+          el('div', { class: 'sh-line' }, el('span'), el('span', { class: 'line-val' }, el('span', { class: 'auto' }, value('+2'))), el('span', { class: 'lbl' }, 'Bonus')),
+        ),
       ),
     ),
   );
+};
 
 // ---------- the dialog ----------
 
