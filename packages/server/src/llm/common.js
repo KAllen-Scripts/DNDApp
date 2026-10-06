@@ -2,11 +2,13 @@
  * Shared pieces for the LLM providers.
  *
  * Every provider exposes the same three calls:
- *   structured({ task, purpose, system, prompt, schema, campaignId }) -> parsed object
+ *   structured({ task, purpose, system, prompt, schema, attachments?, campaignId, userId }) -> parsed object
  *   text({ task, purpose, system, prompt, campaignId })                -> string
  *   agent({ task, purpose, system, prompt, tools, limits, ... })        -> { answer, costUsd, toolCalls }
  *
  * Agent tools are { name, description, schema (zod object), run(input) -> string }.
+ * Attachments are { type: 'image' | 'document', media_type, data (base64) },
+ * sent before the prompt (e.g. a photo or PDF of a character sheet).
  */
 import { z } from 'zod';
 
@@ -51,4 +53,13 @@ export function createUsage({ db, config }) {
       return costUsd;
     },
   };
+}
+
+/** A user message's content: attachments (images, PDFs), then the prompt. */
+export function userContent(prompt, attachments = []) {
+  if (!attachments.length) return prompt;
+  return [
+    ...attachments.map(({ type, media_type, data }) => ({ type, source: { type: 'base64', media_type, data } })),
+    { type: 'text', text: prompt },
+  ];
 }

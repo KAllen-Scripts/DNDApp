@@ -11,6 +11,12 @@ if (ctx.config.llm.provider === 'api' && !process.env.ANTHROPIC_API_KEY && !proc
 }
 
 ctx.jobs.start();
+// Read the rulebooks in the background so the first spell lookup is quick.
+ctx.books.load().then(() => {
+  const { books, spells, dir } = ctx.books.status();
+  if (books.length) app.log.info(`Books for spell lookups: ${books.map((b) => b.title).join(', ')} (${spells} spells found)`);
+  else app.log.info(`No books found in ${dir}; spell lookups use the SRD and the AI.`);
+});
 await app.listen({ host: ctx.config.host, port: ctx.config.port });
 app.log.info(`Player web page: ${ctx.config.publicUrl} (locally: http://${ctx.config.host}:${ctx.config.port})`);
 const noPassword = ctx.db.prepare('SELECT name FROM users WHERE password_hash IS NULL AND revoked_at IS NULL').all();

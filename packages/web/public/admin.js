@@ -5,6 +5,7 @@
  * Shown instead of Ask/Notes when the admin login is used.
  */
 import { api, h } from './api.js';
+import { createSessions } from './admin-sessions.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -94,6 +95,9 @@ const dot = (id) => h('span', { class: 'camp camp-dot', style: campStyle(id), 'a
 
 const roleLabel = (m) => `${m.role === 'dm' ? 'DM' : 'player'}${m.character_name ? ` (${m.character_name})` : ''}`;
 
+// Sessions on each campaign card (admin-sessions.js).
+const sessions = createSessions({ run, say, guarded: () => guarded });
+
 // ---------- forms that are always there ----------
 
 function wire() {
@@ -122,6 +126,7 @@ function wire() {
 
 async function refresh() {
   [users, campaigns] = await Promise.all([api('GET', '/admin/users'), api('GET', '/admin/campaigns')]);
+  await sessions.load(campaigns.map((c) => c.id));
   // Keep what's ticked on the add-account form across refreshes.
   addAccess = accessEditor(addAccess?.value() ?? []);
   $('#add-user-campaigns').replaceChildren(h('span', { class: 'access-label' }, 'Campaigns they can access'), addAccess.el);
@@ -361,6 +366,9 @@ function renderCampaign(c) {
     h(
       'div',
       { class: 'campaign-body' },
+      h('h4', {}, 'Sessions'),
+      sessions.section(c),
+      h('h4', {}, 'People'),
       c.members.length
         ? h('div', { class: 'table-wrap' }, h('table', {},
             h('thead', {}, h('tr', {}, ...['Name', 'Role', 'Character', ''].map((t) => h('th', {}, t)))),

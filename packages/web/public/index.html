@@ -6,6 +6,9 @@
   <title>Campaign Memory</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="themes.css">
+  <!-- Applies the chosen look before the page draws, so it doesn't flash. -->
+  <script src="look-boot.js"></script>
   <script type="module" src="app.js"></script>
 </head>
 <body>
@@ -23,6 +26,7 @@
       </label>
       <p id="login-error" class="error" role="alert" hidden></p>
       <button type="submit" class="primary">Log in</button>
+      <button type="button" class="link look-open">Change the look</button>
     </form>
   </main>
 
@@ -69,6 +73,7 @@
   <div id="admin-view" class="admin" hidden>
     <header class="topbar">
       <div class="who"><strong>Server admin</strong> <span id="admin-name" class="muted"></span></div>
+      <button class="ghost look-open" title="Themes and layouts">Look</button>
       <button class="ghost change-password">Change password</button>
       <button class="ghost logout">Log out</button>
     </header>
@@ -106,28 +111,45 @@
         <button id="switch-campaign" class="link" hidden>Switch campaign</button>
       </div>
       <nav class="tabs" role="tablist">
-        <button role="tab" data-tab="ask" aria-selected="true">Ask</button>
-        <button role="tab" data-tab="notes" aria-selected="false">Notes</button>
+        <button role="tab" data-tab="ask" aria-selected="true"><span class="tab-icon" aria-hidden="true">✦</span><span>Ask</span></button>
+        <button role="tab" data-tab="notes" aria-selected="false"><span class="tab-icon" aria-hidden="true">✎</span><span>Notes</span></button>
+        <button role="tab" data-tab="sheet" aria-selected="false"><span class="tab-icon" aria-hidden="true">⚔</span><span>Sheet</span></button>
       </nav>
+      <button class="ghost look-open" title="Themes and layouts">Look</button>
       <button class="ghost change-password">Change password</button>
       <button class="ghost logout">Log out</button>
     </header>
 
     <!-- Ask -->
-    <section id="tab-ask" class="panel">
-      <div class="panel-head">
-        <select id="conversation-select" aria-label="Past questions">
-          <option value="">New conversation</option>
-        </select>
-        <button id="new-conversation" class="ghost">New</button>
+    <section id="tab-ask" class="panel ask-panel">
+      <!-- Your chats: a drawer, or a sidebar on wide screens (depends on the layout chosen under Look). -->
+      <aside id="chats" class="chats" aria-label="Your chats">
+        <div class="chats-head">
+          <h2>Chats</h2>
+          <button type="button" class="ghost icon-btn chats-close" aria-label="Close the chat list">✕</button>
+        </div>
+        <button type="button" class="primary new-chat">+ New chat</button>
+        <input id="chat-filter" type="search" placeholder="Find a chat…" aria-label="Find a chat" autocomplete="off">
+        <div id="chat-list" class="chat-list"></div>
+      </aside>
+      <div class="chats-scrim" aria-hidden="true"></div>
+      <div class="ask-main">
+        <div class="panel-head">
+          <button type="button" id="chats-toggle" class="ghost chats-toggle" aria-controls="chats" aria-expanded="false">☰ <span>Chats</span></button>
+          <h2 id="chat-title" class="chat-title">New chat</h2>
+          <div class="chat-actions">
+            <button type="button" id="chat-pin" class="ghost icon-btn" hidden></button>
+            <button type="button" id="chat-rename" class="ghost icon-btn" title="Rename this chat" aria-label="Rename this chat" hidden></button>
+            <button type="button" id="chat-delete" class="ghost icon-btn danger" title="Delete this chat" aria-label="Delete this chat" hidden></button>
+            <button type="button" class="ghost new-chat new-chat-head">New chat</button>
+          </div>
+        </div>
+        <div id="thread" class="thread" aria-live="polite"></div>
+        <form id="ask-form" class="composer">
+          <textarea name="question" rows="2" maxlength="2000" placeholder="How much do we still owe Brother Hal?" required></textarea>
+          <button type="submit" class="primary">Ask</button>
+        </form>
       </div>
-      <div id="thread" class="thread" aria-live="polite">
-        <p class="empty muted">Ask anything about the campaign. Answers only use what your character knows, with links back to the session.</p>
-      </div>
-      <form id="ask-form" class="composer">
-        <textarea name="question" rows="2" maxlength="2000" placeholder="How much do we still owe Brother Hal?" required></textarea>
-        <button type="submit" class="primary">Ask</button>
-      </form>
     </section>
 
     <!-- Notes -->
@@ -141,6 +163,30 @@
       </form>
       <div id="notes" class="notes"></div>
     </section>
+
+    <!-- Character sheet (sheet.js) -->
+    <section id="tab-sheet" class="panel sheet-panel" hidden>
+      <div class="sheet-bar">
+        <span id="sheet-status" class="muted small" role="status"></span>
+        <button id="sheet-upload" class="ghost">Upload a sheet</button>
+        <input id="sheet-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.json,.txt,application/pdf,image/*" hidden>
+        <button id="sheet-download" class="ghost">Download</button>
+        <button id="sheet-print" class="ghost">Print</button>
+      </div>
+      <div id="sheet" class="sheet"></div>
+    </section>
   </div>
+
+  <!-- Themes and layouts (look.js). Saved in this browser. -->
+  <dialog id="look-dialog" class="look-dialog" aria-labelledby="look-title">
+    <form method="dialog" class="look-inner">
+      <header class="look-head">
+        <h2 id="look-title">Change the look</h2>
+        <button type="button" class="ghost look-reset">Reset</button>
+        <button class="primary" value="done">Done</button>
+      </header>
+      <div id="look-body" class="look-body"></div>
+    </form>
+  </dialog>
 </body>
 </html>

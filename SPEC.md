@@ -1,6 +1,7 @@
 # DNDApp — Project Spec
 
-> Status: v0.7 (2026-10-04). Server built and tested end to end with real AI calls, including the archivist and privacy. Web page served by the server: name + password logins (with admin-forced password changes), multiple campaigns, a player view (ask, notes) and an admin screen (accounts, campaigns, roles). No DM/host screens yet.
+> Status: v0.9 (2026-10-06). Character sheets added (§6.4).
+> Previously v0.8 (2026-10-04). Server built and tested end to end with real AI calls, including the archivist and privacy. Web page served by the server: name + password logins (with admin-forced password changes), multiple campaigns, a player view (ask, notes) and an admin screen (accounts, campaigns, roles, session uploads with speaker linking). No DM screens yet.
 > This is the source of truth for scope and design. Update it when decisions change. For the history of changes and where work left off, see [HANDOFF.md](HANDOFF.md).
 
 ## 1. Overview
@@ -9,8 +10,9 @@ DNDApp is a campaign-memory tool for a D&D group.
 
 1. During a session (played over Discord), players use the **web page** (served by the DNDApp server) to **take private notes**. Each note is sent to the server and archived immediately.
 2. The session is recorded, and separate speech-to-text software produces **one timestamped transcript**.
-3. The transcript is uploaded **with the date it was played** (currently through the API, by any account with the `dm` role or the admin login; there's no upload screen yet). The server archives it permanently. Then an AI **archivist** reads the transcript plus that date's player notes and updates the campaign's **knowledge base**. The archivist has full authority over the knowledge base and organises it however it judges best, including **who knows what**.
-4. Players use the web page to **ask questions** ("How much do we still owe Brother Hal?"). Answers cite the session and timestamp, and only use what that player's character should know.
+3. The transcript is uploaded **with its session number and the date it was played**, on the admin screen (or through the API by an account with the `dm` role). The date is what ties it to the notes players took that day. The server archives it permanently. Then an AI **archivist** reads the transcript plus that date's player notes and updates the campaign's **knowledge base**. The archivist has full authority over the knowledge base and organises it however it judges best, including **who knows what**.
+4. Each player keeps their **character sheet** on the web page (§6.4).
+5. Players use the web page to **ask questions** ("How much do we still owe Brother Hal?"). Answers cite the session and timestamp, and only use what that player's character should know.
 
 The app's two core functions are **asking questions** and **taking notes during the session**. A basic UI for both exists (§3.3); it will be refined with real use.
 
@@ -18,7 +20,7 @@ This is a personal project for a small group of friends. It is not sold and play
 
 **People and roles:**
 - **Host / project owner (Kenny):** runs the server on his machine and owns the admin login (management only). He is **not** the DM. He plays through a separate, ordinary player account.
-- **Admin login:** for managing the server only (accounts, campaigns, roles). It isn't in any campaign. It also passes DM checks in the API, so transcripts can be uploaded before DM screens exist.
+- **Admin login:** for managing the server (accounts, campaigns, roles, session uploads). It isn't in any campaign, so it can't ask questions or take notes. It passes DM checks in the API (that's how it uploads).
 - **DM:** a separate person, with role `dm` in a campaign (set on the admin screen). The DM's role and permissions will be designed later; for now the `dm` role has the permissions described in this spec. The DM can't manage accounts.
 - **Players:** role `player`. One account can be in several campaigns, with a different role and character in each.
 
@@ -32,7 +34,7 @@ Hard design problems:
 
 - **All JavaScript.** Node.js for the server; a plain web page (HTML/CSS/JS, no build step) for players. Plain JS (ES modules), with JSDoc types where useful. npm packages are welcome.
 - **Self-hosted.** The server runs on the host's own machine (Kenny's). No cloud backend of our own.
-- **Thin client.** The web page only talks to the DNDApp server. It sends what players type (questions, notes) and displays results. It never processes, indexes or stores campaign data (only the login token, in the browser), and never calls the AI.
+- **Thin client.** The web page only talks to the DNDApp server. It sends what players type (questions, notes, sheet edits) and displays results. It never processes, indexes or stores campaign data (only the login token, in the browser), and never calls the AI. One deliberate exception: the character sheet's rules (`packages/shared/src/sheet.js`, plain arithmetic) also run in the page so automatic values update while typing; the server runs the same file and stays the authority on what's saved.
 - **Archive first.** Transcripts, player notes, DM corrections and accounts are archived as plain files and never modified. Everything else is derived and can be regenerated.
 - **The AI owns the knowledge base.** No human reads it directly, so it doesn't need to be human-friendly. The archivist can create, restructure, merge and delete freely.
 - **Claude via the host's Claude Code.** By default all AI work runs through Claude Code on the host (Claude Agent SDK), using the host's Claude subscription. The Anthropic API is a config switch away (§3.5).
@@ -58,7 +60,7 @@ Hard design problems:
 ```
 DNDApp/
   packages/
-    shared/    transcript parser, citation format
+    shared/    transcript parser, citation format, sheet.js (character sheet rules; served to the page at /shared/sheet.js)
     server/
       src/
         app.js            HTTP routes
@@ -75,11 +77,14 @@ DNDApp/
         kb/               store.js (knowledge-base records, journal), archivist.js (agent + tools)
         pipeline/         prepare.js (speakers, glossary, chunking), ingest.js (attendance, indexing, archivist run)
         qa/               agent.js, tools.js
+        sheets/           store.js (sheets, archived as diffs), import.js (uploaded sheets), spells.js (lookup),
+                          books.js + pdf.js (reading the books folder), srd-spells.json (SRD 5.1 spells)
         cli/              admin.js (init, set-password, list), rebuild.js
       test/               offline tests (fake AI); fixtures/privacy-scenario/ = manual real-AI scenario
     web/public/  the web page, served by the server at / (no build step):
-                 index.html, app.js (login, password, campaign picker, Ask, Notes), admin.js (admin screen),
-                 api.js (requests, SSE, element helper), style.css, icon.svg
+                 index.html, app.js (login, password, campaign picker, Ask, Notes), sheet.js (Sheet tab), admin.js (admin screen),
+                 admin-sessions.js (sessions + upload on each campaign card), api.js (requests, SSE, element helper),
+                 style.css, icon.svg
   SPEC.md  HANDOFF.md  README.md  AGENTS.md  CLAUDE.md
 ```
 
@@ -97,9 +102,11 @@ Electron was dropped (owner's call: overkill, since there's a server and an addr
 - **Login:** name + password set by the admin (§7). The token is kept in the browser's localStorage; a 401 sends the player back to the login screen.
 - **Passwords:** if the admin requires it, a "Choose a new password" screen comes straight after login and can't be skipped (the server enforces it too). "Change password" in the header lets anyone change theirs at any time.
 - **Campaign choice:** after logging in, someone in several campaigns picks one from a dropdown (last choice pre-selected); in one campaign, they go straight in. The choice holds for that browser tab (survives reloads; a new visit asks again). "Switch campaign" in the header goes back to the picker. Ask, Notes and past conversations all belong to the chosen campaign.
-- **Admin screen** (admin login only, instead of Ask/Notes): accounts (add with the campaigns they can access, "Edit campaigns" to change that later, set password, require a new password at next login, log out everywhere, block/unblock, delete if unused), campaigns (each a colour-coded card; create with a unique name, delete with typed-name confirmation; add people as player or DM, change roles and characters, remove). Messages appear as a toast that's always on screen. The admin login is for management only and isn't in any campaign; an admin who plays uses a separate, ordinary player account (§5.5 applies to it like anyone else).
-- **Player view:** ask questions (streamed answers, a status line while it searches, clickable citations that jump to the quoted transcript lines, past conversations, follow-ups); take notes (saved to today's session, listed by session date). Works on phones; light and dark themes.
-- **Not built yet: DM / host features** (split between DM and host to be decided with the DM role): upload transcripts with date; speaker map (linking transcript names to accounts); glossary; corrections; answer the archivist's questions; job progress.
+- **Admin screen** (admin login only, instead of Ask/Notes): accounts (add with the campaigns they can access, "Edit campaigns" to change that later, set password, require a new password at next login, log out everywhere, block/unblock, delete if unused), campaigns (each a colour-coded card; create with a unique name, delete with typed-name confirmation; add people as player or DM, change roles and characters, remove). Messages appear as a toast that's always on screen.
+- **Sessions** (on each campaign card, admin): past uploads (number, date, title, matched player notes, attendance, status with progress; refreshed every few seconds while processing; Retry/Process when failed or unprocessed) and **dates with player notes but no transcript**. Upload form: session number (default next), date played (default the newest date with waiting notes, else today's note date), optional title, transcript file or pasted text. Choosing a transcript calls the preview, which lists each speaker name with an account dropdown (current link, or a guess from account/character names). On upload, links are validated before anything is archived, and merged into the speaker map before processing is queued, so attendance uses them. Warns about an existing number, a date another session already has, and unlinked names. The admin login is for management only and isn't in any campaign; an admin who plays uses a separate, ordinary player account (§5.5 applies to it like anyone else).
+- **Player view:** ask questions (streamed answers, a status line while it searches, clickable citations that jump to the quoted transcript lines, follow-ups); **chats**: a list (drawer, or a sidebar in wide layouts) with Pinned and Recent sections and a filter; pin, rename or delete any chat. Deleting erases its questions and answers for good, but the bare `qa_log` rows stay so the hourly limit and usage figures still count them. Take notes (saved to today's session, listed by session date); character sheet (§6.4). Works on phones.
+- **Look** (per browser, saved in localStorage, applied before first paint by `look-boot.js`): 12 themes (colours, system fonts, background art; Tavern follows the device's light/dark), 4 layouts (classic, sidebar, full width, app with bottom tabs), 3 text sizes, 4 chat styles (bubbles, play script, letters, terminal), 6 sheet styles (match theme, official, grimoire, index cards, blueprint, terminal) and 3 sheet layouts (three columns, combat first, one column). All in `themes.css`, keyed by `data-*` attributes; previews in the dialog reuse the same CSS. Only system fonts, nothing loaded from outside. Printing is always black on white.
+- **Not built yet: DM / host features** (split between DM and host to be decided with the DM role): glossary; corrections; answer the archivist's questions; a full speaker-map editor (links are currently set while uploading). Transcript upload is on the admin screen.
 - On each `turn` event from `/ask`, replace displayed text rather than appending.
 
 ### 3.4 Networking
@@ -123,6 +130,10 @@ All AI calls go through `src/llm/` (operations: `structured`, `text`, `agent`). 
 |---|---|---|---|
 | Archivist | Claude Opus 5.5 | high | 250 per run |
 | Q&A | Claude Opus 5.5 | medium | 12 per question |
+| Sheet upload (`import`) | Claude Opus 5.5 | medium | none (one structured call, file attached) |
+| Spell from a book or memory (`spells`) | Claude Opus 5.5 | low | none (one structured call) |
+
+`structured()` takes optional attachments (images, PDFs); the Claude Code provider sends them as a streamed user message.
 
 Decisions: the **Q&A model stays Opus**. Processing time doesn't matter, so the archivist runs at high effort with generous limits.
 
@@ -154,6 +165,7 @@ Also accepted: `[MM:SS]`, fractional seconds, no brackets, `0:01:30 - Name: text
 | `speakers`, `glossary` | source | As above. |
 | `sessions` | source | Number, date played, checksum, processing status. |
 | `player_notes` | source | Private notes with author and session date. |
+| `character_sheets` | source | One sheet per player per campaign (JSON), with a version that goes up on each save. Schema v5. |
 | `corrections` | source | DM corrections with `after_session` (where to replay them in a rebuild). |
 | `attendance` | derived | Who was at each session. |
 | `kb_records` | derived | The archivist's knowledge base (§5.1). |
@@ -173,6 +185,8 @@ data/archive/
     speakers.json, glossary.json      (+ history/)
     corrections.jsonl                 append-only
     player-notes/<YYYY-MM-DD>.jsonl   append-only
+    character-sheets/<user id>.jsonl  append-only: each save's changes (first line = whole sheet)
+    character-sheets/uploads/         uploaded sheet files, as uploaded
     sessions/0001/transcript.txt      read-only, sha256 in meta.json
     outputs/v<PIPELINE_VERSION>/<timestamp>-<run>/report.json, journal.json, knowledge_base.json, questions.json
     deleted.json                      only if the admin deleted the campaign (restore skips it; nothing else is touched)
@@ -180,9 +194,9 @@ data/archive/
 
 - **Deleting a campaign** removes it and everything derived or mirrored from it from the database (foreign-key cascades), but never touches the archive: the folder gets `deleted.json` and restore skips it. New campaigns never reuse an existing archive folder's slug. Undo by hand: remove the marker, restart, rebuild.
 - A transcript can never be replaced (different bytes for an existing session number → 409).
-- **Restore:** on start-up, accounts, campaigns, members, sessions, speakers, glossary, corrections and notes missing from the database are restored from the archive, and notes are re-indexed. Then run a rebuild to regenerate the knowledge base.
+- **Restore:** on start-up, accounts, campaigns, members, sessions, speakers, glossary, corrections, notes and character sheets (replayed from their change lines) missing from the database are restored from the archive, and notes are re-indexed. Then run a rebuild to regenerate the knowledge base.
 - **Rebuild:** `npm run rebuild -- --campaign <id> --yes` (or `POST /rebuild`) wipes all derived data, re-indexes notes, then replays every session in order, each correction right after the session it was made against. The archivist is non-deterministic, so a rebuild gives an equivalent knowledge base, not an identical one.
-- Bump `PIPELINE_VERSION` (now 2) when prompts, tools or the memory design change.
+- Bump `PIPELINE_VERSION` (now 3) when prompts, tools or the memory design change.
 
 ## 5. Knowledge base and Q&A (core design)
 
@@ -213,10 +227,11 @@ Per DM correction (job `correct`): the archivist gets the correction and its sta
 ### 5.3 Q&A
 
 1. **Pre-search** (free): the server searches the knowledge base, transcripts and the asker's own notes for the question (~3,000 tokens) and sends the results with it.
-2. **System prompt**: rules, who is asking, the archivist's guide, and pinned records the asker may see.
+2. **System prompt**: rules, who is asking, the archivist's guide, and pinned records the asker may see. The model first decides whether the question is **general D&D knowledge** (rules, spells, a standard creature's stat block) or **about this campaign**. General questions are welcome and answered straight from the model's own 5e knowledge with no tool calls (noting any house rule the pre-search turned up); campaign questions are researched and answered only from the sources.
 3. **Tools** (read-only, filtered to the asker): `search_kb`, `list_records`, `get_records`, `list_sessions`, `search_transcript`, `read_transcript`, `search_my_notes`.
 4. **Answer** with citations `[S12]`, `[S12 01:23:45]`, `[S12 01:23:45-01:24:10]`. Evidence (the cited transcript lines) is attached server-side, only for sessions the asker attended.
 5. Follow-ups include the last 3 Q&As and the last answer's sources.
+6. **Formatting:** answers are markdown, optionally with HTML (tables, stat blocks with `class="stat-block"`). The page renders them with `marked` and sanitises with DOMPurify to an allowlist (no links, images, scripts or style attributes), then turns citations into buttons, including inside tables. Both libraries are served from `node_modules` at `/vendor/marked.js` and `/vendor/purify.js`.
 
 Streaming events (`POST /campaigns/:cid/ask`, SSE): `conversation`, `turn`, `tool`, `text`, `done`, `error`.
 
@@ -233,6 +248,7 @@ Who-knows-what is decided by the archivist and enforced by the server:
 | Knowledge-base record | Its `known_by` (NULL = every member). DMs see all. |
 | Transcript (search, read, evidence, `/transcript` endpoint) | Attendees of that session. DMs see all. |
 | Player note (search, list) | **Only its author**, not even the DM. |
+| Character sheet | **Only its player.** Not the DM (deferred with the DM role), not Q&A, not the archivist. The admin login has none. |
 | Archivist | Sees everything, including all notes; decides `known_by`. |
 
 The archivist's rules: openly happened → attendees (everyone if all attended); only in a player's note → that player; whispered/secret perception → that player; absent players don't know unless told later (then widen); mixed records get split; when in doubt, restrict.
@@ -255,6 +271,7 @@ The archivist's rules: openly happened → attendees (everyone if all attended);
 - [x] Multiple campaigns: kept separate everywhere; an account can be in several; players choose after logging in.
 - [x] Admin screen on the web page: accounts, campaign access, roles; create and delete campaigns (archive kept).
 - [x] Basic player web page: log in, choose campaign, ask questions, take notes.
+- [x] Session upload on the admin screen: number, date, title, speaker → account links, status/progress, notes matched by date.
 - [x] Transcript upload with date; archived; processed in the background with progress; retry.
 - [x] Private player notes during the session; archived; searchable by their author immediately.
 - [x] Archivist with full authority over the knowledge base, its own guide, journal, and snapshots.
@@ -263,11 +280,12 @@ The archivist's rules: openly happened → attendees (everyone if all attended);
 - [x] Q&A with pre-search, staged tool search, streaming, cited transcript evidence.
 - [x] Rebuild and restore from the archive.
 - [x] Usage and timing stats.
+- [x] Character sheets: automatic values with player overrides, upload, spells with lookup (§6.4).
 
 ### 6.2 Next
 
 - [ ] Real transcript from the recorder.
-- [ ] DM / host features on the web page (upload, speaker map, glossary, corrections, archivist questions, job progress).
+- [ ] DM features on the web page (glossary, corrections, archivist questions, speaker-map editing).
 - [ ] Try the web page with the players on a real session.
 - [ ] Cloudflare Tunnel set up on the host.
 
@@ -276,6 +294,19 @@ The archivist's rules: openly happened → attendees (everyone if all attended);
 - Fuller privacy model (DM access to note-derived knowledge; sharing notes; per-character knowledge beyond attendance).
 - Edit or delete your own notes (as new archived versions).
 - Explicit "session in progress" marker instead of date matching.
+- Character sheets: let Q&A read the asker's own sheet ("what's my AC?"); decide whether the DM can see sheets (part of the DM role); more automation (armour and shields for AC, feats such as Tough or Observant, racial ability bonuses, background skills, weapon attack bonuses); restore an earlier sheet version from the page (the archive has every version).
+
+### 6.4 Character sheets
+
+Owner's requirements (2026-10-06): structured like a normal 5e sheet; autofill what can be worked out from the core stats; **anything the player changes by hand must be respected and preserved**; saved between sessions; players can upload an existing sheet; a spells section with full spell details, which can be pulled in by name.
+
+- **Layout** (Sheet tab, `web/public/sheet.js`): page 1 (name, class & level with multiclass rows, background, race, alignment, XP; ability scores; inspiration, proficiency bonus, saves, skills marked ○/●/◆ for none/proficient/expertise, passive Perception, other proficiencies; AC, initiative, speed, HP, hit dice, death saves; attacks; coins and equipment; personality, ideals, bonds, flaws; features); page 2 (details, appearance, allies, backstory, treasure); page 3 (spellcasting class and ability, save DC, attack bonus, slots per level and Pact Magic with used counts, spells grouped by level with prepared ticks). Download (JSON), upload, print.
+- **Rules** (`shared/src/sheet.js`, 2014 PHB): modifiers; proficiency bonus by total level; save proficiencies from the first class; skills (expertise doubles; bard Jack of All Trades from 2nd level); passive Perception; initiative; unarmoured AC (monk and barbarian Unarmored Defense); speed by race (+ monk); HP (max die at 1st level, then the fixed average, + Con, + hill dwarf); hit dice by die size; spellcasting ability, DC, attack; spell slots for full, half (paladin/ranger from 2nd, artificer rounded up) and third casters (Eldritch Knight, Arcane Trickster), the multiclass table, and warlock Pact Magic. Checked against the PHB tables.
+- **Player's own values:** every derived value has a key (`DERIVED`). Typing into its box stores `overrides[key]`, which always wins and is marked on the page with ↺ to return to automatic; clearing the box also returns to automatic. Values built on others use the effective value (passive Perception follows a typed Perception). The rules never write to fields the player owns. Spell details are only replaced when the player asks ("Look up details", confirmed if there's already a description).
+- **Saving:** the page autosaves the whole sheet ~0.8s after typing stops (also when the tab is hidden, on campaign switch and on logout). `PUT` carries the version the page loaded; if the sheet was saved elsewhere since, it's refused (409 with the current sheet) and the player chooses which to keep, so devices never silently overwrite each other. The server normalises every sheet (`normalizeSheet`: known fields only, types fixed, sizes capped). The archive gets only the changes per save.
+- **Upload:** PDF (form fields and page text extracted with pdf.js; the PDF is also attached so the AI can see checkboxes; scans work), images (PNG, JPEG, WebP, GIF up to 5 MB), text, or this app's own download (loaded without the AI). The AI fills a fixed schema: the fields, plus the numbers as printed. Printed numbers that differ from the rules become overrides; ones that match don't, so they keep updating. Save proficiencies become overrides only where the marks differ from the class default. The AI's notes (what it couldn't read, likely mistakes) are shown to the player.
+- **Spell lookup:** (1) SRD 5.1 (319 spells, bundled; exact name or a small typo); (2) the books folder, with no database: PDFs are read into memory at start-up (~1.7s for the PHB); a spell is found by its printed heading (a capitalised line followed by "1st-level evocation" / "Evocation cantrip", tolerant of OCR errors, fuzzy-matched), its text is cut out up to the next heading, and the AI tidies the scan into fields without changing the wording; (3) the AI's memory, labelled "AI memory" and told to say not-found rather than guess. Book and AI results are cached in memory. Each spell records its source and page. Measured with Claude Code: ~0.5s SRD, ~7s book or memory.
+- **Limits:** `SHEET_AI_PER_HOUR` (60) AI calls per player for uploads and non-SRD lookups; 5 MB per save; 30 MB PDFs.
 
 ## 7. Security & cost controls
 
@@ -293,11 +324,12 @@ The archivist's rules: openly happened → attendees (everyone if all attended);
 1. ✅ Foundation. 2. ✅ Ingestion. 3. ✅ Memory. 4. ✅ Q&A.
 5. ✅ **AI-managed knowledge base**: archivist, player notes, privacy, corrections and questions.
 6. **Real data**: a real transcript; check the parser, the archivist's output, and timings at realistic size.
-7. **Client**: web page. Player view ✅ (login, campaign choice, questions, notes); admin screen ✅; DM/host screens next.
+7. **Client**: web page. Player view ✅ (login, campaign choice, questions, notes); admin screen ✅ (incl. session uploads); DM screens next.
 8. **Hosting**: domain, Cloudflare Tunnel, packaging, player setup guide.
 
 ## 9. Open questions
 
+- Should the DM see players' character sheets, and should Q&A use them? (Currently only the player can.)
 - **DM role (deferred by the owner):** what the DM can see and do, including whether the DM sees knowledge derived from players' private notes (currently yes).
 - What exact format does the recorder produce? Are speakers labelled reliably per Discord user?
 - Note-to-session matching is by date (with a 6am rollover). Is an explicit "session started" button needed?

@@ -12,6 +12,10 @@ import { createArchivist } from './kb/archivist.js';
 import { createPipeline } from './pipeline/ingest.js';
 import { createJobs } from './jobs.js';
 import { createQA } from './qa/agent.js';
+import { createBooks } from './sheets/books.js';
+import { createSpells } from './sheets/spells.js';
+import { createSheets } from './sheets/store.js';
+import { createSheetImport } from './sheets/import.js';
 
 export async function createContext({ config = defaultConfig, paths = defaultPaths, llm, embedder, log } = {}) {
   const db = openDb(paths.db);
@@ -28,6 +32,10 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const pipeline = createPipeline({ db, store, archive, search, kb, archivist, config });
   const jobs = createJobs({ db, store, search, pipeline, log });
   const qa = createQA({ db, store, kb, search, llm, config });
+  const books = createBooks({ dir: config.booksDir, log });
+  const spells = createSpells({ books, llm });
+  const sheets = createSheets({ db, archive, store });
+  const sheetImport = createSheetImport({ llm });
 
   // If the database was lost or replaced, bring back accounts and campaigns from the archive.
   const restored = store.restoreFromArchive();
@@ -36,5 +44,5 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
     await pipeline.reindexNotes(c.id);
   }
 
-  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, pipeline, jobs, qa, restored };
+  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, pipeline, jobs, qa, books, spells, sheets, sheetImport, restored };
 }

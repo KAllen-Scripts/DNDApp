@@ -9,7 +9,7 @@
  * search tools passed in by the Q&A agent.
  */
 import { query, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
-import { LLMError, LIMIT_REACHED, toOutputSchema } from './common.js';
+import { LLMError, LIMIT_REACHED, toOutputSchema, userContent } from './common.js';
 
 const SERVER = 'dnd';
 
@@ -17,6 +17,11 @@ const SERVER = 'dnd';
 function subscriptionEnv() {
   const { ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ...env } = process.env;
   return { ...env, CLAUDE_AGENT_SDK_CLIENT_APP: 'dndapp/0.1' };
+}
+
+/** One user message as the SDK's streaming input. */
+async function* singleMessage(content) {
+  yield { type: 'user', message: { role: 'user', content }, parent_tool_use_id: null };
 }
 
 /**
@@ -102,13 +107,15 @@ export function createClaudeCodeProvider({ config, usage, queryFn = query }) {
   return {
     name: 'claude-code',
 
-    async structured({ task, purpose, system, prompt, schema, campaignId }) {
+    async structured({ task, purpose, system, prompt, schema, attachments = [], campaignId, userId }) {
       const result = await run({
         task,
         purpose,
         system,
-        prompt,
+        // Images and PDFs go in as a streamed user message; plain prompts as text.
+        prompt: attachments.length ? singleMessage(userContent(prompt, attachments)) : prompt,
         campaignId,
+        userId,
         options: { outputFormat: { type: 'json_schema', schema: toOutputSchema(schema) } },
       });
       if (result.structured_output === undefined) throw new LLMError(`${purpose}: no structured output returned.`);

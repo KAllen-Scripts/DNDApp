@@ -34,7 +34,7 @@ export async function api(method, path, body) {
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && path !== '/login') throw new LoggedOut(data.error);
-  if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+  if (!res.ok) throw Object.assign(new Error(data.error ?? `Request failed (${res.status})`), { status: res.status, data });
   return data;
 }
 

@@ -10,6 +10,8 @@
  *     glossary.json                    current glossary     (+ history/glossary-<ts>.json)
  *     corrections.jsonl                DM corrections, append-only
  *     player-notes/<YYYY-MM-DD>.jsonl  private player notes, append-only
+ *     character-sheets/<user id>.jsonl each save's changes to a player's sheet, append-only
+ *     character-sheets/uploads/        sheets players uploaded, as uploaded
  *     sessions/0001/
  *       transcript.txt                 byte-for-byte as uploaded, read-only
  *       meta.json                      number, title, played_on, sha256
@@ -134,6 +136,19 @@ export function createArchive(root) {
     appendPlayerNote: (slug, note) =>
       appendLine(path.join(campaignDir(slug), 'player-notes', `${note.session_date}.jsonl`), note),
 
+    appendSheetChanges: (slug, userId, entry) =>
+      appendLine(path.join(campaignDir(slug), 'character-sheets', `${Number(userId)}.jsonl`), entry),
+
+    /** Keep an uploaded sheet file exactly as uploaded. @returns {string} its file name */
+    saveSheetUpload(slug, userId, filename, buf) {
+      const safe = String(filename || 'sheet').replace(/[^\w.-]+/g, '_').slice(-80);
+      const name = `${Number(userId)}-${stamp()}-${safe}`;
+      const file = path.join(campaignDir(slug), 'character-sheets', 'uploads', name);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, buf, { flag: 'wx' });
+      return name;
+    },
+
     /** Knowledge-base snapshot and journal after an archivist run. */
     saveRunOutput(slug, runLabel, files) {
       const dir = path.join(campaignDir(slug), 'outputs', `v${PIPELINE_VERSION}`, `${stamp()}-${runLabel.replace(/\W+/g, '-')}`);
@@ -158,6 +173,13 @@ export function createArchive(root) {
         const playerNotes = fs.existsSync(notesDir)
           ? fs.readdirSync(notesDir).flatMap((f) => readLines(path.join(notesDir, f)))
           : [];
+        const sheetsDir = path.join(campaignDir(slug), 'character-sheets');
+        const sheets = fs.existsSync(sheetsDir)
+          ? fs
+              .readdirSync(sheetsDir)
+              .filter((f) => /^\d+\.jsonl$/.test(f))
+              .map((f) => ({ user_id: Number(f.split('.')[0]), entries: readLines(path.join(sheetsDir, f)) }))
+          : [];
         yield {
           campaign,
           sessions,
@@ -166,6 +188,7 @@ export function createArchive(root) {
           glossary: readJson(path.join(campaignDir(slug), 'glossary.json'), []),
           corrections: readLines(path.join(campaignDir(slug), 'corrections.jsonl')),
           playerNotes,
+          sheets,
         };
       }
     },

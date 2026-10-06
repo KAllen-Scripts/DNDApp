@@ -4,15 +4,18 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import { z, ZodError } from 'zod';
 import { formatTimestamp, parseTimestamp, parseTranscript, formatUtterance } from '@dndapp/shared';
 import { AuthError } from './auth.js';
-import { NotFoundError, BadRequestError } from './store.js';
+import { NotFoundError, BadRequestError, sessionDateFor } from './store.js';
 import { ArchiveConflictError } from './archive.js';
 import { SpendingCapError } from './llm/index.js';
 import { RateLimitError } from './qa/agent.js';
 import { preparedTranscript } from './pipeline/prepare.js';
+import { SheetConflictError } from './sheets/store.js';
+import { SHEET_FORMAT } from '@dndapp/shared/sheet.js';
 
 /** Open a Server-Sent Events stream on a request. */
 function openSse(request, reply) {
@@ -71,14 +74,28 @@ function serveWebPage(app, dir) {
     app.get(url, { config: { public: true } }, send);
     if (url === '/index.html') app.get('/', { config: { public: true } }, send);
   }
+  // Modules the page imports from packages: the character sheet rules (shared with the server, so the page can
+  // show automatic values as players type), and markdown + HTML sanitising for answers.
+  const modules = {
+    '/shared/sheet.js': '@dndapp/shared/sheet.js',
+    '/vendor/marked.js': 'marked',
+    '/vendor/purify.js': 'dompurify',
+  };
+  for (const [url, spec] of Object.entries(modules)) {
+    const file = fileURLToPath(import.meta.resolve(spec));
+    app.get(url, { config: { public: true } }, async (request, reply) =>
+      reply.type(CONTENT_TYPES['.js']).header('Cache-Control', 'no-cache').header('X-Content-Type-Options', 'nosniff').send(fs.readFileSync(file)));
+  }
 }
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date like 2026-10-03');
 
-export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, config, logger = true }) {
+export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, archive, config, logger = true }) {
   const app = Fastify({ logger, bodyLimit: config.maxUploadBytes });
 
   app.setErrorHandler((err, request, reply) => {
+    // Saving a sheet that changed elsewhere: send the current one so the page can reload it.
+    if (err instanceof SheetConflictError) return reply.status(409).send({ error: err.message, current: err.current });
     const status =
       err instanceof AuthError ? err.status
       : err instanceof NotFoundError ? 404
@@ -303,6 +320,48 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, conf
   });
 
   /**
+   * Sessions for the admin screen: each upload with its processing state and
+   * how many player notes its date picks up, plus dates that have notes but no
+   * transcript yet (notes are matched to a session by date; see sessionDateFor).
+   */
+  app.get('/admin/campaigns/:cid/sessions', async (request) => {
+    requireAdmin(request);
+    const cid = store.getCampaign(Number(request.params.cid)).id;
+    const notesByDate = new Map(
+      db
+        .prepare('SELECT session_date AS date, COUNT(*) AS notes, COUNT(DISTINCT user_id) AS authors FROM player_notes WHERE campaign_id = ? GROUP BY session_date')
+        .all(cid)
+        .map((r) => [r.date, r]),
+    );
+    const jobs = new Map();
+    for (const j of db.prepare("SELECT status, progress, message, error, params FROM jobs WHERE campaign_id = ? AND type = 'ingest' ORDER BY id").all(cid)) {
+      jobs.set(JSON.parse(j.params).session, { status: j.status, progress: j.progress, message: j.message, error: j.error });
+    }
+    const sessions = db
+      .prepare(
+        `SELECT s.id, s.number, s.title, s.played_on, s.status, s.error, s.created_at,
+           (SELECT COUNT(*) FROM attendance a WHERE a.session_id = s.id) AS attendees
+         FROM sessions s WHERE s.campaign_id = ? ORDER BY s.number DESC`,
+      )
+      .all(cid)
+      .map(({ id, ...s }) => ({
+        ...s,
+        notes: notesByDate.get(s.played_on)?.notes ?? 0,
+        note_authors: notesByDate.get(s.played_on)?.authors ?? 0,
+        job: jobs.get(s.number) ?? null,
+      }));
+    const dates = new Set(sessions.map((s) => s.played_on));
+    const waiting = [...notesByDate.values()].filter((r) => !dates.has(r.date)).sort((a, b) => b.date.localeCompare(a.date));
+    return {
+      sessions,
+      notes_waiting: waiting,
+      next_number: (sessions[0]?.number ?? 0) + 1,
+      today: sessionDateFor(new Date(), config.notes.rolloverHour),
+      rollover_hour: config.notes.rolloverHour,
+    };
+  });
+
+  /**
    * Delete a campaign and everything in it from the database. Its archive
    * folder is kept (marked deleted) and can be recovered by hand.
    */
@@ -386,6 +445,54 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, conf
    * or a text/plain body with ?number=&played_on=&title= in the query string.
    * played_on (YYYY-MM-DD) links the session to players' notes from that date.
    */
+  /** Who speaks in a transcript, with their current speaker-map link. Nothing is saved. */
+  const transcriptSpeakers = (cid, utterances) => {
+    const map = new Map(store.getSpeakers(cid).map((s) => [s.speaker, s]));
+    const counts = new Map();
+    for (const u of utterances) counts.set(u.speaker, (counts.get(u.speaker) ?? 0) + 1);
+    return [...counts].map(([speaker, lines]) => ({ speaker, lines, user_id: map.get(speaker)?.user_id ?? null }));
+  };
+
+  const parseOrFail = (transcript) => {
+    const { utterances } = parseTranscript(transcript);
+    if (!utterances.length) throw new BadRequestError('No lines in the expected "[HH:MM:SS] Speaker: text" format were found.');
+    return utterances;
+  };
+
+  /** Check a transcript before uploading it: line count, length, and who speaks (DM). */
+  app.post('/campaigns/:cid/sessions/preview', async (request) => {
+    const { cid } = access(request, { dm: true });
+    const { transcript } = z.object({ transcript: z.string().min(1) }).parse(request.body);
+    const utterances = parseOrFail(transcript);
+    return {
+      lines: utterances.length,
+      first: formatTimestamp(utterances[0].time),
+      last: formatTimestamp(utterances.at(-1).time),
+      speakers: transcriptSpeakers(cid, utterances),
+    };
+  });
+
+  /**
+   * Speaker-map entries for transcript names linked to accounts (user_id null =
+   * not a member, e.g. a guest). Throws before anything is saved if a link is bad.
+   */
+  function speakerEntries(cid, links) {
+    const roster = new Map(store.roster(cid).map((m) => [m.user_id, m]));
+    return links.map(({ speaker, user_id }) => {
+      const m = user_id == null ? null : roster.get(user_id);
+      if (user_id != null && !m) throw new BadRequestError(`Account ${user_id} isn't in this campaign`);
+      const display_name = !m ? speaker : m.role === 'dm' ? `DM (${m.name})` : `${m.character_name || m.name} (${m.name})`;
+      return { speaker, display_name, user_id: m ? user_id : null };
+    });
+  }
+
+  /** Merge entries into the speaker map, keeping everyone else's links. */
+  function mergeSpeakers(cid, entries) {
+    const map = new Map(store.getSpeakers(cid).map((s) => [s.speaker, s]));
+    for (const e of entries) map.set(e.speaker, e);
+    store.setSpeakers(cid, [...map.values()]);
+  }
+
   app.post('/campaigns/:cid/sessions', async (request, reply) => {
     const { cid } = access(request, { dm: true });
     const isText = typeof request.body === 'string';
@@ -393,24 +500,34 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, conf
       .object({
         number: z.coerce.number().int().positive(),
         played_on: DATE,
-        title: z.string().max(200).nullish(),
+        title: z.string().trim().max(200).nullish(),
         transcript: z.string().min(1).optional(),
+        // Optional: link this transcript's speakers to accounts before it is processed.
+        speakers: z.array(z.object({ speaker: z.string().min(1), user_id: z.number().int().nullable() })).optional(),
       })
       .parse(isText ? request.query : request.body);
     const transcript = isText ? request.body : meta.transcript;
     if (!transcript) throw new BadRequestError('transcript is required');
+    const utterances = parseOrFail(transcript);
+    // Validate links first: the archive is permanent, so nothing is saved if a link is wrong.
+    const links = speakerEntries(cid, meta.speakers ?? []);
 
-    const { utterances } = parseTranscript(transcript);
-    if (!utterances.length) throw new BadRequestError('No lines in the expected "[HH:MM:SS] Speaker: text" format were found.');
-
-    const { session, alreadyArchived } = store.addSession(cid, meta, Buffer.from(transcript, 'utf8'));
-    const job = session.status === 'ready' ? null : jobs.enqueueIngest(cid, session.number);
+    const { session, alreadyArchived } = store.addSession(cid, { ...meta, title: meta.title || null }, Buffer.from(transcript, 'utf8'));
+    // Links go in before processing is queued, so attendance uses them.
+    if (links.length) mergeSpeakers(cid, links);
+    const busy = session.status === 'queued' || session.status === 'processing';
+    const job = session.status === 'ready' || busy ? null : jobs.enqueueIngest(cid, session.number);
     reply.status(alreadyArchived ? 200 : 201);
+    const speakers = [...new Set(utterances.map((u) => u.speaker))];
+    const linked = new Set(store.getSpeakers(cid).filter((s) => s.user_id != null).map((s) => s.speaker));
     return {
       session: store.getSession(cid, session.number),
       job,
+      already_archived: alreadyArchived,
       lines: utterances.length,
-      speakers: [...new Set(utterances.map((u) => u.speaker))],
+      speakers,
+      // Attendance and privacy depend on these being linked to accounts in the speaker map.
+      unlinked_speakers: speakers.filter((s) => !linked.has(s)),
       player_notes: store.playerNotes(cid, { date: meta.played_on }).length,
     };
   });
@@ -468,6 +585,91 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, conf
     const { cid } = access(request);
     const { date } = z.object({ date: DATE.optional() }).parse(request.query);
     return store.playerNotes(cid, { userId: request.user.id, date }).map(({ user_name, ...n }) => n);
+  });
+
+  // ---------- character sheets (private to their player) ----------
+
+  // AI calls for sheets (uploads, spell lookups outside the SRD) per player per hour.
+  const sheetAiCalls = new Map();
+  const sheetAiAllowed = (userId) => () => {
+    const hourAgo = Date.now() - 3600_000;
+    const recent = (sheetAiCalls.get(userId) ?? []).filter((t) => t > hourAgo);
+    if (recent.length >= config.sheets.aiPerHour) {
+      throw new RateLimitError("That's a lot of sheet lookups in the last hour. Please wait a bit, or type the details in yourself.");
+    }
+    recent.push(Date.now());
+    sheetAiCalls.set(userId, recent);
+  };
+
+  /** Sheets belong to people in the campaign (not the admin login, which only manages). */
+  function sheetOwner(request) {
+    const a = access(request);
+    if (!a.membership) throw new AuthError('Only people in this campaign have character sheets', 403);
+    return a;
+  }
+
+  /** Your sheet in this campaign (a blank one, version 0, if you haven't saved one). */
+  app.get('/campaigns/:cid/sheet', async (request) => sheets.get(sheetOwner(request).cid, request.user.id));
+
+  /**
+   * Save your whole sheet: { sheet, version } where version is the one you
+   * loaded. 409 { error, current } if it was saved elsewhere since.
+   */
+  app.put('/campaigns/:cid/sheet', { bodyLimit: 5 * 1024 * 1024 }, async (request) => {
+    const { cid } = sheetOwner(request);
+    const body = z.object({ sheet: z.record(z.string(), z.unknown()), version: z.number().int().min(0) }).parse(request.body);
+    return sheets.save(cid, request.user.id, body.sheet, { baseVersion: body.version });
+  });
+
+  /**
+   * Upload an existing sheet: { filename, data (base64) }. A PDF, photo, text
+   * file or a sheet downloaded from here. The file is archived as uploaded,
+   * read (by the AI unless it's one of ours) and saved as your sheet.
+   */
+  app.post('/campaigns/:cid/sheet/import', async (request) => {
+    const { cid, campaign } = sheetOwner(request);
+    const { filename, data, version } = z
+      .object({ filename: z.string().max(200).default('sheet'), data: z.string().min(1), version: z.number().int().min(0).optional() })
+      .parse(request.body);
+    const buf = Buffer.from(data, 'base64');
+    if (!buf.length) throw new BadRequestError('The file is empty.');
+    const current = sheets.get(cid, request.user.id);
+    if (version != null && version !== current.version) throw new SheetConflictError(current);
+    archive.saveSheetUpload(campaign.slug, request.user.id, filename, buf);
+    const { sheet, notes } = await sheetImport.read({
+      filename,
+      buf,
+      base: { name: current.sheet.name, player_name: current.sheet.player_name },
+      campaignId: cid,
+      userId: request.user.id,
+      beforeAi: sheetAiAllowed(request.user.id),
+    });
+    const saved = sheets.save(cid, request.user.id, sheet, { reason: `uploaded ${filename}` });
+    return { ...saved, notes };
+  });
+
+  /** The sheet as a file to keep or upload again later. */
+  app.get('/campaigns/:cid/sheet/download', async (request, reply) => {
+    const { sheet, version, updated_at } = sheets.get(sheetOwner(request).cid, request.user.id);
+    const name = (sheet.name || 'character').replace(/[^\w -]+/g, '').trim() || 'character';
+    reply.header('Content-Disposition', `attachment; filename="${name}.json"`);
+    return { format: SHEET_FORMAT, version, saved_at: updated_at, sheet };
+  });
+
+  /** Spell names for suggestions while typing (SRD, plus spells found in the books). */
+  app.get('/campaigns/:cid/spells', async (request) => {
+    access(request);
+    const { q } = z.object({ q: z.string().max(100).default('') }).parse(request.query);
+    return spells.search(q);
+  });
+
+  /** A spell's details by name: the SRD, else the group's books, else the AI's memory. 404 if nobody knows it. */
+  app.get('/campaigns/:cid/spells/lookup', async (request) => {
+    const { cid } = access(request);
+    const { name } = z.object({ name: z.string().trim().min(1).max(120) }).parse(request.query);
+    const spell = await spells.lookup(name, { campaignId: cid, userId: request.user.id, beforeAi: sheetAiAllowed(request.user.id) });
+    if (!spell) throw new NotFoundError(`No spell called "${name}" was found in the SRD, your books, or the AI's memory.`);
+    return spell;
   });
 
   // ---------- corrections & archivist questions (DM) ----------
@@ -565,24 +767,61 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, conf
     }
   });
 
+  // A player's own conversations. Pinned ones first, then newest (by last question).
   app.get('/campaigns/:cid/conversations', async (request) => {
     const { cid } = access(request);
     return db
-      .prepare('SELECT id, title, created_at FROM conversations WHERE campaign_id = ? AND user_id = ? ORDER BY id DESC')
-      .all(cid, request.user.id);
+      .prepare(
+        `SELECT c.id, c.title, c.pinned, c.created_at, COALESCE(MAX(q.created_at), c.created_at) AS updated_at
+         FROM conversations c LEFT JOIN qa_log q ON q.conversation_id = c.id
+         WHERE c.campaign_id = ? AND c.user_id = ? AND c.deleted_at IS NULL
+         GROUP BY c.id ORDER BY c.pinned DESC, updated_at DESC, c.id DESC`,
+      )
+      .all(cid, request.user.id)
+      .map((c) => ({ ...c, pinned: !!c.pinned }));
   });
+
+  const ownConversation = (request, cid) => {
+    const conv = db
+      .prepare('SELECT * FROM conversations WHERE id = ? AND campaign_id = ? AND user_id = ? AND deleted_at IS NULL')
+      .get(Number(request.params.id), cid, request.user.id);
+    if (!conv) throw new NotFoundError('Conversation not found');
+    return conv;
+  };
 
   app.get('/campaigns/:cid/conversations/:id', async (request) => {
     const { cid } = access(request);
-    const conv = db
-      .prepare('SELECT * FROM conversations WHERE id = ? AND campaign_id = ? AND user_id = ?')
-      .get(Number(request.params.id), cid, request.user.id);
-    if (!conv) throw new NotFoundError('Conversation not found');
+    const conv = ownConversation(request, cid);
     const turns = db
       .prepare("SELECT id, question, answer, evidence, created_at FROM qa_log WHERE conversation_id = ? AND status = 'ok' ORDER BY id")
       .all(conv.id)
       .map((t) => ({ ...t, evidence: JSON.parse(t.evidence) }));
-    return { ...conv, turns };
+    return { ...conv, pinned: !!conv.pinned, deleted_at: undefined, turns };
+  });
+
+  app.patch('/campaigns/:cid/conversations/:id', async (request) => {
+    const { cid } = access(request);
+    const conv = ownConversation(request, cid);
+    const body = z.object({ pinned: z.boolean().optional(), title: z.string().trim().min(1).max(80).optional() }).parse(request.body ?? {});
+    db.prepare('UPDATE conversations SET pinned = COALESCE(?, pinned), title = COALESCE(?, title) WHERE id = ?').run(
+      body.pinned === undefined ? null : Number(body.pinned),
+      body.title ?? null,
+      conv.id,
+    );
+    const row = db.prepare('SELECT id, title, pinned, created_at FROM conversations WHERE id = ?').get(conv.id);
+    return { ...row, pinned: !!row.pinned };
+  });
+
+  // Deleting erases the questions and answers for good. The bare rows stay, so the hourly
+  // question limit and usage figures still count them (otherwise deleting would reset the limit).
+  app.delete('/campaigns/:cid/conversations/:id', async (request) => {
+    const { cid } = access(request);
+    const conv = ownConversation(request, cid);
+    db.transaction(() => {
+      db.prepare("UPDATE qa_log SET question = '', answer = NULL, evidence = '[]', tool_calls = '[]' WHERE conversation_id = ?").run(conv.id);
+      db.prepare("UPDATE conversations SET title = NULL, pinned = 0, deleted_at = datetime('now') WHERE id = ?").run(conv.id);
+    })();
+    return { ok: true };
   });
 
   // ---------- usage (DM) ----------

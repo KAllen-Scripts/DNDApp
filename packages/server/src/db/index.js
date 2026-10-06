@@ -5,7 +5,8 @@ import Database from 'better-sqlite3';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-const SCHEMA_VERSION = 4;
+// v5 only added the character_sheets table (created by schema.sql), so it needs no migration.
+const SCHEMA_VERSION = 6;
 
 /**
  * @param {string} file  path to the SQLite file, or ':memory:'
@@ -33,6 +34,15 @@ function migrateBeforeSchema(db) {
   if (version < 2) migrateV1(db, has);
   if (version < 3) migrateV2(db);
   if (version < 4) migrateV3(db);
+  if (version < 6) migrateV5(db, has);
+}
+
+/** v5 -> v6: players can pin and delete their conversations. */
+function migrateV5(db, has) {
+  if (!has('conversations')) return;
+  const cols = db.prepare('PRAGMA table_info(conversations)').all().map((c) => c.name);
+  if (!cols.includes('pinned')) db.exec('ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
+  if (!cols.includes('deleted_at')) db.exec('ALTER TABLE conversations ADD COLUMN deleted_at TEXT');
 }
 
 /** v3 -> v4: the admin can make someone change their password at their next login. */

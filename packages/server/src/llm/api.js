@@ -4,7 +4,7 @@
  * and runs the agent loop itself.
  */
 import Anthropic from '@anthropic-ai/sdk';
-import { LLMError, LIMIT_REACHED, toOutputSchema } from './common.js';
+import { LLMError, LIMIT_REACHED, toOutputSchema, userContent } from './common.js';
 
 const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 
@@ -81,15 +81,15 @@ export function createApiProvider({ config, usage, client = new Anthropic() }) {
     costOf,
     call,
 
-    async structured({ task, purpose, system, prompt, schema, campaignId }) {
+    async structured({ task, purpose, system, prompt, schema, attachments, campaignId, userId }) {
       const { message } = await call(
         {
           system,
           max_tokens: 32000,
-          messages: [{ role: 'user', content: prompt }],
+          messages: [{ role: 'user', content: userContent(prompt, attachments) }],
           output_config: { format: { type: 'json_schema', schema: toOutputSchema(schema) } },
         },
-        { task, purpose, campaignId },
+        { task, purpose, campaignId, userId },
       );
       if (message.stop_reason === 'max_tokens') {
         throw new LLMError(`${purpose}: output was cut off (max_tokens). Raise the limit or split the input.`);

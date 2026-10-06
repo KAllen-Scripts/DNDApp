@@ -102,13 +102,16 @@ const nulls = () => ({
 /**
  * Fake LLM. Archivist runs call `archivist({ prompt, tools })`; each Q&A
  * question consumes the next entry of `qaScript` (steps: { tool, input } or { answer }).
+ * structured() calls (sheet uploads, spell lookups) go to `structured({ purpose, prompt, attachments, schema })`.
  */
-export function createFakeLLM({ qaScript = [], archivist = defaultArchivist } = {}) {
+export function createFakeLLM({ qaScript = [], archivist = defaultArchivist, structured } = {}) {
   const calls = [];
   return {
     calls,
-    async structured() {
-      throw new Error('fake llm: structured() is not used any more');
+    async structured(opts) {
+      calls.push({ purpose: opts.purpose, system: opts.system, prompt: opts.prompt, attachments: opts.attachments ?? [] });
+      if (!structured) throw new Error(`fake llm: no structured() handler for ${opts.purpose}`);
+      return opts.schema.parse(await structured(opts));
     },
     async text() {
       throw new Error('fake llm: text() is not used any more');
@@ -185,7 +188,8 @@ export async function setup({ llm = createFakeLLM(), config = {} } = {}) {
     db: path.join(dir, 'db.sqlite'),
     models: path.join(dir, 'models'),
   };
-  const cfg = { ...baseConfig, ...config, qa: { ...baseConfig.qa, ...config.qa } };
+  // No books unless a test provides some (the real ones would make tests slow and machine-specific).
+  const cfg = { ...baseConfig, booksDir: path.join(dir, 'books'), ...config, qa: { ...baseConfig.qa, ...config.qa } };
   const ctx = await createContext({ config: cfg, paths, llm, embedder: fakeEmbedder, log: { error() {} } });
   const app = buildApp({ ...ctx, logger: false });
 

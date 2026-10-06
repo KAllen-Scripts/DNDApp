@@ -1,10 +1,14 @@
 /**
  * The web page. Display only: it sends what people type to the DNDApp server
  * and shows what comes back. Players get Ask and Notes; the admin login gets
- * the admin screen (admin.js) instead.
+ * the admin screen (admin.js) instead. The Sheet tab is in sheet.js.
  */
 import { api, stream, storage, getToken, setToken, LoggedOut } from './api.js';
 import { showAdmin } from './admin.js';
+import { loadSheet, initSheetActions, flush as flushSheet } from './sheet.js';
+import { marked } from './vendor/marked.js';
+import DOMPurify from './vendor/purify.js';
+import { initLook } from './look.js';
 
 const $ = (sel) => document.querySelector(sel);
 const CAMPAIGN_KEY = 'dndapp.campaign'; // last campaign chosen in this browser (pre-selected next time)
@@ -144,7 +148,10 @@ $('#campaign-form').addEventListener('submit', (e) => {
   if (campaign) guarded(() => enterCampaign(campaign));
 });
 
-$('#switch-campaign').addEventListener('click', showCampaignPicker);
+$('#switch-campaign').addEventListener('click', async () => {
+  await flushSheet();
+  showCampaignPicker();
+});
 
 /** Everything on the Ask and Notes tabs belongs to this campaign. */
 async function enterCampaign(campaign) {
@@ -157,7 +164,7 @@ async function enterCampaign(campaign) {
   $('#character').textContent = describe(campaign);
   $('#switch-campaign').hidden = state.me.campaigns.length < 2;
   newConversation();
-  await Promise.all([loadConversations(), loadNotes()]);
+  await Promise.all([loadConversations(), loadNotes(), loadSheet({ campaignId: campaign.id, guarded })]);
 }
 
 const base = () => `/campaigns/${state.campaign.id}`;
@@ -185,6 +192,7 @@ $('#login-form').addEventListener('submit', async (e) => {
 
 for (const button of document.querySelectorAll('.logout')) {
   button.addEventListener('click', async () => {
+    await flushSheet().catch(() => {});
     await api('POST', '/logout').catch(() => {});
     showLogin();
   });
@@ -199,7 +207,9 @@ for (const tab of document.querySelectorAll('[data-tab]')) {
       t.setAttribute('aria-selected', String(on));
       $(`#tab-${t.dataset.tab}`).hidden = !on;
     }
-    $(`#tab-${tab.dataset.tab} textarea`)?.focus();
+    // The sheet needs more room than Ask and Notes.
+    $('#app-view').classList.toggle('wide', tab.dataset.tab === 'sheet');
+    if (tab.dataset.tab !== 'sheet') $(`#tab-${tab.dataset.tab} textarea`)?.focus();
   });
 }
 
@@ -211,24 +221,56 @@ const citationKey = (num, from, to) => `S${num}${from ? ` ${from}${to ? `-${to}`
 
 const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-/** Answer text -> HTML: paragraphs, **bold**, and citations as buttons that jump to the evidence. */
+// What an answer may contain: markdown, plus HTML for formatting (tables, stat blocks). Nothing that runs,
+// loads, links out or restyles the page; the text can quote transcripts, so it's never trusted.
+const ANSWER_HTML = {
+  ALLOWED_TAGS: [
+    'p', 'br', 'hr', 'strong', 'b', 'em', 'i', 'u', 's', 'del', 'small', 'sub', 'sup', 'code', 'pre', 'blockquote',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'dl', 'dt', 'dd',
+    'table', 'caption', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'colgroup', 'col',
+    'div', 'span', 'section', 'details', 'summary',
+  ],
+  ALLOWED_ATTR: ['class', 'colspan', 'rowspan', 'scope', 'align', 'start', 'open'],
+};
+
+// Markdown that's still streaming can end mid-table or mid-tag; marked and the sanitiser cope with both.
+marked.use({ gfm: true, breaks: true });
+
+/** Citations in text -> buttons that jump to the evidence (plain labels when there's no evidence for them). */
+function linkCitations(root, sources) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (n.parentElement?.closest('code, pre') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+  });
+  const texts = [];
+  while (walker.nextNode()) if (walker.currentNode.data.search(CITATION_RE) >= 0) texts.push(walker.currentNode);
+  for (const node of texts) {
+    const html = escapeHtml(node.data).replace(CITATION_RE, (match, num, from, to) => {
+      const key = citationKey(num, from, to);
+      const label = escapeHtml(match.slice(1, -1));
+      return sources.has(key)
+        ? `<button type="button" class="cite" data-source="${escapeHtml(key)}">${label}</button>`
+        : `<span class="cite static">${label}</span>`;
+    });
+    const t = document.createElement('template');
+    t.innerHTML = html;
+    node.replaceWith(t.content);
+  }
+}
+
+/** Answer text (markdown and/or HTML) -> sanitised HTML, with citations as buttons. */
 function renderAnswer(text, evidence = []) {
-  const sources = new Set(evidence.map((e) => e.source));
-  return escapeHtml(text.trim())
-    .split(/\n{2,}/)
-    .map((para) =>
-      `<p>${para
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(CITATION_RE, (match, num, from, to) => {
-          const key = citationKey(num, from, to);
-          const label = escapeHtml(match.slice(1, -1));
-          return sources.has(key)
-            ? `<button type="button" class="cite" data-source="${escapeHtml(key)}">${label}</button>`
-            : `<span class="cite static">${label}</span>`;
-        })
-        .replace(/\n/g, '<br>')}</p>`,
-    )
-    .join('');
+  const root = DOMPurify.sanitize(marked.parse(text.trim()), { ...ANSWER_HTML, RETURN_DOM_FRAGMENT: true });
+  // Wide tables scroll inside the answer rather than stretching the page.
+  for (const table of root.querySelectorAll('table')) {
+    const wrap = document.createElement('div');
+    wrap.className = 'table-wrap';
+    table.replaceWith(wrap);
+    wrap.append(table);
+  }
+  linkCitations(root, new Set(evidence.map((e) => e.source)));
+  const box = document.createElement('div');
+  box.append(root);
+  return box.innerHTML;
 }
 
 function renderEvidence(evidence) {
@@ -277,34 +319,175 @@ function addTurn(question, answer = '', evidence = []) {
 
 // ---------- asking ----------
 
+// ---------- chats: list, open, pin, rename, delete ----------
+
+const ICONS = {
+  pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 3.5 20.5 9.5 17 11l-3.5 3.5.5 4-1.5 1.5-4-4-4.5 4.5L3.5 20l4.5-4.5-4-4L5.5 10l4 .5L13 7z" fill="currentColor"/></svg>',
+  unpin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 3.5 20.5 9.5 17 11l-3.5 3.5.5 4-1.5 1.5-4-4-4.5 4.5L3.5 20l4.5-4.5-4-4L5.5 10l4 .5L13 7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+  rename: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+
+const EMPTY_THREAD = '<p class="empty muted">Ask anything about the campaign, or about D&amp;D in general. Campaign answers only use what your character knows, with links back to the session.</p>';
+
+const chats = { list: [] };
+const currentChat = () => chats.list.find((c) => c.id === state.conversationId);
+const chatName = (c) => c.title || 'Untitled chat';
+
+const chatDate = (c) => {
+  const d = new Date(`${(c.updated_at ?? c.created_at).replace(' ', 'T')}Z`);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  if (now - d < 6 * 86400000) return d.toLocaleDateString(undefined, { weekday: 'short' });
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+};
+
+/** The chat list is a drawer in some layouts (a sidebar on wide screens in others; CSS decides). */
+function setChatsOpen(open) {
+  $('#tab-ask').classList.toggle('chats-open', open);
+  $('#chats-toggle').setAttribute('aria-expanded', String(open));
+  if (open) $('#chat-filter').focus();
+}
+$('#chats-toggle').addEventListener('click', () => setChatsOpen(!$('#tab-ask').classList.contains('chats-open')));
+$('.chats-close').addEventListener('click', () => setChatsOpen(false));
+$('.chats-scrim').addEventListener('click', () => setChatsOpen(false));
+$('#chats').addEventListener('keydown', (e) => e.key === 'Escape' && setChatsOpen(false));
+
+function iconButton(button, icon, label) {
+  button.innerHTML = ICONS[icon];
+  button.title = label;
+  button.setAttribute('aria-label', label);
+}
+
+/** The header above the thread: the open chat's title and its pin / rename / delete buttons. */
+function drawChatHead() {
+  const c = currentChat();
+  $('#chat-title').textContent = c ? chatName(c) : 'New chat';
+  for (const id of ['#chat-pin', '#chat-rename', '#chat-delete']) $(id).hidden = !c;
+  if (!c) return;
+  iconButton($('#chat-pin'), c.pinned ? 'pin' : 'unpin', c.pinned ? 'Unpin this chat' : 'Pin this chat to the top');
+  $('#chat-pin').setAttribute('aria-pressed', String(c.pinned));
+  iconButton($('#chat-rename'), 'rename', 'Rename this chat');
+  iconButton($('#chat-delete'), 'trash', 'Delete this chat');
+}
+
+function drawChatList() {
+  const filter = $('#chat-filter').value.trim().toLowerCase();
+  const shown = chats.list.filter((c) => !filter || chatName(c).toLowerCase().includes(filter));
+  const box = $('#chat-list');
+  const none = (text) => {
+    const p = document.createElement('p');
+    p.className = 'muted small chat-none';
+    p.textContent = text;
+    box.replaceChildren(p);
+  };
+  if (!chats.list.length) return none('No chats yet. Ask something and it will appear here.');
+  if (!shown.length) return none('No chats match.');
+  const group = (label, items) => {
+    if (!items.length) return [];
+    const h = document.createElement('h3');
+    h.textContent = label;
+    return [h, ...items.map(chatRow)];
+  };
+  box.replaceChildren(...group('Pinned', shown.filter((c) => c.pinned)), ...group('Recent', shown.filter((c) => !c.pinned)));
+}
+
+function chatRow(c) {
+  const row = document.createElement('div');
+  row.className = 'chat-row';
+  row.classList.toggle('current', c.id === state.conversationId);
+  row.classList.toggle('pinned', c.pinned);
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'chat-open';
+  if (c.id === state.conversationId) open.setAttribute('aria-current', 'true');
+  const title = document.createElement('span');
+  title.className = 'chat-name';
+  title.textContent = chatName(c);
+  const when = document.createElement('span');
+  when.className = 'chat-when';
+  when.textContent = chatDate(c);
+  open.append(title, when);
+  open.addEventListener('click', () => openChat(c.id));
+  const pin = document.createElement('button');
+  pin.type = 'button';
+  pin.className = 'icon-btn chat-pin';
+  iconButton(pin, c.pinned ? 'pin' : 'unpin', `${c.pinned ? 'Unpin' : 'Pin to the top'}: ${chatName(c)}`);
+  pin.addEventListener('click', () => togglePin(c));
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'icon-btn chat-del danger';
+  iconButton(del, 'trash', `Delete: ${chatName(c)}`);
+  del.addEventListener('click', () => deleteChat(c));
+  row.append(open, pin, del);
+  return row;
+}
+
+$('#chat-filter').addEventListener('input', drawChatList);
+
 function newConversation() {
   state.conversationId = null;
-  $('#conversation-select').value = '';
-  $('#thread').innerHTML = '<p class="empty muted">Ask anything about the campaign. Answers only use what your character knows, with links back to the session.</p>';
+  $('#thread').innerHTML = EMPTY_THREAD;
+  drawChatHead();
+  drawChatList();
+  setChatsOpen(false);
 }
 
 async function loadConversations() {
-  const list = await api('GET', `${base()}/conversations`);
-  const select = $('#conversation-select');
-  select.replaceChildren(
-    new Option('New conversation', ''),
-    ...list.map((c) => new Option(`${c.title ?? 'Untitled'} · ${new Date(c.created_at.replace(' ', 'T') + 'Z').toLocaleDateString()}`, c.id)),
-  );
-  select.value = state.conversationId ?? '';
+  chats.list = await api('GET', `${base()}/conversations`);
+  drawChatHead();
+  drawChatList();
 }
 
-$('#new-conversation').addEventListener('click', newConversation);
+for (const b of document.querySelectorAll('.new-chat')) {
+  b.addEventListener('click', () => {
+    if (state.asking) return;
+    newConversation();
+    $('#ask-form textarea').focus();
+  });
+}
 
-$('#conversation-select').addEventListener('change', (e) =>
-  guarded(async () => {
-    if (!e.target.value) return newConversation();
-    const conv = await api('GET', `${base()}/conversations/${e.target.value}`);
+function openChat(id) {
+  if (state.asking) return;
+  return guarded(async () => {
+    const conv = await api('GET', `${base()}/conversations/${id}`);
     state.conversationId = conv.id;
     $('#thread').replaceChildren();
     for (const t of conv.turns) addTurn(t.question, t.answer ?? '', t.evidence);
+    if (!conv.turns.length) $('#thread').innerHTML = EMPTY_THREAD;
     $('#thread').scrollTop = $('#thread').scrollHeight;
-  }),
-);
+    drawChatHead();
+    drawChatList();
+    setChatsOpen(false);
+  }).catch((err) => alert(`Couldn't open that chat: ${err.message}`));
+}
+
+const changeChat = (c, body, what) =>
+  guarded(async () => {
+    await api('PATCH', `${base()}/conversations/${c.id}`, body);
+    await loadConversations();
+  }).catch((err) => alert(`Couldn't ${what}: ${err.message}`));
+
+const togglePin = (c) => changeChat(c, { pinned: !c.pinned }, c.pinned ? 'unpin it' : 'pin it');
+
+function renameChat(c) {
+  const title = prompt('Name this chat:', c.title ?? '')?.trim();
+  if (title && title !== c.title) return changeChat(c, { title: title.slice(0, 80) }, 'rename it');
+}
+
+async function deleteChat(c) {
+  if (state.asking && c.id === state.conversationId) return;
+  if (!confirm(`Delete "${chatName(c)}"?\n\nIts questions and answers are erased for good.`)) return;
+  await guarded(async () => {
+    await api('DELETE', `${base()}/conversations/${c.id}`);
+    if (c.id === state.conversationId) newConversation();
+    await loadConversations();
+  }).catch((err) => alert(`Couldn't delete it: ${err.message}`));
+}
+
+$('#chat-pin').addEventListener('click', () => currentChat() && togglePin(currentChat()));
+$('#chat-rename').addEventListener('click', () => currentChat() && renameChat(currentChat()));
+$('#chat-delete').addEventListener('click', () => currentChat() && deleteChat(currentChat()));
 
 const TOOL_LABELS = {
   search_kb: 'Checking the campaign records',
@@ -448,4 +631,6 @@ $('#note-form textarea').addEventListener('keydown', (e) => {
   }
 });
 
+initSheetActions();
+initLook();
 start().catch((err) => showLogin(err.message));

@@ -4,6 +4,7 @@
  */
 import crypto from 'node:crypto';
 import { json } from './db/index.js';
+import { replaySheet } from './sheets/store.js';
 
 export class NotFoundError extends Error {}
 export class BadRequestError extends Error {}
@@ -247,7 +248,7 @@ export function createStore({ db, archive, config }) {
           }
         }
         for (const entry of archive.readAll()) {
-          const { campaign, sessions, members, speakers, glossary, corrections, playerNotes } = entry;
+          const { campaign, sessions, members, speakers, glossary, corrections, playerNotes, sheets = [] } = entry;
           if (db.prepare('SELECT 1 FROM campaigns WHERE slug = ?').get(campaign.slug)) continue;
           const cid = Number(
             db
@@ -277,6 +278,12 @@ export function createStore({ db, archive, config }) {
             'INSERT OR IGNORE INTO player_notes (id, campaign_id, user_id, session_date, written_at, text) VALUES (?, ?, ?, ?, ?, ?)',
           );
           for (const n of playerNotes) insN.run(n.id, cid, n.user_id, n.session_date, n.written_at, n.text);
+          const insSheet = db.prepare('INSERT INTO character_sheets (campaign_id, user_id, data, version, updated_at) VALUES (?, ?, ?, ?, ?)');
+          for (const { user_id, entries } of sheets) {
+            if (!entries.length || !userExists.get(user_id)) continue;
+            const { sheet, version, saved_at } = replaySheet(entries);
+            insSheet.run(cid, user_id, JSON.stringify(sheet), version, saved_at);
+          }
           restored.push(campaign.slug);
         }
       })();

@@ -18,7 +18,7 @@ const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
  * Bump this whenever chunking, prompts, schemas or the memory design change.
  * Every generated output is tagged with it so we know which approach made it.
  */
-export const PIPELINE_VERSION = 2;
+export const PIPELINE_VERSION = 3;
 
 const DEFAULT_MODEL = env.MODEL || 'claude-opus-5-5';
 
@@ -33,6 +33,9 @@ export const config = {
   // The player web page, served by this server at "/".
   webDir: path.resolve(repoRoot, env.WEB_DIR || 'packages/web/public'),
   maxUploadBytes: num(env.MAX_UPLOAD_MB, 50) * 1024 * 1024,
+  // The group's rulebooks (PDFs), used to look up spells for character sheets.
+  // Next to the repo by default: Desktop/Code/DND books.
+  booksDir: path.resolve(repoRoot, env.BOOKS_DIR || '../DND books'),
 
   auth: {
     // A login ends after this many days without being used.
@@ -48,6 +51,9 @@ export const config = {
     tasks: {
       archivist: { model: env.MODEL_ARCHIVIST || DEFAULT_MODEL, effort: env.EFFORT_ARCHIVIST || 'high' },
       qa: { model: env.MODEL_QA || DEFAULT_MODEL, effort: env.EFFORT_QA || 'medium' },
+      // Character sheets: reading an uploaded sheet, and tidying a spell from a book.
+      import: { model: env.MODEL_IMPORT || DEFAULT_MODEL, effort: env.EFFORT_IMPORT || 'medium' },
+      spells: { model: env.MODEL_SPELLS || DEFAULT_MODEL, effort: env.EFFORT_SPELLS || 'low' },
     },
     // API provider only: re-run refused requests on Anthropic's recommended fallback model.
     fallbacks: env.LLM_FALLBACKS !== 'off',
@@ -98,6 +104,11 @@ export const config = {
     maxCostUsd: num(env.QA_MAX_COST_USD, 0.5),
     historyTurns: num(env.QA_HISTORY_TURNS, 3),
     questionsPerUserPerHour: num(env.QA_RATE_PER_HOUR, 30),
+  },
+
+  sheets: {
+    // AI calls (sheet uploads, spell lookups outside the SRD) per player per hour.
+    aiPerHour: num(env.SHEET_AI_PER_HOUR, 60),
   },
 
   // Applies to the API provider only (Claude Code runs on the subscription).

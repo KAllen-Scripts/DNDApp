@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { setup, createFakeLLM, SAMPLE, SAMPLE_2, fakeEmbedder, PASSWORD } from './helpers.js';
 import { createContext } from '../src/context.js';
+import { PIPELINE_VERSION } from '../src/config.js';
 
 /** Parse an SSE response body into [{event, data}]. */
 const parseSse = (body) =>
@@ -102,6 +103,13 @@ test('the web page is served without logging in; API routes still need a login',
     assert.equal(page.statusCode, 200);
     assert.match(page.headers['content-type'], /text\/html/);
     assert.equal((await t.app.inject({ method: 'GET', url: '/app.js' })).statusCode, 200);
+    // Modules the page imports from packages: sheet rules, and markdown + sanitising for answers.
+    for (const url of ['/shared/sheet.js', '/vendor/marked.js', '/vendor/purify.js']) {
+      const res = await t.app.inject({ method: 'GET', url });
+      assert.equal(res.statusCode, 200, url);
+      assert.match(res.headers['content-type'], /javascript/);
+      assert.match(res.body, /\bexport\b/);
+    }
     assert.notEqual((await t.app.inject({ method: 'GET', url: '/../package.json' })).statusCode, 200);
     assert.equal((await t.app.inject({ method: 'GET', url: `/campaigns/${t.campaign.id}` })).statusCode, 401);
   } finally {
@@ -457,6 +465,84 @@ test('"must change password at next login": set by the admin, enforced by the se
   }
 });
 
+test('admin sessions view: uploads, processing state, notes matched by date, dates waiting for a transcript', async () => {
+  const t = await setup();
+  try {
+    const cid = t.campaign.id;
+    const view = async () => (await t.request('GET', `/admin/campaigns/${cid}/sessions`)).json();
+    let v = await view();
+    assert.deepEqual([v.sessions.length, v.next_number, v.notes_waiting.length], [0, 1, 0]);
+    assert.match(v.today, /^\d{4}-\d{2}-\d{2}$/);
+
+    // Notes on two dates; only the first gets a transcript.
+    for (const [as, date] of [[t.sam.token, '2026-10-01'], [t.alex.token, '2026-10-01'], [t.sam.token, '2026-10-01'], [t.sam.token, '2026-10-08']]) {
+      await t.request('POST', `/campaigns/${cid}/notes`, { as, body: { text: 'note', session_date: date } });
+    }
+    const res = await t.request('POST', `/campaigns/${cid}/sessions`, {
+      body: { number: 1, played_on: '2026-10-01', title: 'Brindle', transcript: SAMPLE + '\n[00:03:00] NewGuy: hello' },
+    });
+    assert.equal(res.statusCode, 201);
+    assert.deepEqual(res.json().unlinked_speakers, ['NewGuy']);
+    assert.equal(res.json().player_notes, 3);
+    await t.jobs.idle();
+
+    v = await view();
+    assert.equal(v.next_number, 2);
+    const [s1] = v.sessions;
+    assert.deepEqual([s1.number, s1.title, s1.played_on, s1.status, s1.notes, s1.note_authors], [1, 'Brindle', '2026-10-01', 'ready', 3, 2]);
+    assert.equal(s1.job.status, 'done');
+    assert.ok(s1.attendees >= 3);
+    assert.deepEqual(v.notes_waiting, [{ date: '2026-10-08', notes: 1, authors: 1 }]);
+
+    // Admin only.
+    assert.equal((await t.request('GET', `/admin/campaigns/${cid}/sessions`, { as: t.sam.token })).statusCode, 403);
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('upload preview lists speakers; links sent with the upload are saved before processing', async () => {
+  const t = await setup();
+  try {
+    const cid = t.campaign.id;
+    t.store.setSpeakers(cid, [{ speaker: 'KennyDM', display_name: 'DM', user_id: t.dm.id }]); // only the DM is linked
+    const transcript = SAMPLE_2 + '\n[00:02:00] Guest: hi all';
+
+    const preview = (await t.request('POST', `/campaigns/${cid}/sessions/preview`, { body: { transcript } })).json();
+    assert.equal(preview.lines, 4);
+    assert.deepEqual([preview.first, preview.last], ['00:00:05', '00:02:00']);
+    assert.deepEqual(preview.speakers, [
+      { speaker: 'KennyDM', lines: 2, user_id: t.dm.id },
+      { speaker: 'SamPlays', lines: 1, user_id: null },
+      { speaker: 'Guest', lines: 1, user_id: null },
+    ]);
+    assert.equal((await t.request('POST', `/campaigns/${cid}/sessions/preview`, { body: { transcript: 'no timestamps here' } })).statusCode, 400);
+    assert.equal((await t.request('POST', `/campaigns/${cid}/sessions/preview`, { as: t.sam.token, body: { transcript } })).statusCode, 403);
+
+    // Links to accounts outside the campaign are refused.
+    const bad = await t.request('POST', `/campaigns/${cid}/sessions`, {
+      body: { number: 1, played_on: '2026-10-08', transcript, speakers: [{ speaker: 'Guest', user_id: 999 }] },
+    });
+    assert.equal(bad.statusCode, 400);
+    assert.equal((await t.request('GET', `/campaigns/${cid}/sessions/1`)).statusCode, 404); // nothing was archived
+
+    const res = await t.request('POST', `/campaigns/${cid}/sessions`, {
+      body: { number: 2, played_on: '2026-10-08', transcript, speakers: [{ speaker: 'SamPlays', user_id: t.sam.id }, { speaker: 'Guest', user_id: null }] },
+    });
+    assert.equal(res.statusCode, 201);
+    assert.deepEqual(res.json().unlinked_speakers, ['Guest']);
+    await t.jobs.idle();
+
+    // The map was merged (the DM's link kept) and used for attendance: Sam and the DM were there, Alex wasn't.
+    const map = Object.fromEntries(t.store.getSpeakers(cid).map((m) => [m.speaker, [m.display_name, m.user_id]]));
+    assert.deepEqual(map, { KennyDM: ['DM', t.dm.id], SamPlays: ['Thorin (Sam)', t.sam.id], Guest: ['Guest', null] });
+    const attendees = (await t.request('GET', `/campaigns/${cid}/sessions/2`)).json().attendees.map((a) => a.name).sort();
+    assert.deepEqual(attendees, ['Kenny', 'Sam']);
+  } finally {
+    await t.cleanup();
+  }
+});
+
 // ---------- sessions & archivist ----------
 
 test('upload needs a date; transcripts are archived and never replaced', async () => {
@@ -522,7 +608,7 @@ test('archivist gets the transcript, notes, roster and attendance, and builds th
     assert.equal(questions[0].question, 'Is it Brother Hal or Brother Hall?');
 
     // Snapshot of the run (report, journal, full knowledge base) in the archive.
-    const outputs = path.join(t.paths.archive, t.campaign.slug, 'outputs', 'v2');
+    const outputs = path.join(t.paths.archive, t.campaign.slug, 'outputs', `v${PIPELINE_VERSION}`);
     const [snap] = fs.readdirSync(outputs);
     const journal = JSON.parse(fs.readFileSync(path.join(outputs, snap, 'journal.json'), 'utf8'));
     assert.deepEqual(journal.map((j) => j.op), ['guide', 'create', 'create']);
@@ -655,6 +741,9 @@ test('players only see records and transcripts they should know about', async ()
     // Pinned records (visible to everyone) reach both.
     assert.match(alexCall.system, /<pinned_records>[\s\S]*Story so far/);
     assert.match(alexCall.system, /You are answering: Alex, who plays Lyra/);
+    // General D&D questions are answered from the model's own knowledge; answers may use markdown/HTML.
+    assert.match(alexCall.system, /General D&D knowledge/);
+    assert.match(alexCall.system, /class="stat-block"/);
 
     // Transcript endpoint follows attendance too.
     assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/sessions/2/transcript`, { as: t.alex.token })).statusCode, 403);
@@ -760,6 +849,46 @@ test('Q&A pre-searches, cites transcript evidence, and remembers the conversatio
 
     // Conversations are per user.
     assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/conversations/${done.conversationId}`, { as: t.alex.token })).statusCode, 404);
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('players can pin and delete their own conversations; deleting erases them but still counts toward the limit', async () => {
+  const t = await setup({ config: { qa: { questionsPerUserPerHour: 3 } } });
+  try {
+    const conv = (events) => events.find((e) => e.event === 'done').data.conversationId;
+    const url = (id = '') => `/campaigns/${t.campaign.id}/conversations${id === '' ? '' : `/${id}`}`;
+    const first = conv(await ask(t, 'Who is Brother Hal?', t.sam.token));
+    const second = conv(await ask(t, 'Where is the mill?', t.sam.token));
+
+    // Newest first, until one is pinned.
+    let list = (await t.request('GET', url(), { as: t.sam.token })).json();
+    assert.deepEqual(list.map((c) => [c.id, c.pinned]), [[second, false], [first, false]]);
+    assert.equal((await t.request('PATCH', url(first), { as: t.sam.token, body: { pinned: true } })).json().pinned, true);
+    list = (await t.request('GET', url(), { as: t.sam.token })).json();
+    assert.deepEqual(list.map((c) => [c.id, c.pinned]), [[first, true], [second, false]]);
+    assert.equal((await t.request('PATCH', url(first), { as: t.sam.token, body: { title: 'The innkeeper' } })).json().title, 'The innkeeper');
+
+    // Only the owner can pin, delete or continue it.
+    assert.equal((await t.request('PATCH', url(first), { as: t.alex.token, body: { pinned: false } })).statusCode, 404);
+    assert.equal((await t.request('DELETE', url(first), { as: t.alex.token })).statusCode, 404);
+
+    // Deleting hides it and erases what was said...
+    assert.equal((await t.request('DELETE', url(first), { as: t.sam.token })).statusCode, 200);
+    assert.deepEqual((await t.request('GET', url(), { as: t.sam.token })).json().map((c) => c.id), [second]);
+    assert.equal((await t.request('GET', url(first), { as: t.sam.token })).statusCode, 404);
+    assert.equal((await t.request('DELETE', url(first), { as: t.sam.token })).statusCode, 404);
+    const rows = t.db.prepare('SELECT question, answer FROM qa_log WHERE conversation_id = ?').all(first);
+    assert.deepEqual(rows, [{ question: '', answer: null }]);
+    assert.equal(t.db.prepare('SELECT title FROM conversations WHERE id = ?').get(first).title, null);
+    const followUp = await t.request('POST', `/campaigns/${t.campaign.id}/ask`, { as: t.sam.token, body: { question: 'More?', conversationId: first } });
+    assert.match(followUp.body, /Conversation not found/);
+
+    // ...but it still counts toward the hourly limit (2 asked + 1 more = 3).
+    await ask(t, 'One more?', t.sam.token);
+    const limited = await ask(t, 'And another?', t.sam.token);
+    assert.match(limited.find((e) => e.event === 'error').data.error, /questions in the last hour/);
   } finally {
     await t.cleanup();
   }

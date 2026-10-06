@@ -8,28 +8,34 @@ Read this first when picking the project up on another machine or with another A
 
 ---
 
-## Current state (2026-10-04)
+## Current state (2026-10-06)
 
 - **Server: built and working end to end with real AI calls.** Player notes → transcript upload (with date) → attendance → **archivist** (an AI with full authority over the knowledge base) → per-player Q&A with privacy. Verified with a realistic two-session privacy scenario through Claude Code (see the change log).
-- **Tests:** 41 passing (`npm test`). They're offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools.
+- **Character sheets** (new, 2026-10-06): a Sheet tab per player per campaign, laid out like the official 5e sheet, with automatic values the player can override (overrides are always kept), autosave with version checks, upload of existing sheets (PDF, photo, text, own JSON) read by the AI, and spells looked up by name from the SRD, then the PDFs in `DND books`, then the AI. Schema v5. See SPEC §6.4.
+- **Chats can be pinned, renamed and deleted; the page has themes and layouts** (new, 2026-10-06): a chat list replaces the old dropdown; a Look dialog offers 12 themes, 4 layouts, 3 text sizes, 4 chat styles, 6 sheet styles and 3 sheet layouts, saved per browser. Schema v6.
+- **Q&A handles general D&D questions and rich formatting** (new, 2026-10-06): questions like "stat block for a brown bear?" are answered straight from the model's knowledge without searching the campaign; answers can include tables and stat blocks (markdown/HTML, sanitised on the page).
+- **Tests:** 55 passing (`npm test`). They're offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools.
 - **Electron dropped; it's a web page now** (owner's call: overkill when there's a server and address anyway). A basic player page (`packages/web/public`, no build step) is served by the server at `/`: log in, ask questions (streamed, clickable citations, past conversations), take notes. No DM/host screens yet.
 - **Logins: name + password**, set by the admin, who can also require a new password at next login (Active Directory style, enforced by the server). Anyone can change their own password. Schema v4.
 - **Multiple campaigns supported throughout.** Players in several campaigns pick one after logging in; the admin chooses each account's campaigns (plural) when adding it and can change them later.
+- **Session uploads** on the admin screen: each campaign card lists its sessions (status, notes matched by date, attendance) and dates with notes but no transcript, and has an upload form (number, date, title, file) that links transcript speakers to accounts before processing.
 - **Admin screen** on the web page (admin login only): accounts (add with campaign access, edit access, set password, require password change, log out everywhere, block, delete if unused) and campaigns (colour-coded cards; create with unique names, delete keeping the archive, add people as player/DM, change roles, remove). The admin login is management only; Kenny plays through a separate player account, which gets normal player privacy. The console only has `init`, `set-password` (recovery) and `list`.
 - **Public URL:** `PUBLIC_URL` (in `config.js`, overridable in `.env`) is the one place it's set. Placeholder `https://dnd.example.xyz` until the domain is bought.
 - **Hosting:** not set up. Cloudflare Tunnel is decided (domain not bought yet).
-- **Git:** `main` on GitHub has everything up to the archivist work (`317ce14`). **Everything from "Web page instead of Electron" onwards in the change log is uncommitted** (the whole web page, logins, admin screen, campaigns, password changes).
-- **Live install on the owner's machine:** `data/` holds the admin login ("admin") and a player account for Kenny; the database is on schema v4. The owner has been using the admin screen in a real browser. Start the server with `npm start` (or `node packages/server/src/index.js`), then open http://127.0.0.1:4400.
+- **Git:** pushed to `main` on GitHub up to the forced password changes (commit `acf2d05`, made by the owner). **Session uploads (2026-10-04) and character sheets (2026-10-06) are not committed yet.**
+- **Live install on the owner's machine:** `data/` holds the admin login ("admin") and a player account for Kenny; the database is on schema v4 and becomes v6 the next time the server starts (v5 adds `character_sheets`; v6 adds `pinned` and `deleted_at` to `conversations`; nothing else changes). The owner has been using the admin screen in a real browser. Start the server with `npm start` (or `node packages/server/src/index.js`), then open http://127.0.0.1:4400.
 - **Real transcript:** none tested yet. The parser is built to an assumed format.
 
 ## Next steps
 
-1. Get a **real transcript** from the recorder. Check the parser (adapt `packages/shared/src/transcript.js` if needed), set the speaker map **with user ids**, process it, and inspect the knowledge base (`GET /campaigns/:cid/kb`) and the archivist's questions. Measure archivist time and Q&A latency.
+1. Get a **real transcript** from the recorder. Upload it on the admin screen (check the speaker preview: if the names come out wrong, adapt `packages/shared/src/transcript.js`), link every speaker to an account, let it process, and inspect the knowledge base (`GET /campaigns/:cid/kb`) and the archivist's questions. Measure archivist time and Q&A latency.
 2. **DM role: deferred.** The owner said to leave it for now. When it's designed, decide what the DM can see (including knowledge derived from players' private notes, currently visible to the `dm` role) and do.
-3. **Commit and push** the uncommitted work (ask the owner first).
-4. Try **asking a question from the web page against the real AI** (streaming, citations, evidence in the browser), then use the page with the players in a real session.
-5. Add **DM / host screens** to the web page: upload transcripts with their date; speaker map with account links; glossary; corrections; the archivist's questions; job progress. Which belong to the DM vs the host is part of the deferred DM-role design. (Account management stays on the admin screen.) Until then, transcripts can be uploaded through the API with the admin login, which passes DM checks.
-6. Buy the domain, set `PUBLIC_URL`, set up **Cloudflare Tunnel**, write a short player guide (address + "log in with what Kenny gave you").
+3. **Commit and push** the session-upload, character-sheet, Q&A-formatting, chats and Look work (ask the owner first).
+4. **Character sheets with real players:** have someone upload their real sheet (a D&D Beyond PDF and a phone photo are the likely cases) and check what the AI got wrong. Then decide with the owner: should Q&A read the asker's sheet, and can the DM see sheets (part of the DM role)?
+5. Show the players the **Look** dialog and see which themes they actually use; prune or add.
+6. Try **asking a question from the web page against the real AI** (streaming, citations, evidence in the browser), then use the page with the players in a real session. Include a general question ("stat block for a brown bear") and a campaign one, and check the AI picks the right path and the table/stat-block formatting looks right.
+7. Add **DM screens** to the web page: glossary; corrections; the archivist's questions; a full speaker-map editor. Which belong to the DM vs the host is part of the deferred DM-role design. (Accounts and session uploads are on the admin screen.)
+8. Buy the domain, set `PUBLIC_URL`, set up **Cloudflare Tunnel**, write a short player guide (address + "log in with what Kenny gave you").
 
 ## Getting running on a new machine
 
@@ -91,6 +97,12 @@ Details are in SPEC §3–5.
 | Forced password change enforced by the server, not the page | So it can't be skipped by calling the API directly. |
 | One `PUBLIC_URL` setting | Owner's call: the address should be easy to change in one place. |
 | Logins not archived | They're throwaway; after a database loss people just log in again. |
+| **No database of the D&D books** | Owner's call (2026-10-06): the books are plain files in `DND books` (next to the repo). The server reads PDF text into memory at start-up and finds a spell by its heading when asked. |
+| Character sheet: anything the player types into an automatic box is kept | Owner's requirement ("MUST be respected and preserved"). Even a typed value equal to the automatic one is kept, so later rule changes never move it; ↺ or clearing the box goes back to automatic. Only an upload's printed numbers that match the rules are left automatic (the player didn't type those here). |
+| Sheet rules run in the page as well as the server | So automatic values update while typing. Same file (`shared/src/sheet.js`); the server normalises what's saved. The one exception to "clients don't process". |
+| Spell sources: SRD, then the books, then the AI's memory | SRD is exact and free; the books cover the group's other spells (the AI only tidies OCR); the AI is a labelled last resort. Details are replaced only when the player asks. |
+| Sheets private to their player | Same rule as notes. DM access is part of the deferred DM role. |
+| Sheet saves carry a version; stale saves get 409 | So a phone and a laptop can't silently overwrite each other. |
 
 ## Change log
 
@@ -230,6 +242,57 @@ The owner asked for Active Directory-style forced password changes, at the admin
 - SPEC v0.7: status, roles (admin login vs DM vs players; multiple campaigns per account), file layout of `web/public`, web page (password screen, admin screen, player view), tables, built features, security (password rules, logins), milestones.
 - This file: current state (schema v4, live install, exactly what's uncommitted), next steps (commit first, then real-AI Q&A from the browser), setup notes (automatic upgrades, admin password recovery), decisions, verified table, gotchas.
 
+### 2026-10-04: Session uploads on the admin screen
+
+The owner asked for somewhere on the admin screen to upload session transcripts with a session number and date, see past uploads, and keep the date tied to how player notes are matched.
+
+- **`GET /admin/campaigns/:cid/sessions`**: sessions (newest first) with status, error, job progress/message, matched note count and authors for their date, attendance count; `notes_waiting` (dates with notes but no session); `next_number`; `today` (today's note date by the same 6am rule as notes); `rollover_hour`.
+- **`POST /campaigns/:cid/sessions/preview`** (DM/admin): parses without saving; returns lines, first/last timestamp, and each speaker with line count and current account link.
+- **Upload** now takes optional `speakers: [{speaker, user_id}]`. They're validated **before** the transcript is archived (a bad link used to be found only after archiving, leaving a permanent orphan session; caught by the new test), and merged into the speaker map (others kept) **before** processing is queued, so attendance uses them. Display names are generated: "Thorin (Sam)", "DM (Dee)", or the raw name for guests. The reply lists `unlinked_speakers`. A re-upload of a session that's queued or processing no longer queues it twice.
+- **Admin screen** (`admin-sessions.js`): per campaign card, a Sessions table (refreshes every 4s only while something is processing, without touching the upload form), a "waiting for a transcript" notice, and an upload form: number and date pre-filled, a live hint saying how many player notes the date will pick up (and warning if another session has that date), file or paste, then "Who's who in this transcript" with an account dropdown per name (current link, or a guess when exactly one account or character name is inside the transcript name). Enter can't submit before a transcript is loaded.
+- Tests: 43. Checked in headless Edge with processing deliberately failing (API provider, no key): defaults, hint, file pick, guesses (Sam and Alex guessed, KennyDM linked to Dee by hand), upload, notes moving from "waiting" to the session, failed status with error and Retry, speaker map saved as "DM (Dee)", "Thorin (Sam)", "Lyra (Alex)". No console errors.
+- **Not yet done with the real AI from the screen:** a successful processing run started from the upload form.
+
+### 2026-10-06: Character sheets; no book database
+
+The owner's direction: no longer building a database from the D&D source books (it was never in these docs; only in an assistant's memory notes, now removed); books go in the `DND books` folder and are referred to when needed. Add a character sheet for players, structured like a normal 5e sheet, autofilled from core stats, with manual changes always respected and preserved, saved between sessions, uploadable, and with a spells section that can pull spell details by name.
+
+- **Rules** (`packages/shared/src/sheet.js`, no imports, also served to the page at `/shared/sheet.js`): `emptySheet`, `normalizeSheet`, `computeSheet` (auto values + the player's overrides), `DERIVED` keys, class/skill tables, 2014 PHB slot tables (checked against the book). 6 tests.
+- **Server** (`src/sheets/`): `store.js` (get/save with version check, archive of per-save diffs, replay for restore), `import.js` (sniff file type; PDF form fields + text via pdf.js, PDF/image attached; structured AI read; printed numbers that differ from the rules become overrides), `spells.js` (SRD → books → AI memory, in-memory cache), `books.js` + `pdf.js` (read PDFs in `BOOKS_DIR`, find spells by heading, fuzzy/OCR-tolerant), `srd-spells.json` (319 SRD 5.1 spells, CC BY 4.0). Routes: `GET/PUT /campaigns/:cid/sheet`, `POST .../sheet/import`, `GET .../sheet/download`, `GET .../spells?q=`, `GET .../spells/lookup?name=`. Sheets count as account history (can't delete the account). Restore replays sheets.
+- **AI layer:** `structured()` now takes `attachments` (images/PDFs) and `userId`; the Claude Code provider sends attachments as a streamed user message. New tasks `import` (medium) and `spells` (low). `SHEET_AI_PER_HOUR` (60) per player.
+- **Config:** `BOOKS_DIR` (default `../DND books`), `MODEL_/EFFORT_IMPORT`, `MODEL_/EFFORT_SPELLS`, `SHEET_AI_PER_HOUR`. Schema v5 (`character_sheets`; no migration needed). New dependency `pdfjs-dist`.
+- **Page:** Sheet tab (`sheet.js`, styles in `style.css`): official-sheet layout, ↺ on the player's own values, autosave (status line; 409 → choose which version to keep), upload/download/print, spells with suggestions, "Look up details", "Fill in missing details". The view widens to 1280px on this tab; 3 → 2 → 1 columns.
+- **Tests:** 54 (5 new server tests: diff/replay, save/versions/privacy/archive/download-reupload, upload with overrides and attachments, spell lookup order + cache + rate limit, restore).
+- **Checked for real** (throwaway server on port 4411 with a temp data dir, headless Edge, real Claude Code):
+  - Filling in a 5th-level hill dwarf wizard gave HP 37, DC 15, 4/3/2 slots; a typed AC 15 stayed 15 after Dexterity changed while initiative followed; autosave worked; no console errors.
+  - Spells: Fireball and Shield from the SRD (~0.5s); Hex from the PHB scan (~7s, OCR errors fixed: "Vou" → "You", "Id6" → "1d6"); Booming Blade from AI memory (~7s, labelled).
+  - Upload: a text PDF of a 4th-level cleric through Claude Code with the PDF attached (~20s): fields, skills, prepared spells and coins read correctly; AC 18 and HP 35 kept as the player's values; the AI noted HP 35 looked low for a hill dwarf.
+  - The PHB is read at start-up in ~1.7s, 307 spell headings found.
+- **Not checked:** a real D&D Beyond or official fillable PDF, a phone photo of a paper sheet, the page on a real phone, print layout on paper, the API provider with attachments.
+
+### 2026-10-06: General D&D questions; rich answer formatting
+
+The owner's direction: players will ask generic questions ("What is the stat block for a standard brown bear?"). That's a valid use, so the AI shouldn't hunt through campaign notes for it or treat it as odd; it should first decide whether it can answer right away or whether the question is about this campaign. And answers should be able to show tables and similar via HTML.
+
+- **Q&A prompt** (`src/qa/agent.js`): a first step classifies the question as general D&D knowledge (answer from own knowledge, no tools, mention a house rule only if the pre-search shows one), about the campaign (research as before, answer only from sources), or both. A "How to format" section allows markdown and a fixed HTML allowlist, with a stat-block template. Pre-search still runs (it's free and local, and catches house rules). `PIPELINE_VERSION` 2 → 3.
+- **Page** (`app.js`, `style.css`): `renderAnswer` now uses `marked` (GFM, line breaks) + DOMPurify (allowlisted tags; only `class`, `colspan`, `rowspan`, `scope`, `align`, `start`, `open` attributes), then links citations by walking text nodes (skipping code), so citations work in tables too. Wide tables scroll inside the answer. Styles for headings, lists, tables, `details`, and `.stat-block` / `.ability-scores`.
+- **Server** (`app.js`): serves `/vendor/marked.js` and `/vendor/purify.js` from `node_modules` alongside `/shared/sheet.js`. New dependencies `marked`, `dompurify` (server package, since the server serves them).
+- **Tests:** still 54; the web-page test checks the vendor modules are served, the Q&A test checks the prompt has the general-knowledge and stat-block instructions, and the archivist test reads the outputs folder for the current `PIPELINE_VERSION`.
+- **Checked in headless Edge** with the real `renderAnswer` code and `style.css`: a stat block, a markdown table with citations in cells (linked when there's evidence, plain otherwise), literal citations in `code`, and hostile HTML (`img onerror`, `script`, `javascript:` link, `style`, `onclick`) all stripped. This caught a crash on text at the top level of an answer, now fixed.
+- **Not checked:** a real question through the AI from the page.
+
+### 2026-10-06: Pin, rename and delete chats; themes and layouts
+
+The owner asked for deleting chats and pinning ones to come back to, and "an assortment of styles and layouts for the sheets and overall page. Go nuts, be creative."
+
+- **Server:** schema v6 (`conversations.pinned`, `conversations.deleted_at`; in-place migration). `GET /conversations` now returns `pinned` and `updated_at`, pinned first then most recent. New `PATCH /conversations/:id` (`pinned`, `title`) and `DELETE /conversations/:id`, owner only. **Delete erases** the questions, answers, evidence and tool calls and hides the chat, but keeps the bare `qa_log` rows: otherwise deleting chats would reset the hourly question limit (and drop usage figures). A deleted chat can't be opened or continued.
+- **Page, chats:** the conversation dropdown is now a chat list (`#chats`): Pinned and Recent sections, a filter box, and pin/delete buttons on each row. The header above the thread shows the open chat's title with pin, rename and delete. It's a drawer in the classic and app layouts, and a sidebar in the sidebar and full-width layouts on screens 900px and wider.
+- **Page, Look** (`look-boot.js`, `look.js`, `themes.css`; a "Look" button in the player and admin headers and on the login screen): themes Tavern (the old look; follows the device), Arcane Study, Dungeon Crawl, Elven Grove, Nine Hells, Frostmaiden, Ancient Scroll, Synthwave Sorcery, 8-bit Quest, Ink & Paper (high contrast), Feywild, The Abyss. Layouts: classic, sidebar, full width, app (tabs at the bottom). Text size: compact/cosy/roomy. Chat styles: bubbles, play script, letters (with a wax seal), terminal. Sheet styles: match theme, official (labels under the boxes, badge-shaped abilities), grimoire, index cards on cork, blueprint, terminal. Sheet layouts: three columns, combat first, one column. Saved per browser in localStorage, applied in `<head>` before the page draws. System fonts only. Printing resets to black on white. Animations respect reduced motion.
+- **Base CSS:** new tokens (`--font-body`, `--font-head`, `--head-color`, `--bg-art`, `--topbar-bg`, `--q-bg`, `--q-text`, `--shadow`, `--base-size`). The root font size now drives everything, which is how text size works.
+- **Tests:** 55 (new: pin order, rename, owner-only, delete erases, deleted chat can't be opened or continued, and deleting doesn't reset the hourly limit).
+- **Checked in headless Edge** against a throwaway server (temp data dir, seeded player and chats, driven over the DevTools protocol): every theme in the dialog previews; Tavern on a dark device; Arcane + sidebar; Scroll + letters; 8-bit + terminal + full width; Grove + play script; Neon; each sheet style and layout; the app layout and drawer at phone width; the login screen; pin and delete through the real buttons. No page errors. Fixed what the screenshots showed: a double scrollbar in the dialog, the drawer see-through on themes with translucent surfaces, sheet styles picking up the theme's heading colour, 8-bit's shadow leaking into the terminal chat, a wrapped label in a preview.
+- **Not checked:** a real phone, Safari/Firefox (uses `color-mix`, `:is`, `<dialog>`; all current browsers support them), printing each sheet style on paper.
+
 ## Verified vs. not verified
 
 | Verified for real | Not yet verified |
@@ -243,7 +306,8 @@ The owner asked for Active Directory-style forced password changes, at the admin
 | Logins, admin screen and page serving over real HTTP; v2 → v3 migration on a synthetic v2 database | Streaming answers from the real AI in the browser |
 | Web page layout in headless Edge (desktop + phone), no console errors | The page on real phones / Safari |
 | v3 → v4 migration on a copy of the real database, then on the real one | Several people using the page at once |
-| The owner using the admin screen in a real browser | |
+| The owner using the admin screen in a real browser | A real uploaded character sheet (D&D Beyond PDF, phone photo) |
+| Character sheet in headless Edge; spell lookup (SRD, PHB scan, AI memory) and PDF sheet upload through real Claude Code | Sheet attachments on the API provider |
 
 ## Gotchas and lessons
 
@@ -257,7 +321,9 @@ The owner asked for Active Directory-style forced password changes, at the admin
 - Q&A once cited a session 2 event as `[S1 …]`. Citations are model-written; evidence lookup will then show the wrong lines.
 - **Claude Opus 5.5:** thinking can't be disabled, and forced `tool_choice` (`any`/`tool`) returns 400. The API provider uses `tool_choice: {type: 'none'}` plus a "research limit reached" message to force a final answer.
 - **Structured output schemas** come from zod via `z.toJSONSchema()` (strip `$schema`). Keep all fields required; use `.nullable()` instead of optional.
-- `llm.structured()` and `llm.text()` still exist in both providers, but nothing calls them since the archivist redesign (only `llm.agent()` is used). Kept as general capabilities.
+- `llm.structured()` is used by character sheets (uploads, spell lookups); `llm.text()` is unused, kept as a general capability.
+- **Book spell headings are OCR'd:** suggestions can show slightly misspelled names for non-SRD spells (e.g. "Ar Ms of Hadar"); the AI's tidied result uses the right name. Fireball's level line in the PHB scan reads "3rd~evelevoeaUon", hence the loose level-line pattern in `books.js`.
+- **Bash heredocs** in this environment sometimes fail with "unexpected EOF" on long scripts; writing the script to a file first works.
 - **Claude Code provider:** `result.usage` covers the main loop only; `total_cost_usd` is an estimate, not a bill on a subscription. Each call spawns a Claude Code process (~0.7s).
 - **Windows:** archived transcripts are made read-only (`chmod 0o444`). Tests clean up temp dirs with `fs.rmSync(..., { force: true })`, which works.
 - **Testing:** `test/helpers.js` has `setup()` (an admin account "Kenny" who is also the campaign's DM, plus players Sam/Thorin and Alex/Lyra, all logged in, with a speaker map; `PASSWORD` is every test account's password), `createFakeLLM` (archivist runs call a function that drives the real tools, `defaultArchivist` by default; Q&A follows a script of tool calls and answers), `createFakeAnthropic`, and `fakeEmbedder`. Jobs run async: call `jobs.idle()` before asserting, and `jobs.stop()` before closing the DB.
