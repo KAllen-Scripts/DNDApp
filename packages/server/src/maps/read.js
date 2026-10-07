@@ -204,7 +204,8 @@ export function createMapReader({ llm }) {
 
     /**
      * Draft the walls and doors on a map from its picture, for the DM to
-     * correct: { walls: [{ x1, y1, x2, y2, door }] in image pixels, notes }.
+     * correct: { walls: [{ x1, y1, x2, y2, door, kind }] in image pixels, notes }.
+     * kind 'low' is an obstacle: seen over, not crossed.
      * The AI's positions are rough, so wall ends that nearly meet are joined
      * (gaps would let sight through).
      */
@@ -227,16 +228,18 @@ export function createMapReader({ llm }) {
       });
       const px = (p) => ({ x: (Math.min(1000, Math.max(0, p.x)) / 1000) * width, y: (Math.min(1000, Math.max(0, p.y)) / 1000) * height });
       const lines = [];
-      for (const wall of out.walls) {
-        const pts = wall.points.map(px);
-        for (let i = 1; i < pts.length; i++) lines.push({ a: pts[i - 1], b: pts[i], door: false });
+      for (const [list, kind] of [[out.walls, 'wall'], [out.obstacles, 'low']]) {
+        for (const wall of list) {
+          const pts = wall.points.map(px);
+          for (let i = 1; i < pts.length; i++) lines.push({ a: pts[i - 1], b: pts[i], door: false, kind });
+        }
       }
       for (const d of out.doors) lines.push({ a: px(d.from), b: px(d.to), door: true });
       joinEnds(lines, Math.max(width, height) / 100);
       const walls = lines
         .filter((l) => Math.hypot(l.b.x - l.a.x, l.b.y - l.a.y) >= 1)
         .slice(0, MAX_WALLS)
-        .map((l) => ({ x1: l.a.x, y1: l.a.y, x2: l.b.x, y2: l.b.y, door: l.door }));
+        .map((l) => ({ x1: l.a.x, y1: l.a.y, x2: l.b.x, y2: l.b.y, door: l.door, kind: l.kind ?? 'wall' }));
       return { walls, notes: out.notes };
     },
   };
@@ -269,12 +272,15 @@ const Point = z.object({ x: z.number(), y: z.number() });
 const WallsOut = z.object({
   walls: z.array(z.object({ points: z.array(Point).min(2).describe('The wall as a line through these points, in order; a curved wall as several short straight pieces') }))
     .describe('Every wall, as lines along its middle'),
+  obstacles: z.array(z.object({ points: z.array(Point).min(2) })).default([])
+    .describe('Outlines of things you can see over but not walk through: buildings seen from above (their roofs), cliff edges, fences, deep water edges'),
   doors: z.array(z.object({ from: Point, to: Point })).describe('Each door or gate, from one side of the doorway to the other'),
   notes: z.string().describe("For the DM: anything you couldn't trace or are unsure of. Empty if nothing."),
 });
 
 const WALLS_SYSTEM = `You trace walls on maps a Dungeon Master imports into a D&D table app. The app uses them for line of sight: players only see what their token has a clear line to, so a wall you trace hides what is behind it, and a gap lets sight through.
-- Trace solid things a person can't see through: walls of buildings, rooms and towers, castle and city walls, cave and cliff edges at eye height. Not floors, furniture, tables, rubble, water, trees, bushes or roof edges seen from above (trace the walls under a roof where they must be).
+- Walls: solid things a person can't see through: walls of rooms and towers you can see inside, castle and city walls, cave walls. Not floors, furniture, tables, rubble, trees or bushes.
+- Obstacles: things you can see over but can't walk through: a building drawn as its roof (outline the roof all the way round), a cliff edge you look down from, a fence, the edge of deep water. They block movement, not sight.
 - Follow each wall along its middle as a line through points. Make walls that meet share the same point, and close rooms all the way round except at doors and open doorways.
 - Doors and gates go in doors, across the doorway. Leave open archways and gaps open.
 - Positions are from 0 to 1000 across and 0 to 1000 down the whole image. Be as accurate as you can; the DM corrects them afterwards.

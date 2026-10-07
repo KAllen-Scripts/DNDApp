@@ -105,17 +105,19 @@ export function createSight({ db }) {
   return {
     /**
      * What a player sees of a map: { polygons, mask, key }. polygons: what
-     * their tokens see now; mask: the fog as they get it (see fogMask); key:
-     * changes whenever their image does ('clear' with the fog off). Seeing
-     * somewhere marks it explored.
+     * their tokens see now; mask: the fog as they get it (see fogMask), empty
+     * when the fog is off or the DM shows the map and only hides tokens; key:
+     * changes whenever their image does ('clear' when unfogged). Seeing
+     * somewhere marks it explored (when the map remembers).
      */
     forPlayer(map, userId) {
       if (!map.fog?.enabled) return { polygons: [], mask: [], key: 'clear' };
       const memoKey = `${map.id}:${map.version}:${userId}`;
       if (memo.has(memoKey)) return memo.get(memoKey);
       const polygons = sightOf(map, userId);
+      if (map.fog.map === 'shown') return { polygons, mask: [], key: 'clear' };
       let explored = [];
-      if (map.fog.sight) {
+      if (map.fog.sight && map.fog.memory) {
         const grid = exploreGrid(map.image);
         const bits = load(map.id, userId, grid);
         if (markExplored(bits, grid, polygons)) save(map.id, userId, grid, bits);

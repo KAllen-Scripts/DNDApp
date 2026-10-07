@@ -5,6 +5,7 @@ import {
   normalizeStats, normalizeHp, normalizeToken, normalizeGrid, normalizeScale, unitsPerPx, squarePx, isTokenId,
   PERSON_KIND, MAX_PINS, PIN_COLOR, TOKEN_COLORS,
   normalizeWalls, segmentsCross, wallBetween, sightPolygon, pointInPolygon, sightOf, canSee, fogMask, nearestWall, snapWallPoint,
+  distanceToWall, doorReach,
 } from '../src/map.js';
 
 const battle = normalizeMap({ image: { width: 700, height: 490 }, grid: { size: 70, x: 0, y: 0 }, scale: { distance: 5, unit: 'ft', per: 'square' } });
@@ -164,13 +165,34 @@ test('normalizeWalls keeps real lines on the image; only doors can be open', () 
     { id: 'no', x1: 1, y1: 1, x2: 9, y2: 9 },
   ], { width: 100, height: 50 });
   assert.deepEqual(walls, [
-    { id: 'aaaaaa', x1: 0, y1: 10, x2: 100, y2: 10, door: false, open: false, source: 'ai' },
-    { id: 'dddddd', x1: 1, y1: 1, x2: 1, y2: 20, door: true, open: true, source: 'dm' },
+    { id: 'aaaaaa', x1: 0, y1: 10, x2: 100, y2: 10, kind: 'wall', door: false, open: false, locked: false, source: 'ai' },
+    { id: 'dddddd', x1: 1, y1: 1, x2: 1, y2: 20, kind: 'wall', door: true, open: true, locked: false, source: 'dm' },
   ]);
   const m = normalizeMap({ image: { width: 10, height: 10 } });
   assert.deepEqual(m.walls, []);
   assert.deepEqual(m.wall_draft, { status: '', error: '', notes: '' });
   assert.equal(m.fog.sight, false);
+  assert.equal(m.fog.memory, true);
+  assert.equal(m.fog.map, 'dark');
+  // Doors are never obstacles; an open door can't be locked.
+  const [low, door, open] = normalizeWalls([
+    { id: 'llllll', x1: 0, y1: 0, x2: 9, y2: 0, kind: 'low', locked: true },
+    { id: 'oooooo', x1: 0, y1: 0, x2: 9, y2: 0, kind: 'low', door: true, locked: true },
+    { id: 'pppppp', x1: 0, y1: 0, x2: 9, y2: 0, door: true, open: true, locked: true },
+  ], { width: 10, height: 10 });
+  assert.deepEqual([low.kind, low.locked, door.kind, door.locked, open.locked], ['low', false, 'wall', true, false]);
+});
+
+test('obstacles block movement but not sight', () => {
+  const m = room({ walls: [{ id: 'roof01', x1: 50, y1: 0, x2: 50, y2: 100, kind: 'low' }] });
+  assert.ok(wallBetween(m, { x: 25, y: 50 }, { x: 75, y: 50 }));
+  assert.ok(pointInPolygon(90, 50, sightPolygon(m, { x: 25, y: 50 })));
+});
+
+test('distanceToWall and doorReach', () => {
+  assert.equal(distanceToWall({ x: 5, y: 3 }, { x1: 0, y1: 0, x2: 10, y2: 0 }), 3);
+  assert.equal(distanceToWall({ x: 13, y: 4 }, { x1: 0, y1: 0, x2: 10, y2: 0 }), 5);
+  assert.equal(doorReach(normalizeMap({ image: { width: 100, height: 100 }, grid: { size: 20, x: 0, y: 0 } })), 30);
 });
 
 test('segmentsCross and wallBetween: walls and closed doors are in the way, open doors are not', () => {
@@ -230,6 +252,9 @@ test('fogMask: covered, then places seen before, then the DM\'s rectangles, then
     { fill: 'clear', points: [[0, 0], [1, 0], [1, 1]] },
   ]);
   assert.deepEqual(fogMask(room({ fog: { enabled: false } })), []);
+  // Greyed out: unseen and covered parts are dim, not dark.
+  const grey = room({ fog: { enabled: true, map: 'grey', shapes: [{ op: 'cover', x: 0, y: 0, w: 5, h: 5 }] } });
+  assert.deepEqual(fogMask(grey).map((x) => x.fill), ['dim', 'dim']);
 });
 
 test('nearestWall picks the wall under a click; snapWallPoint joins wall ends, then grid corners', () => {

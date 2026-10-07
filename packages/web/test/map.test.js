@@ -456,7 +456,33 @@ test('walls: the DM draws walls and doors (snapped to wall ends and grid corners
     page.type('#map-sight-on', true);
     await page.settle();
     assert.equal((await map()).fog.sight, true);
-    assert.match(page.text('#map-wall-hint'), /0 walls, 1 door/);
+    assert.match(page.text('#map-wall-hint'), /0 walls, 0 obstacles, 1 door/);
+
+    // Lock the door (it shows red), draw an obstacle players see over.
+    page.click('[data-wall-mode=lock]');
+    drag(page, '#map-view', [[101, 120]]);
+    await page.settle();
+    assert.deepEqual((({ open, locked }) => ({ open, locked }))((await map()).walls[0]), { open: false, locked: true });
+    assert.ok(page.$('#map-walls line.door.locked'));
+    page.click('[data-wall-mode=low]');
+    drag(page, '#map-view', [[300, 300], [400, 300]]);
+    await page.settle();
+    assert.equal((await map()).walls.find((w) => !w.door).kind, 'low');
+    assert.ok(page.$('#map-walls line.wall.low'));
+
+    // What players get of the parts they can't see; remembering where they've been.
+    assert.equal(page.$('#map-fog-map').value, 'dark');
+    page.type('#map-fog-map', 'grey');
+    await page.settle();
+    assert.equal((await map()).fog.map, 'grey');
+    assert.ok(page.$('#map-memory-on').disabled, 'nothing to remember when unseen parts are greyed anyway');
+    page.type('#map-fog-map', 'dark');
+    await page.settle();
+    assert.ok(page.$('#map-memory-on').checked);
+    page.type('#map-memory-on', false);
+    await page.settle();
+    assert.equal((await map()).fog.memory, false);
+    assert.ok(page.$('[data-wall-action=forget]').disabled);
 
     // The AI's draft arrives live, in its own colour, and can be cleared.
     page.click('#map-walls-draft');
@@ -469,13 +495,13 @@ test('walls: the DM draws walls and doors (snapped to wall ends and grid corners
   });
 });
 
-test('line of sight: a player sees what their token sees, live as the DM opens a door; never the walls', async () => {
+test('line of sight: a player sees what their token sees, opens the door next to them with a click; never the walls', async () => {
   await withPage({
     setup: { llm: mapLLM() },
     before: async (t) => {
       const map = await importMap(t, { patch: SHOWN });
       const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
-      await addToken(t, map, { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 50, y: 50 });
+      await addToken(t, map, { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 320, y: 230 });
       await addToken(t, map, { kind: 'enemy', name: 'Goblin', x: 600, y: 400 });
       await t.request('PATCH', `${base}/walls`, { body: { add: { x1: 350, y1: 0, x2: 350, y2: 210 } } });
       const res = await t.request('PATCH', `${base}/walls`, { body: { add: { x1: 350, y1: 210, x2: 350, y2: 280, door: true } } });
@@ -487,12 +513,21 @@ test('line of sight: a player sees what their token sees, live as the DM opens a
   }, async (page, t, { base, door }) => {
     await openMapTab(page);
     assert.ok(page.$('#map-fog mask polygon'), 'his sight is cut out of the fog');
-    assert.equal(page.$$('#map-walls line').length, 0);
+    // Only the door he can see, to click; no walls.
+    assert.equal(page.$$('#map-walls line.door').length, 1);
+    assert.ok(!page.$('#map-walls line.wall'));
     assert.ok(!page.visible('#map-wall-tools'));
     assert.ok(tokenEl(page, 'Thorin'));
     assert.ok(!tokenEl(page, 'Goblin'));
-    await t.request('PATCH', `${base}/walls`, { body: { toggle: door.id } });
+    drag(page, '#map-view', [[350, 245]]);
     await page.waitFor(() => tokenEl(page, 'Goblin'), { what: 'the goblin through the open door' });
+    assert.ok(page.$('#map-walls line.door.open'));
+    // Locked by the DM: it won't open again for him.
+    await t.request('PATCH', `${base}/walls`, { body: { lock: door.id } });
+    await page.waitFor(() => page.$('#map-walls line.door.locked'), { what: 'the door locked' });
+    drag(page, '#map-view', [[350, 245]]);
+    await page.settle();
+    assert.match(page.text('#map-status'), /locked/);
   });
 });
 
