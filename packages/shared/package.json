@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.js",
     "./sheet.js": "./src/sheet.js",
-    "./dice.js": "./src/dice.js"
+    "./dice.js": "./src/dice.js",
+    "./map.js": "./src/map.js"
   },
   "scripts": {
     "test": "node --test \"test/*.test.js\""

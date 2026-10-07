@@ -18,6 +18,11 @@ import { preparedTranscript } from './pipeline/prepare.js';
 import { SheetConflictError } from './sheets/store.js';
 import { SHEET_FORMAT } from '@dndapp/shared/sheet.js';
 import { parseRoll, rollDice, ROLL_MODES } from '@dndapp/shared/dice.js';
+import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, snapToken } from '@dndapp/shared/map.js';
+import { inspectImage } from './maps/read.js';
+import { isPdf, renderPdfPage } from './maps/pdf.js';
+import { createPlayerImages } from './maps/image.js';
+import { newTokenId, isMapId } from './maps/store.js';
 
 /** Open a Server-Sent Events stream on a request. */
 function openSse(request, reply) {
@@ -79,22 +84,21 @@ function serveWebPage(app, dir) {
     if (url === '/index.html') app.get('/', { config: { public: true } }, send);
   }
   // Modules the page imports from packages: the character sheet rules (shared with the server, so the page can
-  // show automatic values as players type), dice notation, markdown + HTML sanitising for answers, and the 3D
-  // dice (Three.js and the physics are bundled into that one file), and the map (Leaflet).
+  // show automatic values as players type), dice notation, map geometry (snapping and measuring while dragging), markdown + HTML sanitising for answers, and the 3D
+  // dice (Three.js and the physics are bundled into that one file).
   const modules = {
     '/shared/sheet.js': '@dndapp/shared/sheet.js',
     '/shared/dice.js': '@dndapp/shared/dice.js',
+    '/shared/map.js': '@dndapp/shared/map.js',
     '/vendor/marked.js': 'marked',
     '/vendor/purify.js': 'dompurify',
     '/vendor/dice/dice-box.js': '@3d-dice/dice-box-threejs',
-    '/vendor/leaflet.js': 'leaflet/dist/leaflet-src.esm.js',
   };
   const sendFile = (file, type) => async (request, reply) =>
     reply.type(type).header('Cache-Control', 'no-cache').header('X-Content-Type-Options', 'nosniff').send(fs.readFileSync(file));
   for (const [url, spec] of Object.entries(modules)) {
     app.get(url, { config: { public: true } }, sendFile(fileURLToPath(import.meta.resolve(spec)), CONTENT_TYPES['.js']));
   }
-  app.get('/vendor/leaflet.css', { config: { public: true } }, sendFile(fileURLToPath(import.meta.resolve('leaflet/dist/leaflet.css')), CONTENT_TYPES['.css']));
   // The dice's sounds and textures, from the same package (dice-box.js asks for /vendor/dice/sounds/... and
   // /vendor/dice/textures/...; a texture is only fetched when a dice style uses it).
   const assets = path.resolve(path.dirname(fileURLToPath(import.meta.resolve('@3d-dice/dice-box-threejs'))), '../public');
@@ -110,7 +114,7 @@ function serveWebPage(app, dir) {
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date like 2026-10-03');
 
-export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, archive, config, logger = true }) {
+export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, maps, mapReader, statBlocks, archive, config, logger = true }) {
   const app = Fastify({ logger, bodyLimit: config.maxUploadBytes });
 
   app.setErrorHandler((err, request, reply) => {
@@ -156,7 +160,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     if (!membership && !request.user.is_admin) throw new AuthError('Not a member of this campaign', 403);
     const role = membership?.role ?? 'dm'; // admins act as DM
     if (dm && role !== 'dm') throw new AuthError('Only the DM can do that', 403);
-    return { campaign, role, cid, membership };
+    return { campaign, role, cid, membership, userId: request.user.id };
   }
 
   const attended = (sessionId, userId) =>
@@ -711,6 +715,373 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       throw new BadRequestError(err.message);
     }
     return rollDice(parsed, { mode, random: (sides) => crypto.randomInt(1, sides + 1) });
+  });
+
+  // ---------- maps (the DM imports them; players see shown maps and move their own token) ----------
+
+  // AI reads of imported maps per person per hour.
+  const mapAiCalls = new Map();
+  const mapAiAllowed = (userId) => {
+    const hourAgo = Date.now() - 3600_000;
+    const recent = (mapAiCalls.get(userId) ?? []).filter((t) => t > hourAgo);
+    if (recent.length >= config.maps.aiPerHour) throw new RateLimitError("That's a lot of map reading in the last hour. Please wait a bit, or set the grid by hand.");
+    recent.push(Date.now());
+    mapAiCalls.set(userId, recent);
+  };
+
+  /** A map this viewer may see (players: only shown ones; 404 either way, so hidden maps don't show they exist). */
+  function viewableMap(request) {
+    const a = access(request);
+    if (!isMapId(request.params.mid)) throw new NotFoundError('No such map');
+    const map = maps.get(a.cid, request.params.mid);
+    const view = maps.view(map, a);
+    if (!view) throw new NotFoundError('No such map');
+    return { ...a, map, view };
+  }
+
+  /**
+   * Read a map with the AI in the background. Fields the DM changed while it
+   * was reading are left alone, and the AI's name only replaces the file
+   * name (never a name the DM typed).
+   */
+  function readMapInBackground(cid, map, userId) {
+    const before = { grid: JSON.stringify(map.grid), scale: JSON.stringify(map.scale) };
+    maps.change(cid, map.id, (m) => {
+      m.reading = { status: 'pending', error: '', notes: '' };
+    }, { by: userId, reason: 'reading' });
+    const buf = fs.readFileSync(maps.imagePath(cid, map.id).path);
+    return mapReader
+      .read({ buf, width: map.image.width, height: map.image.height, campaignId: cid, userId })
+      .then((r) =>
+        maps.change(cid, map.id, (m) => {
+          if (r.name && !m.named) m.name = r.name;
+          if (JSON.stringify(m.grid) === before.grid) m.grid = r.grid;
+          if (JSON.stringify(m.scale) === before.scale) m.scale = r.scale;
+          m.kind = r.kind;
+          m.description = r.description;
+          m.reading = { status: 'done', error: '', notes: r.notes };
+        }, { reason: 'read by the AI' }),
+      )
+      .catch((err) => {
+        app.log.warn(err);
+        try {
+          maps.change(cid, map.id, (m) => {
+            m.reading = { status: 'failed', error: `The AI couldn't read this map: ${err.message}`, notes: '' };
+          }, { reason: 'read failed' });
+        } catch {
+          // removed while it was being read
+        }
+      });
+  }
+
+  /** Maps this viewer can see. can_edit: whether they're the DM here. */
+  app.get('/campaigns/:cid/maps', async (request) => {
+    const a = access(request);
+    return { can_edit: a.role === 'dm', maps: maps.list(a.cid).map((m) => maps.view(m, a)).filter(Boolean) };
+  });
+
+  /**
+   * Import a map (DM): { filename, data (base64), name? }. The image is
+   * archived as uploaded and the AI reads it in the background; the map
+   * starts hidden from players.
+   */
+  app.post('/campaigns/:cid/maps', async (request, reply) => {
+    const a = access(request, { dm: true });
+    const { filename, data, name, page } = z
+      .object({ filename: z.string().max(200).default('map'), data: z.string().min(1), name: z.string().trim().max(100).optional(), page: z.number().int().positive().optional() })
+      .parse(request.body);
+    let buf = Buffer.from(data, 'base64');
+    if (!buf.length) throw new BadRequestError('The file is empty.');
+    // A PDF: draw the page asked for (default the first) and use that as the image.
+    let pdf = null;
+    let pages = 1;
+    if (isPdf(buf)) {
+      const rendered = await renderPdfPage(buf, page ?? 1);
+      pdf = { buf, page: page ?? 1 };
+      pages = rendered.pages;
+      buf = rendered.png;
+    }
+    const image = await inspectImage(buf);
+    mapAiAllowed(request.user.id);
+    let fromFile = filename.replace(/\.[^.]*$/, '').replace(/[_-]+/g, ' ').trim();
+    if (pdf && pages > 1) fromFile = `${fromFile || 'Map'}, page ${pdf.page}`;
+    const map = maps.create(a.cid, { name: name || fromFile || 'Map', named: !!name, buf, ...image, pdf, by: request.user.id });
+    readMapInBackground(a.cid, map, request.user.id);
+    reply.status(201);
+    return maps.view(maps.get(a.cid, map.id), a);
+  });
+
+  /**
+   * The campaign's records, for putting someone from them on a map (DM):
+   * { records: [{ id, kind, title, status, person }] }, people first. The
+   * archivist names its kinds freely, so `person` is only a guess from the kind.
+   */
+  app.get('/campaigns/:cid/maps/records', async (request) => {
+    const a = access(request, { dm: true });
+    const records = kb.list(a.cid).map((r) => ({ id: r.id, kind: r.kind, title: r.title, status: r.status, person: PERSON_KIND.test(r.kind) }));
+    records.sort((x, y) => Number(y.person) - Number(x.person) || x.kind.localeCompare(y.kind) || x.title.localeCompare(y.title));
+    return { records };
+  });
+
+  /**
+   * One record (DM), for a token linked to it. Record ids can change when the
+   * knowledge base is rebuilt, so ?title= finds it by title if the id is gone.
+   */
+  app.get('/campaigns/:cid/maps/records/:rid', async (request) => {
+    const a = access(request, { dm: true });
+    const { title } = z.object({ title: z.string().max(200).optional() }).parse(request.query ?? {});
+    let [r] = /^\d+$/.test(request.params.rid) ? kb.getMany(a.cid, [Number(request.params.rid)]) : [];
+    if ((!r || (title && r.title !== title)) && title) r = kb.list(a.cid).find((x) => x.title === title) ?? r;
+    if (!r) throw new NotFoundError('That record is gone. The archivist may have merged or renamed it.');
+    return { id: r.id, kind: r.kind, title: r.title, status: r.status, body: r.body, data: r.data, tags: r.tags };
+  });
+
+  /** Live changes to the maps this viewer can see (SSE): map {map} | gone {id}. */
+  app.get('/campaigns/:cid/maps/events', async (request, reply) => {
+    const a = access(request);
+    const sse = openSse(request, reply);
+    const listener = (map) => {
+      if (map.campaign_id !== a.cid) return;
+      const view = maps.view(map, a);
+      if (view) sse.send('map', view);
+      else sse.send('gone', { id: map.id });
+    };
+    maps.events.on('update', listener);
+    sse.onClose(() => maps.events.off('update', listener));
+  });
+
+  app.get('/campaigns/:cid/maps/:mid', async (request) => viewableMap(request).view);
+
+  const playerImages = createPlayerImages();
+
+  /** The map's image: as imported for the DM; for players, with the fog's covered parts blacked out. */
+  app.get('/campaigns/:cid/maps/:mid/image', async (request, reply) => {
+    const { cid, map, role } = viewableMap(request);
+    const { path: file, type } = maps.imagePath(cid, map.id);
+    reply.type(type).header('X-Content-Type-Options', 'nosniff');
+    if (role === 'dm') {
+      // The file never changes, so the browser can keep it.
+      return reply.header('Cache-Control', 'private, max-age=31536000, immutable').send(fs.createReadStream(file));
+    }
+    return reply.header('Cache-Control', 'private, no-cache').send(await playerImages.get(map, file));
+  });
+
+  const GRID = z.object({ size: z.number().positive(), x: z.number(), y: z.number() }).nullable();
+  const SCALE = z.object({ distance: z.number().positive(), unit: z.enum(UNITS), per: z.enum(SCALE_PER) }).nullable();
+
+  /** Change a map (DM): { name?, shown?, grid?, scale? }. grid/scale null removes them. */
+  app.patch('/campaigns/:cid/maps/:mid', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const body = z
+      .object({ name: z.string().trim().min(1).max(100).optional(), shown: z.boolean().optional(), grid: GRID.optional(), scale: SCALE.optional() })
+      .parse(request.body ?? {});
+    const saved = maps.change(a.cid, map.id, (m) => {
+      if (body.name !== undefined) {
+        m.name = body.name;
+        m.named = true;
+      }
+      if (body.shown !== undefined) m.shown = body.shown;
+      if (body.grid !== undefined) m.grid = body.grid;
+      if (body.scale !== undefined) m.scale = body.scale;
+    }, { by: request.user.id });
+    return maps.view(saved, a);
+  });
+
+  /**
+   * Fog of war (DM): { enabled?, add?: {op: reveal | cover, x, y, w, h}, undo?, reset?: cover | reveal }.
+   * reset: cover hides the whole map again, reveal shows all of it; undo takes back the last rectangle.
+   */
+  app.patch('/campaigns/:cid/maps/:mid/fog', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const body = z
+      .object({
+        enabled: z.boolean().optional(),
+        add: z.object({ op: z.enum(FOG_OPS), x: z.number(), y: z.number(), w: z.number().positive(), h: z.number().positive() }).optional(),
+        undo: z.boolean().optional(),
+        reset: z.enum(['cover', 'reveal']).optional(),
+      })
+      .parse(request.body ?? {});
+    if (body.add && map.fog.shapes.length >= MAX_FOG_SHAPES) throw new BadRequestError('That map has too many fog changes. Use "Cover all" or "Reveal all" to start again.');
+    const saved = maps.change(a.cid, map.id, (m) => {
+      if (body.enabled !== undefined) m.fog.enabled = body.enabled;
+      if (body.reset === 'cover') m.fog.shapes = [];
+      if (body.reset === 'reveal') m.fog.shapes = [{ op: 'reveal', x: 0, y: 0, w: m.image.width, h: m.image.height }];
+      if (body.undo) m.fog.shapes.pop();
+      if (body.add) m.fog.shapes.push(body.add);
+    }, { by: request.user.id, reason: 'fog' });
+    return maps.view(saved, a);
+  });
+
+  /** Read the map with the AI again (DM). Its grid, scale and description are replaced. */
+  app.post('/campaigns/:cid/maps/:mid/read', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    if (map.reading.status === 'pending') throw new BadRequestError('This map is already being read.');
+    mapAiAllowed(request.user.id);
+    readMapInBackground(a.cid, map, request.user.id);
+    return maps.view(maps.get(a.cid, map.id), a);
+  });
+
+  /** Remove a map (DM). It's only marked removed; the archive keeps everything. */
+  app.delete('/campaigns/:cid/maps/:mid', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    maps.change(a.cid, map.id, (m) => {
+      m.removed = true;
+    }, { by: request.user.id, reason: 'removed' });
+    return { ok: true };
+  });
+
+  const TOKEN = z.object({
+    kind: z.enum(TOKEN_KINDS),
+    name: z.string().trim().max(80),
+    user_id: z.number().int().nullable(),
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a colour like #b33a3a'),
+    size: z.number().refine((n) => TOKEN_SIZES.includes(n), 'must be 0.5, 1, 2, 3 or 4'),
+    x: z.number(),
+    y: z.number(),
+    hp: z.object({ current: z.number().int().nullable(), max: z.number().int().positive().nullable() }).nullable(),
+    conditions: z.array(z.enum(CONDITIONS)).max(CONDITIONS.length),
+    hidden: z.boolean(),
+    record: z.object({ id: z.number().int().positive(), title: z.string().max(200).optional() }).nullable(),
+    stats: z.object({ text: z.string().max(8000), ac: z.number().int().nullable().optional(), hp_formula: z.string().max(40).optional(), speed: z.string().max(120).optional(), challenge: z.string().max(40).optional() }).nullable(),
+  });
+  // What a player may change on their own token; everything else is the DM's.
+  const OWNER_FIELDS = new Set(['x', 'y', 'hp', 'conditions']);
+
+  /** A token linked to a record gets that record's current title (the DM only sends the id). */
+  const linkRecord = (cid, body) => {
+    if (!body.record) return;
+    const [r] = kb.getMany(cid, [body.record.id]);
+    if (!r) throw new BadRequestError('No such record.');
+    body.record = { id: r.id, title: r.title };
+  };
+
+  /** A player character token belongs to someone in this campaign. */
+  const checkTokenOwner = (cid, token) => {
+    if (token.kind === 'pc' && token.user_id != null && !auth.membership(cid, token.user_id)) {
+      throw new BadRequestError("That player isn't in this campaign.");
+    }
+  };
+
+  /** Add a token (DM): { kind, name, user_id?, color?, size?, x?, y?, hp?, conditions?, hidden? }. On a grid it snaps to squares. */
+  app.post('/campaigns/:cid/maps/:mid/tokens', async (request, reply) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const body = TOKEN.partial().required({ kind: true }).parse(request.body ?? {});
+    if (map.tokens.length >= MAX_TOKENS) throw new BadRequestError(`A map can have at most ${MAX_TOKENS} tokens.`);
+    checkTokenOwner(a.cid, body);
+    linkRecord(a.cid, body);
+    const id = newTokenId();
+    const saved = maps.change(a.cid, map.id, (m) => {
+      const token = { size: 1, ...body, id, x: body.x ?? m.image.width / 2, y: body.y ?? m.image.height / 2 };
+      Object.assign(token, snapToken(m, { size: TOKEN_SIZES.includes(token.size) ? token.size : 1 }, token.x, token.y));
+      m.tokens.push(token);
+    }, { by: request.user.id, reason: 'token added' });
+    reply.status(201);
+    return { map: maps.view(saved, a), token: saved.tokens.find((t) => t.id === id) };
+  });
+
+  /**
+   * Change a token. The player it belongs to may move it ({ x, y }) and set
+   * its hit points and conditions; anything else (name, kind, owner, colour,
+   * size, hidden) is the DM's.
+   */
+  app.patch('/campaigns/:cid/maps/:mid/tokens/:tid', async (request) => {
+    const a = access(request);
+    const { map, view } = viewableMap(request);
+    // Only tokens this viewer can see (players don't get to find tokens under the fog).
+    const token = view.tokens.find((t) => t.id === request.params.tid);
+    if (!token) throw new NotFoundError('No such token');
+    const body = TOKEN.partial().parse(request.body ?? {});
+    const moving = Object.keys(body).every((k) => k === 'x' || k === 'y');
+    if (a.role !== 'dm') {
+      if (token.user_id !== request.user.id) throw new AuthError('You can only change your own token', 403);
+      if (!Object.keys(body).every((k) => OWNER_FIELDS.has(k))) throw new AuthError('Only the DM can change that', 403);
+    }
+    checkTokenOwner(a.cid, { ...token, ...body });
+    linkRecord(a.cid, body);
+    const saved = maps.change(a.cid, map.id, (m) => {
+      const t = m.tokens.find((x) => x.id === token.id);
+      if (!t) return;
+      Object.assign(t, body);
+      if (t.kind !== 'pc') t.user_id = null;
+      Object.assign(t, snapToken(m, t, t.x, t.y));
+    }, { by: request.user.id, reason: moving ? 'token moved' : 'token changed' });
+    return { map: maps.view(saved, a), token: saved.tokens.find((t) => t.id === token.id) };
+  });
+
+  /**
+   * Fill a token's stat block with the AI (DM): { name? } (default: the
+   * token's name). Sets its hit points and size too, unless the DM already
+   * did. 404 if the AI doesn't know the creature.
+   */
+  app.post('/campaigns/:cid/maps/:mid/tokens/:tid/stats', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const token = map.tokens.find((t) => t.id === request.params.tid);
+    if (!token) throw new NotFoundError('No such token');
+    const { name } = z.object({ name: z.string().trim().min(1).max(100).optional() }).parse(request.body ?? {});
+    mapAiAllowed(request.user.id);
+    const found = await statBlocks.lookup(name ?? token.name, { campaignId: a.cid, userId: request.user.id });
+    if (!found) throw new NotFoundError(`The AI doesn't know a creature called "${name ?? token.name}". Try its proper name, like "Goblin" or "Adult Red Dragon".`);
+    const saved = maps.change(a.cid, map.id, (m) => {
+      const t = m.tokens.find((x) => x.id === token.id);
+      if (!t) return;
+      t.stats = found.stats;
+      if (!t.hp && found.hp) t.hp = { current: found.hp, max: found.hp };
+      if (found.size && t.size === 1) Object.assign(t, { size: found.size }, snapToken(m, { size: found.size }, t.x, t.y));
+    }, { by: request.user.id, reason: 'stat block' });
+    return { map: maps.view(saved, a), token: saved.tokens.find((t) => t.id === token.id) };
+  });
+
+  // Private pins: each person's own marks on a map. Only they ever see them (not even the DM).
+  const PIN = z.object({ x: z.number(), y: z.number(), label: z.string().trim().max(80), color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a colour like #d9a400') });
+
+  /** Your own pins on a map: { pins }. */
+  app.get('/campaigns/:cid/maps/:mid/pins', async (request) => {
+    const { cid, map } = viewableMap(request);
+    return { pins: maps.pins(cid, map.id, request.user.id) };
+  });
+
+  /** Add a pin: { x, y, label?, color? }. */
+  app.post('/campaigns/:cid/maps/:mid/pins', async (request, reply) => {
+    const { cid, map } = viewableMap(request);
+    const body = PIN.partial().required({ x: true, y: true }).parse(request.body ?? {});
+    if (maps.pins(cid, map.id, request.user.id).length >= MAX_PINS) throw new BadRequestError(`You can have at most ${MAX_PINS} pins on a map.`);
+    const id = newTokenId();
+    const pins = maps.changePins(cid, map.id, request.user.id, (list) => list.push({ ...body, id }));
+    reply.status(201);
+    return { pins, pin: pins.find((p) => p.id === id) };
+  });
+
+  /** Move or relabel one of your pins: { x?, y?, label?, color? }. */
+  app.patch('/campaigns/:cid/maps/:mid/pins/:pid', async (request) => {
+    const { cid, map } = viewableMap(request);
+    const body = PIN.partial().parse(request.body ?? {});
+    if (!maps.pins(cid, map.id, request.user.id).some((p) => p.id === request.params.pid)) throw new NotFoundError('No such pin');
+    const pins = maps.changePins(cid, map.id, request.user.id, (list) => Object.assign(list.find((p) => p.id === request.params.pid), body));
+    return { pins, pin: pins.find((p) => p.id === request.params.pid) };
+  });
+
+  /** Remove one of your pins. */
+  app.delete('/campaigns/:cid/maps/:mid/pins/:pid', async (request) => {
+    const { cid, map } = viewableMap(request);
+    if (!maps.pins(cid, map.id, request.user.id).some((p) => p.id === request.params.pid)) throw new NotFoundError('No such pin');
+    return { pins: maps.changePins(cid, map.id, request.user.id, (list) => list.splice(list.findIndex((p) => p.id === request.params.pid), 1)) };
+  });
+
+  /** Remove a token (DM). */
+  app.delete('/campaigns/:cid/maps/:mid/tokens/:tid', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    if (!map.tokens.some((t) => t.id === request.params.tid)) throw new NotFoundError('No such token');
+    const saved = maps.change(a.cid, map.id, (m) => {
+      m.tokens = m.tokens.filter((t) => t.id !== request.params.tid);
+    }, { by: request.user.id, reason: 'token removed' });
+    return { map: maps.view(saved, a) };
   });
 
   // ---------- corrections & archivist questions (DM) ----------

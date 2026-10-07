@@ -5,6 +5,8 @@
 import crypto from 'node:crypto';
 import { json } from './db/index.js';
 import { replaySheet } from './sheets/store.js';
+import { replayMap } from './maps/store.js';
+import { normalizePins } from '@dndapp/shared/map.js';
 
 export class NotFoundError extends Error {}
 export class BadRequestError extends Error {}
@@ -248,7 +250,7 @@ export function createStore({ db, archive, config }) {
           }
         }
         for (const entry of archive.readAll()) {
-          const { campaign, sessions, members, speakers, glossary, corrections, playerNotes, sheets = [] } = entry;
+          const { campaign, sessions, members, speakers, glossary, corrections, playerNotes, sheets = [], maps = [] } = entry;
           if (db.prepare('SELECT 1 FROM campaigns WHERE slug = ?').get(campaign.slug)) continue;
           const cid = Number(
             db
@@ -283,6 +285,17 @@ export function createStore({ db, archive, config }) {
             if (!entries.length || !userExists.get(user_id)) continue;
             const { sheet, version, saved_at } = replaySheet(entries);
             insSheet.run(cid, user_id, JSON.stringify(sheet), version, saved_at);
+          }
+          const insMap = db.prepare('INSERT OR IGNORE INTO maps (id, campaign_id, data, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)');
+          const insPins = db.prepare('INSERT OR IGNORE INTO map_pins (map_id, user_id, data, updated_at) VALUES (?, ?, ?, ?)');
+          for (const { id, entries, pins = [] } of maps) {
+            if (!entries.length) continue;
+            const { map, version, saved_at, created_at } = replayMap(entries);
+            insMap.run(id, cid, JSON.stringify(map), version, created_at, saved_at);
+            for (const { user_id, entries: lines } of pins) {
+              const last = lines.at(-1);
+              if (last) insPins.run(id, user_id, JSON.stringify(normalizePins(last.pins, map.image)), last.saved_at);
+            }
           }
           restored.push(campaign.slug);
         }

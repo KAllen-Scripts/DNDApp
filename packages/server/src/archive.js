@@ -12,6 +12,10 @@
  *     player-notes/<YYYY-MM-DD>.jsonl  private player notes, append-only
  *     character-sheets/<user id>.jsonl each save's changes to a player's sheet, append-only
  *     character-sheets/uploads/        sheets players uploaded, as uploaded
+ *     maps/<map id>/image.<ext>        a map the DM imported, as uploaded
+ *     maps/<map id>/changes.jsonl      each change to that map, append-only
+ *     maps/<map id>/source.pdf         the PDF, when the map is a page of one
+ *     maps/<map id>/pins/<user id>.jsonl  someone's private pins on it (the whole list each time)
  *     sessions/0001/
  *       transcript.txt                 byte-for-byte as uploaded, read-only
  *       meta.json                      number, title, played_on, sha256
@@ -32,6 +36,10 @@ import { PIPELINE_VERSION } from './config.js';
 export class ArchiveConflictError extends Error {}
 
 const pad = (n) => String(n).padStart(4, '0');
+const mapDir = (id) => {
+  if (!/^[a-f0-9]{10}$/.test(String(id))) throw new Error(`Bad map id: ${id}`);
+  return String(id);
+};
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
 export const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 
@@ -149,6 +157,19 @@ export function createArchive(root) {
       return name;
     },
 
+    /** Keep an imported map's image exactly as uploaded (never replaced). */
+    saveMapImage(slug, mapId, file, buf) {
+      const dest = path.join(campaignDir(slug), 'maps', mapDir(mapId), file);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, buf, { flag: 'wx' });
+    },
+
+    mapImagePath: (slug, mapId, file) => path.join(campaignDir(slug), 'maps', mapDir(mapId), path.basename(file)),
+
+    appendMapChanges: (slug, mapId, entry) => appendLine(path.join(campaignDir(slug), 'maps', mapDir(mapId), 'changes.jsonl'), entry),
+
+    appendMapPins: (slug, mapId, userId, entry) => appendLine(path.join(campaignDir(slug), 'maps', mapDir(mapId), 'pins', `${Number(userId)}.jsonl`), entry),
+
     /** Knowledge-base snapshot and journal after an archivist run. */
     saveRunOutput(slug, runLabel, files) {
       const dir = path.join(campaignDir(slug), 'outputs', `v${PIPELINE_VERSION}`, `${stamp()}-${runLabel.replace(/\W+/g, '-')}`);
@@ -180,6 +201,22 @@ export function createArchive(root) {
               .filter((f) => /^\d+\.jsonl$/.test(f))
               .map((f) => ({ user_id: Number(f.split('.')[0]), entries: readLines(path.join(sheetsDir, f)) }))
           : [];
+        const mapsDir = path.join(campaignDir(slug), 'maps');
+        const maps = fs.existsSync(mapsDir)
+          ? fs
+              .readdirSync(mapsDir)
+              .filter((d) => /^[a-f0-9]{10}$/.test(d))
+              .map((id) => {
+                const pinsDir = path.join(mapsDir, id, 'pins');
+                const pins = fs.existsSync(pinsDir)
+                  ? fs
+                      .readdirSync(pinsDir)
+                      .filter((f) => /^\d+\.jsonl$/.test(f))
+                      .map((f) => ({ user_id: Number(f.split('.')[0]), entries: readLines(path.join(pinsDir, f)) }))
+                  : [];
+                return { id, entries: readLines(path.join(mapsDir, id, 'changes.jsonl')), pins };
+              })
+          : [];
         yield {
           campaign,
           sessions,
@@ -189,6 +226,7 @@ export function createArchive(root) {
           corrections: readLines(path.join(campaignDir(slug), 'corrections.jsonl')),
           playerNotes,
           sheets,
+          maps,
         };
       }
     },

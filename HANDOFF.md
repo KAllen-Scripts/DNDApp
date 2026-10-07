@@ -17,8 +17,8 @@ Read this first when picking the project up on another machine or with another A
 - **Q&A handles general D&D questions and rich formatting** (new, 2026-10-06): questions like "stat block for a brown bear?" are answered straight from the model's knowledge without searching the campaign; answers can include tables and stat blocks (markdown/HTML, sanitised on the page).
 - **Q&A can look rules up in the group's books** (new, 2026-10-07): `search_books`, `read_book` and `book_contents` over the PDFs in `DND books`, still with no database. The AI picks the search terms itself, so vague questions work. See SPEC §5.3.
 - **Dice** (new, 2026-10-07, merged to `main`): a Dice button in the player header; click-to-roll from the sheet; the server rolls and 3D dice land on its numbers. 24 dice styles and special effects (trails, natural 20 / natural 1 / max-damage bursts, banners, shake, chimes). Rolls aren't saved or shared yet. See SPEC §6.5.
-- **Map prototype** (new, 2026-10-07, merged to `main`): a Map tab with Leaflet to pan, zoom and drop named pins on a map image the player picks. Kept in that browser only (IndexedDB); nothing on the server or in the archive yet. See SPEC §6.6.
-- **Tests:** 66 passing (`npm test`). They're offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools.
+- **Maps** (new, 2026-10-07, on branch `claude/project-thread-vc1c31`, draft PR): a Map tab. The DM imports any map image (battle map, town, region); the AI reads it in the background (kind, name, grid, scale) and the server measures the grid exactly from the pixels; the DM corrects grid and scale, shows/hides the map, and adds tokens for player characters (tied to a player), NPCs and enemies. Players move their own token, the DM any; moves snap to the grid, show the distance while dragging, and reach everyone live (SSE). Archived like sheets. Schema v7. Since then, on the same PR: fog of war (enforced on the server: players' image is blacked out), hit points and conditions (players see enemies' health only as hurt/bloodied/down), hidden tokens, AI stat blocks (DM only), NPCs linked to the archivist's records, importing a page of a PDF, and private pins only their owner sees (schema v8). See SPEC §6.6.
+- **Tests:** 82 passing (`npm test`). They're offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools.
 - **Electron dropped; it's a web page now** (owner's call: overkill when there's a server and address anyway). A basic player page (`packages/web/public`, no build step) is served by the server at `/`: log in, ask questions (streamed, clickable citations, past conversations), take notes. No DM/host screens yet.
 - **Logins: name + password**, set by the admin, who can also require a new password at next login (Active Directory style, enforced by the server). Anyone can change their own password. Schema v4.
 - **Multiple campaigns supported throughout.** Players in several campaigns pick one after logging in; the admin chooses each account's campaigns (plural) when adding it and can change them later.
@@ -27,11 +27,12 @@ Read this first when picking the project up on another machine or with another A
 - **Public URL:** `PUBLIC_URL` (in `config.js`, overridable in `.env`) is the one place it's set. Placeholder `https://dnd.example.xyz` until the domain is bought.
 - **Hosting:** not set up. Cloudflare Tunnel is decided (domain not bought yet).
 - **Git:** everything is on `main`, including the sheet tidy-up and new sheet layouts (merged 2026-10-07). The book tools (Q&A searching the rulebooks) were merged to `main` on 2026-10-07.
-- **Live install on the owner's machine:** `data/` holds the admin login ("admin") and a player account for Kenny; the database is on schema v4 and becomes v6 the next time the server starts (v5 adds `character_sheets`; v6 adds `pinned` and `deleted_at` to `conversations`; nothing else changes). The owner has been using the admin screen in a real browser. Start the server with `npm start` (or `node packages/server/src/index.js`), then open http://127.0.0.1:4400.
+- **Live install on the owner's machine:** `data/` holds the admin login ("admin") and a player account for Kenny; the database is on schema v4 and becomes v7 the next time the server starts (v5 adds `character_sheets`; v6 adds `pinned` and `deleted_at` to `conversations`; v7 adds `maps`; nothing else changes). The owner has been using the admin screen in a real browser. Start the server with `npm start` (or `node packages/server/src/index.js`), then open http://127.0.0.1:4400.
 - **Real transcript:** none tested yet. The parser is built to an assumed format.
 
 ## Next steps
 
+0. **Maps: review and merge the draft PR (the owner asks to be asked first), then try it for real.** Import a real battle map, a town or region map, and a page of a real adventure PDF through real Claude Code; check the AI's kind, name and scale, and that the measured grid lines up (settings draw it over the map). Faint or dashed grid lines may not be measured (the AI's count is used then; see `detectGrid` in `maps/read.js`). Check AI stat blocks against the Monster Manual for a few creatures. Run a fight with fog and hit points as DM and player, on a phone too. Then decide with the owner what comes next (SPEC §6.6 "Later": walls and line of sight, a ruler, initiative, telling the archivist what happened on a map).
 1. Get a **real transcript** from the recorder. Upload it on the admin screen (check the speaker preview: if the names come out wrong, adapt `packages/shared/src/transcript.js`), link every speaker to an account, let it process, and inspect the knowledge base (`GET /campaigns/:cid/kb`) and the archivist's questions. Measure archivist time and Q&A latency.
 2. **DM role: deferred.** The owner said to leave it for now. When it's designed, decide what the DM can see (including knowledge derived from players' private notes, currently visible to the `dm` role) and do.
 3. **Try the tidied sheet and the dice for real:** each sheet layout and style in the Look dialog, and some rolls, on a laptop and a phone (Safari/Firefox untested; the 3D dice need WebGL, and were only seen in headless Chromium's software renderer).
@@ -43,7 +44,6 @@ Read this first when picking the project up on another machine or with another A
 9. Add **DM screens** to the web page: glossary; corrections; the archivist's questions; a full speaker-map editor. Which belong to the DM vs the host is part of the deferred DM-role design. (Accounts and session uploads are on the admin screen.)
 10. Buy the domain, set `PUBLIC_URL`, set up **Cloudflare Tunnel**, write a short player guide (address + "log in with what Kenny gave you").
 
-11. **Map, next (owner's call):** try the prototype (Map tab), then decide who puts maps up, whether maps and pins are shared or private, and whether the DM needs fog of war. Then move maps and pins to the server and the archive, filtered per viewer (SPEC §6.6).
 
 ## Getting running on a new machine
 
@@ -112,6 +112,10 @@ Details are in SPEC §3–5.
 | Spell sources: SRD, then the books, then the AI's memory | SRD is exact and free; the books cover the group's other spells (the AI only tidies OCR); the AI is a labelled last resort. Details are replaced only when the player asks. |
 | Sheets private to their player | Same rule as notes. DM access is part of the deferred DM role. |
 | Sheet saves carry a version; stale saves get 409 | So a phone and a laptop can't silently overwrite each other. |
+| **Maps are imported by the DM, never premade; the AI reads them; tokens are placed by hand** | Owner's call (2026-10-07): "the map itself just needs to be the terrain", maps can be "used for anything", and players move their own tokens. |
+| Map grids measured from the pixels, not taken from the AI | The AI's square counts are approximate; edge strength per column/row and the repeat distance near the AI's estimate gives the exact size and offset (tested on synthetic maps). |
+| Players never see the AI's map description | It might describe something the DM hasn't revealed (a trapdoor). |
+| `sharp` for images | Already installed (a dependency of the embedding library), with prebuilt binaries for Windows; resizes maps for the AI and reads pixels for the grid. |
 | **The server decides dice rolls; the 3D dice are animated to land on them** | Owner's call (2026-10-07): fine as long as it looks the same to the player. D&D Beyond lets the browser's physics decide; server rolls are evenly random and can't be faked from the page, which matters once rolls are shared. The library really throws the dice, then relabels faces. |
 
 ## Change log
@@ -352,12 +356,37 @@ The owner asked for "more dice themes? Special effects? Nice fancy shit like tha
 
 ### 2026-10-07: Map prototype
 
-The project's goal is an interactive map; this is a first prototype of the interaction only.
+The project's goal is an interactive map; this is a first prototype of the interaction only. (Replaced the same day, following the owner's direction, by server-backed maps; see "Maps (DM imports, AI reads, tokens moved live)". Leaflet and the browser-only storage were removed.)
 
 - **Map tab** (`web/public/map.js`): Leaflet 1.9 (`CRS.Simple`, flat image coordinates) served from the npm package at `/vendor/leaflet.js` and `/vendor/leaflet.css`. Pan by dragging, zoom with the wheel, pinch or +/−. "Choose a map image" (any image the browser can show; a grid until then), "Place a pin" then tap: name it in its popup (shown as a label), drag it, or remove it. "Fit to screen", "Clear". Styled from the theme's colours.
 - **Kept in the browser only** (IndexedDB, per account per campaign), so nothing is written to the archive before the sharing design is decided. Private mode just means it isn't kept.
 - **Checked in headless Chromium:** grid, wheel zoom, drag, image chosen, pin placed and named, kept after reload, phone width. No page errors. `npm test`: 66 passing (the static-file test now also fetches Leaflet).
 - **Not checked:** pinch zoom on a real phone, Safari/Firefox, very large images (a 10k-pixel scan may be slow to draw).
+
+### 2026-10-07: Maps (DM imports, AI reads, tokens moved live)
+
+Owner's direction in the project thread: no premade maps; the DM imports their own (battle maps, towns, anything); the AI turns the terrain into something interactive; the DM adds characters, enemies and NPCs by hand; players move their own tokens.
+
+- `shared/src/map.js`: the map document (`normalizeMap`), token sizes, snapping (`snapToken`: Medium in a square's middle, Large on a corner, always on the map) and distances (`measure`: 5e squares on a grid, straight lines otherwise). Served to the page at `/shared/map.js`.
+- Server: `maps/store.js` (maps table, schema v7; archive-first with the image as uploaded and append-only diffs reusing the sheets' `diffJson`; restore replays them; `view()` filters per viewer; live `events`), `maps/read.js` (`inspectImage`, `detectGrid`, the AI's structured reading on a 2000 px JPEG copy; task `maps`, medium effort), routes in `app.js` (import, list, image, settings, read again, remove, tokens, SSE). AI reads per DM per hour: `MAP_AI_PER_HOUR` (20). A read cut short by a restart is marked failed on start-up.
+- Page: Map tab (`web/public/map.js`): picker, pan (drag), zoom (wheel, pinch), Fit, a grid overlay toggle, the DM's Import / Add token / Map settings (name, shown, grid drawn live while editing, scale, what the AI saw, read again, remove), a token bar (Edit/Remove for the DM), drag-to-move with the distance shown, live updates with reconnects. `api.js` gained `listen` (GET SSE) and `fileUrl` (images need the login header).
+- `package-lock.json` regenerated with npm 11 (it was also missing the dice library's entries).
+- Tests: `test/maps.test.js` (grid measuring, import/read/archive, hidden from players, token permissions and snapping, live events over real HTTP, failed read and read again, restore) and `shared/test/map.test.js`. Checked in headless Chromium as DM and player, desktop and phone size, with a fake AI: import, read, add tokens, drag with distance, show/hide live, a player moving their own token and not the DM's.
+- Not tried: the real AI reading a real map.
+
+### 2026-10-07: Maps: fog, hit points, hidden tokens, stat blocks, NPCs, PDF pages, pins
+
+The owner asked for the rest of the map list to be built, one at a time, in this order, on the same draft PR and without merging until he says so. 3D stays parked.
+
+- **Fog of war:** `fog: { enabled, shapes }` (reveal/cover rectangles applied in order). `maps/image.js` blacks out covered parts of the image for players (sharp with an SVG mask, cached by a hash of the fog, which is also the player's `image_key`); `view()` drops tokens under the fog except the player's own. `PATCH .../fog` (enabled, add, undo, reset). Page: Fog tools (Reveal/Cover drag modes snapped to squares, Undo, Reveal all, Cover all).
+- **Hit points and conditions:** `hp: {current, max}`, `conditions` (5e list plus concentrating). Players may set their own token's; for NPCs and enemies they get `health` (unhurt/hurt/bloodied/down) instead of numbers. Page: HP bar on tokens, `-7` / `+5` / `12` box, condition chips.
+- **Hidden tokens:** `hidden: true`; players never get them.
+- **AI stat blocks:** `maps/stats.js` (one structured call, purpose `map:stats`, counted in `MAP_AI_PER_HOUR`); `POST .../tokens/:tid/stats {name?}` sets `stats`, and hit points and size unless already set. Players get `stats: null`. Page: "Stat block (AI)" button, a dialog with the Markdown block, "look up instead", and auto lookup for new enemies.
+- **NPCs from records:** `record: {id, title}` on tokens; `GET .../maps/records` (DM; `PERSON_KIND` guesses people from the archivist's free-form kinds) and `GET .../maps/records/:rid?title=` (falls back to the title, since a rebuild renumbers records). The knowledge base itself is untouched. Players get `record: null`.
+- **PDF pages:** `maps/pdf.js` draws the page with pdf.js on `@napi-rs/canvas` (now a direct dependency; it was already installed as pdf.js's optional one). The PDF is archived as `source.pdf` and the map's `source` says which page.
+- **Private pins:** `map_pins` table (schema v8), archived at `maps/<id>/pins/<user id>.jsonl`, restored, never sent over SSE or to anyone but their owner. Page: Pin button, labelled teardrop markers that keep their size at any zoom, drag to move.
+- `PIPELINE_VERSION` not bumped: maps aren't part of the pipeline.
+- Tests: 82 (`maps.test.js` now covers fog, hit points/hidden, stat blocks, records, PDF pages and pins). Checked in headless Chromium with a fake AI: PDF page import, stat block dialog, NPC from a record and its record dialog, a player's pin (placed, labelled, dragged, same size when zoomed, not seen by the DM). No console errors.
 
 ## Verified vs. not verified
 
@@ -375,6 +404,7 @@ The project's goal is an interactive map; this is a first prototype of the inter
 | The owner using the admin screen in a real browser | A real uploaded character sheet (D&D Beyond PDF, phone photo) |
 | Character sheet in headless Edge; spell lookup (SRD, PHB scan, AI memory) and PDF sheet upload through real Claude Code | Sheet attachments on the API provider |
 | 3D dice landing on the server's rolls, in headless Chromium (software WebGL) | 3D dice on real phones and GPUs; Safari/Firefox |
+| Maps in headless Chromium with a fake AI (DM and player, live moves, fog, stat blocks, records, PDF page, pins); grid measuring on synthetic maps | The real AI reading real maps and writing stat blocks; grid measuring on real (faint, textured) maps; real adventure PDFs (big scanned pages); touch dragging on real phones |
 
 ## Gotchas and lessons
 
