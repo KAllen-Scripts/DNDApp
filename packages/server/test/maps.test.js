@@ -287,3 +287,41 @@ test('fog of war: players get covered parts blacked out and no tokens hidden in 
     await t.cleanup();
   }
 });
+
+test('tokens: hit points and conditions; players see how hurt enemies look, never hidden tokens', async () => {
+  const t = await setup({ llm: mapLLM() });
+  try {
+    const map = await importMap(t, await terrain(700, 490, { size: 35 }));
+    const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+    await t.request('PATCH', base, { body: { shown: true } });
+    const add = async (body) => (await t.request('POST', `${base}/tokens`, { body })).json().token;
+    const thorin = await add({ kind: 'pc', name: 'Thorin', user_id: t.sam.id, hp: { current: 24, max: 24 } });
+    const ogre = await add({ kind: 'enemy', name: 'Ogre', hp: { current: 59, max: 59 }, conditions: ['prone', 'prone'] });
+    await add({ kind: 'enemy', name: 'Assassin', hidden: true });
+    assert.equal((await t.request('POST', `${base}/tokens`, { body: { kind: 'enemy', conditions: ['sleepy'] } })).statusCode, 400);
+
+    const seen = async (as = t.alex.token) => (await t.request('GET', base, { as })).json();
+    const tokens = (await seen()).tokens;
+    assert.deepEqual(tokens.map((x) => x.name), ['Thorin', 'Ogre']); // the hidden assassin isn't sent
+    const ogreSeen = tokens.find((x) => x.name === 'Ogre');
+    assert.equal(ogreSeen.hp, null);
+    assert.equal(ogreSeen.health, 'unhurt');
+    assert.deepEqual(ogreSeen.conditions, ['prone']);
+    assert.deepEqual(tokens.find((x) => x.name === 'Thorin').hp, { current: 24, max: 24 }); // the party's numbers are shown
+
+    const patch = (id, body, as) => t.request('PATCH', `${base}/tokens/${id}`, { body, as });
+    await patch(ogre.id, { hp: { current: 29, max: 59 } });
+    assert.equal((await seen()).tokens.find((x) => x.name === 'Ogre').health, 'bloodied');
+    await patch(ogre.id, { hp: { current: 0, max: 59 } });
+    assert.equal((await seen()).tokens.find((x) => x.name === 'Ogre').health, 'down');
+    assert.equal((await t.request('GET', base)).json().tokens.find((x) => x.name === 'Ogre').hp.current, 0); // the DM sees numbers
+
+    // Sam keeps his own hit points and conditions, but can't touch the ogre's or hide himself.
+    assert.equal((await patch(thorin.id, { hp: { current: 17, max: 24 }, conditions: ['poisoned'] }, t.sam.token)).statusCode, 200);
+    assert.equal((await patch(ogre.id, { hp: { current: 1, max: 59 } }, t.sam.token)).statusCode, 403);
+    assert.equal((await patch(thorin.id, { hidden: true }, t.sam.token)).statusCode, 403);
+    assert.deepEqual((await seen()).tokens.find((x) => x.name === 'Thorin').conditions, ['poisoned']);
+  } finally {
+    await t.cleanup();
+  }
+});

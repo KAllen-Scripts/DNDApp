@@ -17,6 +17,12 @@ export const TOKEN_SIZES = [0.5, 1, 2, 3, 4];
 export const TOKEN_SIZE_NAMES = { 0.5: 'Tiny', 1: 'Medium', 2: 'Large', 3: 'Huge', 4: 'Gargantuan' };
 export const TOKEN_COLORS = { pc: '#2f6fb3', npc: '#3f8a4a', enemy: '#b33a3a' };
 export const UNITS = ['ft', 'm', 'mi', 'km'];
+export const CONDITIONS = [
+  'blinded', 'charmed', 'deafened', 'exhaustion', 'frightened', 'grappled', 'incapacitated', 'invisible',
+  'paralyzed', 'petrified', 'poisoned', 'prone', 'restrained', 'stunned', 'unconscious', 'concentrating',
+];
+/** What players see of an NPC's or enemy's hit points: how hurt it looks, not the numbers. */
+export const HEALTH = ['unhurt', 'hurt', 'bloodied', 'down'];
 /** What a scale's distance covers: one grid square, or the whole width of the image. */
 export const SCALE_PER = ['square', 'width'];
 export const MAX_TOKENS = 300;
@@ -51,7 +57,28 @@ export function normalizeToken(t = {}, map) {
     size,
     x: num(t.x, { min: 0, max: width, fallback: width / 2 }),
     y: num(t.y, { min: 0, max: height, fallback: height / 2 }),
+    hp: normalizeHp(t.hp),
+    conditions: [...new Set((Array.isArray(t.conditions) ? t.conditions : []).filter((c) => CONDITIONS.includes(c)))],
+    // Only the DM sees hidden tokens (an ambush, a lurking NPC).
+    hidden: t.hidden === true,
   };
+}
+
+/** Hit points: { current, max }, either may be unknown (null). Null when neither is known. */
+export function normalizeHp(hp) {
+  if (!hp || typeof hp !== 'object') return null;
+  const max = num(hp.max, { min: 1, max: 99_999, fallback: null });
+  const current = num(hp.current, { min: -99_999, max: 99_999, fallback: null });
+  if (max == null && current == null) return null;
+  return { current: current == null ? null : Math.round(current), max: max == null ? null : Math.round(max) };
+}
+
+/** How hurt a creature looks: unhurt, hurt, bloodied (half or less) or down (0 or less). Null if unknown. */
+export function healthOf(hp) {
+  if (!hp || hp.current == null) return null;
+  if (hp.current <= 0) return 'down';
+  if (hp.max == null || hp.current >= hp.max) return 'unhurt';
+  return hp.current * 2 <= hp.max ? 'bloodied' : 'hurt';
 }
 
 /** Grid in image pixels: square size, and where the first line is. */

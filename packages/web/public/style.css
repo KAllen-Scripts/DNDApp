@@ -865,3 +865,19 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .map-fog-tools { padding: 0.35rem 0.5rem; border: 1px dashed var(--border); border-radius: var(--radius); }
 .map-bar button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 .map-view.fog-drawing { cursor: crosshair; }
+.token.hidden-token { opacity: 0.5; border-style: dashed; }
+.token.down .token-initials { opacity: 0.45; }
+.token.down::after { content: '✕'; position: absolute; inset: 0; display: grid; place-items: center; font-size: 1.4em; color: rgb(255 255 255 / 0.85); pointer-events: none; }
+.token-hp { position: absolute; left: 8%; right: 8%; bottom: -0.18em; height: 0.16em; border-radius: 1em; background: rgb(0 0 0 / 0.6); overflow: hidden; pointer-events: none; }
+.token-hp > span { display: block; height: 100%; background: #4caf50; }
+.token-hp.hurt > span { background: #d9b23a; }
+.token-hp.bloodied > span, .token-hp.down > span { background: #d0453a; }
+.token-conditions {
+  position: absolute; top: -0.12em; right: -0.12em; min-width: 0.55em; height: 0.55em; padding: 0 0.12em; border-radius: 1em;
+  background: #7e57c2; color: #fff; font-size: 0.45em; line-height: 0.55em; text-align: center; box-sizing: content-box; pointer-events: none;
+}
+.map-selection .hp-text { font-weight: 600; font-size: 0.9rem; }
+.map-selection .hp-change { width: 6.5rem; padding: 0.25rem 0.4rem; }
+.map-selection select { width: auto; padding: 0.25rem 0.4rem; font-size: 0.85rem; }
+.chip { display: inline-flex; align-items: center; gap: 0.2rem; padding: 0.05rem 0.45rem; border-radius: 1em; background: var(--surface-2); font-size: 0.8rem; }
+.chip-x { border: none; background: none; padding: 0 0.1rem; color: var(--muted); font-size: 0.75rem; cursor: pointer; }

@@ -13,7 +13,7 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { normalizeMap, isFogged } from '@dndapp/shared/map.js';
+import { normalizeMap, isFogged, healthOf } from '@dndapp/shared/map.js';
 import { fogKey } from './image.js';
 import { diffJson, applyJson } from '../sheets/store.js';
 import { NotFoundError } from '../store.js';
@@ -110,8 +110,9 @@ export function createMaps({ db, archive, store }) {
 
     /**
      * What this viewer may see of a map, or null if they may not see it at all.
-     * Players: only shown maps; no AI description or notes; no tokens under
-     * the fog except their own. `image_key` changes when their image does.
+     * Players: only shown maps; no AI description or notes; no hidden tokens,
+     * and none under the fog except their own; NPCs' and enemies' hit points
+     * only as how hurt they look. `image_key` changes when their image does.
      */
     view(map, { role, userId }) {
       if (!map || map.removed) return null;
@@ -123,7 +124,9 @@ export function createMaps({ db, archive, store }) {
         ...out,
         description: '',
         reading: { status: map.reading.status, error: '', notes: '' },
-        tokens: map.tokens.filter((t) => t.user_id === userId || !isFogged(map, t.x, t.y)),
+        tokens: map.tokens
+          .filter((t) => t.user_id === userId || (!t.hidden && !isFogged(map, t.x, t.y)))
+          .map((t) => (t.kind === 'pc' ? t : { ...t, hp: null, health: healthOf(t.hp) })),
         image_key: fogKey(map),
         can_edit: false,
       };

@@ -11,7 +11,7 @@
 import { api, listen, fileUrl, h, storage, LoggedOut } from './api.js';
 import {
   TOKEN_KINDS, TOKEN_KIND_NAMES, TOKEN_SIZES, TOKEN_SIZE_NAMES, TOKEN_COLORS, UNITS,
-  snapToken, tokenPx, measure, formatDistance, fogRect,
+  CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf,
 } from './shared/map.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -288,14 +288,19 @@ function renderTokens() {
       const dragging = state.drag?.id === t.id;
       const x = dragging ? state.drag.x : t.x;
       const y = dragging ? state.drag.y : t.y;
+      const health = t.hp ? healthOf(t.hp) : t.health;
       const el = h('div', {
-        class: `token token-${t.kind}${canMove(t) ? ' movable' : ''}${t.user_id === state.userId ? ' mine' : ''}${state.selected === t.id ? ' selected' : ''}${dragging ? ' dragging' : ''}`,
-        title: `${t.name} (${TOKEN_KIND_NAMES[t.kind]})`,
+        class: `token token-${t.kind}${canMove(t) ? ' movable' : ''}${t.user_id === state.userId ? ' mine' : ''}${state.selected === t.id ? ' selected' : ''}${dragging ? ' dragging' : ''}${t.hidden ? ' hidden-token' : ''}${health === 'down' ? ' down' : ''}`,
+        title: [t.name, TOKEN_KIND_NAMES[t.kind], hpText(t), ...t.conditions].filter(Boolean).join(' · '),
         role: 'button',
         tabindex: '0',
         'aria-label': t.name,
         'data-id': t.id,
-      }, h('span', { class: 'token-initials' }, initials(t.name)), h('span', { class: 'token-name' }, t.name));
+      },
+      h('span', { class: 'token-initials' }, initials(t.name)),
+      h('span', { class: 'token-name' }, t.name),
+      health ? h('span', { class: `token-hp ${health}` }, h('span', { style: `width:${hpFraction(t, health) * 100}%` })) : null,
+      t.conditions.length ? h('span', { class: 'token-conditions', title: t.conditions.join(', ') }, String(t.conditions.length)) : null);
       el.style.cssText = `left:${x - d / 2}px;top:${y - d / 2}px;width:${d}px;height:${d}px;--token:${t.color};font-size:${d * 0.38}px`;
       el.addEventListener('pointerdown', (e) => tokenDown(e, t));
       el.addEventListener('keydown', (e) => {
@@ -309,6 +314,66 @@ function renderTokens() {
   );
 }
 
+const HEALTH_NAMES = { unhurt: 'Unhurt', hurt: 'Hurt', bloodied: 'Bloodied', down: 'Down' };
+const HEALTH_FRACTION = { unhurt: 1, hurt: 0.75, bloodied: 0.4, down: 0 };
+
+/** Hit points as text: numbers where this viewer gets them, else how hurt it looks. */
+function hpText(t) {
+  if (t.hp) return `${t.hp.current ?? '?'}${t.hp.max ? ` / ${t.hp.max}` : ''} HP`;
+  return t.health ? HEALTH_NAMES[t.health] : '';
+}
+
+function hpFraction(t, health) {
+  if (t.hp?.max && t.hp.current != null) return Math.max(0, Math.min(1, t.hp.current / t.hp.max));
+  return HEALTH_FRACTION[health] ?? 1;
+}
+
+async function patchToken(token, body) {
+  try {
+    const res = await state.guarded(() => api('PATCH', `${base()}/${state.current.id}/tokens/${token.id}`, body));
+    if (res) onMap(res.map);
+  } catch (err) {
+    report(err);
+  }
+}
+
+/** Hit points and conditions: the DM for any token, a player for their own. */
+function tokenControls(token) {
+  const editable = state.canEdit || (token.user_id != null && token.user_id === state.userId);
+  const parts = [];
+  if (editable) {
+    // "-7" deals 7 damage, "+5" heals 5, a plain number sets current hit points.
+    const change = h('input', { class: 'hp-change', placeholder: token.hp ? '-7, +5 or 12' : 'max HP', 'aria-label': 'Change hit points', inputMode: 'numeric', size: 7 });
+    change.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const v = change.value.trim();
+      const n = Number(v);
+      if (!v || !Number.isFinite(n)) return;
+      const hp = token.hp ?? { current: null, max: null };
+      let next;
+      if (!token.hp) next = { current: Math.round(n), max: Math.max(1, Math.round(n)) };
+      else if (/^[+-]/.test(v)) next = { ...hp, current: Math.min(hp.max ?? Infinity, (hp.current ?? hp.max ?? 0) + Math.round(n)) };
+      else next = { ...hp, current: Math.round(n) };
+      patchToken(token, { hp: next });
+    });
+    parts.push(h('span', { class: 'hp-text' }, hpText(token) || 'No HP'), change);
+    const add = h('select', { 'aria-label': 'Add a condition' }, new Option('+ Condition', ''), ...CONDITIONS.filter((c) => !token.conditions.includes(c)).map((c) => new Option(c, c)));
+    add.addEventListener('change', () => add.value && patchToken(token, { conditions: [...token.conditions, add.value] }));
+    parts.push(add);
+  } else if (hpText(token)) {
+    parts.push(h('span', { class: 'hp-text' }, hpText(token)));
+  }
+  for (const c of token.conditions) {
+    parts.push(h('span', { class: 'chip' }, c, editable ? h('button', { class: 'chip-x', 'aria-label': `Remove ${c}`, onclick: () => patchToken(token, { conditions: token.conditions.filter((x) => x !== c) }) }, '✕') : null));
+  }
+  if (state.canEdit) {
+    const hidden = h('input', { type: 'checkbox', checked: token.hidden });
+    hidden.addEventListener('change', () => patchToken(token, { hidden: hidden.checked }));
+    parts.push(h('label', { class: 'map-check small', title: 'Players never see hidden tokens' }, hidden, ' Hidden'));
+  }
+  return parts;
+}
+
 function renderSelection() {
   const bar = $('#map-selection');
   const token = state.current?.tokens.find((t) => t.id === state.selected);
@@ -319,6 +384,7 @@ function renderSelection() {
       h('span', { class: 'swatch', style: `background:${token.color}` }),
       h('strong', {}, token.name),
       h('span', { class: 'muted small' }, `${TOKEN_KIND_NAMES[token.kind]} · ${TOKEN_SIZE_NAMES[token.size]}`),
+      ...tokenControls(token),
       h('span', { class: 'spacer' }),
       canMove(token) && !state.canEdit ? h('span', { class: 'muted small' }, 'Drag to move') : null,
       state.canEdit ? h('button', { class: 'ghost', onclick: () => tokenDialog(token) }, 'Edit') : null,
@@ -600,6 +666,8 @@ async function tokenDialog(token = null) {
   const size = h('select', {}, ...TOKEN_SIZES.map((s) => new Option(`${TOKEN_SIZE_NAMES[s]} (${s === 0.5 ? '½' : s} square${s > 1 ? 's' : ''})`, s)));
   size.value = String(token?.size ?? 1);
   const color = h('input', { type: 'color', value: token?.color ?? TOKEN_COLORS[kind.value] });
+  const hpMax = h('input', { type: 'number', min: '1', step: '1', value: token?.hp?.max ?? '', placeholder: 'unknown' });
+  const hidden = h('input', { type: 'checkbox', checked: !!token?.hidden });
   let colorTouched = !!token;
   color.addEventListener('input', () => (colorTouched = true));
   const playerField = field('Player', player);
@@ -622,7 +690,14 @@ async function tokenDialog(token = null) {
       user_id: kind.value === 'pc' && player.value ? Number(player.value) : null,
       size: Number(size.value),
       color: color.value,
+      hidden: hidden.checked,
     };
+    const max = Number(hpMax.value) > 0 ? Math.round(Number(hpMax.value)) : null;
+    if (max !== (token?.hp?.max ?? null)) {
+      // A new maximum: keep the damage taken so far, or start at full.
+      const taken = token?.hp?.max && token.hp.current != null ? token.hp.max - token.hp.current : 0;
+      body.hp = max ? { current: max - taken, max } : null;
+    }
     if (token) {
       onMap((await api('PATCH', `${base()}/${map.id}/tokens/${token.id}`, body)).map);
     } else {
@@ -642,7 +717,8 @@ async function tokenDialog(token = null) {
       field('Kind', kind),
       playerField,
       field('Name', name),
-      h('div', { class: 'map-row' }, field('Size', size), field('Colour', color)),
+      h('div', { class: 'map-row' }, field('Size', size), field('Colour', color), field('Max HP', hpMax)),
+      h('label', { class: 'map-check' }, hidden, ' Hidden from players (an ambush, someone lurking)'),
       token ? null : h('p', { class: 'muted small' }, 'It appears in the middle of what you can see; drag it into place.'),
       h('div', { class: 'map-dialog-actions' },
         h('span', { class: 'spacer' }),

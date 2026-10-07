@@ -18,7 +18,7 @@ import { preparedTranscript } from './pipeline/prepare.js';
 import { SheetConflictError } from './sheets/store.js';
 import { SHEET_FORMAT } from '@dndapp/shared/sheet.js';
 import { parseRoll, rollDice, ROLL_MODES } from '@dndapp/shared/dice.js';
-import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, snapToken } from '@dndapp/shared/map.js';
+import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, snapToken } from '@dndapp/shared/map.js';
 import { inspectImage } from './maps/read.js';
 import { createPlayerImages } from './maps/image.js';
 import { newTokenId, isMapId } from './maps/store.js';
@@ -906,7 +906,12 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     size: z.number().refine((n) => TOKEN_SIZES.includes(n), 'must be 0.5, 1, 2, 3 or 4'),
     x: z.number(),
     y: z.number(),
+    hp: z.object({ current: z.number().int().nullable(), max: z.number().int().positive().nullable() }).nullable(),
+    conditions: z.array(z.enum(CONDITIONS)).max(CONDITIONS.length),
+    hidden: z.boolean(),
   });
+  // What a player may change on their own token; everything else is the DM's.
+  const OWNER_FIELDS = new Set(['x', 'y', 'hp', 'conditions']);
 
   /** A player character token belongs to someone in this campaign. */
   const checkTokenOwner = (cid, token) => {
@@ -915,7 +920,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     }
   };
 
-  /** Add a token (DM): { kind, name, user_id?, color?, size?, x?, y? }. On a grid it snaps to squares. */
+  /** Add a token (DM): { kind, name, user_id?, color?, size?, x?, y?, hp?, conditions?, hidden? }. On a grid it snaps to squares. */
   app.post('/campaigns/:cid/maps/:mid/tokens', async (request, reply) => {
     const a = access(request, { dm: true });
     const { map } = viewableMap(request);
@@ -933,8 +938,9 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   });
 
   /**
-   * Change a token: { x, y } moves it (the DM, or the player it belongs to);
-   * anything else (name, kind, owner, colour, size) is the DM's.
+   * Change a token. The player it belongs to may move it ({ x, y }) and set
+   * its hit points and conditions; anything else (name, kind, owner, colour,
+   * size, hidden) is the DM's.
    */
   app.patch('/campaigns/:cid/maps/:mid/tokens/:tid', async (request) => {
     const a = access(request);
@@ -945,8 +951,8 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     const body = TOKEN.partial().parse(request.body ?? {});
     const moving = Object.keys(body).every((k) => k === 'x' || k === 'y');
     if (a.role !== 'dm') {
-      if (!moving) throw new AuthError('Only the DM can change tokens', 403);
-      if (token.user_id !== request.user.id) throw new AuthError('You can only move your own token', 403);
+      if (token.user_id !== request.user.id) throw new AuthError('You can only change your own token', 403);
+      if (!Object.keys(body).every((k) => OWNER_FIELDS.has(k))) throw new AuthError('Only the DM can change that', 403);
     }
     checkTokenOwner(a.cid, { ...token, ...body });
     const saved = maps.change(a.cid, map.id, (m) => {
