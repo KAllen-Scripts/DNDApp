@@ -327,6 +327,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
 
   app.get('/me', async (request) => ({
     user: request.user,
+    dice: { roller: config.dice?.roller ?? 'quick' },
     campaigns: db
       .prepare(
         `SELECT c.id, c.name, m.role, m.character_name FROM memberships m JOIN campaigns c ON c.id = m.campaign_id

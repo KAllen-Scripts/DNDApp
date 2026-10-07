@@ -2,11 +2,12 @@
  * Dice: a tray (the Dice button in the header), 3D dice that tumble across
  * the screen, the result, and a history of this tab's rolls.
  *
- * The server decides every roll (POST /campaigns/:cid/roll). The 3D dice are
- * then thrown with real physics and their faces relabelled so they land on
- * the server's numbers (dice-box-threejs, loaded the first time someone
- * rolls). With reduced motion, 3D switched off, or no WebGL, the result just
- * appears.
+ * The server decides every roll (POST /campaigns/:cid/roll). The dice are then
+ * thrown and land on the server's numbers, by one of several rollers (ROLLERS
+ * below; the server's DICE_ROLLER setting picks the default, and the tray can
+ * pick another for this browser). The roller is loaded the first time someone
+ * rolls. If WebGL isn't there, the 3D rollers fall back to the light one. With
+ * reduced motion or the dice switched off, the result just appears.
  */
 import { api, h, storage } from './api.js';
 import { parseRoll } from './shared/dice.js';
@@ -17,6 +18,20 @@ const SETTINGS_KEY = 'dndapp.dice';
 const DICE = [4, 6, 8, 10, 12, 20, 100];
 const MAX_3D_DICE = 30;
 const MODE_NAMES = { normal: 'Normal', advantage: 'Advantage', disadvantage: 'Disadvantage' };
+
+/**
+ * The rollers, heaviest first. module is what's loaded (its default export
+ * works like dice-box-threejs); hold is how long the dice stay after landing.
+ * "none" shows only the result.
+ */
+export const ROLLERS = {
+  classic: { name: 'Classic 3D', about: 'Full physics with shadows (slowest, about 3.5 s a roll)', module: '/vendor/dice/dice-box.js', hold: 2600 },
+  quick: { name: 'Quick 3D', about: 'The same 3D dice, no shadows, landing in about 1.5 s', module: './dice-quick.js', hold: 1800 },
+  lite: { name: 'Lite', about: '3D-looking dice drawn without WebGL or physics, about 1.2 s', module: './dice-lite.js', hold: 1600, options: { mode: 'lite' } },
+  flat: { name: 'Flat', about: 'Flat dice that spin in, under a second', module: './dice-lite.js', hold: 1400, options: { mode: 'flat' } },
+  none: { name: 'None', about: 'Just the result' },
+};
+const DEFAULT_ROLLER = 'quick';
 
 /**
  * Dice styles: colours and textures for dice-box-threejs (its texture names;
@@ -61,10 +76,12 @@ const state = {
   nextMode: 'normal', // for the next d20 roll, then back to normal
   history: [],
   seq: 0, // the newest roll; an older one still animating doesn't show its result
-  no3d: false, // WebGL or the dice failed to load on this device
+  serverRoller: DEFAULT_ROLLER, // the server's DICE_ROLLER
+  failed: new Set(), // rollers that couldn't start on this device (no WebGL...)
+  shown3d: false, // the last roll's dice were shown (else its big moments play at the result card)
   fadeTimer: null,
   hideTimer: null,
-  settings: { threeD: true, sound: true, effects: true, style: 'match' },
+  settings: { threeD: true, sound: true, effects: true, style: 'match', roller: '' }, // roller '': the server's choice
   fx: null,
 };
 
@@ -74,14 +91,22 @@ try {
 const saveSettings = () => storage.set(SETTINGS_KEY, JSON.stringify(state.settings));
 
 const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-const animated = () => state.settings.threeD && !state.no3d && !reducedMotion?.matches;
+/** The roller to use: this browser's choice, else the server's, falling back to Lite where the 3D ones can't run. */
+function rollerKey() {
+  let key = state.settings.roller in ROLLERS ? state.settings.roller : state.serverRoller in ROLLERS ? state.serverRoller : DEFAULT_ROLLER;
+  if (state.failed.has(key) && key !== 'lite' && key !== 'flat') key = 'lite';
+  return state.failed.has(key) ? 'none' : key;
+}
+const animated = () => state.settings.threeD && rollerKey() !== 'none' && !reducedMotion?.matches;
 const effects = () => state.settings.effects && !reducedMotion?.matches;
 const style = () => STYLES[state.settings.style] ?? STYLES.match;
 
-/** Rolls belong to a campaign (called when entering one). */
-export function setDiceCampaign({ campaignId, guarded }) {
+/** Rolls belong to a campaign (called when entering one). roller is the server's default (DICE_ROLLER). */
+export function setDiceCampaign({ campaignId, guarded, roller = null }) {
   Object.assign(state, { campaignId, guarded, history: [] });
+  if (roller in ROLLERS) state.serverRoller = roller;
   drawHistory();
+  drawSettings();
 }
 
 /** Shift-click rolls with advantage, Alt-click with disadvantage. */
@@ -112,12 +137,12 @@ export async function roll(notation, { label = '', mode = null, then = null } = 
   if (threeD) await animate(result, id);
   if (id !== state.seq) return;
   showResult(entry);
-  if (!threeD || state.no3d) celebrate(result);
+  if (!threeD || !state.shown3d) celebrate(result);
 }
 
 // ---------- 3D ----------
 
-let boxPromise = null;
+const boxes = new Map(); // roller → its loaded dice (a promise)
 
 /** The dice-box colorset for the chosen style (or the page's accent colours). */
 function colorset() {
@@ -132,27 +157,32 @@ function colorset() {
   return { name: `dndapp-${background}-${foreground}`, foreground, background, outline: background, texture: 'none', material: 'plastic' };
 }
 
-function getBox() {
-  boxPromise ??= (async () => {
-    const { default: DiceBox } = await import('/vendor/dice/dice-box.js');
-    const box = new DiceBox('#dice-stage', {
-      assetPath: '/vendor/dice/',
-      sounds: state.settings.sound,
-      volume: 50,
-      theme_customColorset: colorset(),
-      theme_material: 'plastic',
-      light_intensity: 0.9,
-      strength: 1.3,
+function getBox(key) {
+  if (!boxes.has(key)) {
+    const roller = ROLLERS[key];
+    const promise = (async () => {
+      const { default: Dice } = await import(roller.module);
+      const box = new Dice('#dice-stage', {
+        assetPath: '/vendor/dice/',
+        sounds: state.settings.sound,
+        volume: 50,
+        theme_customColorset: colorset(),
+        theme_material: 'plastic',
+        light_intensity: 0.9,
+        strength: 1.3,
+        ...roller.options,
+      });
+      await box.initialize();
+      return box;
+    })();
+    promise.catch(() => {
+      state.failed.add(key);
+      boxes.delete(key);
+      drawSettings();
     });
-    await box.initialize();
-    return box;
-  })();
-  boxPromise.catch(() => {
-    state.no3d = true;
-    boxPromise = null;
-    drawSettings();
-  });
-  return boxPromise;
+    boxes.set(key, promise);
+  }
+  return boxes.get(key);
 }
 
 const diceCount = (result) => result.terms.reduce((n, t) => n + (t.dice?.length ?? 0) * (t.sides === 100 ? 2 : 1), 0);
@@ -189,9 +219,23 @@ async function animate(result, id) {
   const stage = $('#dice-stage');
   clearTimeout(state.fadeTimer);
   stage.classList.remove('fading');
+  state.shown3d = false;
   let box;
+  let key;
   try {
-    box = await getBox();
+    // A 3D roller that can't run here falls back to Lite (rollerKey skips failed ones).
+    for (;;) {
+      key = rollerKey();
+      if (key === 'none') return;
+      try {
+        box = await getBox(key);
+        break;
+      } catch {
+        state.failed.add(key);
+      }
+    }
+    // Dice from a roller used before stay off the stage.
+    for (const [other, promise] of boxes) if (other !== key) promise.then((b) => b.clearDice(), () => {});
     const theme = colorset();
     if (box.theme_customColorset?.name !== theme.name) await box.updateConfig({ theme_customColorset: theme });
     if (box.sounds !== state.settings.sound) {
@@ -199,9 +243,10 @@ async function animate(result, id) {
       if (box.sounds) await box.loadSounds().catch(() => (box.sounds = false));
     }
   } catch {
-    return; // no 3D on this device: the result just appears
+    return; // no dice on this device: the result just appears
   }
   if (id !== state.seq) return;
+  state.shown3d = true;
   stage.classList.add('rolling');
   const stopTrails = trails(box, id);
   // A newer roll clears these dice and never finishes this one, hence the time limit.
@@ -216,13 +261,14 @@ async function animate(result, id) {
       box.clearDice();
       stage.classList.remove('rolling', 'fading');
     }, 600);
-  }, 2600);
+  }, ROLLERS[key].hold);
 }
 
 // ---------- special effects ----------
 
 /** Where a die is on screen. */
 function onScreen(box, mesh) {
+  if (box.screenPosition) return box.screenPosition(mesh);
   const p = mesh.position.clone().project(box.camera);
   const rect = box.container.getBoundingClientRect();
   return { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height };
@@ -376,9 +422,19 @@ function addDie(sides) {
 function drawSettings() {
   const threeD = $('#dice-3d');
   if (!threeD) return;
-  threeD.checked = state.settings.threeD && !state.no3d;
-  threeD.disabled = state.no3d || !!reducedMotion?.matches;
-  $('#dice-3d-note').textContent = state.no3d ? "3D dice aren't available on this device." : reducedMotion?.matches ? 'Off because your device asks for less motion.' : '';
+  const key = rollerKey();
+  const wanted = state.settings.roller in ROLLERS ? state.settings.roller : state.serverRoller;
+  const none = key === 'none' && wanted !== 'none';
+  threeD.checked = state.settings.threeD && !none;
+  threeD.disabled = none || !!reducedMotion?.matches;
+  $('#dice-3d-note').textContent = none
+    ? "Dice aren't available on this device."
+    : reducedMotion?.matches ? 'Off because your device asks for less motion.'
+      : key !== wanted ? `${ROLLERS[wanted].name} dice aren't available on this device, so it uses ${ROLLERS[key].name}.` : '';
+  const picker = $('#dice-roller');
+  picker.value = state.settings.roller in ROLLERS ? state.settings.roller : '';
+  picker.options[0].textContent = `Server's choice (${ROLLERS[state.serverRoller].name})`;
+  picker.title = ROLLERS[wanted].about;
   $('#dice-sound').checked = state.settings.sound;
   $('#dice-effects').checked = state.settings.effects;
   $('#dice-effects').disabled = !!reducedMotion?.matches;
@@ -455,7 +511,11 @@ export function initDice() {
     h('h3', { class: 'dice-history-title' }, 'Dice style'),
     stylePicker(),
     h('div', { class: 'dice-settings' },
-      h('label', { class: 'check' }, h('input', { id: 'dice-3d', type: 'checkbox', onchange: (e) => { state.settings.threeD = e.target.checked; saveSettings(); } }), '3D dice'),
+      h('label', { class: 'check' }, h('input', { id: 'dice-3d', type: 'checkbox', onchange: (e) => { state.settings.threeD = e.target.checked; saveSettings(); } }), 'Animated dice'),
+      h('label', { class: 'dice-roller' }, 'Roller',
+        h('select', { id: 'dice-roller', onchange: (e) => { state.settings.roller = e.target.value; saveSettings(); drawSettings(); } },
+          h('option', { value: '' }, "Server's choice"),
+          Object.entries(ROLLERS).map(([k, r]) => h('option', { value: k, title: r.about }, r.name)))),
       h('label', { class: 'check' }, h('input', { id: 'dice-effects', type: 'checkbox', onchange: (e) => { state.settings.effects = e.target.checked; saveSettings(); } }), 'Effects'),
       h('label', { class: 'check' }, h('input', { id: 'dice-sound', type: 'checkbox', onchange: (e) => { state.settings.sound = e.target.checked; saveSettings(); } }), 'Sound'),
       h('button', { type: 'button', class: 'link', onclick: () => preview() }, 'Try it'),

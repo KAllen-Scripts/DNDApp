@@ -27,6 +27,83 @@ export const TRAILS = {
   petals: { colors: ['#ffc6e8', '#ffd9c6', '#e5d4ff', '#fff0f6'], shape: 'petal', size: [3, 6], life: [50, 80], rise: 0.6, spread: 1, glow: false },
 };
 
+// Particle pictures: each shape drawn once per colour at UNIT size, with its glow.
+const UNIT = 16;
+const SPARK = 48; // a spark's streak, drawn this long
+const SPRITE_PAD = 32; // room for the glow
+const sprites = new Map();
+
+function sprite(shape, color, glow) {
+  const key = `${shape} ${color} ${glow}`;
+  let c = sprites.get(key);
+  if (c) return c;
+  c = document.createElement('canvas');
+  const size = UNIT;
+  const pad = glow ? SPRITE_PAD : 2;
+  c.width = shape === 'spark' ? SPARK + pad * 2 : size * 2 + pad * 2;
+  c.height = shape === 'spark' ? 2 * pad + 4 : size * 2 + pad * 2;
+  const g = c.getContext('2d');
+  if (!g) return c; // no canvas (tests): nothing to draw
+  g.fillStyle = g.strokeStyle = color;
+  if (glow) {
+    g.shadowColor = color;
+    g.shadowBlur = shape === 'spark' ? 4 : size * 1.5;
+  }
+  if (shape === 'spark') {
+    g.translate(c.width - pad, c.height / 2);
+    g.lineWidth = 1.6;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(-SPARK, 0);
+    g.lineTo(0, 0);
+    g.stroke();
+  } else {
+    g.translate(c.width / 2, c.height / 2);
+    drawShape(g, shape, size);
+  }
+  sprites.set(key, c);
+  return c;
+}
+
+function drawShape(g, shape, size) {
+  switch (shape) {
+    case 'flake':
+      g.lineWidth = 4; // thin once shrunk to a particle
+      g.beginPath();
+      for (let i = 0; i < 3; i++) {
+        g.rotate(Math.PI / 3);
+        g.moveTo(-size, 0);
+        g.lineTo(size, 0);
+      }
+      g.stroke();
+      break;
+    case 'star':
+      g.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const r = i % 2 ? size * 0.28 : size;
+        g.lineTo(Math.cos((i * TAU) / 8) * r, Math.sin((i * TAU) / 8) * r);
+      }
+      g.closePath();
+      g.fill();
+      break;
+    case 'bubble':
+      g.lineWidth = 4; // thin once shrunk to a particle
+      g.beginPath();
+      g.arc(0, 0, size - 1, 0, TAU);
+      g.stroke();
+      break;
+    case 'petal':
+      g.beginPath();
+      g.ellipse(0, 0, size, size * 0.45, 0, 0, TAU);
+      g.fill();
+      break;
+    default: // dot and smoke
+      g.beginPath();
+      g.arc(0, 0, size, 0, TAU);
+      g.fill();
+  }
+}
+
 /** One shared canvas and animation loop. */
 export function createFx(canvas) {
   const ctx = canvas.getContext('2d');
@@ -70,6 +147,9 @@ export function createFx(canvas) {
       p.spin += p.vspin;
       drawParticle(p);
     }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
     particles = particles.filter((p) => p.age < p.life);
     if (particles.length || flashes.length) requestAnimationFrame(frame);
     else {
@@ -78,75 +158,41 @@ export function createFx(canvas) {
     }
   }
 
+  /**
+   * Each particle is drawn from a small picture made once per shape and colour
+   * (glow included). Blurring every particle as it's drawn (canvas shadowBlur)
+   * cost hundreds of milliseconds a frame with a few hundred particles; copying
+   * a picture costs almost nothing.
+   */
   function drawParticle(p) {
     const t = p.age / p.life;
     const alpha = p.shape === 'smoke' ? 0.35 * (1 - t) : t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85;
+    if (alpha <= 0) return;
     const size = p.shape === 'smoke' ? p.size * (1 + t * 2) : p.size * (p.shape === 'spark' ? 1 : 1 - t * 0.4);
-    ctx.save();
-    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.globalAlpha = alpha;
     ctx.globalCompositeOperation = p.glow ? 'lighter' : 'source-over';
-    ctx.translate(p.x, p.y);
-    ctx.fillStyle = ctx.strokeStyle = p.color;
-    if (p.glow) {
-      ctx.shadowColor = p.color;
-      ctx.shadowBlur = size * 2.5;
+    if (p.shape === 'confetti') {
+      ctx.setTransform(dpr, 0, 0, dpr, dpr * p.x, dpr * p.y);
+      ctx.rotate(p.spin);
+      ctx.scale(1, Math.cos(p.age * 0.2 + p.size));
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-size / 2, -size / 4, size, size / 2);
+      return;
     }
-    switch (p.shape) {
-      case 'spark': {
-        const len = Math.hypot(p.vx, p.vy) * 2 + size * 0.4;
-        ctx.rotate(Math.atan2(p.vy, p.vx));
-        ctx.lineWidth = 1.6;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(-len, 0);
-        ctx.lineTo(0, 0);
-        ctx.stroke();
-        break;
-      }
-      case 'flake':
-        ctx.rotate(p.spin);
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        for (let i = 0; i < 3; i++) {
-          ctx.rotate(Math.PI / 3);
-          ctx.moveTo(-size, 0);
-          ctx.lineTo(size, 0);
-        }
-        ctx.stroke();
-        break;
-      case 'star':
-        ctx.rotate(p.spin);
-        ctx.beginPath();
-        for (let i = 0; i < 8; i++) {
-          const r = i % 2 ? size * 0.28 : size;
-          ctx.lineTo(Math.cos((i * TAU) / 8) * r, Math.sin((i * TAU) / 8) * r);
-        }
-        ctx.closePath();
-        ctx.fill();
-        break;
-      case 'bubble':
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.arc(0, 0, size, 0, TAU);
-        ctx.stroke();
-        break;
-      case 'petal':
-        ctx.rotate(p.spin);
-        ctx.beginPath();
-        ctx.ellipse(0, 0, size, size * 0.45, 0, 0, TAU);
-        ctx.fill();
-        break;
-      case 'confetti':
-        ctx.rotate(p.spin);
-        ctx.scale(1, Math.cos(p.age * 0.2 + p.size));
-        ctx.fillRect(-size / 2, -size / 4, size, size / 2);
-        break;
-      default: // dot and smoke
-        ctx.beginPath();
-        ctx.arc(0, 0, size, 0, TAU);
-        ctx.fill();
+    const img = sprite(p.shape, p.color, p.glow);
+    ctx.setTransform(dpr, 0, 0, dpr, dpr * p.x, dpr * p.y);
+    if (p.shape === 'spark') {
+      // A streak behind the spark, as long as it's fast.
+      const len = Math.hypot(p.vx, p.vy) * 2 + size * 0.4;
+      ctx.rotate(Math.atan2(p.vy, p.vx));
+      ctx.scale(len / SPARK, 1);
+      ctx.drawImage(img, -img.width + SPRITE_PAD, -img.height / 2);
+      return;
     }
-    ctx.restore();
+    if (p.shape !== 'dot' && p.shape !== 'smoke' && p.shape !== 'bubble') ctx.rotate(p.spin);
+    const k = size / UNIT;
+    ctx.scale(k, k);
+    ctx.drawImage(img, -img.width / 2, -img.height / 2);
   }
 
   function drawFlash(f) {

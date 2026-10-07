@@ -127,6 +127,13 @@ export const config = {
     aiPerHour: num(env.MAP_AI_PER_HOUR, 20),
   },
 
+  dice: {
+    // How rolled dice are shown on everyone's page (each player can still pick another in the dice tray):
+    // classic (3D with physics and shadows, slowest), quick (the same 3D dice, tuned to land fast),
+    // lite (3D-looking dice without WebGL), flat (flat dice that spin in), none (just the result).
+    roller: env.DICE_ROLLER || 'quick',
+  },
+
   // Applies to the API provider only (Claude Code runs on the subscription).
   monthlySpendCapUsd: num(env.MONTHLY_SPEND_CAP_USD, 50),
 };

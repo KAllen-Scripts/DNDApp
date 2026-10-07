@@ -383,6 +383,8 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 .dice-hint { margin: 0; }
 .dice-settings { display: flex; align-items: center; gap: 0.4rem 1rem; flex-wrap: wrap; }
 .dice-settings label.check { flex: none; }
+.dice-settings label.dice-roller { display: inline-flex; align-items: center; gap: 0.35rem; flex: none; font-size: 0.9rem; }
+.dice-settings label.dice-roller select { width: auto; padding: 0.15rem 0.4rem; }
 .dice-settings .muted:empty { display: none; }
 .dice-history-title { margin: 0.2rem 0 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .dice-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.15rem; }
@@ -397,7 +399,8 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 .dice-stage { position: fixed; inset: 0; z-index: 8; pointer-events: none; opacity: 0; transition: opacity 0.5s; }
 .dice-stage.rolling { opacity: 1; }
 .dice-stage.fading { opacity: 0; }
-.dice-stage canvas { display: block; }
+/* Each roller adds its own canvas; they must stack, or a second one is pushed below the window. */
+.dice-stage canvas { display: block; position: absolute; inset: 0; }
 
 /* Special effects (dice-fx.js): particles over the dice, a banner, a shake. */
 .dice-fx { position: fixed; inset: 0; z-index: 9; width: 100vw; height: 100vh; pointer-events: none; }
