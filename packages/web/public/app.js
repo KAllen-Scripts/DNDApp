@@ -168,7 +168,7 @@ async function enterCampaign(campaign) {
   $('#character').textContent = describe(campaign);
   $('#switch-campaign').hidden = state.me.campaigns.length < 2;
   newConversation();
-  setDiceCampaign({ campaignId: campaign.id, guarded });
+  setDiceCampaign({ campaignId: campaign.id, guarded, roller: state.me.dice?.roller });
   await Promise.all([
     loadConversations(),
     loadNotes(),
