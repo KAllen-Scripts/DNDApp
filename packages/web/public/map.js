@@ -15,6 +15,7 @@ import {
   TOKEN_KINDS, TOKEN_KIND_NAMES, TOKEN_SIZES, TOKEN_SIZE_NAMES, TOKEN_COLORS, UNITS,
   CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf,
   fogMask, FOG_MASK_FILL, snapWallPoint, nearestWall,
+  TEMPLATE_SHAPES, TEMPLATE_SHAPE_NAMES, TEMPLATE_COLOR, templateShape, tokensInTemplate, inTemplate, snapTemplatePoint, spellArea,
 } from './shared/map.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -45,6 +46,15 @@ const state = {
   selectedPin: null, // pin id
   pinDrag: null, // a pin being moved: { id, pointer, x, y, moved, sx, sy }
   tokenPictures: new Map(), // `${user id}:${picture key}` -> URL of a player's token picture, or null while loading
+  measuring: false, // the Measure tool: dragging on the map measures
+  ruler: null, // the line being (or last) measured: { pointer, a, b, done }
+  templateDraft: null, // a template about to be placed: { shape, size, width, label, color }
+  templatePlace: null, // the template being placed: { pointer, a, b }
+  selectedTemplate: null, // template id
+  templateDrag: null, // a template being moved: { id, pointer, grab, x, y, moved, sx, sy }
+  caught: new Set(), // tokens inside the selected (or placed) template
+  combatOpen: false, // the turn order panel is open
+  combatActive: new Map(), // map id -> whether it had a fight when last drawn (the panel opens when one starts)
 };
 
 const base = () => `/campaigns/${state.campaignId}/maps`;
@@ -141,6 +151,8 @@ async function show(map) {
   state.current = map;
   state.selected = null;
   state.selectedPin = null;
+  state.selectedTemplate = null;
+  state.ruler = null;
   state.fitted = false;
   if (map) storage.set(PICK_KEY(), map.id);
   renderPicker();
@@ -199,7 +211,10 @@ function render() {
     $('#map-image').removeAttribute('src');
     $('#map-tokens').replaceChildren();
     $('#map-pins').replaceChildren();
+    $('#map-templates').replaceChildren();
+    $('#map-ruler-line').replaceChildren();
     renderSelection();
+    renderCombat();
     empty.hidden = false;
     empty.textContent = state.canEdit
       ? 'No maps yet. Import one: a battle map, a town, a region, anything. The AI reads its grid and scale, then you can add tokens.'
@@ -215,10 +230,13 @@ function render() {
   renderGrid();
   renderFog();
   renderWalls();
+  renderTemplates();
   renderTokens();
+  renderRuler();
   renderPins();
   renderSelection();
   renderFogTools();
+  renderCombat();
   if (state.images.has(map.id) && state.images.get(map.id).key !== map.image_key) loadImage(map);
   const reading = map.reading.status;
   if (reading === 'pending') status('The AI is reading this map…');
@@ -377,9 +395,10 @@ async function walls(body) {
 function setTool({ fogMode = null, wallMode = null }) {
   state.fogMode = fogMode;
   state.wallMode = wallMode;
-  if (fogMode || wallMode) state.pinMode = false;
+  if (fogMode || wallMode) Object.assign(state, { pinMode: false, measuring: false, templateDraft: null, ruler: null });
   renderPinTool();
   renderFogTools();
+  renderMeasureTools();
 }
 
 async function fog(body) {
@@ -428,7 +447,7 @@ function renderTokens() {
       const health = t.hp ? healthOf(t.hp) : t.health;
       const picture = tokenPicture(t);
       const el = h('div', {
-        class: `token token-${t.kind}${picture ? ' has-picture' : ''}${canMove(t) ? ' movable' : ''}${t.user_id === state.userId ? ' mine' : ''}${state.selected === t.id ? ' selected' : ''}${dragging ? ' dragging' : ''}${t.hidden ? ' hidden-token' : ''}${health === 'down' ? ' down' : ''}`,
+        class: `token token-${t.kind}${picture ? ' has-picture' : ''}${canMove(t) ? ' movable' : ''}${t.user_id === state.userId ? ' mine' : ''}${state.selected === t.id ? ' selected' : ''}${dragging ? ' dragging' : ''}${t.hidden ? ' hidden-token' : ''}${health === 'down' ? ' down' : ''}${state.caught.has(t.id) ? ' caught' : ''}${map.combat?.turn === t.id ? ' turn' : ''}`,
         title: [t.name, TOKEN_KIND_NAMES[t.kind], hpText(t), ...t.conditions].filter(Boolean).join(' · '),
         role: 'button',
         tabindex: '0',
@@ -482,7 +501,8 @@ function renderPins() {
 
 function selectPin(id) {
   state.selectedPin = id;
-  if (id) state.selected = null;
+  if (id) Object.assign(state, { selected: null, selectedTemplate: null });
+  renderTemplates();
   renderTokens();
   renderPins();
   renderSelection();
@@ -643,7 +663,12 @@ function renderSelection() {
   const bar = $('#map-selection');
   const token = state.current?.tokens.find((t) => t.id === state.selected);
   const pin = !token && myPins().find((p) => p.id === state.selectedPin);
-  bar.hidden = !token && !pin;
+  const tpl = !token && !pin && state.current?.templates?.find((t) => t.id === state.selectedTemplate);
+  bar.hidden = !token && !pin && !tpl;
+  if (tpl) {
+    bar.dataset.pin = '';
+    return bar.replaceChildren(...templateControls(tpl));
+  }
   // Don't rebuild the pin's label box while someone is typing in it.
   if (pin && bar.dataset.pin === pin.id && bar.contains(document.activeElement)) return;
   bar.dataset.pin = pin ? pin.id : '';
@@ -670,6 +695,8 @@ function renderSelection() {
 function select(id) {
   state.selected = id;
   state.selectedPin = null;
+  state.selectedTemplate = null;
+  renderTemplates();
   renderPins();
   renderTokens();
   renderSelection();
@@ -682,6 +709,7 @@ function applyView() {
   $('#map-stage').style.transform = `translate(${x}px, ${y}px) scale(${k})`;
   // Pins stay the same size on screen at any zoom.
   $('#map-stage').style.setProperty('--unzoom', String(1 / k));
+  if (state.ruler && !state.drag) placeMeasure(state.ruler.b);
 }
 
 function fit() {
@@ -736,8 +764,31 @@ function toImage(clientX, clientY) {
 }
 
 function viewDown(e) {
-  if (!state.current || e.target.closest('.token, .map-pin, .map-selection')) return;
+  if (!state.current || e.target.closest('.map-selection, .map-combat')) return;
+  // Measuring and placing a template can start on a token; otherwise tokens and pins handle their own pointers.
+  const aiming = state.measuring || !!state.templateDraft;
+  if (e.target.closest('.token, .map-pin') && !aiming) return;
   e.currentTarget.setPointerCapture(e.pointerId);
+  if (aiming && !state.pointers.size && !state.ruler?.pointer && !state.templatePlace) {
+    const at = toImage(e.clientX, e.clientY);
+    if (state.measuring) {
+      const a = rulerPoint(at);
+      state.ruler = { pointer: e.pointerId, a, b: a, done: false };
+      return renderRuler();
+    }
+    const a = snapTemplatePoint(state.current, at);
+    state.templatePlace = { pointer: e.pointerId, a, b: a };
+    return renderTemplates();
+  }
+  // Dragging the selected template (its owner, or the DM) moves it.
+  const tpl = state.current.templates?.find((t) => t.id === state.selectedTemplate);
+  if (tpl && canChangeTemplate(tpl) && !state.pointers.size && !state.fogMode && !state.wallMode && !state.pinMode) {
+    const at = toImage(e.clientX, e.clientY);
+    if (inTemplate(state.current, tpl, at.x, at.y)) {
+      state.templateDrag = { id: tpl.id, pointer: e.pointerId, grab: { x: at.x - tpl.x, y: at.y - tpl.y }, x: tpl.x, y: tpl.y, moved: false, sx: e.clientX, sy: e.clientY };
+      return;
+    }
+  }
   if (state.fogMode && state.current.fog?.enabled && !state.pointers.size && !state.fogDraw) {
     const at = toImage(e.clientX, e.clientY);
     state.fogDraw = { pointer: e.pointerId, a: at, b: at };
@@ -754,6 +805,16 @@ function viewDown(e) {
 function viewMove(e) {
   if (state.drag) return tokenMove(e);
   if (state.pinDrag) return pinMove(e);
+  if (state.ruler?.pointer === e.pointerId && !state.ruler.done) {
+    state.ruler.b = rulerPoint(toImage(e.clientX, e.clientY));
+    return renderRuler();
+  }
+  if (state.templatePlace?.pointer === e.pointerId) {
+    state.templatePlace.b = toImage(e.clientX, e.clientY);
+    renderTemplates();
+    return renderTokens();
+  }
+  if (state.templateDrag?.pointer === e.pointerId) return templateMove(e);
   if (state.fogDraw?.pointer === e.pointerId) {
     state.fogDraw.b = toImage(e.clientX, e.clientY);
     return renderFog();
@@ -785,6 +846,14 @@ function viewMove(e) {
 function viewUp(e) {
   if (state.drag) return tokenUp(e);
   if (state.pinDrag) return pinUp(e);
+  if (state.ruler?.pointer === e.pointerId && !state.ruler.done) {
+    // The line stays until the next one (or Measure is switched off).
+    state.ruler.done = true;
+    state.ruler.pointer = null;
+    return renderRuler();
+  }
+  if (state.templatePlace?.pointer === e.pointerId) return placeTemplate(e);
+  if (state.templateDrag?.pointer === e.pointerId) return templateUp(e);
   if (state.fogDraw?.pointer === e.pointerId) {
     const r = fogRect(state.current, state.fogDraw.a, state.fogDraw.b);
     state.fogDraw = null;
@@ -801,6 +870,10 @@ function viewUp(e) {
     // A click on a door opens or closes it.
     const door = e.type === 'pointerup' ? doorAt(e.clientX, e.clientY) : null;
     if (door) return toggleDoor(door);
+    // A click on a template picks it (to see who it catches).
+    const at = toImage(e.clientX, e.clientY);
+    const tpl = e.type === 'pointerup' ? (state.current.templates ?? []).findLast((t) => inTemplate(state.current, t, at.x, at.y)) : null;
+    if (tpl) return selectTemplate(tpl.id);
     select(null);
   }
 }
@@ -808,6 +881,7 @@ function viewUp(e) {
 // ---------- moving tokens ----------
 
 function tokenDown(e, token) {
+  if (state.measuring || state.templateDraft) return; // the map view measures or aims from here
   e.stopPropagation();
   if (!canMove(token)) return select(token.id);
   $('#map-view').setPointerCapture(e.pointerId);
@@ -840,6 +914,7 @@ function tokenMove(e) {
   const box = $('#map-view').getBoundingClientRect();
   label.style.left = `${e.clientX - box.left + 14}px`;
   label.style.top = `${e.clientY - box.top - 30}px`;
+  renderRuler();
 }
 
 async function tokenUp(e) {
@@ -847,6 +922,7 @@ async function tokenUp(e) {
   if (e.pointerId !== drag.pointer) return;
   state.drag = null;
   $('#map-measure').hidden = true;
+  renderRuler();
   const map = state.current;
   const token = map.tokens.find((t) => t.id === drag.id);
   if (!drag.moved || !token) return select(drag.id);
@@ -861,6 +937,342 @@ async function tokenUp(e) {
     renderTokens();
     report(err);
   }
+}
+
+// ---------- measuring ----------
+
+/** Where a ruler end goes: the middle of a square on a grid, else where the pointer is. */
+const rulerPoint = (at) => (state.current.grid ? snapToken(state.current, { size: 1 }, at.x, at.y) : at);
+
+/** Put the distance label next to a point on the map. */
+function placeMeasure(at) {
+  const label = $('#map-measure');
+  label.style.left = `${at.x * state.view.k + state.view.x + 14}px`;
+  label.style.top = `${at.y * state.view.k + state.view.y - 30}px`;
+}
+
+/** The measuring line (only on this screen): the Measure tool's, or a token's path while it's dragged. */
+function renderRuler() {
+  const map = state.current;
+  const svg = $('#map-ruler-line');
+  if (!map) return;
+  svg.setAttribute('viewBox', `0 0 ${map.image.width} ${map.image.height}`);
+  svg.replaceChildren();
+  let line = null;
+  const token = state.drag?.moved && map.tokens.find((t) => t.id === state.drag.id);
+  if (token) line = [state.drag.start, snapToken(map, token, state.drag.x, state.drag.y)];
+  else if (state.ruler) line = [state.ruler.a, state.ruler.b];
+  if (line) {
+    const [a, b] = line;
+    for (const cls of ['ruler-halo', 'ruler']) svg.append(svgEl('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: cls }));
+  }
+  if (state.drag) return; // the drag shows its own distance
+  const label = $('#map-measure');
+  label.hidden = !state.ruler;
+  if (!state.ruler) return;
+  const d = measure(map, state.ruler.a, state.ruler.b);
+  label.textContent = d ? `${formatDistance(d)}${d.squares != null ? ` · ${d.squares} square${d.squares === 1 ? '' : 's'}` : ''}` : 'No scale';
+  placeMeasure(state.ruler.b);
+}
+
+function renderMeasureTools() {
+  $('#map-ruler').setAttribute('aria-pressed', String(state.measuring));
+  $('#map-template').setAttribute('aria-pressed', String(!!state.templateDraft));
+  $('#map-view').classList.toggle('measuring', state.measuring || !!state.templateDraft);
+}
+
+// ---------- spell templates (areas of effect) ----------
+
+const canChangeTemplate = (t) => state.canEdit || (t.user_id != null && t.user_id === state.userId);
+
+/** The direction from a to b in degrees, in steps of 15. */
+function aim(a, b) {
+  if (Math.hypot(b.x - a.x, b.y - a.y) < 1) return 0;
+  const deg = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+  return ((Math.round(deg / 15) * 15) % 360 + 360) % 360;
+}
+
+/** The template being placed, as it would be saved. */
+function draftTemplate(place) {
+  return { ...state.templateDraft, id: 'placing', x: place.a.x, y: place.a.y, angle: aim(place.a, place.b) };
+}
+
+/** Templates on the map (everyone's the viewer gets), and which tokens the selected or placed one catches. */
+function renderTemplates() {
+  const map = state.current;
+  const svg = $('#map-templates');
+  state.caught = new Set();
+  if (!map) return;
+  svg.setAttribute('viewBox', `0 0 ${map.image.width} ${map.image.height}`);
+  svg.replaceChildren();
+  const drag = state.templateDrag?.moved ? state.templateDrag : null;
+  const list = (map.templates ?? []).map((t) => (drag?.id === t.id ? { ...t, x: drag.x, y: drag.y } : t));
+  let focus = list.find((t) => t.id === state.selectedTemplate);
+  if (state.templatePlace && state.templateDraft) {
+    focus = draftTemplate(state.templatePlace);
+    list.push(focus);
+  }
+  for (const t of list) {
+    const shape = templateShape(map, t);
+    const cls = `template${t === focus ? (t.id === 'placing' ? ' placing' : ' selected') : ''}`;
+    const style = `--tpl:${t.color}`;
+    svg.append(shape.circle
+      ? svgEl('circle', { cx: shape.circle.cx, cy: shape.circle.cy, r: shape.circle.r, class: cls, style, 'data-template': t.id })
+      : svgEl('polygon', { points: shape.points.map((p) => p.join(',')).join(' '), class: cls, style, 'data-template': t.id }));
+  }
+  if (focus) state.caught = new Set(tokensInTemplate(map, focus).map((t) => t.id));
+}
+
+function selectTemplate(id) {
+  Object.assign(state, { selectedTemplate: id, selected: null, selectedPin: null });
+  renderTemplates();
+  renderTokens();
+  renderPins();
+  renderSelection();
+}
+
+/** Place, change or remove a template; the answer is the whole map. */
+async function templateRequest(method, path, body) {
+  try {
+    const res = await state.guarded(() => api(method, `${base()}/${state.current.id}/templates${path}`, body));
+    if (res) onMap(res.map);
+    return res;
+  } catch (err) {
+    report(err);
+    return null;
+  }
+}
+
+async function placeTemplate(e) {
+  const place = state.templatePlace;
+  state.templatePlace = null;
+  if (e.type !== 'pointerup') {
+    renderTemplates();
+    return renderTokens();
+  }
+  const { shape, x, y, angle, size, width, label, color } = draftTemplate(place);
+  state.templateDraft = null;
+  renderMeasureTools();
+  const res = await templateRequest('POST', '', { shape, x, y, angle, size, width, label, color });
+  if (res) selectTemplate(res.template.id);
+  else render();
+}
+
+function templateMove(e) {
+  const drag = state.templateDrag;
+  if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
+  drag.moved = true;
+  const at = toImage(e.clientX, e.clientY);
+  Object.assign(drag, snapTemplatePoint(state.current, { x: at.x - drag.grab.x, y: at.y - drag.grab.y }));
+  renderTemplates();
+  renderTokens();
+}
+
+function templateUp(e) {
+  const drag = state.templateDrag;
+  state.templateDrag = null;
+  if (!drag.moved) return;
+  const tpl = state.current.templates.find((t) => t.id === drag.id);
+  if (tpl && e.type === 'pointerup') {
+    Object.assign(tpl, { x: drag.x, y: drag.y });
+    templateRequest('PATCH', `/${tpl.id}`, { x: drag.x, y: drag.y });
+  }
+  renderTemplates();
+  renderTokens();
+  renderSelection();
+}
+
+/** What a template is: "20 ft radius", "15 ft cone", "100 × 5 ft line". */
+function templateText(map, t) {
+  const unit = map.scale?.unit ?? 'ft';
+  if (t.shape === 'circle') return `${t.size} ${unit} radius`;
+  if (t.shape === 'line') return `${t.size} × ${t.width} ${unit} line`;
+  return `${t.size} ${unit} ${t.shape}`;
+}
+
+function templateControls(tpl) {
+  const map = state.current;
+  const caught = tokensInTemplate(map, tpl);
+  const mine = canChangeTemplate(tpl);
+  return [
+    h('span', { class: 'swatch', style: `background:${tpl.color}` }),
+    h('strong', {}, tpl.label || TEMPLATE_SHAPE_NAMES[tpl.shape]),
+    h('span', { class: 'muted small' }, templateText(map, tpl)),
+    h('span', { class: 'small template-caught' }, caught.length ? `Catches ${caught.map((t) => t.name).join(', ')}` : 'Catches nobody you can see'),
+    h('span', { class: 'spacer' }),
+    mine ? h('span', { class: 'muted small' }, 'Drag to move.') : null,
+    mine && tpl.shape !== 'circle' ? h('button', { class: 'ghost', title: 'Turn it 45°', onclick: () => templateRequest('PATCH', `/${tpl.id}`, { angle: (tpl.angle + 45) % 360 }) }, 'Turn') : null,
+    mine ? h('button', { class: 'ghost danger', onclick: () => {
+      selectTemplate(null);
+      templateRequest('DELETE', `/${tpl.id}`);
+    } }, 'Remove') : null,
+    h('button', { class: 'ghost icon-btn', 'aria-label': 'Close', onclick: () => selectTemplate(null) }, '✕'),
+  ].filter(Boolean);
+}
+
+/** How many of the map's units one foot is (spells are in feet). */
+const FOOT = { ft: 1, m: 0.3, mi: 1 / 5280, km: 0.0003 };
+
+/** Choose a template (or one of your spells with an area), then click and drag on the map to place and aim it. */
+async function templateDialog() {
+  const map = state.current;
+  if (!map) return;
+  const unit = map.scale?.unit ?? 'ft';
+  // Your spells that have an area, from your character sheet.
+  let spells = [];
+  try {
+    const res = await api('GET', `/campaigns/${state.campaignId}/sheet`);
+    spells = (res.sheet.spells ?? []).map((sp) => ({ name: sp.name, area: spellArea(sp) })).filter((sp) => sp.area);
+  } catch (err) {
+    if (err instanceof LoggedOut) throw err;
+  }
+  const dialog = $('#map-dialog');
+  const spell = h('select', {}, new Option('None (choose a shape)', ''), ...spells.map((sp, i) => new Option(`${sp.name} (${sp.area.size} ft ${sp.area.shape === 'circle' ? 'radius' : sp.area.shape})`, i)));
+  const shape = h('select', {}, ...TEMPLATE_SHAPES.map((sh) => new Option(TEMPLATE_SHAPE_NAMES[sh], sh)));
+  const size = h('input', { type: 'number', min: '0.5', step: 'any', value: '20', required: true });
+  const width = h('input', { type: 'number', min: '0.5', step: 'any', value: String(5 * FOOT[unit]) });
+  const label = h('input', { maxLength: 80, placeholder: 'Fireball' });
+  const color = h('input', { type: 'color', value: TEMPLATE_COLOR });
+  const sizeField = field(`Size (${unit})`, size);
+  const widthField = field(`Width (${unit})`, width);
+  const sync = () => {
+    widthField.hidden = shape.value !== 'line';
+    sizeField.firstChild.textContent = `${shape.value === 'circle' ? 'Radius' : 'Length'} (${unit})`;
+  };
+  shape.addEventListener('change', sync);
+  spell.addEventListener('change', () => {
+    const sp = spells[Number(spell.value)];
+    if (!sp || spell.value === '') return;
+    shape.value = sp.area.shape;
+    size.value = String(Math.round(sp.area.size * FOOT[unit] * 100) / 100);
+    if (sp.area.width) width.value = String(Math.round(sp.area.width * FOOT[unit] * 100) / 100);
+    label.value = sp.name.slice(0, 80);
+    sync();
+  });
+  sync();
+  dialog.replaceChildren(
+    h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => {
+      e.preventDefault();
+      const n = Number(size.value);
+      if (!(n > 0)) return;
+      setTool({});
+      state.templateDraft = { shape: shape.value, size: n, width: shape.value === 'line' ? Number(width.value) || 5 * FOOT[unit] : null, label: label.value.trim(), color: color.value };
+      Object.assign(state, { measuring: false, ruler: null, pinMode: false });
+      renderPinTool();
+      renderMeasureTools();
+      renderRuler();
+      status(state.templateDraft.shape === 'circle' ? 'Click where it centres. Everyone can see it.' : 'Press where it starts and drag to aim it. Everyone can see it.');
+      dialog.close();
+    } },
+      h('h2', {}, 'Place a template'),
+      spells.length ? field('One of your spells', spell) : null,
+      h('div', { class: 'map-row' }, field('Shape', shape), sizeField, widthField),
+      h('div', { class: 'map-row' }, field('Label', label), field('Colour', color)),
+      map.scale ? null : h('p', { class: 'muted small' }, "This map has no scale yet, so a square counts as 5 ft."),
+      h('p', { class: 'muted small' }, 'On a grid it starts on a square\'s corner; tokens with any square\'s middle inside are caught.'),
+      h('div', { class: 'map-dialog-actions' },
+        h('span', { class: 'spacer' }),
+        h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel'),
+        h('button', { class: 'primary' }, 'Place it'),
+      ),
+    ),
+  );
+  dialog.onclose = null;
+  dialog.showModal();
+}
+
+// ---------- initiative (the turn order in a fight) ----------
+
+async function combat(body) {
+  try {
+    const res = await state.guarded(() => api('POST', `${base()}/${state.current.id}/combat`, body));
+    if (!res) return;
+    onMap(res.map);
+    const sign = (n) => `${n < 0 ? '−' : '+'} ${Math.abs(n)}`;
+    if (res.rolls.length === 1) {
+      const [r] = res.rolls;
+      status(`${r.name} rolled ${r.total} for initiative (d20 ${r.d20} ${sign(r.mod)}).`);
+    } else if (res.rolls.length) {
+      status(`Initiative: ${res.rolls.map((r) => `${r.name} ${r.total}`).join(', ')}.`);
+    }
+  } catch (err) {
+    report(err);
+  }
+}
+
+/** The turn order panel: open when there's a fight (or when someone opens it). */
+function renderCombat() {
+  const panel = $('#map-combat');
+  const map = state.current;
+  if (map) {
+    const active = !!map.combat;
+    const was = state.combatActive.get(map.id);
+    if (active && !was) state.combatOpen = true; // a fight started (or this is the first look at one)
+    if (!active && was && !state.canEdit) state.combatOpen = false;
+    state.combatActive.set(map.id, active);
+  }
+  $('#map-combat-open').setAttribute('aria-pressed', String(!!map && state.combatOpen));
+  panel.hidden = !map || !state.combatOpen;
+  if (panel.hidden) return panel.replaceChildren();
+  // Don't rebuild the list while someone is typing a roll into it.
+  if (panel.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;
+  const c = map.combat;
+  const close = h('button', { class: 'ghost icon-btn', 'aria-label': 'Close the turn order', onclick: () => {
+    state.combatOpen = false;
+    renderCombat();
+  } }, '✕');
+  if (!c) {
+    return panel.replaceChildren(
+      h('header', {}, h('strong', {}, 'Initiative'), close),
+      h('p', { class: 'muted small' }, state.canEdit
+        ? 'No fight on this map. Start one: everyone on the map joins, and NPCs and enemies roll straight away (with their Dexterity from the stat block). Players roll their own.'
+        : 'No fight on this map.'),
+      h('footer', {}, state.canEdit ? h('button', { class: 'primary', onclick: () => combat({ action: 'start' }) }, 'Start a fight') : null),
+    );
+  }
+  const byId = new Map(map.tokens.map((t) => [t.id, t]));
+  const turnToken = byId.get(c.turn);
+  const mine = (t) => state.canEdit || (t.user_id != null && t.user_id === state.userId);
+  const rows = c.entries.map((e) => {
+    const t = byId.get(e.id);
+    if (!t) return null;
+    let init;
+    if (mine(t)) {
+      init = h('input', { type: 'number', step: '1', value: e.init ?? '', placeholder: '–', 'aria-label': `Initiative for ${t.name}`, title: 'Type what you rolled at the table' });
+      init.addEventListener('change', () => init.value !== '' && combat({ action: 'set', id: t.id, init: Math.round(Number(init.value)) }));
+      init.addEventListener('keydown', (ev) => ev.key === 'Enter' && init.blur());
+    } else {
+      init = h('span', { class: 'init' }, e.init ?? '–');
+    }
+    return h('li', { class: `${c.turn === e.id ? 'current' : ''}${t.hidden ? ' hidden-token' : ''}`, 'data-id': t.id },
+      h('span', { class: 'swatch', style: `background:${t.color}` }),
+      h('button', { class: 'who', title: `Show ${t.name} on the map`, onclick: () => select(t.id) }, t.name),
+      init,
+      mine(t) && (e.init == null || state.canEdit) ? h('button', { class: 'ghost', 'aria-label': `Roll initiative for ${t.name}`, title: 'Roll a d20 plus their initiative', onclick: () => combat({ action: 'roll', id: t.id }) }, e.init == null ? 'Roll' : '↻') : null,
+      state.canEdit ? h('button', { class: 'ghost icon-btn', 'aria-label': `Take ${t.name} out of the fight`, onclick: () => combat({ action: 'remove', id: t.id }) }, '✕') : null);
+  });
+  const whose = turnToken ? `${turnToken.name}'s turn` : c.turn_unseen ? "someone you can't see" : 'not started yet';
+  const footer = [];
+  if (state.canEdit) {
+    const rolled = c.entries.some((e) => e.init != null);
+    footer.push(h('button', { class: 'ghost', disabled: !c.turn, onclick: () => combat({ action: 'prev' }) }, 'Back'));
+    footer.push(h('button', { class: 'primary', disabled: !rolled, onclick: () => combat({ action: 'next' }) }, c.turn ? 'Next turn' : 'First turn'));
+    if (c.entries.some((e) => e.init == null && byId.get(e.id)?.kind !== 'pc')) footer.push(h('button', { class: 'ghost', onclick: () => combat({ action: 'roll' }) }, 'Roll for NPCs'));
+    const out = map.tokens.filter((t) => !c.entries.some((e) => e.id === t.id));
+    if (out.length) {
+      const add = h('select', { 'aria-label': 'Add to the fight' }, new Option('+ Add', ''), ...out.map((t) => new Option(t.name, t.id)));
+      add.addEventListener('change', () => add.value && combat({ action: 'add', ids: [add.value] }));
+      footer.push(add);
+    }
+    footer.push(h('button', { class: 'ghost danger', onclick: () => confirm('End the fight? The turn order is cleared.') && combat({ action: 'end' }) }, 'End fight'));
+  } else if (turnToken && turnToken.user_id === state.userId) {
+    footer.push(h('button', { class: 'primary', onclick: () => combat({ action: 'next' }) }, 'End my turn'));
+  }
+  panel.replaceChildren(
+    h('header', {}, h('strong', {}, `Round ${c.round}`), h('span', { class: 'muted small' }, whose), close),
+    h('ol', { 'aria-label': 'Turn order' }, ...rows.filter(Boolean)),
+    h('footer', {}, ...footer),
+  );
 }
 
 // ---------- the DM's tools ----------
@@ -1188,6 +1600,8 @@ export function stopMaps() {
   state.live = null;
   state.pins.clear();
   state.pinMode = false;
+  Object.assign(state, { measuring: false, ruler: null, templateDraft: null, templatePlace: null, combatOpen: false });
+  state.combatActive.clear();
   players = null;
 }
 
@@ -1275,9 +1689,31 @@ export function initMapActions() {
   $('#map-settings').addEventListener('click', settingsDialog);
   $('#map-pin').addEventListener('click', () => {
     state.pinMode = !state.pinMode;
-    if (state.pinMode) Object.assign(state, { fogMode: null, wallMode: null });
+    if (state.pinMode) Object.assign(state, { fogMode: null, wallMode: null, measuring: false, templateDraft: null, ruler: null });
     renderFogTools();
     renderPinTool();
+    renderMeasureTools();
+    if (state.current) renderRuler();
     if (state.pinMode) status('Click the map where the pin goes. Only you will see it.');
+  });
+  $('#map-ruler').addEventListener('click', () => {
+    const on = !state.measuring;
+    setTool({});
+    Object.assign(state, { measuring: on, templateDraft: null, ruler: null, pinMode: false });
+    renderPinTool();
+    renderMeasureTools();
+    if (state.current) renderRuler();
+    if (on) status(state.current?.scale ? 'Drag on the map to measure. Only you see it.' : "This map has no scale yet, so distances can't be measured.", !state.current?.scale);
+  });
+  $('#map-template').addEventListener('click', () => {
+    if (state.templateDraft) {
+      state.templateDraft = null;
+      return renderMeasureTools();
+    }
+    templateDialog().catch(report);
+  });
+  $('#map-combat-open').addEventListener('click', () => {
+    state.combatOpen = !state.combatOpen;
+    renderCombat();
   });
 }

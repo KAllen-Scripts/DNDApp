@@ -217,6 +217,9 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | POST | `/campaigns/:cid/maps/:mid/tokens` | Add a token (DM) `{kind: pc \| npc \| enemy, name?, user_id?, size?, color?, x?, y?, hp?: {current, max}, conditions?, hidden?, record?: {id}}` |
 | PATCH / DELETE | `/campaigns/:cid/maps/:mid/tokens/:tid` | Change a token: the player it belongs to may set `{x, y, hp, conditions}`, the DM anything / remove it (DM). Snapped to the grid by the server |
 | POST | `/campaigns/:cid/maps/:mid/tokens/:tid/stats` | Fill the token's stat block with the AI (DM) `{name?}`; 404 if the AI doesn't know the creature |
+| POST | `/campaigns/:cid/maps/:mid/combat` | The fight on a map `{action: start \| end \| next \| prev \| add \| remove \| roll \| set, ids?, id?, init?}` → `{map, rolls: [{id, name, d20, mod, total}]}`. DM: everything (`start` with `ids` or every token; NPCs and enemies roll at once; `roll` without `id` rolls every NPC not rolled yet). A player: `roll` (once) or `set` for their own token, and `next` on their own turn |
+| POST | `/campaigns/:cid/maps/:mid/templates` | Place an area of effect (anyone who can see the map) `{shape: circle \| cone \| line \| cube, x, y, angle?, size, width?, label?, color?}` (size and width in the map's unit) |
+| PATCH / DELETE | `/campaigns/:cid/maps/:mid/templates/:tid` | Move, turn, resize or relabel a template / remove it (whoever placed it, or the DM) |
 | GET / POST | `/campaigns/:cid/maps/:mid/pins` | Your own pins on the map `{pins}` / add one `{x, y, label?, color?}` |
 | PATCH / DELETE | `/campaigns/:cid/maps/:mid/pins/:pid` | Move or relabel one of your pins / remove it |
 | GET | `/campaigns/:cid/usage` | AI usage this month by step and provider, plus average answer times (DM) |

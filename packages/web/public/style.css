@@ -941,3 +941,37 @@ details.spell > summary::-webkit-details-marker { display: none; }
 }
 .map-selection .map-pin-input { flex: 1; min-width: 8rem; max-width: 18rem; width: auto; padding: 0.25rem 0.5rem; }
 .map-selection .map-pin-color { width: 2.2rem; height: 1.9rem; padding: 0.1rem; flex: none; }
+
+/* Measuring, spell templates and the turn order (map.js). */
+.map-ruler, .map-templates { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.map-ruler line { stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.map-ruler .ruler-halo { stroke: rgb(0 0 0 / 0.6); stroke-width: 6px; }
+.map-ruler .ruler { stroke: #f2d675; stroke-width: 3px; stroke-dasharray: 8 5; }
+.map-templates .template { fill: var(--tpl); fill-opacity: 0.28; stroke: var(--tpl); stroke-width: 2px; vector-effect: non-scaling-stroke; }
+.map-templates .template.selected { fill-opacity: 0.4; stroke-width: 3px; stroke-dasharray: 7 4; }
+.map-templates .template.placing { fill-opacity: 0.35; stroke-dasharray: 5 4; }
+.map-templates .origin { fill: var(--tpl); stroke: #fff; stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+.map-view.measuring { cursor: crosshair; }
+.token.caught { box-shadow: 0 0 0 0.12em #ffb74d, 0 0 0.5em 0.15em rgb(255 183 77 / 0.8); }
+.token.turn { outline: 0.14em solid #ffd54a; outline-offset: 0.12em; }
+.token.turn::before { content: ''; position: absolute; inset: -0.32em; border-radius: inherit; border: 0.08em dashed rgb(255 213 74 / 0.85); pointer-events: none; }
+.map-combat {
+  position: absolute; top: 0.5rem; right: 0.5rem; z-index: 4; width: min(17rem, calc(100% - 1rem)); max-height: calc(100% - 1rem);
+  display: grid; grid-template-rows: auto 1fr auto; gap: 0.4rem; padding: 0.6rem 0.7rem; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 2px 10px rgb(0 0 0 / 0.3); cursor: default;
+}
+.map-combat[hidden] { display: none; }
+.map-combat header { display: flex; align-items: center; gap: 0.4rem; }
+.map-combat header strong { flex: 1; }
+.map-combat ol { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: grid; gap: 0.2rem; align-content: start; }
+.map-combat li { display: flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.35rem; border-radius: calc(var(--radius) / 2); }
+.map-combat li.current { background: color-mix(in srgb, #ffd54a 28%, transparent); font-weight: 600; }
+.map-combat li.hidden-token { opacity: 0.6; }
+.map-combat li .swatch { width: 0.8rem; height: 0.8rem; border-radius: 50%; flex: none; }
+.map-combat li .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.map-combat li .init { min-width: 2ch; text-align: right; font-variant-numeric: tabular-nums; }
+.map-combat li input { width: 3.6rem; padding: 0.15rem 0.3rem; font-size: 0.85rem; }
+.map-combat button { padding: 0.2rem 0.55rem; font-size: 0.85rem; }
+.map-combat footer { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+.map-combat footer select { width: auto; max-width: 100%; padding: 0.2rem 0.3rem; font-size: 0.85rem; }
+.map-combat p { margin: 0; }

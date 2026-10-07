@@ -214,6 +214,8 @@ export function normalizeMap(input = {}) {
     seen.add(token.id);
     out.tokens.push(token);
   }
+  out.templates = normalizeTemplates(m.templates, image);
+  out.combat = normalizeCombat(m.combat, out.tokens);
   return out;
 }
 
@@ -549,4 +551,236 @@ export function formatDistance(d) {
   if (!d) return '';
   const v = d.value >= 100 ? Math.round(d.value) : Math.round(d.value * 10) / 10;
   return `${v.toLocaleString('en')} ${d.unit}`;
+}
+
+// ---------- initiative ----------
+
+/**
+ * A fight on a map: the turn order, whose turn it is and the round, or null
+ * when there's no fight. Each entry is a token on the map with its
+ * initiative (null until rolled) and the modifier it rolled with (ties go to
+ * the higher modifier). Entries are kept in turn order; `turn` is the token
+ * whose turn it is, or null before the first turn.
+ */
+export function normalizeCombat(c, tokens = []) {
+  if (!c || typeof c !== 'object') return null;
+  const ids = new Set(tokens.map((t) => t.id));
+  const seen = new Set();
+  const entries = [];
+  for (const e of Array.isArray(c.entries) ? c.entries : []) {
+    if (!e || !ids.has(e.id) || seen.has(e.id)) continue;
+    seen.add(e.id);
+    entries.push({
+      id: e.id,
+      init: num(e.init, { min: -99, max: 999, fallback: null }),
+      mod: num(e.mod, { min: -99, max: 99, fallback: null }),
+    });
+  }
+  const sorted = sortCombat(entries, tokens);
+  const turn = sorted.some((e) => e.id === c.turn && e.init != null) ? c.turn : null;
+  return { round: Math.round(num(c.round, { min: 1, max: 9999, fallback: 1 })), turn, entries: sorted };
+}
+
+/**
+ * Turn order: highest initiative first; ties go to the higher modifier, then
+ * player characters, then by name. Entries not rolled yet go last.
+ */
+export function sortCombat(entries, tokens = []) {
+  const byId = new Map(tokens.map((t) => [t.id, t]));
+  return [...entries].sort((a, b) => {
+    if ((a.init == null) !== (b.init == null)) return a.init == null ? 1 : -1;
+    if (a.init !== b.init) return b.init - a.init;
+    if ((a.mod ?? 0) !== (b.mod ?? 0)) return (b.mod ?? 0) - (a.mod ?? 0);
+    const ta = byId.get(a.id);
+    const tb = byId.get(b.id);
+    if ((ta?.kind === 'pc') !== (tb?.kind === 'pc')) return ta?.kind === 'pc' ? -1 : 1;
+    return String(ta?.name ?? '').localeCompare(String(tb?.name ?? ''));
+  });
+}
+
+/**
+ * The next (dir 1) or previous (dir -1) turn: { round, turn }. Only entries
+ * with an initiative take turns. Going past the last one starts the next
+ * round; going back past the first returns to the previous round (never
+ * before round 1). Null when nobody has rolled yet.
+ */
+export function stepTurn(combat, dir = 1) {
+  const order = combat.entries.filter((e) => e.init != null).map((e) => e.id);
+  if (!order.length) return null;
+  const i = order.indexOf(combat.turn);
+  if (i < 0) return { round: combat.round, turn: dir > 0 ? order[0] : combat.turn };
+  if (dir > 0) return i + 1 < order.length ? { round: combat.round, turn: order[i + 1] } : { round: combat.round + 1, turn: order[0] };
+  if (i > 0) return { round: combat.round, turn: order[i - 1] };
+  return combat.round > 1 ? { round: combat.round - 1, turn: order.at(-1) } : { round: 1, turn: order[0] };
+}
+
+/**
+ * A creature's Dexterity modifier from its stat block's text, or null if it
+ * isn't there. Reads "DEX 14 (+2)" and the usual Markdown table (a row of
+ * ability names, then a row of scores).
+ */
+export function dexModifier(text) {
+  const s = String(text ?? '').replace(/[−–]/g, '-');
+  const signed = (v) => Number(v.replace(/\s+/g, ''));
+  const fromScore = (n) => Math.floor((Number(n) - 10) / 2);
+  const inline = s.match(/\bDEX(?:TERITY)?\b[*_:\s]{0,6}(\d{1,2})\s*\(\s*([+-]\s*\d{1,2})\s*\)/i);
+  if (inline) return signed(inline[2]);
+  const lines = s.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const cells = lines[i].split('|').map((c) => c.replace(/[*_]/g, '').trim());
+    const col = cells.findIndex((c) => /^dex(terity)?$/i.test(c));
+    if (col < 0) continue;
+    for (const next of lines.slice(i + 1, i + 3)) {
+      const cell = next.split('|').map((c) => c.trim())[col] ?? '';
+      const m = cell.match(/\(\s*([+-]\s*\d{1,2})\s*\)/);
+      if (m) return signed(m[1]);
+      if (/^\d{1,2}$/.test(cell)) return fromScore(cell);
+    }
+  }
+  const bare = s.match(/\bDEX(?:TERITY)?\b[*_:\s]{0,6}(\d{1,2})\b/i);
+  return bare ? fromScore(bare[1]) : null;
+}
+
+// ---------- spell templates ----------
+
+/**
+ * Areas of effect on a map, like a fireball's sphere or a dragon's cone:
+ * { id, shape, x, y, angle, size, width, label, color, user_id }. x/y is
+ * the point of origin in image pixels, angle the direction in degrees
+ * (clockwise from pointing right), size the radius or length and width a
+ * line's width, both in the map's scale unit (feet on most maps).
+ */
+export const TEMPLATE_SHAPES = ['circle', 'cone', 'line', 'cube'];
+export const TEMPLATE_SHAPE_NAMES = { circle: 'Sphere / radius', cone: 'Cone', line: 'Line', cube: 'Cube' };
+export const MAX_TEMPLATES = 50;
+export const TEMPLATE_COLOR = '#e8743b';
+
+export function normalizeTemplates(list, image = {}) {
+  const { width = 1, height = 1 } = image;
+  const seen = new Set();
+  const out = [];
+  for (const t of Array.isArray(list) ? list : []) {
+    if (!t || !isTokenId(t.id) || seen.has(t.id) || out.length >= MAX_TEMPLATES) continue;
+    const size = num(t.size, { min: 0.1, max: 10_000, fallback: null });
+    if (!size) continue;
+    seen.add(t.id);
+    const shape = pick(t.shape, TEMPLATE_SHAPES, 'circle');
+    out.push({
+      id: String(t.id),
+      shape,
+      x: round(num(t.x, { min: 0, max: width, fallback: width / 2 }), 2),
+      y: round(num(t.y, { min: 0, max: height, fallback: height / 2 }), 2),
+      angle: round(((num(t.angle, { min: -1e6, max: 1e6, fallback: 0 }) % 360) + 360) % 360, 2),
+      size: round(size, 2),
+      width: shape === 'line' ? round(num(t.width, { min: 0.1, max: 10_000, fallback: 5 }), 2) : null,
+      label: str(t.label, 80),
+      color: color(t.color, TEMPLATE_COLOR),
+      user_id: Number.isInteger(Number(t.user_id)) && Number(t.user_id) > 0 ? Number(t.user_id) : null,
+    });
+  }
+  return out;
+}
+
+/** Image pixels per unit of the map's scale. Without a scale, a square (or a share of the map) counts as 5 ft. */
+export function pxPerUnit(map) {
+  const per = unitsPerPx(map);
+  return per ? 1 / per : squarePx(map) / 5;
+}
+
+/**
+ * Where a template's point of origin goes when placed at p: on a grid, the
+ * nearest corner of a square (5e areas start at a square's corner).
+ */
+export function snapTemplatePoint(map, p) {
+  if (!map.grid) return { x: round(p.x, 2), y: round(p.y, 2) };
+  const { size: g, x: gx, y: gy } = map.grid;
+  const { width, height } = map.image;
+  const x = Math.min(width, Math.max(0, Math.round((p.x - gx) / g) * g + gx));
+  const y = Math.min(height, Math.max(0, Math.round((p.y - gy) / g) * g + gy));
+  return { x: round(x, 2), y: round(y, 2) };
+}
+
+/**
+ * A template's outline in image pixels: { circle: { cx, cy, r } } or
+ * { points: [[x, y], ...] }. A cone is as wide at its end as it is long
+ * (the 5e cone); a cube's origin is one corner, and it lies on the side the
+ * angle points to.
+ */
+export function templateShape(map, t) {
+  const k = pxPerUnit(map);
+  const len = t.size * k;
+  if (t.shape === 'circle') return { circle: { cx: t.x, cy: t.y, r: len } };
+  const a = (t.angle * Math.PI) / 180;
+  const dx = Math.cos(a);
+  const dy = Math.sin(a);
+  const at = (along, across) => [round(t.x + dx * along - dy * across, 2), round(t.y + dy * along + dx * across, 2)];
+  if (t.shape === 'cone') return { points: [[t.x, t.y], at(len, -len / 2), at(len, len / 2)] };
+  if (t.shape === 'line') {
+    const w = ((t.width ?? 5) * k) / 2;
+    return { points: [at(0, -w), at(len, -w), at(len, w), at(0, w)] };
+  }
+  const sx = dx < -1e-9 ? -1 : 1;
+  const sy = dy < -1e-9 ? -1 : 1;
+  const x2 = t.x + sx * len;
+  const y2 = t.y + sy * len;
+  return { points: [[t.x, t.y], [round(x2, 2), t.y], [round(x2, 2), round(y2, 2)], [t.x, round(y2, 2)]] };
+}
+
+/** Is a point inside a template (its edge counts)? */
+export function inTemplate(map, t, x, y) {
+  const s = templateShape(map, t);
+  if (s.circle) return Math.hypot(x - s.circle.cx, y - s.circle.cy) <= s.circle.r + 0.01;
+  if (pointInPolygon(x, y, s.points)) return true;
+  // Points exactly on an edge.
+  const pts = s.points;
+  return pts.some((p, i) => {
+    const q = pts[(i + 1) % pts.length];
+    return distanceToWall({ x, y }, { x1: p[0], y1: p[1], x2: q[0], y2: q[1] }) <= 0.01;
+  });
+}
+
+/**
+ * The tokens a template catches. On a grid, a token is caught when the
+ * middle of any square it fills is inside the area (the usual way VTTs
+ * read the 5e rule); off a grid, when its centre is.
+ */
+export function tokensInTemplate(map, t, tokens = map.tokens) {
+  return tokens.filter((tok) => {
+    if (!map.grid || tok.size < 1) return inTemplate(map, t, tok.x, tok.y);
+    const g = map.grid.size;
+    const n = tok.size;
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        if (inTemplate(map, t, tok.x - (n * g) / 2 + (i + 0.5) * g, tok.y - (n * g) / 2 + (j + 0.5) * g)) return true;
+      }
+    }
+    return false;
+  });
+}
+
+/**
+ * A spell's area, read from its range and description: { shape, size,
+ * width? } in feet, or null. "Self (15-foot cone)", "20-foot-radius
+ * sphere", "a line 100 feet long and 5 feet wide", "10-foot cube".
+ */
+export function spellArea(spell) {
+  const texts = [spell?.range, spell?.description].map((s) => String(s ?? '').replace(/[‐‑–]/g, '-'));
+  for (const s of texts) {
+    const found = [
+      [/(\d+)[- ](?:foot|feet|ft\.?)[- ]radius/i, (m) => ({ shape: 'circle', size: +m[1] })],
+      [/radius of (\d+) (?:foot|feet)/i, (m) => ({ shape: 'circle', size: +m[1] })],
+      [/(\d+)[- ](?:foot|feet|ft\.?)(?:[- ]long)?[- ]cone/i, (m) => ({ shape: 'cone', size: +m[1] })],
+      [/(\d+)[- ](?:foot|feet|ft\.?)[- ]cube/i, (m) => ({ shape: 'cube', size: +m[1] })],
+      [/\bline\b[^.]{0,40}?(\d+) (?:foot|feet) long and (\d+) (?:foot|feet) wide/i, (m) => ({ shape: 'line', size: +m[1], width: +m[2] })],
+      [/(\d+)[- ](?:foot|feet|ft\.?)[- ]line/i, (m) => ({ shape: 'line', size: +m[1], width: 5 })],
+    ]
+      .map(([re, make]) => {
+        const m = s.match(re);
+        return m && { at: m.index, area: make(m) };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.at - b.at)[0];
+    if (found) return found.area;
+  }
+  return null;
 }

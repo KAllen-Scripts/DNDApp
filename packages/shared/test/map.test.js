@@ -6,6 +6,7 @@ import {
   PERSON_KIND, MAX_PINS, PIN_COLOR, TOKEN_COLORS,
   normalizeWalls, segmentsCross, wallBetween, sightPolygon, pointInPolygon, sightOf, canSee, fogMask, nearestWall, snapWallPoint,
   distanceToWall, doorReach,
+  normalizeCombat, stepTurn, dexModifier, normalizeTemplates, templateShape, tokensInTemplate, inTemplate, snapTemplatePoint, spellArea,
 } from '../src/map.js';
 
 const battle = normalizeMap({ image: { width: 700, height: 490 }, grid: { size: 70, x: 0, y: 0 }, scale: { distance: 5, unit: 'ft', per: 'square' } });
@@ -264,4 +265,102 @@ test('nearestWall picks the wall under a click; snapWallPoint joins wall ends, t
   assert.deepEqual(snapWallPoint(m, { x: 47, y: 42 }, 5), { x: 50, y: 40 });
   assert.deepEqual(snapWallPoint(m, { x: 21, y: 38 }, 5), { x: 20, y: 40 });
   assert.deepEqual(snapWallPoint(m, { x: 30.04, y: 30 }, 5), { x: 30, y: 30 });
+});
+
+// ---------- initiative ----------
+
+test('normalizeCombat keeps the turn order sorted, drops tokens that are gone, and only a rolled turn', () => {
+  const tokens = [
+    { id: 'aaaaaa', kind: 'enemy', name: 'Goblin' },
+    { id: 'bbbbbb', kind: 'pc', name: 'Thorin' },
+    { id: 'cccccc', kind: 'npc', name: 'Hal' },
+  ];
+  const c = normalizeCombat({ round: 2, turn: 'cccccc', entries: [
+    { id: 'cccccc', init: null }, { id: 'aaaaaa', init: 12, mod: 2 }, { id: 'bbbbbb', init: 12, mod: 2 }, { id: 'zzzzzz', init: 30 }, { id: 'aaaaaa', init: 1 },
+  ] }, tokens);
+  // Ties: the higher modifier, then player characters; not rolled yet goes last.
+  assert.deepEqual(c.entries.map((e) => e.id), ['bbbbbb', 'aaaaaa', 'cccccc']);
+  assert.equal(c.turn, null, "Hal hasn't rolled, so it can't be his turn");
+  assert.equal(c.round, 2);
+  assert.equal(normalizeCombat(null, tokens), null);
+  assert.deepEqual(normalizeMap({ tokens: [{ id: 'aaaaaa' }], combat: { entries: [{ id: 'aaaaaa', init: 5 }], turn: 'aaaaaa' } }).combat, { round: 1, turn: 'aaaaaa', entries: [{ id: 'aaaaaa', init: 5, mod: null }] });
+});
+
+test('stepTurn goes round the rolled entries, into the next round and back', () => {
+  const c = { round: 1, turn: null, entries: [{ id: 'a', init: 20 }, { id: 'b', init: 10 }, { id: 'c', init: null }] };
+  assert.deepEqual(stepTurn(c, 1), { round: 1, turn: 'a' });
+  assert.deepEqual(stepTurn({ ...c, turn: 'a' }, 1), { round: 1, turn: 'b' });
+  assert.deepEqual(stepTurn({ ...c, turn: 'b' }, 1), { round: 2, turn: 'a' }); // c hasn't rolled: skipped
+  assert.deepEqual(stepTurn({ ...c, round: 2, turn: 'a' }, -1), { round: 1, turn: 'b' });
+  assert.deepEqual(stepTurn({ ...c, turn: 'a' }, -1), { round: 1, turn: 'a' }); // never before round 1
+  assert.equal(stepTurn({ round: 1, turn: null, entries: [{ id: 'a', init: null }] }, 1), null);
+});
+
+test('dexModifier reads a stat block: inline, Markdown tables, a bare score, or nothing', () => {
+  assert.equal(dexModifier('STR 10 (+0) DEX 16 (+3) CON 12 (+1)'), 3);
+  assert.equal(dexModifier('**DEX** 8 (−1)'), -1);
+  assert.equal(dexModifier('| STR | DEX | CON |\n|:-:|:-:|:-:|\n| 8 (-1) | 14 (+2) | 10 (+0) |'), 2);
+  assert.equal(dexModifier('| **Str** | **Dex** |\n|---|---|\n| 19 | 7 |'), -2);
+  assert.equal(dexModifier('Dexterity 18'), 4);
+  assert.equal(dexModifier('A big angry bear.'), null);
+  assert.equal(dexModifier(null), null);
+});
+
+// ---------- spell templates ----------
+
+const grid = (over = {}) => normalizeMap({ image: { width: 700, height: 490 }, grid: { size: 35, x: 0, y: 0 }, scale: { distance: 5, unit: 'ft', per: 'square' }, ...over });
+
+test('templateShape: circles, 5e cones (as wide as long), lines and cubes, in image pixels', () => {
+  const map = grid();
+  const t = (o) => normalizeTemplates([{ id: 'tttttt', x: 70, y: 70, ...o }], map.image)[0];
+  assert.deepEqual(templateShape(map, t({ shape: 'circle', size: 20 })), { circle: { cx: 70, cy: 70, r: 140 } });
+  assert.deepEqual(templateShape(map, t({ shape: 'cone', size: 15, angle: 0 })).points, [[70, 70], [175, 17.5], [175, 122.5]]);
+  assert.deepEqual(templateShape(map, t({ shape: 'line', size: 30, width: 5, angle: 90 })).points, [[87.5, 70], [87.5, 280], [52.5, 280], [52.5, 70]]);
+  // A cube lies on the side its angle points to.
+  assert.deepEqual(templateShape(map, t({ shape: 'cube', size: 10, angle: 135 })).points, [[70, 70], [0, 70], [0, 140], [70, 140]]);
+  // Without a scale, a square counts as 5 ft.
+  const noScale = normalizeMap({ image: { width: 700, height: 490 }, grid: { size: 50, x: 0, y: 0 } });
+  assert.equal(templateShape(noScale, t({ shape: 'circle', size: 10 })).circle.r, 100);
+});
+
+test('tokensInTemplate: a token is caught when any of its squares\' middles is inside', () => {
+  const map = grid({ tokens: [
+    { id: 'aaaaaa', x: 87.5, y: 87.5 }, // the square just inside the corner
+    { id: 'bbbbbb', x: 227.5, y: 87.5 }, // 4 squares across: its middle is 157.5 px away
+    { id: 'cccccc', x: 245, y: 245, size: 2 }, // Large: its nearest square's middle is ~223 px away
+  ] });
+  const fireball = normalizeTemplates([{ id: 'tttttt', shape: 'circle', x: 70, y: 70, size: 20 }], map.image)[0];
+  assert.deepEqual(tokensInTemplate(map, fireball).map((t) => t.id), ['aaaaaa']);
+  const bigger = { ...fireball, size: 35 };
+  assert.deepEqual(tokensInTemplate(map, bigger).map((t) => t.id), ['aaaaaa', 'bbbbbb', 'cccccc']);
+  // Off a grid, only the centre counts.
+  const free = normalizeMap({ ...map, grid: null, scale: { distance: 5, unit: 'ft', per: 'width' }, tokens: [{ id: 'aaaaaa', x: 10, y: 0 }] });
+  assert.deepEqual(tokensInTemplate(free, { shape: 'circle', x: 0, y: 0, size: 0.05 }).map((t) => t.id), []); // 7 px across
+  assert.ok(inTemplate(map, { shape: 'cone', x: 70, y: 70, angle: 0, size: 15 }, 175, 17.5), 'a corner counts');
+});
+
+test('snapTemplatePoint puts the origin on a square corner on a grid', () => {
+  assert.deepEqual(snapTemplatePoint(grid(), { x: 52, y: 89 }), { x: 35, y: 105 });
+  assert.deepEqual(snapTemplatePoint(normalizeMap({ image: { width: 700, height: 490 } }), { x: 52.123, y: 89 }), { x: 52.12, y: 89 });
+});
+
+test('normalizeTemplates: known shapes, sizes required, angles kept within a turn, width only on lines', () => {
+  const [a, b] = normalizeTemplates([
+    { id: 'tttttt', shape: 'cone', x: 5000, y: -3, angle: -90, size: 15, width: 9, color: 'red', label: '  Burning   Hands ', user_id: 4 },
+    { id: 'uuuuuu', shape: 'line', x: 1, y: 1, size: 60 },
+    { id: 'vvvvvv', shape: 'circle', x: 1, y: 1 },
+    { id: 'tttttt', shape: 'circle', x: 1, y: 1, size: 5 },
+  ], { width: 700, height: 490 });
+  assert.deepEqual(a, { id: 'tttttt', shape: 'cone', x: 700, y: 0, angle: 270, size: 15, width: null, label: 'Burning Hands', color: '#e8743b', user_id: 4 });
+  assert.equal(b.width, 5);
+  assert.equal(normalizeTemplates([{ id: 'x', shape: 'circle', size: 5 }]).length, 0);
+});
+
+test('spellArea reads a spell\'s area from its range or description', () => {
+  assert.deepEqual(spellArea({ range: '150 feet', description: 'Each creature in a 20-foot-radius sphere centered on that point' }), { shape: 'circle', size: 20 });
+  assert.deepEqual(spellArea({ range: 'Self (15-foot cone)', description: 'Each creature in a 15-foot cone must make a Dexterity saving throw.' }), { shape: 'cone', size: 15 });
+  assert.deepEqual(spellArea({ range: 'Self (100-foot line)' }), { shape: 'line', size: 100, width: 5 });
+  assert.deepEqual(spellArea({ range: 'Self', description: 'A line of strong wind 60 feet long and 10 feet wide blasts from you' }), { shape: 'line', size: 60, width: 10 });
+  assert.deepEqual(spellArea({ range: '90 feet', description: 'a 20-foot cube of fog' }), { shape: 'cube', size: 20 });
+  assert.equal(spellArea({ range: '120 feet', description: 'three glowing darts' }), null);
 });

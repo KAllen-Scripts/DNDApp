@@ -131,6 +131,8 @@ export function createMaps({ db, archive, store, pictures = null }) {
      * how hurt they look; no stat blocks or links to the DM's records. Their
      * fog comes as `fog.mask` (what they see, see fogMask), not the DM's
      * rectangles. `image_key` changes when their image does.
+     * Players get only the spell templates they placed or whose origin they
+     * can see, and only the visible tokens' places in the turn order.
      * Player character tokens carry `picture`: the key of their player's token picture, or null.
      */
     view(map, { role, userId }) {
@@ -142,6 +144,8 @@ export function createMaps({ db, archive, store, pictures = null }) {
       if (role === 'dm') return { ...out, image_key: 'dm', can_edit: true };
       if (!map.shown) return null;
       const seen = sight.forPlayer(map, userId);
+      const tokens = out.tokens.filter((t) => t.user_id === userId || (!t.hidden && canSee(map, seen.polygons, t.x, t.y)));
+      const visible = new Set(tokens.map((t) => t.id));
       return {
         ...out,
         description: '',
@@ -153,8 +157,16 @@ export function createMaps({ db, archive, store, pictures = null }) {
           .map(({ id, x1, y1, x2, y2, open, locked }) => ({ id, x1, y1, x2, y2, open, locked })),
         wall_draft: { status: '', error: '', notes: '' },
         fog: { ...map.fog, shapes: [], mask: seen.mask },
-        tokens: out.tokens
-          .filter((t) => t.user_id === userId || (!t.hidden && canSee(map, seen.polygons, t.x, t.y)))
+        // Areas of effect: their own, and ones whose point of origin they can see.
+        templates: map.templates.filter((t) => t.user_id === userId || canSee(map, seen.polygons, t.x, t.y)),
+        // The turn order holds only the tokens they can see; on an unseen token's turn, `turn` is null and `turn_unseen` says so.
+        combat: map.combat && {
+          ...map.combat,
+          entries: map.combat.entries.filter((e) => visible.has(e.id)),
+          turn: visible.has(map.combat.turn) ? map.combat.turn : null,
+          turn_unseen: map.combat.turn != null && !visible.has(map.combat.turn),
+        },
+        tokens: tokens
           .map((t) => (t.kind === 'pc' ? { ...t, stats: null, record: null } : { ...t, hp: null, health: healthOf(t.hp), stats: null, record: null })),
         image_key: seen.key,
         can_edit: false,
