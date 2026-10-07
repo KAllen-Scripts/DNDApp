@@ -68,6 +68,28 @@ export function normalizeToken(t = {}, map) {
   };
 }
 
+export const MAX_PINS = 100;
+export const PIN_COLOR = '#d9a400';
+
+/** Someone's private pins on a map (only they ever see them): [{ id, x, y, label, color }]. */
+export function normalizePins(list, image = {}) {
+  const { width = 1, height = 1 } = image;
+  const seen = new Set();
+  const out = [];
+  for (const p of Array.isArray(list) ? list : []) {
+    if (!p || !isTokenId(p.id) || seen.has(p.id) || out.length >= MAX_PINS) continue;
+    seen.add(p.id);
+    out.push({
+      id: String(p.id),
+      x: num(p.x, { min: 0, max: width, fallback: width / 2 }),
+      y: num(p.y, { min: 0, max: height, fallback: height / 2 }),
+      label: str(p.label, 80),
+      color: color(p.color, PIN_COLOR),
+    });
+  }
+  return out;
+}
+
 /** A link from a token to a knowledge-base record: { id, title } or null. */
 export function normalizeRecordLink(r) {
   if (!r || typeof r !== 'object') return null;

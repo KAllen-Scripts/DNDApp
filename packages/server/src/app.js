@@ -18,7 +18,7 @@ import { preparedTranscript } from './pipeline/prepare.js';
 import { SheetConflictError } from './sheets/store.js';
 import { SHEET_FORMAT } from '@dndapp/shared/sheet.js';
 import { parseRoll, rollDice, ROLL_MODES } from '@dndapp/shared/dice.js';
-import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, snapToken } from '@dndapp/shared/map.js';
+import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, snapToken } from '@dndapp/shared/map.js';
 import { inspectImage } from './maps/read.js';
 import { isPdf, renderPdfPage } from './maps/pdf.js';
 import { createPlayerImages } from './maps/image.js';
@@ -1035,6 +1035,42 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       if (found.size && t.size === 1) Object.assign(t, { size: found.size }, snapToken(m, { size: found.size }, t.x, t.y));
     }, { by: request.user.id, reason: 'stat block' });
     return { map: maps.view(saved, a), token: saved.tokens.find((t) => t.id === token.id) };
+  });
+
+  // Private pins: each person's own marks on a map. Only they ever see them (not even the DM).
+  const PIN = z.object({ x: z.number(), y: z.number(), label: z.string().trim().max(80), color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a colour like #d9a400') });
+
+  /** Your own pins on a map: { pins }. */
+  app.get('/campaigns/:cid/maps/:mid/pins', async (request) => {
+    const { cid, map } = viewableMap(request);
+    return { pins: maps.pins(cid, map.id, request.user.id) };
+  });
+
+  /** Add a pin: { x, y, label?, color? }. */
+  app.post('/campaigns/:cid/maps/:mid/pins', async (request, reply) => {
+    const { cid, map } = viewableMap(request);
+    const body = PIN.partial().required({ x: true, y: true }).parse(request.body ?? {});
+    if (maps.pins(cid, map.id, request.user.id).length >= MAX_PINS) throw new BadRequestError(`You can have at most ${MAX_PINS} pins on a map.`);
+    const id = newTokenId();
+    const pins = maps.changePins(cid, map.id, request.user.id, (list) => list.push({ ...body, id }));
+    reply.status(201);
+    return { pins, pin: pins.find((p) => p.id === id) };
+  });
+
+  /** Move or relabel one of your pins: { x?, y?, label?, color? }. */
+  app.patch('/campaigns/:cid/maps/:mid/pins/:pid', async (request) => {
+    const { cid, map } = viewableMap(request);
+    const body = PIN.partial().parse(request.body ?? {});
+    if (!maps.pins(cid, map.id, request.user.id).some((p) => p.id === request.params.pid)) throw new NotFoundError('No such pin');
+    const pins = maps.changePins(cid, map.id, request.user.id, (list) => Object.assign(list.find((p) => p.id === request.params.pid), body));
+    return { pins, pin: pins.find((p) => p.id === request.params.pid) };
+  });
+
+  /** Remove one of your pins. */
+  app.delete('/campaigns/:cid/maps/:mid/pins/:pid', async (request) => {
+    const { cid, map } = viewableMap(request);
+    if (!maps.pins(cid, map.id, request.user.id).some((p) => p.id === request.params.pid)) throw new NotFoundError('No such pin');
+    return { pins: maps.changePins(cid, map.id, request.user.id, (list) => list.splice(list.findIndex((p) => p.id === request.params.pid), 1)) };
   });
 
   /** Remove a token (DM). */

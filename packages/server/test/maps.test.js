@@ -449,3 +449,41 @@ test('a page of a PDF becomes a map; the PDF is archived with it', async () => {
     await t.cleanup();
   }
 });
+
+test('private pins: only the person who placed them ever sees them, not even the DM', async () => {
+  const t = await setup({ llm: mapLLM() });
+  try {
+    const map = await importMap(t, await terrain(700, 490));
+    const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+    // Not shown yet: players can't pin it.
+    assert.equal((await t.request('POST', `${base}/pins`, { as: t.sam.token, body: { x: 1, y: 1 } })).statusCode, 404);
+    await t.request('PATCH', base, { body: { shown: true } });
+
+    const added = await t.request('POST', `${base}/pins`, { as: t.sam.token, body: { x: 200, y: 9999, label: 'Trap here?' } });
+    assert.equal(added.statusCode, 201);
+    const pin = added.json().pin;
+    assert.deepEqual({ ...pin, id: 'x' }, { id: 'x', x: 200, y: 490, label: 'Trap here?', color: '#d9a400' });
+    assert.equal((await t.request('PATCH', `${base}/pins/${pin.id}`, { as: t.sam.token, body: { label: 'Trap!' } })).json().pin.label, 'Trap!');
+
+    assert.deepEqual((await t.request('GET', `${base}/pins`, { as: t.alex.token })).json(), { pins: [] });
+    assert.deepEqual((await t.request('GET', `${base}/pins`)).json(), { pins: [] });
+    assert.equal((await t.request('PATCH', `${base}/pins/${pin.id}`, { as: t.alex.token, body: { label: 'mine' } })).statusCode, 404);
+    assert.equal((await t.request('DELETE', `${base}/pins/${pin.id}`)).statusCode, 404);
+    assert.ok(!JSON.stringify((await t.request('GET', base)).json()).includes('Trap'));
+
+    // Archived per person, and restored.
+    const file = path.join(t.paths.archive, t.campaign.slug, 'maps', map.id, 'pins', `${t.sam.id}.jsonl`);
+    assert.equal(fs.readFileSync(file, 'utf8').trim().split('\n').length, 2);
+    const fresh = await createContext({ config: t.config, paths: { ...t.paths, db: path.join(t.dir, 'fresh.sqlite') }, llm: createFakeLLM(), embedder: fakeEmbedder });
+    try {
+      const c = fresh.db.prepare('SELECT id FROM campaigns').get();
+      assert.equal(fresh.maps.pins(c.id, map.id, t.sam.id)[0].label, 'Trap!');
+    } finally {
+      fresh.db.close();
+    }
+
+    assert.deepEqual((await t.request('DELETE', `${base}/pins/${pin.id}`, { as: t.sam.token })).json(), { pins: [] });
+  } finally {
+    await t.cleanup();
+  }
+});

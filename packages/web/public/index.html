@@ -185,6 +185,7 @@
         <span id="map-status" class="muted small" role="status"></span>
         <label class="map-check small"><input type="checkbox" id="map-show-grid"> Grid</label>
         <button id="map-fit" class="ghost map-needs-map" title="Fit the whole map on screen">Fit</button>
+        <button id="map-pin" class="ghost map-needs-map" aria-pressed="false" title="Drop a pin only you can see: a note to yourself on the map">Pin</button>
         <button id="map-add-token" class="ghost dm-only map-needs-map">Add token</button>
         <button id="map-fog-open" class="ghost dm-only map-needs-map" aria-pressed="false">Fog</button>
         <button id="map-settings" class="ghost dm-only map-needs-map">Map settings</button>
@@ -206,6 +207,7 @@
           <svg id="map-grid" class="map-grid" preserveAspectRatio="none" aria-hidden="true"></svg>
           <svg id="map-fog" class="map-fog" preserveAspectRatio="none" aria-hidden="true"></svg>
           <div id="map-tokens" class="map-tokens"></div>
+          <div id="map-pins" class="map-pins"></div>
         </div>
         <p id="map-empty" class="map-empty muted" hidden></p>
         <div id="map-measure" class="map-measure" hidden></div>

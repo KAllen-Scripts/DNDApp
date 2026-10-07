@@ -13,7 +13,7 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { normalizeMap, isFogged, healthOf } from '@dndapp/shared/map.js';
+import { normalizeMap, normalizePins, isFogged, healthOf } from '@dndapp/shared/map.js';
 import { fogKey } from './image.js';
 import { diffJson, applyJson } from '../sheets/store.js';
 import { NotFoundError } from '../store.js';
@@ -134,6 +134,30 @@ export function createMaps({ db, archive, store }) {
         image_key: fogKey(map),
         can_edit: false,
       };
+    },
+
+    /** Someone's private pins on a map. Only ever sent to that person. */
+    pins(campaignId, id, userId) {
+      const map = maps.get(campaignId, id);
+      const r = db.prepare('SELECT data FROM map_pins WHERE map_id = ? AND user_id = ?').get(map.id, userId);
+      return normalizePins(r ? JSON.parse(r.data) : [], map.image);
+    },
+
+    /** Change someone's pins: `fn` gets a copy of the list to change in place. Archived first. */
+    changePins(campaignId, id, userId, fn) {
+      const map = maps.get(campaignId, id);
+      const before = maps.pins(campaignId, id, userId);
+      const list = structuredClone(before);
+      fn(list);
+      const after = normalizePins(list, map.image);
+      if (JSON.stringify(after) === JSON.stringify(before)) return after;
+      const saved_at = new Date().toISOString();
+      archive.appendMapPins(store.getCampaign(campaignId).slug, map.id, userId, { saved_at, pins: after });
+      db.prepare(
+        `INSERT INTO map_pins (map_id, user_id, data, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT (map_id, user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+      ).run(map.id, userId, JSON.stringify(after), saved_at);
+      return after;
     },
 
     /** Reads cut short by a restart can't finish; say so, so the DM can run them again. */

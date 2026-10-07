@@ -37,6 +37,10 @@ const state = {
   fogMode: null, // DM drawing fog: 'reveal' | 'cover'
   fogDraw: null, // the rectangle being drawn: { pointer, a, b }
   live: null, // AbortController for the live stream
+  pins: new Map(), // map id -> this person's private pins on it
+  pinMode: false, // the next click on the map drops a pin
+  selectedPin: null, // pin id
+  pinDrag: null, // a pin being moved: { id, pointer, x, y, moved, sx, sy }
 };
 
 const base = () => `/campaigns/${state.campaignId}/maps`;
@@ -130,13 +134,27 @@ function onGone(id) {
 async function show(map) {
   state.current = map;
   state.selected = null;
+  state.selectedPin = null;
   state.fitted = false;
   if (map) storage.set(PICK_KEY(), map.id);
   renderPicker();
   render();
   if (!map) return;
+  loadPins(map);
   await loadImage(map);
   if (state.current?.id === map.id) fit();
+}
+
+/** This person's own pins on a map (nobody else ever gets them). */
+async function loadPins(map) {
+  try {
+    const res = await state.guarded(() => api('GET', `${base()}/${map.id}/pins`));
+    if (!res) return;
+    state.pins.set(map.id, res.pins);
+    if (state.current?.id === map.id) renderPins();
+  } catch (err) {
+    report(err);
+  }
 }
 
 /** Fetch the map's image if this viewer's version of it changed (players: the fog moved). */
@@ -174,6 +192,7 @@ function render() {
   if (!map) {
     $('#map-image').removeAttribute('src');
     $('#map-tokens').replaceChildren();
+    $('#map-pins').replaceChildren();
     renderSelection();
     empty.hidden = false;
     empty.textContent = state.canEdit
@@ -190,6 +209,7 @@ function render() {
   renderGrid();
   renderFog();
   renderTokens();
+  renderPins();
   renderSelection();
   renderFogTools();
   if (state.images.has(map.id) && state.images.get(map.id).key !== map.image_key) loadImage(map);
@@ -316,6 +336,132 @@ function renderTokens() {
   );
 }
 
+const myPins = () => (state.current && state.pins.get(state.current.id)) || [];
+
+function renderPins() {
+  const layer = $('#map-pins');
+  layer.replaceChildren(
+    ...myPins().map((p) => {
+      const dragging = state.pinDrag?.id === p.id;
+      const el = h('div', {
+        class: `map-pin${state.selectedPin === p.id ? ' selected' : ''}${dragging ? ' dragging' : ''}`,
+        title: p.label ? `${p.label} (only you see this pin)` : 'Your pin (only you see it)',
+        role: 'button',
+        tabindex: '0',
+        'aria-label': p.label || 'Pin',
+        'data-pin': p.id,
+      }, p.label ? h('span', { class: 'map-pin-label' }, p.label) : null);
+      el.style.cssText = `left:${dragging ? state.pinDrag.x : p.x}px;top:${dragging ? state.pinDrag.y : p.y}px;--pin:${p.color}`;
+      el.addEventListener('pointerdown', (e) => pinDown(e, p));
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectPin(p.id);
+        }
+      });
+      return el;
+    }),
+  );
+}
+
+function selectPin(id) {
+  state.selectedPin = id;
+  if (id) state.selected = null;
+  renderTokens();
+  renderPins();
+  renderSelection();
+}
+
+/** Change this person's pins on the server; the answer is their whole list. */
+async function pinRequest(method, path, body) {
+  const map = state.current;
+  try {
+    const res = await state.guarded(() => api(method, `${base()}/${map.id}/pins${path}`, body));
+    if (!res) return null;
+    state.pins.set(map.id, res.pins);
+    if (state.current?.id === map.id) {
+      renderPins();
+      renderSelection();
+    }
+    return res;
+  } catch (err) {
+    report(err);
+    return null;
+  }
+}
+
+async function dropPin(at) {
+  state.pinMode = false;
+  renderPinTool();
+  const res = await pinRequest('POST', '', { x: at.x, y: at.y });
+  if (res) {
+    selectPin(res.pin.id);
+    $('#map-selection input')?.focus();
+  }
+}
+
+function renderPinTool() {
+  $('#map-pin').setAttribute('aria-pressed', String(state.pinMode));
+  $('#map-view').classList.toggle('pin-placing', state.pinMode);
+}
+
+function pinDown(e, pin) {
+  e.stopPropagation();
+  $('#map-view').setPointerCapture(e.pointerId);
+  state.pinDrag = { id: pin.id, pointer: e.pointerId, x: pin.x, y: pin.y, moved: false, sx: e.clientX, sy: e.clientY };
+}
+
+function pinMove(e) {
+  const drag = state.pinDrag;
+  if (e.pointerId !== drag.pointer) return;
+  if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
+  drag.moved = true;
+  const map = state.current;
+  const at = toImage(e.clientX, e.clientY);
+  drag.x = Math.max(0, Math.min(map.image.width, at.x));
+  drag.y = Math.max(0, Math.min(map.image.height, at.y));
+  const el = document.querySelector(`.map-pin[data-pin="${drag.id}"]`);
+  if (el) {
+    el.style.left = `${drag.x}px`;
+    el.style.top = `${drag.y}px`;
+    el.classList.add('dragging');
+  }
+}
+
+function pinUp(e) {
+  const drag = state.pinDrag;
+  if (e.pointerId !== drag.pointer) return;
+  state.pinDrag = null;
+  if (!drag.moved) return selectPin(drag.id);
+  const pin = myPins().find((p) => p.id === drag.id);
+  if (pin) Object.assign(pin, { x: drag.x, y: drag.y });
+  renderPins();
+  pinRequest('PATCH', `/${drag.id}`, { x: drag.x, y: drag.y });
+}
+
+function pinControls(pin) {
+  const label = h('input', { value: pin.label, maxLength: 80, placeholder: 'A note to yourself', 'aria-label': 'Pin label', class: 'map-pin-input' });
+  label.addEventListener('change', () => pinRequest('PATCH', `/${pin.id}`, { label: label.value.trim() }));
+  label.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') label.blur();
+  });
+  const color = h('input', { type: 'color', value: pin.color, 'aria-label': 'Pin colour' });
+  color.addEventListener('change', () => pinRequest('PATCH', `/${pin.id}`, { color: color.value }));
+  return [
+    h('span', { class: 'swatch', style: `background:${pin.color}` }),
+    h('strong', {}, 'Your pin'),
+    label,
+    color,
+    h('span', { class: 'muted small' }, 'Only you see it. Drag to move.'),
+    h('span', { class: 'spacer' }),
+    h('button', { class: 'ghost danger', onclick: () => {
+      selectPin(null);
+      pinRequest('DELETE', `/${pin.id}`);
+    } }, 'Remove'),
+    h('button', { class: 'ghost icon-btn', 'aria-label': 'Close', onclick: () => selectPin(null) }, '✕'),
+  ];
+}
+
 const HEALTH_NAMES = { unhurt: 'Unhurt', hurt: 'Hurt', bloodied: 'Bloodied', down: 'Down' };
 const HEALTH_FRACTION = { unhurt: 1, hurt: 0.75, bloodied: 0.4, down: 0 };
 
@@ -379,7 +525,12 @@ function tokenControls(token) {
 function renderSelection() {
   const bar = $('#map-selection');
   const token = state.current?.tokens.find((t) => t.id === state.selected);
-  bar.hidden = !token;
+  const pin = !token && myPins().find((p) => p.id === state.selectedPin);
+  bar.hidden = !token && !pin;
+  // Don't rebuild the pin's label box while someone is typing in it.
+  if (pin && bar.dataset.pin === pin.id && bar.contains(document.activeElement)) return;
+  bar.dataset.pin = pin ? pin.id : '';
+  if (pin) return bar.replaceChildren(...pinControls(pin));
   if (!token) return bar.replaceChildren();
   bar.replaceChildren(
     ...[
@@ -401,6 +552,8 @@ function renderSelection() {
 
 function select(id) {
   state.selected = id;
+  if (id) state.selectedPin = null;
+  renderPins();
   renderTokens();
   renderSelection();
 }
@@ -410,6 +563,8 @@ function select(id) {
 function applyView() {
   const { x, y, k } = state.view;
   $('#map-stage').style.transform = `translate(${x}px, ${y}px) scale(${k})`;
+  // Pins stay the same size on screen at any zoom.
+  $('#map-stage').style.setProperty('--unzoom', String(1 / k));
 }
 
 function fit() {
@@ -440,7 +595,7 @@ function toImage(clientX, clientY) {
 }
 
 function viewDown(e) {
-  if (!state.current || e.target.closest('.token, .map-selection')) return;
+  if (!state.current || e.target.closest('.token, .map-pin, .map-selection')) return;
   e.currentTarget.setPointerCapture(e.pointerId);
   if (state.fogMode && state.current.fog?.enabled && !state.pointers.size && !state.fogDraw) {
     const at = toImage(e.clientX, e.clientY);
@@ -452,6 +607,7 @@ function viewDown(e) {
 
 function viewMove(e) {
   if (state.drag) return tokenMove(e);
+  if (state.pinDrag) return pinMove(e);
   if (state.fogDraw?.pointer === e.pointerId) {
     state.fogDraw.b = toImage(e.clientX, e.clientY);
     return renderFog();
@@ -478,6 +634,7 @@ function viewMove(e) {
 
 function viewUp(e) {
   if (state.drag) return tokenUp(e);
+  if (state.pinDrag) return pinUp(e);
   if (state.fogDraw?.pointer === e.pointerId) {
     const r = fogRect(state.current, state.fogDraw.a, state.fogDraw.b);
     state.fogDraw = null;
@@ -487,8 +644,11 @@ function viewUp(e) {
   }
   const p = state.pointers.get(e.pointerId);
   state.pointers.delete(e.pointerId);
-  // A click on the map itself (not a drag) clears the selection.
-  if (p && Math.hypot(e.clientX - p.startX, e.clientY - p.startY) < 4 && !state.pointers.size) select(null);
+  // A click on the map itself (not a drag) drops a pin when placing one, else clears the selection.
+  if (p && Math.hypot(e.clientX - p.startX, e.clientY - p.startY) < 4 && !state.pointers.size) {
+    if (state.pinMode && e.type === 'pointerup') return dropPin(toImage(e.clientX, e.clientY));
+    select(null);
+  }
 }
 
 // ---------- moving tokens ----------
@@ -871,6 +1031,8 @@ async function removeToken(token) {
 export function stopMaps() {
   state.live?.abort();
   state.live = null;
+  state.pins.clear();
+  state.pinMode = false;
   players = null;
 }
 
@@ -916,6 +1078,8 @@ export function initMapActions() {
   for (const b of document.querySelectorAll('[data-fog-mode]')) {
     b.addEventListener('click', () => {
       state.fogMode = state.fogMode === b.dataset.fogMode ? null : b.dataset.fogMode;
+      if (state.fogMode) state.pinMode = false;
+      renderPinTool();
       renderFogTools();
     });
   }
@@ -927,4 +1091,11 @@ export function initMapActions() {
     });
   }
   $('#map-settings').addEventListener('click', settingsDialog);
+  $('#map-pin').addEventListener('click', () => {
+    state.pinMode = !state.pinMode;
+    if (state.pinMode) state.fogMode = null;
+    renderFogTools();
+    renderPinTool();
+    if (state.pinMode) status('Click the map where the pin goes. Only you will see it.');
+  });
 }

@@ -14,6 +14,8 @@
  *     character-sheets/uploads/        sheets players uploaded, as uploaded
  *     maps/<map id>/image.<ext>        a map the DM imported, as uploaded
  *     maps/<map id>/changes.jsonl      each change to that map, append-only
+ *     maps/<map id>/source.pdf         the PDF, when the map is a page of one
+ *     maps/<map id>/pins/<user id>.jsonl  someone's private pins on it (the whole list each time)
  *     sessions/0001/
  *       transcript.txt                 byte-for-byte as uploaded, read-only
  *       meta.json                      number, title, played_on, sha256
@@ -166,6 +168,8 @@ export function createArchive(root) {
 
     appendMapChanges: (slug, mapId, entry) => appendLine(path.join(campaignDir(slug), 'maps', mapDir(mapId), 'changes.jsonl'), entry),
 
+    appendMapPins: (slug, mapId, userId, entry) => appendLine(path.join(campaignDir(slug), 'maps', mapDir(mapId), 'pins', `${Number(userId)}.jsonl`), entry),
+
     /** Knowledge-base snapshot and journal after an archivist run. */
     saveRunOutput(slug, runLabel, files) {
       const dir = path.join(campaignDir(slug), 'outputs', `v${PIPELINE_VERSION}`, `${stamp()}-${runLabel.replace(/\W+/g, '-')}`);
@@ -202,7 +206,16 @@ export function createArchive(root) {
           ? fs
               .readdirSync(mapsDir)
               .filter((d) => /^[a-f0-9]{10}$/.test(d))
-              .map((id) => ({ id, entries: readLines(path.join(mapsDir, id, 'changes.jsonl')) }))
+              .map((id) => {
+                const pinsDir = path.join(mapsDir, id, 'pins');
+                const pins = fs.existsSync(pinsDir)
+                  ? fs
+                      .readdirSync(pinsDir)
+                      .filter((f) => /^\d+\.jsonl$/.test(f))
+                      .map((f) => ({ user_id: Number(f.split('.')[0]), entries: readLines(path.join(pinsDir, f)) }))
+                  : [];
+                return { id, entries: readLines(path.join(mapsDir, id, 'changes.jsonl')), pins };
+              })
           : [];
         yield {
           campaign,
