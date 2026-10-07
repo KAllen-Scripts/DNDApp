@@ -382,3 +382,41 @@ test('sheet: an upload the AI reads shows its notes', async () => {
     assert.equal(page.text('#sheet .summary'), 'Halfling · Bard 2 · Level 2');
   });
 });
+
+test('sheet: "Fill in missing details" and "Look up details" ask the server again (replacing typed details only after asking)', async () => {
+  let known = false;
+  const booming = { found: true, name: 'Booming Blade', level: 0, school: 'evocation', casting_time: '1 action', range: 'Self (5-foot radius)', components: 'S, M', material: 'a melee weapon', duration: '1 round', concentration: false, ritual: false, description: 'You brandish the weapon used in the spell\'s casting.', higher_levels: '' };
+  const llm = createFakeLLM({ structured: async () => (known ? booming : { ...booming, found: false }) });
+  await withPage(sheetPage({ setup: { llm } }), async (page) => {
+    page.click('[data-tab=sheet]');
+    page.type('#sheet .add-spell input', 'Booming Blade');
+    page.submit('#sheet .add-spell');
+    await page.settle();
+    assert.match(page.text('#sheet .add-spell'), /Couldn't find details for Booming Blade/);
+
+    // Found the second time.
+    known = true;
+    page.click(page.$$('#sheet .add-spell button').find((b) => b.textContent.startsWith('Fill in missing details')));
+    await page.waitFor(() => /Done\./.test(page.text('#sheet .add-spell')), { what: 'the lookups' });
+    const card = () => page.$$('#sheet .spell').find((c) => c.textContent.includes('Booming Blade'));
+    assert.equal(page.text(card().closest('.spell-group').querySelector('h4')), 'Cantrips');
+    assert.equal(page.text(card().querySelector('.source')), 'AI memory');
+    assert.ok(page.$('#sheet .add-spell button.ghost').hidden, 'nothing left to fill in');
+
+    // Look up again from the card: it has details now, so it asks first.
+    card().open = true;
+    card().dispatchEvent(new page.window.Event('toggle'));
+    page.type(card().querySelector('[aria-label="Description"]'), 'My own words.');
+    page.answers.confirm = [false, true];
+    const lookUp = () => page.click([...card().querySelectorAll('button')].find((b) => b.textContent === 'Look up details'));
+    lookUp();
+    await page.settle();
+    assert.equal(card().querySelector('[aria-label="Description"]').value, 'My own words.');
+    lookUp();
+    await page.settle();
+    assert.match(page.dialogs.at(-1).message, /Replace the details of Booming Blade/);
+    card().open = true;
+    card().dispatchEvent(new page.window.Event('toggle'));
+    assert.match(card().querySelector('[aria-label="Description"]').value, /You brandish/);
+  });
+});

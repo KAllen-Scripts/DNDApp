@@ -123,3 +123,27 @@ test('normalizeSheet cleans input; helpers', () => {
   assert.equal(classKey('wizard (evoker)'), 'wizard');
   assert.equal(classKey('Blood Hunter'), null);
 });
+
+test('spell slots for a single class: artificers round up, half casters start at 2nd level, third casters at 3rd', () => {
+  const slots = (name, level) => {
+    const { values } = computeSheet(sheetWith({ classes: [{ name, subclass: '', level }] }));
+    return [1, 2, 3, 4, 5].map((n) => values[`slots.${n}`] ?? 0);
+  };
+  assert.deepEqual(slots('Artificer', 1), [2, 0, 0, 0, 0]);
+  assert.deepEqual(slots('Artificer', 5), [4, 2, 0, 0, 0]);
+  assert.deepEqual(slots('Paladin', 1), [0, 0, 0, 0, 0]);
+  assert.deepEqual(slots('Paladin', 5), [4, 2, 0, 0, 0]);
+  assert.deepEqual(slots('Ranger', 2), [2, 0, 0, 0, 0]);
+  assert.deepEqual(slots('Barbarian', 20), [0, 0, 0, 0, 0]);
+});
+
+test('normalizeSheet: attacks keep what was typed (spaces too, as it\'s typed live), as text, at most 50; death saves stay 0 to 3', () => {
+  const s = normalizeSheet({
+    attacks: [{ name: '  Long   sword ', bonus: 5, damage: '1d8+3', notes: 'versatile', extra: true }, null, ...Array.from({ length: 60 }, () => ({}))],
+    death_saves: { successes: 7, failures: -2 },
+  });
+  assert.deepEqual(s.attacks[0], { name: '  Long   sword ', bonus: '5', damage: '1d8+3', notes: 'versatile' });
+  assert.deepEqual(s.attacks[1], { name: '', bonus: '', damage: '', notes: '' });
+  assert.equal(s.attacks.length, 50);
+  assert.deepEqual(s.death_saves, { successes: 3, failures: 0 });
+});

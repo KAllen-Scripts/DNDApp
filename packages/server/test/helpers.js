@@ -4,6 +4,7 @@ import path from 'node:path';
 import { config as baseConfig } from '../src/config.js';
 import { createContext } from '../src/context.js';
 import { buildApp } from '../src/app.js';
+import sharp from 'sharp';
 
 export const SAMPLE = `[00:00:05] KennyDM: Welcome back. You arrive in the village of Brindle at dusk.
 [00:00:20] SamPlays: Thorin walks into the inn and asks for the innkeeper.
@@ -271,4 +272,23 @@ export function makePdf(pages, { bookmarks = [] } = {}) {
   out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`;
   out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   return Buffer.from(out, 'latin1');
+}
+
+/** A grey terrain picture, with dark grid lines every `size` pixels if asked. */
+export async function terrain(width, height, { size = null, x = 0, y = 0, line = 2 } = {}) {
+  const buf = Buffer.alloc(width * height * 3);
+  let seed = 7;
+  const rnd = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+  for (let py = 0; py < height; py++) {
+    for (let px = 0; px < width; px++) {
+      let v = 120 + 60 * Math.sin(px / 90) * Math.cos(py / 70) + (rnd() - 0.5) * 40;
+      if (size) {
+        const dx = (((px - x) % size) + size) % size;
+        const dy = (((py - y) % size) + size) % size;
+        if (dx < line || dy < line) v = 40;
+      }
+      buf.fill(Math.max(0, Math.min(255, Math.round(v))), (py * width + px) * 3, (py * width + px) * 3 + 3);
+    }
+  }
+  return sharp(buf, { raw: { width, height, channels: 3 } }).png().toBuffer();
 }

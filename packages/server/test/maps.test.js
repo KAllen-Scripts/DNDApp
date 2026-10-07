@@ -3,28 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
-import { setup, createFakeLLM, fakeEmbedder } from './helpers.js';
+import { setup, createFakeLLM, fakeEmbedder, terrain } from './helpers.js';
 import { createContext } from '../src/context.js';
 import { detectGrid } from '../src/maps/read.js';
-
-/** A grey terrain picture, with dark grid lines every `size` pixels if asked. */
-async function terrain(width, height, { size = null, x = 0, y = 0, line = 2 } = {}) {
-  const buf = Buffer.alloc(width * height * 3);
-  let seed = 7;
-  const rnd = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
-  for (let py = 0; py < height; py++) {
-    for (let px = 0; px < width; px++) {
-      let v = 120 + 60 * Math.sin(px / 90) * Math.cos(py / 70) + (rnd() - 0.5) * 40;
-      if (size) {
-        const dx = (((px - x) % size) + size) % size;
-        const dy = (((py - y) % size) + size) % size;
-        if (dx < line || dy < line) v = 40;
-      }
-      buf.fill(Math.max(0, Math.min(255, Math.round(v))), (py * width + px) * 3, (py * width + px) * 3 + 3);
-    }
-  }
-  return sharp(buf, { raw: { width, height, channels: 3 } }).png().toBuffer();
-}
 
 /** What the AI might say about a battle map: a grid of roughly `columns` squares, no scale printed. */
 const readOut = (over = {}) => ({
