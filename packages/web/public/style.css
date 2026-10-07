@@ -383,6 +383,8 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 .dice-hint { margin: 0; }
 .dice-settings { display: flex; align-items: center; gap: 0.4rem 1rem; flex-wrap: wrap; }
 .dice-settings label.check { flex: none; }
+.dice-settings label.dice-roller { display: inline-flex; align-items: center; gap: 0.35rem; flex: none; font-size: 0.9rem; }
+.dice-settings label.dice-roller select { width: auto; padding: 0.15rem 0.4rem; }
 .dice-settings .muted:empty { display: none; }
 .dice-history-title { margin: 0.2rem 0 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .dice-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.15rem; }

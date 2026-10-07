@@ -69,7 +69,19 @@ Each player has a **Sheet** tab, laid out like the official 5e sheet (core stats
 
 The **Dice** button in the player's header opens a dice tray: click dice to build a roll (or type one, like `2d6+3` or `d%`), choose advantage or disadvantage for the next d20, and see this session's rolls. On the Sheet tab, clicking a save, skill, ability name, initiative or spell attack rolls it, and the dice button next to an attack rolls to hit, then offers its damage (doubled dice on a natural 20). Shift-click rolls with advantage, Alt-click with disadvantage.
 
-The **server rolls** (a secure random number). The page then throws 3D dice with real physics and relabels their faces so they land on the server's numbers, so a roll can't be faked from the browser. The 3D dice ([dice-box-threejs](https://github.com/3d-dice/dice-box-threejs), MIT) are served by this server and only loaded the first time someone rolls; by default they take the theme's accent colour, and the tray has 23 other **dice styles** (Dragonfire, Frost, Necrotic, Thylean Bronze, Here Be Dragons, Glitter Party...; textures load only for the style in use). **Effects:** each style's dice leave a trail while they roll (embers, snow, sparks, stars, smoke, bubbles, petals); a natural 20 gets a golden burst and banner, a natural 1 a red flash, smoke and a shake, and damage with every die on its highest face a sparkle, with small chimes when sound is on. 3D, effects and sound can each be switched off in the tray; with reduced motion on, or without WebGL, the result just appears. Rolls aren't saved or shown to anyone else yet.
+The **server rolls** (a secure random number). The page then throws 3D dice with real physics and relabels their faces so they land on the server's numbers, so a roll can't be faked from the browser. The 3D dice ([dice-box-threejs](https://github.com/3d-dice/dice-box-threejs), MIT) are served by this server and only loaded the first time someone rolls; by default they take the theme's accent colour, and the tray has 23 other **dice styles** (Dragonfire, Frost, Necrotic, Thylean Bronze, Here Be Dragons, Glitter Party...; textures load only for the style in use). **Effects:** each style's dice leave a trail while they roll (embers, snow, sparks, stars, smoke, bubbles, petals); a natural 20 gets a golden burst and banner, a natural 1 a red flash, smoke and a shake, and damage with every die on its highest face a sparkle, with small chimes when sound is on. Animation, effects and sound can each be switched off in the tray; with reduced motion on, the result just appears. Rolls aren't saved or shown to anyone else yet.
+
+**Rollers:** how the dice are shown, lightest last. Set the default for everyone with `DICE_ROLLER` in `.env` (restart the server); anyone can pick another for their own browser under **Roller** in the dice tray.
+
+| `DICE_ROLLER` | What you get |
+|---|---|
+| `classic` | The original 3D dice: full physics and shadows. About 3.5 s a roll. |
+| `quick` (default) | The same 3D dice without shadows, tuned to land in about 1.5 s. |
+| `lite` | 3D-looking dice drawn without WebGL or a physics engine. About 1.2 s; smooth on any device. |
+| `flat` | Flat dice that spin in. Under a second. |
+| `none` | Just the result. |
+
+Without WebGL, `classic` and `quick` fall back to `lite`.
 
 ### Maps
 
