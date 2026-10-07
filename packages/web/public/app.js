@@ -1,7 +1,7 @@
 /**
  * The web page. Display only: it sends what people type to the DNDApp server
  * and shows what comes back. Players get Ask and Notes; the admin login gets
- * the admin screen (admin.js) instead. The Sheet tab is in sheet.js.
+ * the admin screen (admin.js) instead. The Sheet tab is in sheet.js, the Map tab in map.js.
  */
 import { api, stream, storage, getToken, setToken, LoggedOut } from './api.js';
 import { showAdmin } from './admin.js';
@@ -10,6 +10,7 @@ import { marked } from './vendor/marked.js';
 import DOMPurify from './vendor/purify.js';
 import { initLook } from './look.js';
 import { initDice, setDiceCampaign } from './dice.js';
+import { initMapActions, loadMap, showMap } from './map.js';
 
 const $ = (sel) => document.querySelector(sel);
 const CAMPAIGN_KEY = 'dndapp.campaign'; // last campaign chosen in this browser (pre-selected next time)
@@ -166,7 +167,7 @@ async function enterCampaign(campaign) {
   $('#switch-campaign').hidden = state.me.campaigns.length < 2;
   newConversation();
   setDiceCampaign({ campaignId: campaign.id, guarded });
-  await Promise.all([loadConversations(), loadNotes(), loadSheet({ campaignId: campaign.id, guarded })]);
+  await Promise.all([loadConversations(), loadNotes(), loadSheet({ campaignId: campaign.id, guarded }), loadMap({ campaignId: campaign.id, userId: state.me.user.id })]);
 }
 
 const base = () => `/campaigns/${state.campaign.id}`;
@@ -209,9 +210,10 @@ for (const tab of document.querySelectorAll('[data-tab]')) {
       t.setAttribute('aria-selected', String(on));
       $(`#tab-${t.dataset.tab}`).hidden = !on;
     }
-    // The sheet needs more room than Ask and Notes.
-    $('#app-view').classList.toggle('wide', tab.dataset.tab === 'sheet');
-    if (tab.dataset.tab !== 'sheet') $(`#tab-${tab.dataset.tab} textarea`)?.focus();
+    // The sheet and the map need more room than Ask and Notes.
+    $('#app-view').classList.toggle('wide', ['sheet', 'map'].includes(tab.dataset.tab));
+    if (tab.dataset.tab === 'map') showMap();
+    else if (tab.dataset.tab !== 'sheet') $(`#tab-${tab.dataset.tab} textarea`)?.focus();
   });
 }
 
@@ -638,5 +640,6 @@ $('#note-form textarea').addEventListener('keydown', (e) => {
 
 initSheetActions();
 initDice();
+initMapActions();
 initLook();
 start().catch((err) => showLogin(err.message));

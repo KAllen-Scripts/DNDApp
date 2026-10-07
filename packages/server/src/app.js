@@ -80,19 +80,21 @@ function serveWebPage(app, dir) {
   }
   // Modules the page imports from packages: the character sheet rules (shared with the server, so the page can
   // show automatic values as players type), dice notation, markdown + HTML sanitising for answers, and the 3D
-  // dice (Three.js and the physics are bundled into that one file).
+  // dice (Three.js and the physics are bundled into that one file), and the map (Leaflet).
   const modules = {
     '/shared/sheet.js': '@dndapp/shared/sheet.js',
     '/shared/dice.js': '@dndapp/shared/dice.js',
     '/vendor/marked.js': 'marked',
     '/vendor/purify.js': 'dompurify',
     '/vendor/dice/dice-box.js': '@3d-dice/dice-box-threejs',
+    '/vendor/leaflet.js': 'leaflet/dist/leaflet-src.esm.js',
   };
   const sendFile = (file, type) => async (request, reply) =>
     reply.type(type).header('Cache-Control', 'no-cache').header('X-Content-Type-Options', 'nosniff').send(fs.readFileSync(file));
   for (const [url, spec] of Object.entries(modules)) {
     app.get(url, { config: { public: true } }, sendFile(fileURLToPath(import.meta.resolve(spec)), CONTENT_TYPES['.js']));
   }
+  app.get('/vendor/leaflet.css', { config: { public: true } }, sendFile(fileURLToPath(import.meta.resolve('leaflet/dist/leaflet.css')), CONTENT_TYPES['.css']));
   // The dice's sounds and textures, from the same package (dice-box.js asks for /vendor/dice/sounds/... and
   // /vendor/dice/textures/...; a texture is only fetched when a dice style uses it).
   const assets = path.resolve(path.dirname(fileURLToPath(import.meta.resolve('@3d-dice/dice-box-threejs'))), '../public');
