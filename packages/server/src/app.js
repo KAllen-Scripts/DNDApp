@@ -59,6 +59,7 @@ const CONTENT_TYPES = {
   '.ico': 'image/x-icon',
   '.json': 'application/json',
   '.mp3': 'audio/mpeg',
+  '.webp': 'image/webp',
 };
 
 /**
@@ -92,11 +93,16 @@ function serveWebPage(app, dir) {
   for (const [url, spec] of Object.entries(modules)) {
     app.get(url, { config: { public: true } }, sendFile(fileURLToPath(import.meta.resolve(spec)), CONTENT_TYPES['.js']));
   }
-  // The dice's sounds, from the same package (dice-box.js asks for /vendor/dice/sounds/...).
-  const sounds = path.resolve(path.dirname(fileURLToPath(import.meta.resolve('@3d-dice/dice-box-threejs'))), '../public/sounds');
-  for (const name of fs.existsSync(sounds) ? fs.readdirSync(sounds, { recursive: true }) : []) {
-    if (path.extname(name) !== '.mp3') continue;
-    app.get(`/vendor/dice/sounds/${name.split(path.sep).join('/')}`, { config: { public: true } }, sendFile(path.join(sounds, name), CONTENT_TYPES['.mp3']));
+  // The dice's sounds and textures, from the same package (dice-box.js asks for /vendor/dice/sounds/... and
+  // /vendor/dice/textures/...; a texture is only fetched when a dice style uses it).
+  const assets = path.resolve(path.dirname(fileURLToPath(import.meta.resolve('@3d-dice/dice-box-threejs'))), '../public');
+  for (const folder of ['sounds', 'textures']) {
+    const dir = path.join(assets, folder);
+    for (const name of fs.existsSync(dir) ? fs.readdirSync(dir, { recursive: true }) : []) {
+      const type = { '.mp3': CONTENT_TYPES['.mp3'], '.webp': CONTENT_TYPES['.webp'], '.png': CONTENT_TYPES['.png'] }[path.extname(name)];
+      if (!type) continue;
+      app.get(`/vendor/dice/${folder}/${name.split(path.sep).join('/')}`, { config: { public: true } }, sendFile(path.join(dir, name), type));
+    }
   }
 }
 

@@ -115,6 +115,9 @@ test('the web page is served without logging in; API routes still need a login',
     assert.equal(sound.statusCode, 200);
     assert.equal(sound.headers['content-type'], 'audio/mpeg');
     assert.notEqual((await t.app.inject({ method: 'GET', url: '/vendor/dice/sounds/../../package.json' })).statusCode, 200);
+    const texture = await t.app.inject({ method: 'GET', url: '/vendor/dice/textures/fire.webp' });
+    assert.equal(texture.statusCode, 200);
+    assert.equal(texture.headers['content-type'], 'image/webp');
     assert.notEqual((await t.app.inject({ method: 'GET', url: '/../package.json' })).statusCode, 200);
     assert.equal((await t.app.inject({ method: 'GET', url: `/campaigns/${t.campaign.id}` })).statusCode, 401);
   } finally {

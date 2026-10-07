@@ -399,6 +399,54 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 .dice-stage.fading { opacity: 0; }
 .dice-stage canvas { display: block; }
 
+/* Special effects (dice-fx.js): particles over the dice, a banner, a shake. */
+.dice-fx { position: fixed; inset: 0; z-index: 9; width: 100vw; height: 100vh; pointer-events: none; }
+.dice-fx-layer { position: fixed; inset: 0; z-index: 9; display: grid; place-items: center; pointer-events: none; overflow: hidden; }
+.fx-banner {
+  grid-area: 1 / 1; font: 900 clamp(2.4rem, 9vw, 5.5rem)/1 var(--font-head); letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap;
+  animation: fx-banner 1.9s cubic-bezier(0.2, 1.4, 0.4, 1) forwards;
+}
+.fx-banner.crit { color: #ffe27a; -webkit-text-stroke: 2px #8a5a00; text-shadow: 0 0 18px rgb(255 200 60 / 0.9), 0 0 60px rgb(255 160 0 / 0.6), 0 4px 0 #6b4400; }
+.fx-banner.fumble { color: #ff4a3b; -webkit-text-stroke: 2px #3a0000; text-shadow: 0 0 22px rgb(140 0 0 / 0.9), 0 4px 0 #2a0000; animation-name: fx-banner-fall; }
+.fx-banner.max { color: #c9f1ff; -webkit-text-stroke: 1.5px #0b4a6b; text-shadow: 0 0 18px rgb(120 210 255 / 0.9); font-size: clamp(1.8rem, 6vw, 3.6rem); }
+@keyframes fx-banner {
+  0% { opacity: 0; transform: scale(0.3) rotate(-6deg); }
+  18% { opacity: 1; transform: scale(1.08) rotate(1deg); }
+  30% { transform: scale(1) rotate(0); }
+  75% { opacity: 1; transform: scale(1.02); }
+  100% { opacity: 0; transform: scale(1.25); filter: blur(4px); }
+}
+@keyframes fx-banner-fall {
+  0% { opacity: 0; transform: translateY(-40px) scale(1.4); }
+  15% { opacity: 1; transform: translateY(0) scale(1); }
+  22% { transform: translateY(0) rotate(-2deg); }
+  30% { transform: translateY(0) rotate(1.5deg); }
+  75% { opacity: 1; transform: translateY(6px) rotate(3deg); }
+  100% { opacity: 0; transform: translateY(80px) rotate(8deg); }
+}
+.fx-shake { animation: fx-shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+@keyframes fx-shake {
+  10%, 90% { transform: translate(-2px, 1px); }
+  20%, 80% { transform: translate(4px, -2px); }
+  30%, 50%, 70% { transform: translate(-7px, 2px) rotate(-0.4deg); }
+  40%, 60% { transform: translate(7px, -1px) rotate(0.4deg); }
+}
+.dice-result.crit { animation: dice-pop 0.22s ease-out, dice-shine 1.6s ease-in-out 0.2s 2; }
+@keyframes dice-shine { 50% { box-shadow: 0 12px 34px rgb(0 0 0 / 0.3), 0 0 0 3px rgb(255 210 80 / 0.7), 0 0 40px rgb(255 200 60 / 0.55); } }
+.dice-result.fumble { animation: dice-pop 0.22s ease-out, fx-shake 0.45s 0.15s; }
+
+/* Dice styles in the tray */
+.dice-styles { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.4rem, 1fr)); gap: 0.35rem; }
+.dice-style { display: grid; justify-items: center; gap: 0.2rem; padding: 0.35rem 0.2rem 0.3rem; border-radius: 10px; background: none; }
+.dice-style[aria-checked="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+.ds-swatch {
+  display: grid; place-items: center; width: 2.3rem; height: 2.3rem; font: 800 0.8rem/1 var(--font-body);
+  clip-path: polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%); text-shadow: 0 1px 1px rgb(0 0 0 / 0.35);
+}
+.ds-name { font-size: 0.66rem; line-height: 1.15; text-align: center; color: var(--muted); }
+.dice-style[aria-checked="true"] .ds-name { color: var(--text); font-weight: 700; }
+@media print { .dice-fx, .dice-fx-layer { display: none !important; } }
+
 .dice-result {
   position: fixed; z-index: 10; left: 50%; bottom: calc(1.25rem + env(safe-area-inset-bottom)); transform: translateX(-50%);
   width: min(26rem, calc(100vw - 32px)); padding: 0.65rem 0.9rem 0.8rem;
