@@ -34,7 +34,7 @@ export function replayMap(entries) {
   return { map: normalizeMap(doc), version, saved_at, created_at: entries[0]?.saved_at ?? saved_at };
 }
 
-export function createMaps({ db, archive, store }) {
+export function createMaps({ db, archive, store, pictures = null }) {
   const events = new EventEmitter();
   events.setMaxListeners(0);
 
@@ -116,10 +116,13 @@ export function createMaps({ db, archive, store }) {
      * Players: only shown maps; no AI description or notes; no hidden tokens,
      * and none under the fog except their own; NPCs' and enemies' hit points
      * only as how hurt they look; no stat blocks or links to the DM's records. `image_key` changes when their image does.
+     * Player character tokens carry `picture`: the key of their player's token picture, or null.
      */
     view(map, { role, userId }) {
       if (!map || map.removed) return null;
-      const out = { ...map };
+      // A player character's token shows the token picture its player uploaded.
+      const picture = (t) => (t.kind === 'pc' && pictures ? pictures.tokenKey(map.campaign_id, t.user_id) : null);
+      const out = { ...map, tokens: map.tokens.map((t) => ({ ...t, picture: picture(t) })) };
       delete out.campaign_id;
       if (role === 'dm') return { ...out, image_key: 'dm', can_edit: true };
       if (!map.shown) return null;
@@ -128,7 +131,7 @@ export function createMaps({ db, archive, store }) {
         description: '',
         source: null,
         reading: { status: map.reading.status, error: '', notes: '' },
-        tokens: map.tokens
+        tokens: out.tokens
           .filter((t) => t.user_id === userId || (!t.hidden && !isFogged(map, t.x, t.y)))
           .map((t) => (t.kind === 'pc' ? { ...t, stats: null, record: null } : { ...t, hp: null, health: healthOf(t.hp), stats: null, record: null })),
         image_key: fogKey(map),

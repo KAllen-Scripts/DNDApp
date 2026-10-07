@@ -23,6 +23,7 @@ import { inspectImage } from './maps/read.js';
 import { isPdf, renderPdfPage } from './maps/pdf.js';
 import { createPlayerImages } from './maps/image.js';
 import { newTokenId, isMapId } from './maps/store.js';
+import { PICTURE_KINDS, MAX_PICTURE_BYTES } from './characters/pictures.js';
 
 /** Open a Server-Sent Events stream on a request. */
 function openSse(request, reply) {
@@ -114,7 +115,7 @@ function serveWebPage(app, dir) {
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date like 2026-10-03');
 
-export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, maps, mapReader, statBlocks, archive, config, logger = true }) {
+export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, maps, mapReader, statBlocks, pictures, pictureDescriber, archive, config, logger = true }) {
   const app = Fastify({ logger, bodyLimit: config.maxUploadBytes });
 
   app.setErrorHandler((err, request, reply) => {
@@ -694,6 +695,103 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     const spell = await spells.lookup(name, { campaignId: cid, userId: request.user.id, beforeAi: sheetAiAllowed(request.user.id) });
     if (!spell) throw new NotFoundError(`No spell called "${name}" was found in the SRD, your books, or the AI's memory.`);
     return spell;
+  });
+
+  // ---------- pictures of characters (the token is seen by the campaign; the full picture is private) ----------
+
+  /** Maps with this player's token on them get sent again, so everyone sees the new picture. */
+  const resendMapsWithToken = (cid, userId) => {
+    for (const map of maps.list(cid)) if (map.tokens.some((t) => t.kind === 'pc' && t.user_id === userId)) maps.events.emit('update', map);
+  };
+
+  const pictureKind = (request) => {
+    if (!PICTURE_KINDS.includes(request.params.kind)) throw new NotFoundError('No such picture');
+    return request.params.kind;
+  };
+
+  /**
+   * Describe your full picture with the AI and put it on your sheet: the
+   * Appearance box, and eyes, hair and skin where they're empty. Appearance
+   * text you already have is only replaced if `replace` is set.
+   */
+  async function describePicture(cid, userId, replace) {
+    sheetAiAllowed(userId)();
+    const found = await pictureDescriber.describe(pictures.original(cid, userId, 'picture'), { campaignId: cid, userId });
+    if (!found.appearance) return { description: found, applied: false };
+    const current = sheets.get(cid, userId);
+    const sheet = structuredClone(current.sheet);
+    const applied = replace || !sheet.appearance.trim();
+    if (applied) sheet.appearance = found.appearance;
+    for (const k of ['eyes', 'hair', 'skin']) if (found[k] && !sheet[k].trim()) sheet[k] = found[k];
+    const saved = sheets.save(cid, userId, sheet, { reason: 'described from their picture' });
+    return { description: found, applied, sheet: saved };
+  }
+
+  /** Your pictures in this campaign: { token, picture }, each null or { key, width, height }. */
+  app.get('/campaigns/:cid/character/pictures', async (request) => pictures.view(sheetOwner(request).cid, request.user.id));
+
+  /**
+   * Upload your token (the picture on your token on maps) or a full picture
+   * of your character: { filename, data (base64) }. A full picture is
+   * described by the AI for your sheet unless `describe` is false; the sheet's
+   * Appearance is only replaced if it's empty or `replace` is set.
+   * Returns { pictures, description?, applied?, sheet? }.
+   */
+  app.put('/campaigns/:cid/character/:kind', { bodyLimit: Math.ceil(MAX_PICTURE_BYTES * 1.4) }, async (request) => {
+    const { cid } = sheetOwner(request);
+    const kind = pictureKind(request);
+    const body = z.object({ filename: z.string().max(200).default(''), data: z.string().min(1), describe: z.boolean().default(true), replace: z.boolean().default(false) }).parse(request.body);
+    await pictures.save(cid, request.user.id, kind, Buffer.from(body.data, 'base64'));
+    if (kind === 'token') {
+      resendMapsWithToken(cid, request.user.id);
+      return { pictures: pictures.view(cid, request.user.id) };
+    }
+    let described = {};
+    if (body.describe) {
+      try {
+        described = await describePicture(cid, request.user.id, body.replace);
+      } catch (err) {
+        // The picture is saved either way; say why there's no description.
+        if (!(err instanceof RateLimitError || err instanceof SpendingCapError)) request.log.warn(err);
+        described = { error: `Your picture is saved, but the AI couldn't describe it: ${err.message}` };
+      }
+    }
+    return { pictures: pictures.view(cid, request.user.id), ...described };
+  });
+
+  /** Describe your full picture again: { replace? }. Returns { description, applied, sheet? }. */
+  app.post('/campaigns/:cid/character/picture/describe', async (request) => {
+    const { cid } = sheetOwner(request);
+    const { replace } = z.object({ replace: z.boolean().default(false) }).parse(request.body ?? {});
+    return describePicture(cid, request.user.id, replace);
+  });
+
+  /** Stop using your token or full picture (the archive keeps it). */
+  app.delete('/campaigns/:cid/character/:kind', async (request) => {
+    const { cid } = sheetOwner(request);
+    const kind = pictureKind(request);
+    pictures.remove(cid, request.user.id, kind);
+    if (kind === 'token') resendMapsWithToken(cid, request.user.id);
+    return { pictures: pictures.view(cid, request.user.id) };
+  });
+
+  const sendPicture = async (reply, cid, userId, kind) => {
+    const { buf, type } = await pictures.image(cid, userId, kind);
+    return reply.type(type).header('X-Content-Type-Options', 'nosniff').header('Cache-Control', 'private, max-age=31536000, immutable').send(buf);
+  };
+
+  /** Your full picture (only ever yours). ?v= is its key, so a new picture is a new address. */
+  app.get('/campaigns/:cid/character/picture/image', async (request, reply) => {
+    const { cid } = sheetOwner(request);
+    return sendPicture(reply, cid, request.user.id, 'picture');
+  });
+
+  /** Someone's token picture, for anyone in the campaign (it's on the maps they're on). */
+  app.get('/campaigns/:cid/members/:uid/token', async (request, reply) => {
+    const { cid } = access(request);
+    const uid = Number(request.params.uid);
+    if (!Number.isInteger(uid) || !auth.membership(cid, uid)) throw new NotFoundError('No token picture');
+    return sendPicture(reply, cid, uid, 'token');
   });
 
   // ---------- dice ----------

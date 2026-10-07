@@ -5,8 +5,8 @@ import Database from 'better-sqlite3';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-// v5 only added the character_sheets table, v7 the maps table and v8 map_pins (all created by schema.sql), so they need no migration.
-const SCHEMA_VERSION = 8;
+// v5 only added the character_sheets table, v7 the maps table, v8 map_pins and v9 character_pictures (all created by schema.sql), so they need no migration.
+const SCHEMA_VERSION = 9;
 
 /**
  * @param {string} file  path to the SQLite file, or ':memory:'
