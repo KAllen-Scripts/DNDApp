@@ -4,6 +4,7 @@ import {
   normalizeMap, snapToken, measure, formatDistance, tokenPx, healthOf, isFogged, fogRect, normalizePins, normalizeRecordLink,
   normalizeStats, normalizeHp, normalizeToken, normalizeGrid, normalizeScale, unitsPerPx, squarePx, isTokenId,
   PERSON_KIND, MAX_PINS, PIN_COLOR, TOKEN_COLORS,
+  normalizeWalls, segmentsCross, wallBetween, sightPolygon, pointInPolygon, sightOf, canSee, fogMask, nearestWall, snapWallPoint,
 } from '../src/map.js';
 
 const battle = normalizeMap({ image: { width: 700, height: 490 }, grid: { size: 70, x: 0, y: 0 }, scale: { distance: 5, unit: 'ft', per: 'square' } });
@@ -138,4 +139,104 @@ test('grids and scales: offsets wrap into one square; bad values are dropped; sc
   assert.equal(unitsPerPx(normalizeMap({ image: { width: 10, height: 10 } })), null);
   // A per-square scale with no grid can't measure (normalizeMap drops it anyway).
   assert.equal(unitsPerPx({ scale: { distance: 5, per: 'square' }, grid: null, image: { width: 10 } }), null);
+});
+
+// A 100 × 100 room split by a wall down the middle, with a door in it from y 40 to 60.
+const room = (over = {}) => normalizeMap({
+  image: { width: 100, height: 100 },
+  fog: { enabled: true, sight: true },
+  walls: [
+    { id: 'wall01', x1: 50, y1: 0, x2: 50, y2: 40 },
+    { id: 'door01', x1: 50, y1: 40, x2: 50, y2: 60, door: true },
+    { id: 'wall02', x1: 50, y1: 60, x2: 50, y2: 100 },
+  ],
+  tokens: [{ id: 'thorin', kind: 'pc', user_id: 3, x: 25, y: 50 }],
+  ...over,
+});
+
+test('normalizeWalls keeps real lines on the image; only doors can be open', () => {
+  const walls = normalizeWalls([
+    { id: 'aaaaaa', x1: -5, y1: 10, x2: 500, y2: 10, open: true, source: 'ai' },
+    { id: 'aaaaaa', x1: 0, y1: 0, x2: 10, y2: 10 },
+    { id: 'bbbbbb', x1: 5, y1: 5, x2: 5.2, y2: 5 },
+    { id: 'cccccc', x1: 1, y1: 1, x2: 1, y2: 'x' },
+    { id: 'dddddd', x1: 1, y1: 1, x2: 1, y2: 20, door: true, open: true, source: 'evil' },
+    { id: 'no', x1: 1, y1: 1, x2: 9, y2: 9 },
+  ], { width: 100, height: 50 });
+  assert.deepEqual(walls, [
+    { id: 'aaaaaa', x1: 0, y1: 10, x2: 100, y2: 10, door: false, open: false, source: 'ai' },
+    { id: 'dddddd', x1: 1, y1: 1, x2: 1, y2: 20, door: true, open: true, source: 'dm' },
+  ]);
+  const m = normalizeMap({ image: { width: 10, height: 10 } });
+  assert.deepEqual(m.walls, []);
+  assert.deepEqual(m.wall_draft, { status: '', error: '', notes: '' });
+  assert.equal(m.fog.sight, false);
+});
+
+test('segmentsCross and wallBetween: walls and closed doors are in the way, open doors are not', () => {
+  assert.ok(segmentsCross({ x: 0, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }, { x: 10, y: 0 }));
+  assert.ok(!segmentsCross({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 0, y: 1 }, { x: 10, y: 1 }));
+  assert.ok(segmentsCross({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 5 }), 'touching counts');
+  const m = room();
+  assert.ok(wallBetween(m, { x: 25, y: 20 }, { x: 75, y: 20 }));
+  assert.ok(wallBetween(m, { x: 25, y: 50 }, { x: 75, y: 50 }), 'closed door');
+  assert.ok(!wallBetween(m, { x: 25, y: 20 }, { x: 40, y: 80 }));
+  const open = room();
+  open.walls[1].open = true;
+  assert.ok(!wallBetween(open, { x: 25, y: 50 }, { x: 75, y: 50 }));
+});
+
+test('sightPolygon: a token sees its own side of a wall, and through an open door', () => {
+  const m = room();
+  const poly = sightPolygon(m, { x: 25, y: 50 });
+  assert.ok(pointInPolygon(10, 10, poly));
+  assert.ok(pointInPolygon(45, 95, poly));
+  assert.ok(!pointInPolygon(55, 50, poly));
+  assert.ok(!pointInPolygon(90, 90, poly));
+
+  const open = room();
+  open.walls[1].open = true;
+  const through = sightPolygon(open, { x: 25, y: 50 });
+  assert.ok(pointInPolygon(90, 50, through), 'straight through the doorway');
+  assert.ok(!pointInPolygon(90, 5, through), 'not round the corner');
+
+  // No walls: the whole image.
+  const all = sightPolygon(normalizeMap({ image: { width: 100, height: 100 } }), { x: 0, y: 100 });
+  for (const [x, y] of [[1, 1], [99, 1], [99, 99]]) assert.ok(pointInPolygon(x, y, all), `${x},${y}`);
+});
+
+test('sightOf and canSee: only with fog and line of sight on, and only from the player\'s own tokens', () => {
+  const m = room();
+  assert.equal(sightOf(m, 3).length, 1);
+  assert.deepEqual(sightOf(m, 4), []);
+  assert.deepEqual(sightOf(room({ fog: { enabled: true } }), 3), []);
+  assert.deepEqual(sightOf(room({ fog: { enabled: false, sight: true } }), 3), []);
+  const polys = sightOf(m, 3);
+  assert.ok(canSee(m, polys, 10, 10));
+  assert.ok(!canSee(m, polys, 75, 50));
+  // The DM's reveals still show outside sight.
+  const revealed = room({ fog: { enabled: true, sight: true, shapes: [{ op: 'reveal', x: 60, y: 0, w: 40, h: 100 }] } });
+  assert.ok(canSee(revealed, sightOf(revealed, 3), 75, 50));
+  assert.ok(canSee(room({ fog: { enabled: false } }), [], 75, 50));
+});
+
+test('fogMask: covered, then places seen before, then the DM\'s rectangles, then what is in sight', () => {
+  const m = room({ fog: { enabled: true, sight: true, shapes: [{ op: 'reveal', x: 0, y: 0, w: 10, h: 10 }, { op: 'cover', x: 0, y: 0, w: 5, h: 5 }] } });
+  assert.deepEqual(fogMask(m, { polygons: [[[0, 0], [1, 0], [1, 1]]], explored: [{ x: 1, y: 2, w: 3, h: 4 }] }), [
+    { fill: 'cover', x: 0, y: 0, w: 100, h: 100 },
+    { fill: 'dim', x: 1, y: 2, w: 3, h: 4 },
+    { fill: 'clear', x: 0, y: 0, w: 10, h: 10 },
+    { fill: 'cover', x: 0, y: 0, w: 5, h: 5 },
+    { fill: 'clear', points: [[0, 0], [1, 0], [1, 1]] },
+  ]);
+  assert.deepEqual(fogMask(room({ fog: { enabled: false } })), []);
+});
+
+test('nearestWall picks the wall under a click; snapWallPoint joins wall ends, then grid corners', () => {
+  const m = room({ grid: { size: 20, x: 0, y: 0 } });
+  assert.equal(nearestWall(m, { x: 52, y: 50 }, 5).id, 'door01');
+  assert.equal(nearestWall(m, { x: 60, y: 50 }, 5), null);
+  assert.deepEqual(snapWallPoint(m, { x: 47, y: 42 }, 5), { x: 50, y: 40 });
+  assert.deepEqual(snapWallPoint(m, { x: 21, y: 38 }, 5), { x: 20, y: 40 });
+  assert.deepEqual(snapWallPoint(m, { x: 30.04, y: 30 }, 5), { x: 30, y: 30 });
 });

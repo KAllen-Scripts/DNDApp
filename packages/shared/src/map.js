@@ -28,6 +28,9 @@ export const SCALE_PER = ['square', 'width'];
 export const MAX_TOKENS = 300;
 export const MAX_FOG_SHAPES = 1000;
 export const FOG_OPS = ['reveal', 'cover'];
+export const MAX_WALLS = 2000;
+/** Where a wall came from: drawn by the DM, or drafted by the AI from the picture. */
+export const WALL_SOURCES = ['dm', 'ai'];
 /** On a map without a grid, a size-1 token is this fraction of the map's longer side. */
 const UNGRIDDED_TOKEN_FRACTION = 1 / 40;
 
@@ -179,6 +182,13 @@ export function normalizeMap(input = {}) {
       notes: longStr(m.reading?.notes, 2000),
     },
     fog: normalizeFog(m.fog, image),
+    walls: normalizeWalls(m.walls, image),
+    // The AI drafting walls from the picture (the DM's; players never get it).
+    wall_draft: {
+      status: pick(m.wall_draft?.status, ['', 'pending', 'done', 'failed'], ''),
+      error: str(m.wall_draft?.error, 500),
+      notes: longStr(m.wall_draft?.notes, 2000),
+    },
     // Where the image came from, when it was a page of a PDF (kept in the archive too).
     source: m.source?.file === 'source.pdf' ? { file: 'source.pdf', page: Math.max(1, Math.round(num(m.source.page, { min: 1, max: 100_000, fallback: 1 }))) } : null,
     tokens: [],
@@ -198,6 +208,9 @@ export function normalizeMap(input = {}) {
 /**
  * Fog of war: while it's on, the whole map starts covered and the DM's
  * rectangles reveal or cover parts of it, later ones on top of earlier ones.
+ * With `sight` on as well, each player also sees whatever their own token
+ * has a clear line to (walls and closed doors block it), and keeps a dim
+ * view of places they've seen before.
  */
 export function normalizeFog(f, image = {}) {
   const width = image.width ?? 1;
@@ -210,7 +223,7 @@ export function normalizeFog(f, image = {}) {
     const h = num(s?.h, { min: 0, max: height - y, fallback: 0 });
     if (w > 0 && h > 0) shapes.push({ op: pick(s.op, FOG_OPS, 'reveal'), x: round(x, 1), y: round(y, 1), w: round(w, 1), h: round(h, 1) });
   }
-  return { enabled: f?.enabled === true, shapes };
+  return { enabled: f?.enabled === true, sight: f?.sight === true, shapes };
 }
 
 /** Is this point under the fog (hidden from players)? */
@@ -243,6 +256,196 @@ export function fogRect(map, a, b) {
   x0 = Math.max(0, x0);
   y0 = Math.max(0, y0);
   return { x: x0, y: y0, w: Math.min(width, x1) - x0, h: Math.min(height, y1) - y0 };
+}
+
+// ---------- walls and line of sight ----------
+
+/**
+ * Walls: straight lines in image pixels that block sight (and players'
+ * tokens). A door is a wall that can be open (blocks nothing) or closed.
+ */
+export function normalizeWalls(list, image = {}) {
+  const { width = 1, height = 1 } = image;
+  const seen = new Set();
+  const out = [];
+  for (const w of Array.isArray(list) ? list : []) {
+    if (!w || !isTokenId(w.id) || seen.has(w.id) || out.length >= MAX_WALLS) continue;
+    const x1 = num(w.x1, { min: 0, max: width, fallback: null });
+    const y1 = num(w.y1, { min: 0, max: height, fallback: null });
+    const x2 = num(w.x2, { min: 0, max: width, fallback: null });
+    const y2 = num(w.y2, { min: 0, max: height, fallback: null });
+    if (x1 == null || y1 == null || x2 == null || y2 == null || Math.hypot(x2 - x1, y2 - y1) < 1) continue;
+    seen.add(w.id);
+    const door = w.door === true;
+    out.push({
+      id: String(w.id),
+      x1: round(x1, 1), y1: round(y1, 1), x2: round(x2, 1), y2: round(y2, 1),
+      door,
+      open: door && w.open === true,
+      source: pick(w.source, WALL_SOURCES, 'dm'),
+    });
+  }
+  return out;
+}
+
+/** The walls that block sight and movement right now (everything but open doors). */
+export const blockingWalls = (map) => (map.walls ?? []).filter((w) => !w.open);
+
+const cross = (ax, ay, bx, by) => ax * by - ay * bx;
+
+/** Do segments a-b and c-d cross (touching counts)? */
+export function segmentsCross(a, b, c, d) {
+  const d1 = cross(b.x - a.x, b.y - a.y, c.x - a.x, c.y - a.y);
+  const d2 = cross(b.x - a.x, b.y - a.y, d.x - a.x, d.y - a.y);
+  const d3 = cross(d.x - c.x, d.y - c.y, a.x - c.x, a.y - c.y);
+  const d4 = cross(d.x - c.x, d.y - c.y, b.x - c.x, b.y - c.y);
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
+  const on = (p, q, r, v) => v === 0 && Math.min(p.x, q.x) <= r.x && r.x <= Math.max(p.x, q.x) && Math.min(p.y, q.y) <= r.y && r.y <= Math.max(p.y, q.y);
+  return on(a, b, c, d1) || on(a, b, d, d2) || on(c, d, a, d3) || on(c, d, b, d4);
+}
+
+/** Is there a wall or closed door in the way of a straight move from a to b? */
+export const wallBetween = (map, a, b) =>
+  blockingWalls(map).some((w) => segmentsCross(a, b, { x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 }));
+
+/**
+ * Everything visible from a point: a polygon ([[x, y], ...], in order around
+ * the point), bounded by the map's walls and closed doors and by the edges
+ * of the image. Rays go to every wall end (and just either side of it), so
+ * the polygon's corners are exactly where sight is cut off.
+ */
+export function sightPolygon(map, origin) {
+  const { width, height } = map.image;
+  const ox = Math.min(width - 0.01, Math.max(0.01, origin.x));
+  const oy = Math.min(height - 0.01, Math.max(0.01, origin.y));
+  const segs = blockingWalls(map).map((w) => [w.x1, w.y1, w.x2, w.y2]);
+  segs.push([0, 0, width, 0], [width, 0, width, height], [width, height, 0, height], [0, height, 0, 0]);
+  const angles = [];
+  for (const [x1, y1, x2, y2] of segs) {
+    for (const [x, y] of [[x1, y1], [x2, y2]]) {
+      const a = Math.atan2(y - oy, x - ox);
+      angles.push(a - 1e-5, a, a + 1e-5);
+    }
+  }
+  const points = [];
+  for (const a of angles) {
+    const dx = Math.cos(a);
+    const dy = Math.sin(a);
+    let best = Infinity;
+    for (const [x1, y1, x2, y2] of segs) {
+      const sx = x2 - x1;
+      const sy = y2 - y1;
+      const denom = cross(dx, dy, sx, sy);
+      if (Math.abs(denom) < 1e-12) continue;
+      const qx = x1 - ox;
+      const qy = y1 - oy;
+      const t = cross(qx, qy, sx, sy) / denom;
+      const u = cross(qx, qy, dx, dy) / denom;
+      if (t >= 0 && u >= -1e-9 && u <= 1 + 1e-9 && t < best) best = t;
+    }
+    if (best < Infinity) points.push({ a, x: ox + dx * best, y: oy + dy * best });
+  }
+  points.sort((p, q) => p.a - q.a);
+  const out = [];
+  for (const p of points) {
+    const pt = [round(p.x, 1), round(p.y, 1)];
+    const last = out.at(-1);
+    if (!last || last[0] !== pt[0] || last[1] !== pt[1]) out.push(pt);
+  }
+  if (out.length > 1 && out[0][0] === out.at(-1)[0] && out[0][1] === out.at(-1)[1]) out.pop();
+  return out;
+}
+
+/** Is a point inside a polygon ([[x, y], ...])? */
+export function pointInPolygon(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * What a player's own tokens can see: one sight polygon per token. Empty
+ * unless fog and line of sight are both on.
+ */
+export function sightOf(map, userId) {
+  if (!map.fog?.enabled || !map.fog.sight || userId == null) return [];
+  return map.tokens.filter((t) => t.kind === 'pc' && t.user_id === userId).map((t) => sightPolygon(map, t))
+    .filter((p) => p.length >= 3);
+}
+
+/** Can a player with these sight polygons see the point (x, y) right now? */
+export function canSee(map, polygons, x, y) {
+  if (!map.fog?.enabled) return true;
+  if (polygons.some((p) => pointInPolygon(x, y, p))) return true;
+  return !isFogged(map, x, y);
+}
+
+/**
+ * The fog as one player sees it, as a mask: a list of shapes drawn in
+ * order, each { fill, x, y, w, h } or { fill, points }. fill is 'cover'
+ * (fog), 'dim' (seen before: shown darkened) or 'clear'. Without sight
+ * polygons or explored areas it's the DM's rectangles alone. Empty when
+ * the fog is off.
+ */
+export function fogMask(map, { polygons = [], explored = [] } = {}) {
+  if (!map.fog?.enabled) return [];
+  const { width, height } = map.image;
+  return [
+    { fill: 'cover', x: 0, y: 0, w: width, h: height },
+    ...explored.map((r) => ({ fill: 'dim', ...r })),
+    ...map.fog.shapes.map((s) => ({ fill: s.op === 'reveal' ? 'clear' : 'cover', x: s.x, y: s.y, w: s.w, h: s.h })),
+    ...polygons.map((points) => ({ fill: 'clear', points })),
+  ];
+}
+
+/** Mask colours: white is fully fogged, black is clear, grey is the dim view of places seen before. */
+export const FOG_MASK_FILL = { cover: '#ffffff', dim: '#999999', clear: '#000000' };
+
+/** The nearest wall within `maxDist` of a point (for clicking on one), or null. */
+export function nearestWall(map, p, maxDist) {
+  let best = null;
+  let bestD = maxDist;
+  for (const w of map.walls ?? []) {
+    const dx = w.x2 - w.x1;
+    const dy = w.y2 - w.y1;
+    const t = Math.max(0, Math.min(1, ((p.x - w.x1) * dx + (p.y - w.y1) * dy) / (dx * dx + dy * dy)));
+    const d = Math.hypot(p.x - (w.x1 + t * dx), p.y - (w.y1 + t * dy));
+    if (d <= bestD) {
+      best = w;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+/**
+ * Where a wall being drawn should end: on the nearest existing wall end
+ * within `maxDist` (so walls join without gaps sight could slip through),
+ * else on a grid corner within `maxDist`, else where the pointer is.
+ */
+export function snapWallPoint(map, p, maxDist) {
+  let best = null;
+  let bestD = maxDist;
+  for (const w of map.walls ?? []) {
+    for (const [x, y] of [[w.x1, w.y1], [w.x2, w.y2]]) {
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d <= bestD) {
+        best = { x, y };
+        bestD = d;
+      }
+    }
+  }
+  if (best) return best;
+  if (map.grid) {
+    const { size: g, x: gx, y: gy } = map.grid;
+    const c = { x: Math.round((p.x - gx) / g) * g + gx, y: Math.round((p.y - gy) / g) * g + gy };
+    if (Math.hypot(p.x - c.x, p.y - c.y) <= maxDist) return { x: round(c.x, 1), y: round(c.y, 1) };
+  }
+  return { x: round(p.x, 1), y: round(p.y, 1) };
 }
 
 /** How many image pixels one "square" of token size is: the grid square, or a share of the map. */

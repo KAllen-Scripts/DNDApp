@@ -18,7 +18,7 @@ import { preparedTranscript } from './pipeline/prepare.js';
 import { SheetConflictError } from './sheets/store.js';
 import { SHEET_FORMAT } from '@dndapp/shared/sheet.js';
 import { parseRoll, rollDice, ROLL_MODES } from '@dndapp/shared/dice.js';
-import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, snapToken } from '@dndapp/shared/map.js';
+import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, MAX_WALLS, snapToken, wallBetween } from '@dndapp/shared/map.js';
 import { inspectImage } from './maps/read.js';
 import { isPdf, renderPdfPage } from './maps/pdf.js';
 import { createPlayerImages } from './maps/image.js';
@@ -1008,6 +1008,33 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       });
   }
 
+  /** Draft walls with the AI in the background. The new draft replaces the AI's old one; the DM's own walls stay. */
+  function draftWallsInBackground(cid, map, userId) {
+    maps.change(cid, map.id, (m) => {
+      m.wall_draft = { status: 'pending', error: '', notes: '' };
+    }, { by: userId, reason: 'drafting walls' });
+    const buf = fs.readFileSync(maps.imagePath(cid, map.id).path);
+    return mapReader
+      .walls({ buf, width: map.image.width, height: map.image.height, campaignId: cid, userId })
+      .then((r) =>
+        maps.change(cid, map.id, (m) => {
+          const own = m.walls.filter((w) => w.source !== 'ai');
+          m.walls = [...own, ...r.walls.slice(0, MAX_WALLS - own.length).map((w) => ({ ...w, id: newTokenId(), open: false, source: 'ai' }))];
+          m.wall_draft = { status: 'done', error: '', notes: r.notes };
+        }, { reason: 'walls drafted by the AI' }),
+      )
+      .catch((err) => {
+        app.log.warn(err);
+        try {
+          maps.change(cid, map.id, (m) => {
+            m.wall_draft = { status: 'failed', error: `The AI couldn't draft walls: ${publicMessage(err)}`, notes: '' };
+          }, { reason: 'wall draft failed' });
+        } catch {
+          // removed meanwhile
+        }
+      });
+  }
+
   /** Maps this viewer can see. can_edit: whether they're the DM here. */
   app.get('/campaigns/:cid/maps', async (request) => {
     const a = access(request);
@@ -1090,16 +1117,16 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
 
   const playerImages = createPlayerImages();
 
-  /** The map's image: as imported for the DM; for players, with the fog's covered parts blacked out. */
+  /** The map's image: as imported for the DM; for players, with what they can't see blacked out (and what they saw before dimmed). */
   app.get('/campaigns/:cid/maps/:mid/image', async (request, reply) => {
-    const { cid, map, role } = viewableMap(request);
+    const { cid, map, role, view } = viewableMap(request);
     const { path: file, type } = maps.imagePath(cid, map.id);
     reply.type(type).header('X-Content-Type-Options', 'nosniff');
     if (role === 'dm') {
       // The file never changes, so the browser can keep it.
       return reply.header('Cache-Control', 'private, max-age=31536000, immutable').send(fs.createReadStream(file));
     }
-    return reply.header('Cache-Control', 'private, no-cache').send(await playerImages.get(map, file));
+    return reply.header('Cache-Control', 'private, no-cache').send(await playerImages.get(map, file, { mask: view.fog.mask, key: view.image_key }));
   });
 
   const GRID = z.object({ size: z.number().positive(), x: z.number(), y: z.number() }).nullable();
@@ -1125,8 +1152,9 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   });
 
   /**
-   * Fog of war (DM): { enabled?, add?: {op: reveal | cover, x, y, w, h}, undo?, reset?: cover | reveal }.
+   * Fog of war (DM): { enabled?, sight?, add?: {op: reveal | cover, x, y, w, h}, undo?, reset?: cover | reveal, forget? }.
    * reset: cover hides the whole map again, reveal shows all of it; undo takes back the last rectangle.
+   * sight: players also see what their own token can see past the walls. forget: players lose the dim view of places they saw before.
    */
   app.patch('/campaigns/:cid/maps/:mid/fog', async (request) => {
     const a = access(request, { dm: true });
@@ -1134,6 +1162,8 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     const body = z
       .object({
         enabled: z.boolean().optional(),
+        sight: z.boolean().optional(),
+        forget: z.boolean().optional(),
         add: z.object({ op: z.enum(FOG_OPS), x: z.number(), y: z.number(), w: z.number().positive(), h: z.number().positive() }).optional(),
         undo: z.boolean().optional(),
         reset: z.enum(['cover', 'reveal']).optional(),
@@ -1142,12 +1172,55 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     if (body.add && map.fog.shapes.length >= MAX_FOG_SHAPES) throw new BadRequestError('That map has too many fog changes. Use "Cover all" or "Reveal all" to start again.');
     const saved = maps.change(a.cid, map.id, (m) => {
       if (body.enabled !== undefined) m.fog.enabled = body.enabled;
+      if (body.sight !== undefined) m.fog.sight = body.sight;
       if (body.reset === 'cover') m.fog.shapes = [];
       if (body.reset === 'reveal') m.fog.shapes = [{ op: 'reveal', x: 0, y: 0, w: m.image.width, h: m.image.height }];
       if (body.undo) m.fog.shapes.pop();
       if (body.add) m.fog.shapes.push(body.add);
     }, { by: request.user.id, reason: 'fog' });
+    if (body.forget) maps.forgetExplored(a.cid, map.id);
     return maps.view(saved, a);
+  });
+
+  const POINT = z.number().min(0).max(100_000);
+  const WALL = z.object({ x1: POINT, y1: POINT, x2: POINT, y2: POINT, door: z.boolean().default(false) });
+
+  /**
+   * Walls and doors (DM): { add?: {x1, y1, x2, y2, door?}, remove?: id, toggle?: id (open or close a door), clear?: ai | all }.
+   * They block line of sight and players' tokens; players never get them.
+   */
+  app.patch('/campaigns/:cid/maps/:mid/walls', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const body = z
+      .object({ add: WALL.optional(), remove: z.string().max(20).optional(), toggle: z.string().max(20).optional(), clear: z.enum(['ai', 'all']).optional() })
+      .parse(request.body ?? {});
+    if (body.add && map.walls.length >= MAX_WALLS) throw new BadRequestError(`A map can have at most ${MAX_WALLS} walls.`);
+    for (const id of [body.remove, body.toggle]) {
+      if (id !== undefined && !map.walls.some((w) => w.id === id)) throw new NotFoundError('No such wall');
+    }
+    if (body.toggle && !map.walls.find((w) => w.id === body.toggle).door) throw new BadRequestError("That's a wall, not a door.");
+    const saved = maps.change(a.cid, map.id, (m) => {
+      if (body.clear === 'all') m.walls = [];
+      if (body.clear === 'ai') m.walls = m.walls.filter((w) => w.source !== 'ai');
+      if (body.remove) m.walls = m.walls.filter((w) => w.id !== body.remove);
+      if (body.toggle) {
+        const door = m.walls.find((w) => w.id === body.toggle);
+        door.open = !door.open;
+      }
+      if (body.add) m.walls.push({ ...body.add, id: newTokenId(), open: false, source: 'dm' });
+    }, { by: request.user.id, reason: body.toggle ? 'door' : 'walls' });
+    return maps.view(saved, a);
+  });
+
+  /** Draft the walls and doors with the AI (DM), in the background. Replaces the AI's earlier draft; walls the DM drew stay. */
+  app.post('/campaigns/:cid/maps/:mid/walls/draft', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    if (map.wall_draft.status === 'pending') throw new BadRequestError('The AI is already drafting walls for this map.');
+    mapAiAllowed(request.user.id);
+    draftWallsInBackground(a.cid, map, request.user.id);
+    return maps.view(maps.get(a.cid, map.id), a);
   });
 
   /** Read the map with the AI again (DM). Its grid, scale and description are replaced. */
@@ -1239,6 +1312,11 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     }
     checkTokenOwner(a.cid, { ...token, ...body });
     linkRecord(a.cid, body);
+    // Players can't walk through walls or closed doors (the DM can put any token anywhere).
+    if (a.role !== 'dm' && (body.x !== undefined || body.y !== undefined)) {
+      const to = snapToken(map, token, body.x ?? token.x, body.y ?? token.y);
+      if (wallBetween(map, token, to)) throw new BadRequestError("There's a wall in the way.");
+    }
     const saved = maps.change(a.cid, map.id, (m) => {
       const t = m.tokens.find((x) => x.id === token.id);
       if (!t) return;

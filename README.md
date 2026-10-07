@@ -91,7 +91,7 @@ The DM adds **tokens** for player characters (tied to a player), NPCs and enemie
 
 For running a fight, the DM has:
 
-- **Fog**: turn on fog of war and drag rectangles to reveal or cover parts of the map. Players' copy of the image is blacked out on the server, and tokens under the fog are hidden from them.
+- **Fog & walls**: turn on fog of war and drag rectangles to reveal or cover parts of the map (turning fog on starts in Reveal, since everything begins covered). Draw walls and doors (or let the AI draft them from the picture, then correct them) and tick **Line of sight**: each player then also sees whatever their own token has a clear line to, and places they've seen before stay dimmed. Click a door in Door mode to open or close it. Players can't move their token through walls or closed doors. Players' copy of the image is blacked out on the server, and tokens they can't see are hidden from them.
 - **Hit points and conditions** on each token (type `-7`, `+5` or `12` in the selection bar). Players see enemies' and NPCs' health only as unhurt, hurt, bloodied or down.
 - **Hidden** tokens that players don't see at all.
 - **Stat block (AI)**: the AI fills in an enemy's 5e stat block, hit points and size. Only the DM sees it.
@@ -205,8 +205,10 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET / POST | `/campaigns/:cid/maps` | Maps you can see `{can_edit, maps}` (players: only shown maps, without the AI's description) / import one (DM) `{filename, data (base64), name?, page?}` (an image, or a PDF and the page to use, default 1); the AI reads it in the background. 429 past `MAP_AI_PER_HOUR` AI calls |
 | GET | `/campaigns/:cid/maps/events` | Live changes (SSE): `map` (the map as you may see it), `gone` `{id}` |
 | GET / PATCH / DELETE | `/campaigns/:cid/maps/:mid` | One map / change it (DM) `{name?, shown?, grid?: {size, x, y} \| null, scale?: {distance, unit, per: square \| width} \| null}` / remove it (DM; kept in the archive) |
-| GET | `/campaigns/:cid/maps/:mid/image` | The image as imported (players: with the fog blacked out) |
-| PATCH | `/campaigns/:cid/maps/:mid/fog` | Fog of war (DM) `{enabled?, add?: {op: reveal \| cover, x, y, w, h}, undo?, reset?: reveal \| cover}` |
+| GET | `/campaigns/:cid/maps/:mid/image` | The image as imported (players: blacked out where they can't see, dimmed where they've seen before) |
+| PATCH | `/campaigns/:cid/maps/:mid/fog` | Fog of war (DM) `{enabled?, sight?, add?: {op: reveal \| cover, x, y, w, h}, undo?, reset?: reveal \| cover, forget?}` (`sight`: line of sight; `forget`: players lose the dim view of places they saw) |
+| PATCH | `/campaigns/:cid/maps/:mid/walls` | Walls and doors (DM) `{add?: {x1, y1, x2, y2, door?}, remove?: id, toggle?: id, clear?: ai \| all}` (`toggle` opens or closes a door) |
+| POST | `/campaigns/:cid/maps/:mid/walls/draft` | The AI drafts walls and doors from the picture, in the background (DM). Replaces its earlier draft; the DM's own walls stay |
 | GET | `/campaigns/:cid/maps/records` | The campaign's records, people first, for linking a token (DM) |
 | GET | `/campaigns/:cid/maps/records/:rid` | One record (DM); `?title=` finds it if its id changed |
 | POST | `/campaigns/:cid/maps/:mid/read` | Read the map with the AI again (DM) |
