@@ -393,6 +393,7 @@ async function pinRequest(method, path, body) {
 async function dropPin(at) {
   state.pinMode = false;
   renderPinTool();
+  render();
   const res = await pinRequest('POST', '', { x: at.x, y: at.y });
   if (res) {
     selectPin(res.pin.id);
@@ -445,7 +446,7 @@ function pinControls(pin) {
   label.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') label.blur();
   });
-  const color = h('input', { type: 'color', value: pin.color, 'aria-label': 'Pin colour' });
+  const color = h('input', { type: 'color', value: pin.color, 'aria-label': 'Pin colour', class: 'map-pin-color' });
   color.addEventListener('change', () => pinRequest('PATCH', `/${pin.id}`, { color: color.value }));
   return [
     h('span', { class: 'swatch', style: `background:${pin.color}` }),
@@ -552,7 +553,7 @@ function renderSelection() {
 
 function select(id) {
   state.selected = id;
-  if (id) state.selectedPin = null;
+  state.selectedPin = null;
   renderPins();
   renderTokens();
   renderSelection();
@@ -878,7 +879,8 @@ async function tokenDialog(token = null) {
     const r = records.find((x) => String(x.id) === record.value);
     if (!r) return;
     if (!token || !name.value.trim()) name.value = r.title.slice(0, 80);
-    if (!token && kind.value === 'pc') kind.value = 'npc';
+    // Someone from the records is an NPC, unless the archivist files them as a monster or a foe.
+    if (!token) kind.value = /monster|creature|enem|villain|beast|foe/i.test(r.kind) ? 'enemy' : 'npc';
     sync();
   });
   const lookUp = h('input', { type: 'checkbox', checked: true });
