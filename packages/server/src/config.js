@@ -54,6 +54,8 @@ export const config = {
       // Character sheets: reading an uploaded sheet, and tidying a spell from a book.
       import: { model: env.MODEL_IMPORT || DEFAULT_MODEL, effort: env.EFFORT_IMPORT || 'medium' },
       spells: { model: env.MODEL_SPELLS || DEFAULT_MODEL, effort: env.EFFORT_SPELLS || 'low' },
+      // Maps: reading an imported map (kind, grid, scale).
+      maps: { model: env.MODEL_MAPS || DEFAULT_MODEL, effort: env.EFFORT_MAPS || 'medium' },
     },
     // API provider only: re-run refused requests on Anthropic's recommended fallback model.
     fallbacks: env.LLM_FALLBACKS !== 'off',
@@ -109,6 +111,11 @@ export const config = {
   sheets: {
     // AI calls (sheet uploads, spell lookups outside the SRD) per player per hour.
     aiPerHour: num(env.SHEET_AI_PER_HOUR, 60),
+  },
+
+  maps: {
+    // AI reads of imported maps per DM per hour.
+    aiPerHour: num(env.MAP_AI_PER_HOUR, 20),
   },
 
   // Applies to the API provider only (Claude Code runs on the subscription).

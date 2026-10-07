@@ -1,6 +1,7 @@
 # DNDApp — Project Spec
 
-> Status: v0.10 (2026-10-07). Q&A can look rules up in the group's own books (§5.3); 3D dice rolled by the server (§6.5).
+> Status: v0.11 (2026-10-07). Maps: imported by the DM, read by the AI, tokens moved live (§6.6).
+> Previously v0.10 (2026-10-07). Q&A can look rules up in the group's own books (§5.3); 3D dice rolled by the server (§6.5).
 > Previously v0.9 (2026-10-06). Character sheets added (§6.4), with five layouts.
 > Previously v0.8 (2026-10-04). Server built and tested end to end with real AI calls, including the archivist and privacy. Web page served by the server: name + password logins (with admin-forced password changes), multiple campaigns, a player view (ask, notes) and an admin screen (accounts, campaigns, roles, session uploads with speaker linking). No DM screens yet.
 > This is the source of truth for scope and design. Update it when decisions change. For the history of changes and where work left off, see [HANDOFF.md](HANDOFF.md).
@@ -134,6 +135,7 @@ All AI calls go through `src/llm/` (operations: `structured`, `text`, `agent`). 
 | Q&A | Claude Opus 5.5 | medium | 12 per question |
 | Sheet upload (`import`) | Claude Opus 5.5 | medium | none (one structured call, file attached) |
 | Spell from a book or memory (`spells`) | Claude Opus 5.5 | low | none (one structured call) |
+| Reading an imported map (`maps`) | Claude Opus 5.5 | medium | none (one structured call, image attached) |
 
 `structured()` takes optional attachments (images, PDFs); the Claude Code provider sends them as a streamed user message.
 
@@ -285,6 +287,7 @@ The archivist's rules: openly happened → attendees (everyone if all attended);
 - [x] Usage and timing stats.
 - [x] Character sheets: automatic values with player overrides, upload, spells with lookup (§6.4).
 - [x] Dice: rolled by the server, shown as 3D dice landing on those numbers; click-to-roll from the sheet (§6.5).
+- [x] Maps: the DM imports any map, the AI reads its grid and scale, tokens for characters, enemies and NPCs, players move their own, live for everyone (§6.6).
 
 ### 6.2 Next
 
@@ -322,6 +325,19 @@ Owner's requirement (2026-10-07): an animated dice roller like D&D Beyond's, as 
 - **Dice styles and effects** (owner's request, 2026-10-07: "more dice themes, special effects, fancy stuff"): 24 styles in the tray (`STYLES` in `dice.js`: "Match the page" plus colour/texture sets, most adapted from the library's own; textures served from `/vendor/dice/textures/` and fetched only for the style in use). All use the library's plain or matte materials: its metal and glass need a reflection map the library switches off, so they render nearly black. `dice-fx.js` draws on a canvas over the page: each style's trail behind every moving die (positions projected from the 3D scene each frame), a natural 20 (golden flash, rings, stars and confetti at the die, a banner, a shine on the result), a natural 1 (red flash closing in, smoke, a banner, the page shakes) and maxed damage (2+ dice, no d20, all on their highest face). Chimes are synthesised with Web Audio. "Try it" and picking a style throw a preview (rolled in the page, shown only, never recorded). Effects can be switched off; they're always off with reduced motion.
 - **Page** (`web/public/dice.js`): the tray (dice buttons and a notation box, Normal / Advantage / Disadvantage for the next d20, dice style, 3D / effects / sound switches kept per browser, this session's rolls), the result card (total, every die with dropped ones struck through, natural 20 / natural 1, and a damage roll offered after an attack: doubled dice on a natural 20). On the sheet, clicking a save, skill, ability name, initiative or spell attack rolls a d20 plus that value; each attack has a roll button; death saves have one. Shift-click: advantage; Alt-click: disadvantage.
 - **Later (owner's call):** sharing rolls with the party or the DM live, DM-only rolls, and whether rolls go into the archive for the archivist. These need a live channel per campaign and decisions that are part of the DM role.
+
+### 6.6 Maps
+
+Owner's requirements (2026-10-07): no premade maps. The DM imports their own map (a battle map, a town, a region, anything); the map itself is just the terrain. The AI reads it and turns it into something interactive. The DM then adds tokens by hand for characters, enemies and NPCs. **Players move their own token; the DM can move any.** Everyone sees moves live.
+
+- **Import** (DM, Map tab): a PNG, JPEG or WebP image (up to the upload limit). The image is archived exactly as uploaded (`maps/<id>/image.<ext>`); the page shows that file. The map starts hidden from players.
+- **Reading (AI, in the background after import, or "Read again"):** the server makes a smaller JPEG copy (2000 px on the long side) and asks the AI (`maps` task) what kind of map it is, a name, a short description of the terrain for the DM, whether it has a grid (and roughly how many squares across and down), and its scale (from a scale bar or labels, e.g. "1 square = 5 ft" or "the map is 30 miles across"). Where the AI sees a grid, the server measures it exactly from the full image's pixels (`detectGrid`: edge strength per column and row, the repeat distance near the AI's estimate, then the offset), because the AI's counts are only approximate. A grid with no scale gets 5 ft per square. The DM can correct the grid (square size and offset, shown on the map while editing) and the scale. The map is usable while it's being read; a read interrupted by a restart is marked failed and can be run again.
+- **Tokens:** the DM adds them with a kind (player character, NPC, enemy), a name, a size (Tiny to Gargantuan: ½, 1, 2, 3, 4 squares) and a colour. A player character token is tied to a player in the campaign (named after their character); that player can move it. On a grid, tokens snap to squares; on a map without one they're placed freely, sized relative to the map. While dragging, the page shows the distance moved (5e counting on a grid: every square, diagonals included, is one square; straight-line distance otherwise).
+- **Who can do what (server-enforced):** only the DM imports, renames, shows/hides, changes the grid or scale, re-reads, removes maps, and adds, edits or removes tokens. A player can only move a token tied to them, and only on a map they can see. Players see a map only when the DM has shown it, and never see the AI's description or reading notes (they could give away something the DM hasn't revealed). The admin login acts as DM in the API, as elsewhere.
+- **Live:** `GET /campaigns/:cid/maps/events` (SSE) sends each change to everyone with the map open, filtered per viewer (a map being hidden is sent as `gone` to players).
+- **Stored like sheets:** each map is one JSON document (`maps` table, schema v7) with a version. Every change appends only what changed to `maps/<id>/changes.jsonl` in the archive (the first line is the whole map), so restore replays it. Removing a map only marks it removed; nothing in the archive is deleted.
+- Shared geometry (snapping, distances, sizes) is in `shared/src/map.js`, served to the page at `/shared/map.js`.
+- **Later:** importing a page from a PDF; fog of war and walls; enemy HP and conditions on tokens; tokens hidden from players; filling an enemy's stat block with the AI; picking NPCs from the archivist's records; a ruler; letting the archivist know what happened on a map.
 
 ## 7. Security & cost controls
 

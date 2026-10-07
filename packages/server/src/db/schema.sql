@@ -104,6 +104,19 @@ CREATE TABLE IF NOT EXISTS character_sheets (
   PRIMARY KEY (campaign_id, user_id)
 );
 
+-- Maps the DM imported (image + grid, scale, tokens), one JSON document each.
+-- Seen by players only once shown. The archive keeps the image as uploaded and
+-- every change (maps/<id>/changes.jsonl). Schema v7.
+CREATE TABLE IF NOT EXISTS maps (
+  id           TEXT PRIMARY KEY,  -- random, also the archive folder name
+  campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  data         TEXT NOT NULL,     -- JSON; see packages/shared/src/map.js
+  version      INTEGER NOT NULL,  -- goes up by one with each change
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS maps_campaign ON maps(campaign_id);
+
 -- ---------- DERIVED ----------
 
 -- Who was at each session (from the speaker map, player notes, and the archivist).
