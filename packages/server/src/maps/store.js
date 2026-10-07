@@ -78,14 +78,17 @@ export function createMaps({ db, archive, store }) {
 
     /**
      * A new map from an image. The image is archived first, then the map.
-     * @param {{ name: string, named?: boolean, buf: Buffer, ext: 'png'|'jpg'|'webp', type: string, width: number, height: number, by: number }} input
+     * A page of a PDF comes as the rendered image plus `pdf: { buf, page }`; the PDF is archived too.
+     * @param {{ name: string, named?: boolean, buf: Buffer, ext: 'png'|'jpg'|'webp', type: string, width: number, height: number, pdf?: { buf: Buffer, page: number }, by: number }} input
      */
-    create(campaignId, { name, named = false, buf, ext, type, width, height, by }) {
+    create(campaignId, { name, named = false, buf, ext, type, width, height, pdf = null, by }) {
       const c = store.getCampaign(campaignId);
       const id = newMapId();
       const file = `image.${ext}`;
+      if (pdf) archive.saveMapImage(c.slug, id, 'source.pdf', pdf.buf);
       archive.saveMapImage(c.slug, id, file, buf);
-      const doc = normalizeMap({ name, named, image: { file, type, width, height }, shown: false, reading: { status: 'pending' } });
+      const source = pdf ? { file: 'source.pdf', page: pdf.page } : null;
+      const doc = normalizeMap({ name, named, image: { file, type, width, height }, source, shown: false, reading: { status: 'pending' } });
       return write(campaignId, id, null, doc, { by, reason: 'imported', created: true });
     },
 
@@ -123,6 +126,7 @@ export function createMaps({ db, archive, store }) {
       return {
         ...out,
         description: '',
+        source: null,
         reading: { status: map.reading.status, error: '', notes: '' },
         tokens: map.tokens
           .filter((t) => t.user_id === userId || (!t.hidden && !isFogged(map, t.x, t.y)))

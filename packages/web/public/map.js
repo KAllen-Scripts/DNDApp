@@ -552,17 +552,48 @@ async function tokenUp(e) {
 // ---------- the DM's tools ----------
 
 async function importMap(file) {
-  if (file.size > 35 * 1024 * 1024) return status('That image is too big (35 MB at most).', true);
-  status('Uploading…');
+  if (file.size > 35 * 1024 * 1024) return status('That file is too big (35 MB at most).', true);
+  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  const page = isPdf ? await askPage(file.name) : null;
+  if (isPdf && !page) return;
+  status(isPdf ? `Uploading page ${page}…` : 'Uploading…');
   const data = await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).split(',')[1]);
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
-  const map = await api('POST', base(), { filename: file.name, data });
+  const map = await api('POST', base(), { filename: file.name, data, ...(page && { page }) });
   onMap(map);
   await show(map);
+}
+
+/** Which page of a PDF has the map (1-based), or null if the DM cancels. */
+function askPage(filename) {
+  const dialog = $('#map-dialog');
+  const page = h('input', { type: 'number', min: '1', step: '1', value: '1', required: true });
+  return new Promise((resolve) => {
+    let chosen = null;
+    dialog.replaceChildren(
+      h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => {
+        e.preventDefault();
+        chosen = Math.max(1, Math.round(Number(page.value) || 1));
+        dialog.close();
+      } },
+        h('h2', {}, 'Which page is the map on?'),
+        h('p', { class: 'muted small' }, `${filename}: the page is turned into the map's picture. The PDF is kept with it.`),
+        field('Page', page),
+        h('div', { class: 'map-dialog-actions' },
+          h('span', { class: 'spacer' }),
+          h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel'),
+          h('button', { class: 'primary' }, 'Import'),
+        ),
+      ),
+    );
+    dialog.onclose = () => resolve(chosen);
+    dialog.showModal();
+    page.select();
+  });
 }
 
 const field = (label, input) => h('label', { class: 'map-field' }, h('span', {}, label), input);

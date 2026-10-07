@@ -157,6 +157,8 @@ export function normalizeMap(input = {}) {
       notes: longStr(m.reading?.notes, 2000),
     },
     fog: normalizeFog(m.fog, image),
+    // Where the image came from, when it was a page of a PDF (kept in the archive too).
+    source: m.source?.file === 'source.pdf' ? { file: 'source.pdf', page: Math.max(1, Math.round(num(m.source.page, { min: 1, max: 100_000, fallback: 1 }))) } : null,
     tokens: [],
   };
   // A scale per square means nothing without a grid.

@@ -26,10 +26,10 @@ export async function inspectImage(buf) {
   try {
     meta = await sharp(buf).metadata();
   } catch {
-    throw new BadRequestError("That file isn't an image that can be read. Import a PNG, JPEG or WebP.");
+    throw new BadRequestError("That file isn't an image that can be read. Import a PNG, JPEG, WebP or PDF.");
   }
   const format = FORMATS[meta.format];
-  if (!format) throw new BadRequestError('Import the map as a PNG, JPEG or WebP image.');
+  if (!format) throw new BadRequestError('Import the map as a PNG, JPEG or WebP image, or a PDF.');
   const turned = (meta.orientation ?? 1) >= 5;
   return { ...format, width: turned ? meta.height : meta.width, height: turned ? meta.width : meta.height };
 }

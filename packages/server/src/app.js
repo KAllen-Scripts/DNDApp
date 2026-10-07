@@ -20,6 +20,7 @@ import { SHEET_FORMAT } from '@dndapp/shared/sheet.js';
 import { parseRoll, rollDice, ROLL_MODES } from '@dndapp/shared/dice.js';
 import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, snapToken } from '@dndapp/shared/map.js';
 import { inspectImage } from './maps/read.js';
+import { isPdf, renderPdfPage } from './maps/pdf.js';
 import { createPlayerImages } from './maps/image.js';
 import { newTokenId, isMapId } from './maps/store.js';
 
@@ -786,15 +787,25 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
    */
   app.post('/campaigns/:cid/maps', async (request, reply) => {
     const a = access(request, { dm: true });
-    const { filename, data, name } = z
-      .object({ filename: z.string().max(200).default('map'), data: z.string().min(1), name: z.string().trim().max(100).optional() })
+    const { filename, data, name, page } = z
+      .object({ filename: z.string().max(200).default('map'), data: z.string().min(1), name: z.string().trim().max(100).optional(), page: z.number().int().positive().optional() })
       .parse(request.body);
-    const buf = Buffer.from(data, 'base64');
+    let buf = Buffer.from(data, 'base64');
     if (!buf.length) throw new BadRequestError('The file is empty.');
+    // A PDF: draw the page asked for (default the first) and use that as the image.
+    let pdf = null;
+    let pages = 1;
+    if (isPdf(buf)) {
+      const rendered = await renderPdfPage(buf, page ?? 1);
+      pdf = { buf, page: page ?? 1 };
+      pages = rendered.pages;
+      buf = rendered.png;
+    }
     const image = await inspectImage(buf);
     mapAiAllowed(request.user.id);
-    const fromFile = filename.replace(/\.[^.]*$/, '').replace(/[_-]+/g, ' ').trim();
-    const map = maps.create(a.cid, { name: name || fromFile || 'Map', named: !!name, buf, ...image, by: request.user.id });
+    let fromFile = filename.replace(/\.[^.]*$/, '').replace(/[_-]+/g, ' ').trim();
+    if (pdf && pages > 1) fromFile = `${fromFile || 'Map'}, page ${pdf.page}`;
+    const map = maps.create(a.cid, { name: name || fromFile || 'Map', named: !!name, buf, ...image, pdf, by: request.user.id });
     readMapInBackground(a.cid, map, request.user.id);
     reply.status(201);
     return maps.view(maps.get(a.cid, map.id), a);

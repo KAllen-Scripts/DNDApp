@@ -393,3 +393,59 @@ test("NPCs from the campaign's records: the DM picks one; players only see the n
     await t.cleanup();
   }
 });
+
+/** A small PDF whose pages each show one JPEG filling the page (sizes in points). */
+async function pdfOf(pages) {
+  const objs = [];
+  const add = (o) => objs.push(o);
+  add('<< /Type /Catalog /Pages 2 0 R >>');
+  add(null); // the page list, filled in below
+  const kids = [];
+  for (const { w, h, color } of pages) {
+    const jpg = await sharp({ create: { width: 40, height: 30, channels: 3, background: color } }).jpeg().toBuffer();
+    add({ dict: `<< /Type /XObject /Subtype /Image /Width 40 /Height 30 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>`, stream: jpg });
+    const img = objs.length;
+    const content = Buffer.from(`q ${w} 0 0 ${h} 0 0 cm /Im1 Do Q`);
+    add({ dict: `<< /Length ${content.length} >>`, stream: content });
+    add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w} ${h}] /Resources << /XObject << /Im1 ${img} 0 R >> >> /Contents ${objs.length} 0 R >>`);
+    kids.push(objs.length);
+  }
+  objs[1] = `<< /Type /Pages /Kids [${kids.map((k) => `${k} 0 R`).join(' ')}] /Count ${kids.length} >>`;
+  const parts = [Buffer.from('%PDF-1.4\n')];
+  let len = parts[0].length;
+  const offsets = objs.map((o, i) => {
+    const at = len;
+    const b = typeof o === 'string'
+      ? Buffer.from(`${i + 1} 0 obj\n${o}\nendobj\n`)
+      : Buffer.concat([Buffer.from(`${i + 1} 0 obj\n${o.dict}\nstream\n`), o.stream, Buffer.from('\nendstream\nendobj\n')]);
+    parts.push(b);
+    len += b.length;
+    return at;
+  });
+  parts.push(Buffer.from(`xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${len}\n%%EOF\n`));
+  return Buffer.concat(parts);
+}
+
+test('a page of a PDF becomes a map; the PDF is archived with it', async () => {
+  const t = await setup({ llm: mapLLM() });
+  try {
+    const pdf = await pdfOf([{ w: 612, h: 792, color: '#ffffff' }, { w: 300, h: 200, color: '#33aa77' }]);
+    const base = `/campaigns/${t.campaign.id}/maps`;
+    const bad = await t.request('POST', base, { body: { filename: 'pack.pdf', data: pdf.toString('base64'), page: 3 } });
+    assert.equal(bad.statusCode, 400, bad.body);
+    assert.match(bad.json().error, /2 pages/);
+
+    const map = await importMap(t, pdf, { filename: 'Lost_Mine_maps.pdf', page: 2 });
+    assert.deepEqual(map.image, { file: 'image.png', type: 'image/png', width: 1800, height: 1200 }); // a small page, drawn at most 6× (432 dpi)
+    assert.deepEqual(map.source, { file: 'source.pdf', page: 2 });
+    assert.equal(map.name, 'Forest clearing'); // the AI's name replaces "Lost Mine maps, page 2"
+    const dir = path.join(t.paths.archive, t.campaign.slug, 'maps', map.id);
+    assert.deepEqual(fs.readFileSync(path.join(dir, 'source.pdf')), pdf);
+    const { channels } = await sharp(fs.readFileSync(path.join(dir, 'image.png'))).stats();
+    assert.deepEqual(channels.slice(0, 3).map((c) => Math.round(c.mean / 10)), [5, 17, 12]); // the page's picture, drawn
+
+    assert.equal((await t.request('POST', base, { body: { filename: 'notes.pdf', data: Buffer.from('%PDF-1.4 nonsense').toString('base64') } })).statusCode, 400);
+  } finally {
+    await t.cleanup();
+  }
+});
