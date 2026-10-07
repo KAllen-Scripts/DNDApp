@@ -34,6 +34,16 @@ export function replayMap(entries) {
   return { map: normalizeMap(doc), version, saved_at, created_at: entries[0]?.saved_at ?? saved_at };
 }
 
+/** Can a player see a door? Its middle lies on the edge of their sight, so look just either side of it. */
+function doorSeen(map, polygons, w) {
+  const len = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) || 1;
+  const nx = ((w.y1 - w.y2) / len) * 2;
+  const ny = ((w.x2 - w.x1) / len) * 2;
+  const mx = (w.x1 + w.x2) / 2;
+  const my = (w.y1 + w.y2) / 2;
+  return canSee(map, polygons, mx + nx, my + ny) || canSee(map, polygons, mx - nx, my - ny);
+}
+
 export function createMaps({ db, archive, store, pictures = null }) {
   const events = new EventEmitter();
   events.setMaxListeners(0);
@@ -114,7 +124,8 @@ export function createMaps({ db, archive, store, pictures = null }) {
 
     /**
      * What this viewer may see of a map, or null if they may not see it at all.
-     * Players: only shown maps; no AI description or notes; no walls; no
+     * Players: only shown maps; no AI description or notes; no walls, only
+     * the doors they can see (`doors`, to open and close them); no
      * hidden tokens, and none they can't see (under the fog, or out of their
      * token's sight) except their own; NPCs' and enemies' hit points only as
      * how hurt they look; no stat blocks or links to the DM's records. Their
@@ -137,8 +148,11 @@ export function createMaps({ db, archive, store, pictures = null }) {
         source: null,
         reading: { status: map.reading.status, error: '', notes: '' },
         walls: [],
+        doors: map.walls
+          .filter((w) => w.door && doorSeen(map, seen.polygons, w))
+          .map(({ id, x1, y1, x2, y2, open, locked }) => ({ id, x1, y1, x2, y2, open, locked })),
         wall_draft: { status: '', error: '', notes: '' },
-        fog: { enabled: map.fog.enabled, sight: map.fog.sight, shapes: [], mask: seen.mask },
+        fog: { ...map.fog, shapes: [], mask: seen.mask },
         tokens: out.tokens
           .filter((t) => t.user_id === userId || (!t.hidden && canSee(map, seen.polygons, t.x, t.y)))
           .map((t) => (t.kind === 'pc' ? { ...t, stats: null, record: null } : { ...t, hp: null, health: healthOf(t.hp), stats: null, record: null })),
