@@ -202,6 +202,7 @@ export function createAuth({ db, archive, loginDays = 30, maxFailedLogins = 10 }
         ['speaker-map links', 'SELECT 1 FROM speakers WHERE user_id = ?'],
         ['corrections', 'SELECT 1 FROM corrections WHERE created_by = ?'],
         ['character sheets', 'SELECT 1 FROM character_sheets WHERE user_id = ?'],
+        ['character pictures', 'SELECT 1 FROM character_pictures WHERE user_id = ?'],
       ].filter(([, sql]) => db.prepare(sql).get(userId)).map(([what]) => what);
       if (used.length) {
         throw new AuthError(`This account has history (${used.join(', ')}), so it can't be deleted. Block it instead.`, 409);

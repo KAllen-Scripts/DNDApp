@@ -172,7 +172,7 @@ async function enterCampaign(campaign) {
   await Promise.all([
     loadConversations(),
     loadNotes(),
-    loadSheet({ campaignId: campaign.id, guarded }),
+    loadSheet({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
     loadMaps({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
   ]);
 }

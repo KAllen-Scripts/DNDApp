@@ -41,6 +41,7 @@ const state = {
   pinMode: false, // the next click on the map drops a pin
   selectedPin: null, // pin id
   pinDrag: null, // a pin being moved: { id, pointer, x, y, moved, sx, sy }
+  tokenPictures: new Map(), // `${user id}:${picture key}` -> URL of a player's token picture, or null while loading
 };
 
 const base = () => `/campaigns/${state.campaignId}/maps`;
@@ -66,6 +67,8 @@ export async function loadMaps({ campaignId, userId, guarded }) {
   Object.assign(state, { campaignId, userId, guarded, current: null, selected: null, fitted: false });
   for (const { url } of state.images.values()) URL.revokeObjectURL(url);
   state.images.clear();
+  for (const url of state.tokenPictures.values()) if (url) URL.revokeObjectURL(url);
+  state.tokenPictures.clear();
   const { can_edit, maps } = await api('GET', base());
   state.canEdit = can_edit;
   state.maps = maps;
@@ -299,6 +302,26 @@ async function fog(body) {
 const initials = (name) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?';
 
+/**
+ * The URL of a player character's token picture, or null until it's loaded
+ * (the tokens are drawn again then). Each picture is fetched once.
+ */
+function tokenPicture(t) {
+  if (!t.picture || t.user_id == null) return null;
+  const key = `${t.user_id}:${t.picture}`;
+  if (state.tokenPictures.has(key)) return state.tokenPictures.get(key);
+  state.tokenPictures.set(key, null);
+  const cid = state.campaignId;
+  fileUrl(`/campaigns/${cid}/members/${t.user_id}/token?v=${encodeURIComponent(t.picture)}`)
+    .then((url) => {
+      if (state.campaignId !== cid) return URL.revokeObjectURL(url);
+      state.tokenPictures.set(key, url);
+      if (state.current) renderTokens();
+    })
+    .catch(() => { /* drawn with initials instead */ });
+  return null;
+}
+
 const canMove = (token) => state.canEdit || (token.user_id != null && token.user_id === state.userId);
 
 function renderTokens() {
@@ -311,15 +334,16 @@ function renderTokens() {
       const x = dragging ? state.drag.x : t.x;
       const y = dragging ? state.drag.y : t.y;
       const health = t.hp ? healthOf(t.hp) : t.health;
+      const picture = tokenPicture(t);
       const el = h('div', {
-        class: `token token-${t.kind}${canMove(t) ? ' movable' : ''}${t.user_id === state.userId ? ' mine' : ''}${state.selected === t.id ? ' selected' : ''}${dragging ? ' dragging' : ''}${t.hidden ? ' hidden-token' : ''}${health === 'down' ? ' down' : ''}`,
+        class: `token token-${t.kind}${picture ? ' has-picture' : ''}${canMove(t) ? ' movable' : ''}${t.user_id === state.userId ? ' mine' : ''}${state.selected === t.id ? ' selected' : ''}${dragging ? ' dragging' : ''}${t.hidden ? ' hidden-token' : ''}${health === 'down' ? ' down' : ''}`,
         title: [t.name, TOKEN_KIND_NAMES[t.kind], hpText(t), ...t.conditions].filter(Boolean).join(' · '),
         role: 'button',
         tabindex: '0',
         'aria-label': t.name,
         'data-id': t.id,
       },
-      h('span', { class: 'token-initials' }, initials(t.name)),
+      picture ? h('img', { class: 'token-picture', src: picture, alt: '', draggable: 'false' }) : h('span', { class: 'token-initials' }, initials(t.name)),
       h('span', { class: 'token-name' }, t.name),
       health ? h('span', { class: `token-hp ${health}` }, h('span', { style: `width:${hpFraction(t, health) * 100}%` })) : null,
       t.conditions.length ? h('span', { class: 'token-conditions', title: t.conditions.join(', ') }, String(t.conditions.length)) : null);

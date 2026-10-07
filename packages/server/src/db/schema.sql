@@ -127,6 +127,15 @@ CREATE TABLE IF NOT EXISTS map_pins (
   PRIMARY KEY (map_id, user_id)
 );
 
+-- A player's token and full picture of their character (files in the archive under characters/<user id>/).
+CREATE TABLE IF NOT EXISTS character_pictures (
+  campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL REFERENCES users(id),
+  data        TEXT NOT NULL,      -- JSON { token, picture }; see normalizePictures in src/characters/pictures.js
+  updated_at  TEXT NOT NULL,
+  PRIMARY KEY (campaign_id, user_id)
+);
+
 -- ---------- DERIVED ----------
 
 -- Who was at each session (from the speaker map, player notes, and the archivist).

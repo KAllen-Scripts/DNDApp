@@ -9,7 +9,7 @@
  * never changed by the rules. Every change is saved to the server shortly
  * after typing stops.
  */
-import { api, h, storage } from './api.js';
+import { api, fileUrl, h, storage } from './api.js';
 import {
   ABILITIES, ABILITY_NAMES, SKILLS, CLASSES, RACES, BACKGROUNDS, ALIGNMENTS, SCHOOLS,
   computeSheet, coerceDerived, formatBonus, normalizeSheet, normalizeSpell,
@@ -24,6 +24,10 @@ const SOURCE_LABELS = { srd: 'SRD', book: 'Your book', ai: 'AI memory', import: 
 
 const state = {
   campaignId: null,
+  userId: null,
+  pictures: { token: null, picture: null }, // this player's token and full picture: { key, width, height } each
+  pictureUrls: new Map(), // picture key -> URL to show it
+  unusedDescription: '', // the AI's description of the picture, when it didn't replace the player's own text
   guarded: (fn) => fn(),
   sheet: null,
   version: 0,
@@ -46,10 +50,13 @@ const setPath = (obj, path, v) => {
 // ---------- loading and saving ----------
 
 /** Show the sheet for this campaign (called when entering a campaign). */
-export async function loadSheet({ campaignId, guarded }) {
+export async function loadSheet({ campaignId, userId, guarded }) {
   await flush();
-  Object.assign(state, { campaignId, guarded, dirty: false });
-  const { sheet, version } = await api('GET', `${base()}/sheet`);
+  for (const url of state.pictureUrls.values()) URL.revokeObjectURL(url);
+  state.pictureUrls.clear();
+  Object.assign(state, { campaignId, userId, guarded, dirty: false, unusedDescription: '' });
+  const [{ sheet, version }, pictures] = await Promise.all([api('GET', `${base()}/sheet`), api('GET', `${base()}/character/pictures`)]);
+  state.pictures = pictures;
   useSheet(sheet, version);
 }
 
@@ -518,6 +525,7 @@ function details() {
   return h('div', { class: 'sh-details' },
     h('section', { class: 'sh-box looks' }, ['age', 'height', 'weight', 'eyes', 'skin', 'hair'].map((k) => labelled(cap(k), field(k, { label: cap(k) })))),
     h('div', { class: 'details-grid' },
+      pictures(),
       text('appearance', 'Character appearance', 5, 'd-appearance'),
       text('backstory', 'Character backstory', 12, 'd-backstory'),
       text('allies', 'Allies & organisations', 5, 'd-allies'),
@@ -525,6 +533,157 @@ function details() {
       text('additional_features', 'Additional features & traits', 5, 'd-additional'),
     ),
   );
+}
+
+// Pictures of the character: the token that stands for them on maps (everyone
+// in the campaign sees it there), and a full picture (only theirs) that the
+// AI describes into the Appearance box.
+
+const readBase64 = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+
+/** Show a picture once it's fetched (it needs the login, so an <img> can't fetch it itself). */
+function pictureImg(kind, cls) {
+  const entry = state.pictures[kind];
+  const img = h('img', { class: cls, alt: kind === 'token' ? 'Your token' : 'Your character' });
+  const url = kind === 'token' ? `${base()}/members/${state.userId}/token` : `${base()}/character/picture/image`;
+  const cached = state.pictureUrls.get(entry.key);
+  if (cached) img.src = cached;
+  else {
+    fileUrl(`${url}?v=${encodeURIComponent(entry.key)}`)
+      .then((u) => {
+        state.pictureUrls.set(entry.key, u);
+        img.src = u;
+      })
+      .catch(() => { img.alt = "Couldn't load the picture"; });
+  }
+  return img;
+}
+
+function pictures() {
+  const el = h('section', { class: 'sh-box d-pictures' });
+  const draw = () => {
+    const { token, picture } = state.pictures;
+    const fileInput = (kind) => {
+      const input = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', hidden: true, 'aria-label': kind === 'token' ? 'Token picture' : 'Character picture' });
+      input.addEventListener('change', () => {
+        const file = input.files[0];
+        input.value = '';
+        if (file) uploadPicture(kind, file, draw);
+      });
+      return input;
+    };
+    const tokenInput = fileInput('token');
+    const pictureInput = fileInput('picture');
+    const button = (text, onclick, title) => h('button', { type: 'button', class: 'ghost small', onclick, title }, text);
+    el.replaceChildren(
+      h('h3', {}, 'Pictures'),
+      h('div', { class: 'pictures' },
+        h('figure', { class: 'pic pic-token' },
+          token ? pictureImg('token', 'token-preview') : h('div', { class: 'token-preview no-picture' }, '?'),
+          h('figcaption', {}, lbl('Token'), h('span', { class: 'muted small' }, 'Shows on the map for everyone')),
+          h('div', { class: 'pic-actions' },
+            button(token ? 'Change' : 'Upload token', () => tokenInput.click(), 'A picture for your token on maps (square works best)'),
+            token && button('Remove', () => removePicture('token', draw)),
+          ),
+          tokenInput,
+        ),
+        h('figure', { class: 'pic pic-full' },
+          picture ? pictureImg('picture', 'full-preview') : h('div', { class: 'full-preview no-picture' }, 'No picture'),
+          h('figcaption', {}, lbl('Full picture'), h('span', { class: 'muted small' }, 'Only you see it; the AI describes it for your sheet')),
+          h('div', { class: 'pic-actions' },
+            button(picture ? 'Change' : 'Upload picture', () => pictureInput.click()),
+            picture && button('Describe again', () => describeAgain(draw), 'Have the AI describe this picture again'),
+            picture && button('Remove', () => removePicture('picture', draw)),
+          ),
+          pictureInput,
+        ),
+      ),
+      state.unusedDescription && h('div', { class: 'unused-description' },
+        h('p', { class: 'small' }, h('strong', {}, "The AI's description"), ' (your own Appearance text was kept):'),
+        h('p', { class: 'small' }, state.unusedDescription),
+        h('div', { class: 'pic-actions' },
+          button('Use it', () => {
+            state.sheet.appearance = state.unusedDescription;
+            state.unusedDescription = '';
+            render();
+            changed();
+          }),
+          button('Dismiss', () => { state.unusedDescription = ''; draw(); }),
+        ),
+      ),
+    );
+  };
+  draw();
+  return el;
+}
+
+/** Ask before the AI replaces Appearance text the player already has. */
+const replaceAppearance = () =>
+  !state.sheet.appearance.trim() || confirm("Replace your Appearance text with the AI's description of this picture?\n\nCancel keeps your text (you'll see the description and can still use it).");
+
+/** The server described the picture and saved the sheet: show that sheet, or the description it didn't use. */
+function described(res) {
+  if (res.sheet) useSheet(res.sheet.sheet, res.sheet.version);
+  state.unusedDescription = !res.applied && res.description?.appearance ? res.description.appearance : '';
+  if (state.unusedDescription) render();
+  const notes = res.description?.notes;
+  if (res.error) status(res.error, true);
+  else if (res.applied) status(`The AI described your picture in Appearance. Change anything it got wrong.${notes ? ` ${notes}` : ''}`);
+  else if (!res.description?.appearance) status(notes || "The AI couldn't describe that picture.", true);
+  else status(`The AI described your picture below; your own Appearance text was kept.${notes ? ` ${notes}` : ''}`);
+}
+
+async function uploadPicture(kind, file, draw) {
+  await flush();
+  const replace = kind === 'picture' ? replaceAppearance() : false;
+  status(kind === 'token' ? `Uploading ${file.name}…` : `Uploading ${file.name}; the AI is describing it… (this can take a minute)`);
+  try {
+    const data = await readBase64(file);
+    const res = await state.guarded(() => api('PUT', `${base()}/character/${kind}`, { filename: file.name, data, replace }));
+    if (!res) return;
+    state.pictures = res.pictures;
+    if (kind === 'token') {
+      status('Your token picture is saved. It shows on any map your token is on.');
+      draw();
+    } else {
+      described(res);
+      draw();
+    }
+  } catch (err) {
+    status(`Couldn't upload that picture: ${err.message}`, true);
+  }
+}
+
+async function describeAgain(draw) {
+  await flush();
+  const replace = replaceAppearance();
+  status('The AI is describing your picture…');
+  try {
+    const res = await state.guarded(() => api('POST', `${base()}/character/picture/describe`, { replace }));
+    if (!res) return;
+    described(res);
+    draw();
+  } catch (err) {
+    status(`Couldn't describe your picture: ${err.message}`, true);
+  }
+}
+
+async function removePicture(kind, draw) {
+  if (!confirm(kind === 'token' ? 'Remove your token picture? Your token goes back to your initials.' : 'Remove your full picture?')) return;
+  try {
+    const res = await state.guarded(() => api('DELETE', `${base()}/character/${kind}`));
+    if (!res) return;
+    state.pictures = res.pictures;
+    draw();
+  } catch (err) {
+    status(`Couldn't remove that picture: ${err.message}`, true);
+  }
 }
 
 // ---------- layouts ----------
@@ -874,12 +1033,7 @@ export function initSheetActions() {
     button.disabled = true;
     status(`Reading ${file.name}… (this can take a minute)`);
     try {
-      const data = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(file);
-      });
+      const data = await readBase64(file);
       const res = await state.guarded(() => api('POST', `${base()}/sheet/import`, { filename: file.name, data, version: state.version }));
       if (!res) return;
       useSheet(res.sheet, res.version);

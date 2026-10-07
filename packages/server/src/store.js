@@ -7,6 +7,7 @@ import { json } from './db/index.js';
 import { replaySheet } from './sheets/store.js';
 import { replayMap } from './maps/store.js';
 import { normalizePins } from '@dndapp/shared/map.js';
+import { normalizePictures } from './characters/pictures.js';
 
 export class NotFoundError extends Error {}
 export class BadRequestError extends Error {}
@@ -250,7 +251,7 @@ export function createStore({ db, archive, config }) {
           }
         }
         for (const entry of archive.readAll()) {
-          const { campaign, sessions, members, speakers, glossary, corrections, playerNotes, sheets = [], maps = [] } = entry;
+          const { campaign, sessions, members, speakers, glossary, corrections, playerNotes, sheets = [], maps = [], characters = [] } = entry;
           if (db.prepare('SELECT 1 FROM campaigns WHERE slug = ?').get(campaign.slug)) continue;
           const cid = Number(
             db
@@ -296,6 +297,11 @@ export function createStore({ db, archive, config }) {
               const last = lines.at(-1);
               if (last) insPins.run(id, user_id, JSON.stringify(normalizePins(last.pins, map.image)), last.saved_at);
             }
+          }
+          const insPictures = db.prepare('INSERT INTO character_pictures (campaign_id, user_id, data, updated_at) VALUES (?, ?, ?, ?)');
+          for (const { user_id, entries } of characters) {
+            const last = entries.at(-1);
+            if (last && userExists.get(user_id)) insPictures.run(cid, user_id, JSON.stringify(normalizePictures(last)), last.saved_at);
           }
           restored.push(campaign.slug);
         }

@@ -170,6 +170,12 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | DELETE | `/campaigns/:cid/conversations/:id` | Delete one of your chats (its questions and answers are erased; it still counts toward the hourly limit) |
 | GET / PUT | `/campaigns/:cid/sheet` | Your character sheet (blank, version 0, if none) / save it `{sheet, version}`. 409 `{error, current}` if it was saved elsewhere since `version`. Campaign members only |
 | POST | `/campaigns/:cid/sheet/import` | Upload a sheet `{filename, data (base64), version?}`: PDF, image, text, or a downloaded sheet. Replies with the saved sheet and the AI's `notes` |
+| GET | `/campaigns/:cid/character/pictures` | Your token and full picture `{token, picture}` (each null or `{key, width, height}`) |
+| PUT / DELETE | `/campaigns/:cid/character/token` | Upload your token picture `{filename?, data (base64)}` (shown on your token on maps) / stop using it |
+| PUT / DELETE | `/campaigns/:cid/character/picture` | Upload a full picture `{filename?, data, describe? (default true), replace?}`: the AI describes it into your sheet's Appearance (only replacing your own text if `replace`). Replies `{pictures, description, applied, sheet}` / stop using it |
+| POST | `/campaigns/:cid/character/picture/describe` | Describe your full picture again `{replace?}` |
+| GET | `/campaigns/:cid/character/picture/image` | Your full picture (only you) |
+| GET | `/campaigns/:cid/members/:uid/token` | A member's token picture, 256 px square (anyone in the campaign) |
 | GET | `/campaigns/:cid/sheet/download` | Your sheet as a file (`{format: "dndapp-sheet", sheet}`) that can be uploaded again |
 | GET | `/campaigns/:cid/spells?q=` | Spell name suggestions (SRD and your books) |
 | GET | `/campaigns/:cid/spells/lookup?name=` | A spell's details: SRD, else your books (tidied by the AI), else the AI's memory. 404 if not found; 429 past `SHEET_AI_PER_HOUR` AI calls |

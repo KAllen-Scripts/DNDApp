@@ -19,6 +19,7 @@ import { createSheetImport } from './sheets/import.js';
 import { createMaps } from './maps/store.js';
 import { createMapReader } from './maps/read.js';
 import { createStatBlocks } from './maps/stats.js';
+import { createPictures, createPictureDescriber } from './characters/pictures.js';
 
 export async function createContext({ config = defaultConfig, paths = defaultPaths, llm, embedder, log } = {}) {
   const db = openDb(paths.db);
@@ -39,7 +40,9 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const spells = createSpells({ books, llm });
   const sheets = createSheets({ db, archive, store });
   const sheetImport = createSheetImport({ llm });
-  const maps = createMaps({ db, archive, store });
+  const pictures = createPictures({ db, archive, store });
+  const pictureDescriber = createPictureDescriber({ llm });
+  const maps = createMaps({ db, archive, store, pictures });
   const mapReader = createMapReader({ llm });
   const statBlocks = createStatBlocks({ llm });
 
@@ -51,5 +54,5 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   }
   maps.failInterrupted();
 
-  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, pipeline, jobs, qa, books, spells, sheets, sheetImport, maps, mapReader, statBlocks, restored };
+  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, pipeline, jobs, qa, books, spells, sheets, sheetImport, maps, mapReader, statBlocks, pictures, pictureDescriber, restored };
 }
