@@ -75,13 +75,14 @@ The **server rolls** (a secure random number). The page then throws 3D dice with
 
 | `DICE_ROLLER` | What you get |
 |---|---|
+| `deluxe` | The fanciest: glossy, metal and see-through dice with reflections, soft shadows, engraved and glowing numbers, sounds, and a pulsing glow on a natural 20, natural 1 or max damage. About 1.7 s. Lowers its own quality on a slow device. |
 | `classic` | The original 3D dice: full physics and shadows. About 3.5 s a roll. |
 | `quick` (default) | The same 3D dice without shadows, tuned to land in about 1.5 s. |
 | `lite` | 3D-looking dice drawn without WebGL or a physics engine. About 1.2 s; smooth on any device. |
 | `flat` | Flat dice that spin in. Under a second. |
 | `none` | Just the result. |
 
-Without WebGL, `classic` and `quick` fall back to `lite`.
+Without WebGL, `deluxe`, `classic` and `quick` fall back to `lite`. The dice libraries are sent compressed (about 2.4 MB down to about 0.4 MB) and start loading when the dice tray opens, so the first roll doesn't wait for them.
 
 ### Maps
 

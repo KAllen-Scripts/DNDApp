@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import zlib from 'node:zlib';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -104,12 +105,24 @@ test('the web page is served without logging in; API routes still need a login',
     assert.match(page.headers['content-type'], /text\/html/);
     assert.equal((await t.app.inject({ method: 'GET', url: '/app.js' })).statusCode, 200);
     // Modules the page imports from packages: sheet rules, markdown + sanitising for answers, dice, map geometry.
-    for (const url of ['/shared/sheet.js', '/shared/dice.js', '/shared/map.js', '/vendor/marked.js', '/vendor/purify.js', '/vendor/dice/dice-box.js']) {
+    for (const url of ['/shared/sheet.js', '/shared/dice.js', '/shared/map.js', '/vendor/marked.js', '/vendor/purify.js', '/vendor/dice/dice-box.js', '/vendor/three/three.module.js', '/vendor/three/three.core.js', '/vendor/cannon-es.js']) {
       const res = await t.app.inject({ method: 'GET', url });
       assert.equal(res.statusCode, 200, url);
       assert.match(res.headers['content-type'], /javascript/);
       assert.match(res.body, /\bexport\b/);
     }
+    // Libraries are sent compressed when the browser can take it, and not again when it already has them.
+    const plain = await t.app.inject({ method: 'GET', url: '/vendor/three/three.core.js' });
+    const br = await t.app.inject({ method: 'GET', url: '/vendor/three/three.core.js', headers: { 'accept-encoding': 'gzip, deflate, br' } });
+    assert.equal(br.headers['content-encoding'], 'br');
+    assert.ok(br.rawPayload.length < plain.rawPayload.length / 4);
+    assert.equal(zlib.brotliDecompressSync(br.rawPayload).toString(), plain.body);
+    const gz = await t.app.inject({ method: 'GET', url: '/vendor/cannon-es.js', headers: { 'accept-encoding': 'gzip' } });
+    assert.equal(gz.headers['content-encoding'], 'gzip');
+    assert.match(zlib.gunzipSync(gz.rawPayload).toString(), /\bexport\b/);
+    const again = await t.app.inject({ method: 'GET', url: '/vendor/three/three.core.js', headers: { 'if-none-match': plain.headers.etag } });
+    assert.equal(again.statusCode, 304);
+    assert.equal(again.rawPayload.length, 0);
     // The 3D dice's sounds come from the same package.
     const sound = await t.app.inject({ method: 'GET', url: '/vendor/dice/sounds/dicehit/dicehit_plastic1.mp3' });
     assert.equal(sound.statusCode, 200);

@@ -127,7 +127,7 @@ test('dice: if the 3D dice can\'t start (no WebGL), the light dice take over and
       page.click('#dice-open');
       page.type('#dice-notation', '1d4');
       page.submit('#dice-panel form');
-      await page.waitFor(() => page.visible('#dice-result'), 5000);
+      await page.waitFor(() => page.visible('#dice-result'));
       assert.equal(page.text('#dice-result .dr-total'), '3');
       assert.match(page.text('#dice-3d-note'), /Quick 3D dice aren't available on this device, so it uses Lite/);
       assert.equal(page.$('#dice-3d').checked, true, 'still animated, by Lite');
@@ -192,7 +192,7 @@ test('dice: the lite and flat rollers land on the server\'s numbers without WebG
       await page.settle();
       assert.ok(page.$('#dice-stage').classList.contains('rolling'), `${roller}: dice on the stage`);
       assert.ok(!page.visible('#dice-result'), `${roller}: the result waits for the dice to land`);
-      await page.waitFor(() => page.visible('#dice-result'), 5000);
+      await page.waitFor(() => page.visible('#dice-result'));
       assert.equal(page.text('#dice-result .dr-total'), '17');
       assert.equal(thrown().length, 0, 'the 3D library was never asked');
     });
@@ -252,4 +252,17 @@ test('dice: every roller\'s canvas sits on top of the others in the stage (a sec
   const rule = /\.dice-stage canvas\s*{([^}]*)}/.exec(css)?.[1] ?? '';
   assert.match(rule, /position:\s*absolute/);
   assert.match(rule, /inset:\s*0/);
+});
+
+test('dice: the Deluxe roller falls back to Lite where WebGL can\'t start, and the result still shows', async () => {
+  fixDice([12]);
+  await withPage({ page: (t) => ({ as: t.sam, storage: { 'dndapp.dice': JSON.stringify({ sound: false, roller: 'deluxe' }) } }) }, async (page) => {
+    page.click('#dice-open');
+    page.type('#dice-notation', '1d20');
+    page.submit('#dice-panel form');
+    await page.waitFor(() => page.visible('#dice-result'), { timeout: 8000 });
+    assert.equal(page.text('#dice-result .dr-total'), '12');
+    await page.waitFor(() => /Deluxe 3D dice aren't available on this device, so it uses Lite/.test(page.text('#dice-3d-note')));
+  });
+  mock.restoreAll();
 });

@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SHAPES, quat, restingRotation, restingSpots, parseForced, faceLabel } from '../public/dice-lite.js';
+import { SHAPES, quat, restingRotation, restingSpots, parseForced, faceLabel, symmetries, relabel, readDie } from '../public/dice-lite.js';
 
 const close = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-6, `${msg}: ${a} vs ${b}`);
 
@@ -54,5 +54,23 @@ test('dice-lite: dice come to rest apart from each other', () => {
     const spots = restingSpots(n, 500, 400, 60);
     assert.equal(spots.length, n);
     for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) assert.ok(Math.hypot(spots[i].x - spots[j].x, spots[i].y - spots[j].y) >= 50, `${n} dice: ${i} and ${j} overlap`);
+  }
+});
+
+test('dice-lite: each die has its full set of turns that leave the shape in place', () => {
+  const expected = { d4: 12, d6: 24, d8: 24, d10: 10, d12: 60, d20: 60, d100: 10 };
+  for (const [shape, n] of Object.entries(expected)) assert.equal(symmetries(shape).length, n, shape);
+});
+
+test('dice-lite: relabelling a landed die makes it show any number asked for (the Deluxe dice land this way)', () => {
+  for (const shape of ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100']) {
+    const max = shape === 'd100' ? 10 : Number(shape.slice(1));
+    for (let k = 0; k < 10; k++) {
+      const q = quat.axisAngle([Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5], Math.random() * 7);
+      for (let v = 1; v <= max; v++) {
+        const value = shape === 'd100' ? v * 10 : v;
+        assert.equal(readDie(shape, quat.mul(q, relabel(shape, q, value))), value, `${shape} ${value}`);
+      }
+    }
   }
 });

@@ -191,6 +191,63 @@ export function restingRotation(shape, value, tilt = 0) {
   return quat.mul(quat.axisAngle([0, 0, 1], spin), align);
 }
 
+/**
+ * The turns that leave a die's shape where it was (60 for a d20, 24 for a d6,
+ * 10 for a d10...). A physics roll lands on whatever face it lands on; turning
+ * the die's numbers by one of these, while the shape stays put, makes the
+ * right number come up without changing how the throw looked.
+ */
+export function symmetries(shape) {
+  const solid = SHAPES[shape];
+  if (solid.symmetries) return solid.symmetries;
+  const f0 = solid.faces[0];
+  const a0 = norm(sub(solid.verts[f0.idx[0]], f0.center));
+  const out = [];
+  for (const f of solid.faces) {
+    for (const j of f.idx) {
+      const q1 = quat.between(f0.normal, f.normal);
+      const a = quat.rotate(q1, a0);
+      const b = norm(sub(solid.verts[j], f.center));
+      const angle = Math.atan2(dot(cross(a, b), f.normal), dot(a, b));
+      const q = quat.mul(quat.axisAngle(f.normal, angle), q1);
+      const keeps = solid.verts.every((v) => solid.verts.some((w) => Math.hypot(...sub(quat.rotate(q, v), w)) < 1e-6));
+      if (keeps) out.push(q);
+    }
+  }
+  return (solid.symmetries = out);
+}
+
+/**
+ * Where a number is on a die, as a direction from its middle: the face for most
+ * dice; on a d4 the corner (a d4 is read at its top corner, the number
+ * printed by that corner on each face).
+ */
+export function numberDirection(shape, value) {
+  const solid = SHAPES[shape];
+  if (shape === 'd4') return norm(solid.verts[value - 1]);
+  return (solid.faces.find((f) => f.value === faceFor(shape, value)) ?? solid.faces[0]).normal;
+}
+
+/** The number a die turned by q shows to the viewer (+z). */
+export function readDie(shape, q) {
+  const solid = SHAPES[shape];
+  if (shape === 'd4') {
+    let best = 0;
+    solid.verts.forEach((v, i) => { if (quat.rotate(q, v)[2] > quat.rotate(q, solid.verts[best])[2]) best = i; });
+    return best + 1;
+  }
+  let best = solid.faces[0];
+  for (const f of solid.faces) if (quat.rotate(q, f.normal)[2] > quat.rotate(q, best.normal)[2]) best = f;
+  return shape === 'd100' ? best.value * 10 : best.value;
+}
+
+/** The turn of a die's numbers (in its own frame) that makes a die resting at q show value instead. */
+export function relabel(shape, q, value) {
+  const landed = numberDirection(shape, readDie(shape, q));
+  const wanted = numberDirection(shape, value);
+  return symmetries(shape).find((s) => Math.hypot(...sub(quat.rotate(s, wanted), landed)) < 1e-6) ?? [1, 0, 0, 0];
+}
+
 /** Where n dice come to rest: a tidy cluster around (cx, cy), spacing apart. */
 export function restingSpots(n, cx, cy, spacing) {
   const cols = Math.ceil(Math.sqrt(n * 1.6));

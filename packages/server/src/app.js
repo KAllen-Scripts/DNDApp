@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import zlib from 'node:zlib';
 import Fastify from 'fastify';
 import { z, ZodError } from 'zod';
 import { formatTimestamp, parseTimestamp, parseTranscript, formatUtterance } from '@dndapp/shared';
@@ -110,8 +111,37 @@ function serveWebPage(app, dir) {
   };
   const sendFile = (file, type) => async (request, reply) =>
     reply.type(type).header('Cache-Control', 'no-cache').header('X-Content-Type-Options', 'nosniff').send(fs.readFileSync(file));
+  // Library files don't change while the server runs: each is compressed once (brotli or gzip, a few
+  // MB of 3D dice libraries become a fraction of that) and has an ETag, so a browser that has it gets
+  // "304 Not Modified" instead of downloading it again.
+  const sendLibrary = (file) => {
+    let cached = null;
+    return async (request, reply) => {
+      cached ??= (() => {
+        const body = fs.readFileSync(file);
+        return { body, etag: `"${crypto.createHash('sha1').update(body).digest('base64url')}"`, br: null, gzip: null };
+      })();
+      reply.type(CONTENT_TYPES['.js']).header('Cache-Control', 'no-cache').header('X-Content-Type-Options', 'nosniff').header('ETag', cached.etag).header('Vary', 'Accept-Encoding');
+      if (request.headers['if-none-match'] === cached.etag) return reply.code(304).send();
+      const accepts = String(request.headers['accept-encoding'] ?? '');
+      if (/\bbr\b/.test(accepts)) {
+        cached.br ??= zlib.brotliCompressSync(cached.body, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9 } });
+        return reply.header('Content-Encoding', 'br').send(cached.br);
+      }
+      if (/\bgzip\b/.test(accepts)) {
+        cached.gzip ??= zlib.gzipSync(cached.body, { level: 9 });
+        return reply.header('Content-Encoding', 'gzip').send(cached.gzip);
+      }
+      return reply.send(cached.body);
+    };
+  };
   for (const [url, spec] of Object.entries(modules)) {
-    app.get(url, { config: { public: true } }, sendFile(fileURLToPath(import.meta.resolve(spec)), CONTENT_TYPES['.js']));
+    app.get(url, { config: { public: true } }, sendLibrary(fileURLToPath(import.meta.resolve(spec))));
+  }
+  // The Deluxe dice (dice-deluxe.js): Three.js (its module imports three.core.js next to it) and the
+  // cannon-es physics, both as ES modules. Loaded only when someone uses that roller.
+  for (const [url, file] of Object.entries(VENDOR_FILES)) {
+    app.get(url, { config: { public: true } }, sendLibrary(file()));
   }
   // The dice's sounds and textures, from the same package (dice-box.js asks for /vendor/dice/sounds/... and
   // /vendor/dice/textures/...; a texture is only fetched when a dice style uses it).
@@ -125,6 +155,14 @@ function serveWebPage(app, dir) {
     }
   }
 }
+
+const threeDir = () => path.dirname(fileURLToPath(import.meta.resolve('three')));
+/** Files served from packages whose ES modules aren't what import.meta.resolve finds (see serveWebPage). */
+export const VENDOR_FILES = {
+  '/vendor/three/three.module.js': () => path.join(threeDir(), 'three.module.js'),
+  '/vendor/three/three.core.js': () => path.join(threeDir(), 'three.core.js'),
+  '/vendor/cannon-es.js': () => path.join(path.dirname(fileURLToPath(import.meta.resolve('cannon-es'))), 'cannon-es.js'),
+};
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date like 2026-10-03');
 
