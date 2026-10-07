@@ -399,7 +399,8 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 .dice-stage { position: fixed; inset: 0; z-index: 8; pointer-events: none; opacity: 0; transition: opacity 0.5s; }
 .dice-stage.rolling { opacity: 1; }
 .dice-stage.fading { opacity: 0; }
-.dice-stage canvas { display: block; }
+/* Each roller adds its own canvas; they must stack, or a second one is pushed below the window. */
+.dice-stage canvas { display: block; position: absolute; inset: 0; }
 
 /* Special effects (dice-fx.js): particles over the dice, a banner, a shake. */
 .dice-fx { position: fixed; inset: 0; z-index: 9; width: 100vw; height: 100vh; pointer-events: none; }
