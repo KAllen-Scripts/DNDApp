@@ -31,8 +31,8 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const archivist = createArchivist({ db, store, kb, search, llm, config });
   const pipeline = createPipeline({ db, store, archive, search, kb, archivist, config });
   const jobs = createJobs({ db, store, search, pipeline, log });
-  const qa = createQA({ db, store, kb, search, llm, config });
   const books = createBooks({ dir: config.booksDir, log });
+  const qa = createQA({ db, store, kb, search, books, llm, config });
   const spells = createSpells({ books, llm });
   const sheets = createSheets({ db, archive, store });
   const sheetImport = createSheetImport({ llm });

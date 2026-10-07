@@ -118,7 +118,7 @@ export function createFakeLLM({ qaScript = [], archivist = defaultArchivist, str
     },
     async agent({ purpose, system, prompt, tools, onText, onTool, onTurn }) {
       const toolResults = [];
-      calls.push({ purpose, system, prompt, toolResults });
+      calls.push({ purpose, system, prompt, toolResults, tools: tools.map((t) => t.name) });
       const tracked = tools.map((t) => ({
         ...t,
         run: async (input) => {
@@ -233,4 +233,42 @@ export async function setup({ llm = createFakeLLM(), config = {} } = {}) {
       fs.rmSync(dir, { recursive: true, force: true });
     },
   };
+}
+
+/**
+ * A small text PDF: one array of lines per page, and optionally bookmarks
+ * ({ title, page } with 1-based pages, all at the top level).
+ */
+export function makePdf(pages, { bookmarks = [] } = {}) {
+  const esc = (t) => t.replace(/[\\()]/g, (c) => `\\${c}`);
+  const pageRef = (i) => `${4 + i * 2} 0 R`;
+  const outlinesAt = 4 + pages.length * 2;
+  const objects = [
+    [1, `<< /Type /Catalog /Pages 2 0 R${bookmarks.length ? ` /Outlines ${outlinesAt} 0 R` : ''} >>`],
+    [2, `<< /Type /Pages /Kids [${pages.map((_, i) => pageRef(i)).join(' ')}] /Count ${pages.length} >>`],
+    [3, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'],
+  ];
+  pages.forEach((lines, i) => {
+    const content = `BT /F1 11 Tf 14 TL 72 740 Td ${lines.map((l) => `(${esc(l)}) Tj T*`).join(' ')} ET`;
+    objects.push([4 + i * 2, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${5 + i * 2} 0 R >>`]);
+    objects.push([5 + i * 2, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`]);
+  });
+  if (bookmarks.length) {
+    const item = (k) => outlinesAt + 1 + k;
+    objects.push([outlinesAt, `<< /Type /Outlines /First ${item(0)} 0 R /Last ${item(bookmarks.length - 1)} 0 R /Count ${bookmarks.length} >>`]);
+    bookmarks.forEach((b, k) => {
+      const links = `${k > 0 ? ` /Prev ${item(k - 1)} 0 R` : ''}${k < bookmarks.length - 1 ? ` /Next ${item(k + 1)} 0 R` : ''}`;
+      objects.push([item(k), `<< /Title (${esc(b.title)}) /Parent ${outlinesAt} 0 R /Dest [${pageRef(b.page - 1)} /Fit]${links} >>`]);
+    });
+  }
+  let out = '%PDF-1.4\n';
+  const offsets = [];
+  for (const [n, body] of objects) {
+    offsets[n] = out.length;
+    out += `${n} 0 obj\n${body}\nendobj\n`;
+  }
+  const xref = out.length;
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`;
+  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out, 'latin1');
 }

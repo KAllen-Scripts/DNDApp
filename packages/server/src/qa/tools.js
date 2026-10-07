@@ -7,6 +7,7 @@
  *   - knowledge-base records and transcripts: only what they may know
  *     (records' known_by; transcripts of sessions they attended). DMs see all.
  *   - player notes: only their own. Not even the DM sees other players' notes.
+ * The group's rulebooks (BOOK_DEFS) aren't campaign data, so everyone sees them.
  */
 import { z } from 'zod';
 import { formatTimestamp, formatUtterance, parseTimestamp, CITATION_RE } from '@dndapp/shared';
@@ -49,11 +50,39 @@ const DEFS = {
   },
 };
 
+const BOOK_DEFS = {
+  search_books: {
+    description:
+      "Search the group's rulebooks for pages containing any of the terms. Write the terms yourself: the words the book would use for the rule (its official name, the action or condition, synonyms), not the player's wording. Returns pages with a short snippet, best first.",
+    schema: z.object({
+      terms: z.array(z.string()).min(1).max(8).describe('1-8 words or short phrases, e.g. ["opportunity attack", "leaves your reach", "Disengage"]'),
+      book: z.string().nullable().describe('Only this book (title as listed), or null for all'),
+    }),
+  },
+  read_book: {
+    description: 'Read pages of a rulebook (page numbers as in search results and contents). The text is from a scan and may have OCR errors.',
+    schema: z.object({
+      book: z.string().describe('Title as listed'),
+      page: z.number().int(),
+      count: z.number().int().min(1).max(2).nullable().describe('Pages to read (1-2), default 1'),
+    }),
+  },
+  book_contents: {
+    description: "A rulebook's chapters and section headings with their pages. Use it to browse to the right section when searches miss or the question is broad.",
+    schema: z.object({
+      book: z.string().describe('Title as listed'),
+      from_page: z.number().int().nullable(),
+      to_page: z.number().int().nullable(),
+    }),
+  },
+};
+
 /**
  * @param {object} opts
  * @param {{ userId: number, seesAll: boolean }} opts.viewer  who is asking
+ * @param {object} [opts.books]  the group's rulebooks; the book tools are added only if there are any
  */
-export function createTools({ db, store, kb, search, config, campaignId, viewer }) {
+export function createTools({ db, store, kb, search, books, config, campaignId, viewer }) {
   const maxChars = config.qa.maxToolResultTokens * 4;
   const clip = (s) => (s.length > maxChars ? `${s.slice(0, maxChars)}\n…(truncated)` : s);
   const ownNotesOnly = { userId: viewer.userId, seesAll: false };
@@ -119,11 +148,28 @@ export function createTools({ db, store, kb, search, config, campaignId, viewer 
     },
     search_my_notes: async ({ query }) =>
       clip(formatNotes(await search.search(campaignId, query, { kinds: ['note'], viewer: ownNotesOnly, limit: 6 })) || 'No matching notes.'),
+    search_books: async ({ terms, book }) =>
+      clip(
+        (await books.search(terms, { book })).map((h) => `--- (${h.book} p. ${h.page})\n${h.snippet}`).join('\n\n') ||
+          'No pages match. Try other terms (synonyms, the official name), or book_contents.',
+      ),
+    read_book: async ({ book, page, count }) => {
+      const r = await books.readPages(book, page, count ?? 1);
+      return r.error ?? clip(r.pages.map((p) => `--- (${r.book} p. ${p.page})\n${p.text || '(no text on this page)'}`).join('\n\n'));
+    },
+    book_contents: async ({ book, from_page, to_page }) => {
+      const r = await books.contents(book, { fromPage: from_page, toPage: to_page });
+      if (r.error) return r.error;
+      const lines = r.entries.map((e) => `${'  '.repeat(e.depth)}p. ${e.page}: ${e.title}`);
+      return clip(`${r.book} (${r.from === 'bookmarks' ? "the PDF's bookmarks" : 'headings found on the pages'}):\n${lines.join('\n') || 'Nothing found in that range.'}`);
+    },
   };
+
+  const defs = { ...DEFS, ...(books?.status().books.length ? BOOK_DEFS : {}) };
 
   return {
     /** Agent tools: { name, description, schema, run(input) -> string }. Providers validate input. */
-    list: Object.entries(DEFS).map(([name, d]) => ({ name, description: d.description, schema: d.schema, run: handlers[name] })),
+    list: Object.entries(defs).map(([name, d]) => ({ name, description: d.description, schema: d.schema, run: handlers[name] })),
 
     /**
      * Search on the question before calling the model, so it can often answer
