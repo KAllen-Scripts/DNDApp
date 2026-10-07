@@ -37,7 +37,7 @@ const state = {
   draftGrid: undefined, // grid being edited in the settings dialog (shown live)
   fogMode: null, // DM drawing fog: 'reveal' | 'cover'
   fogDraw: null, // the rectangle being drawn: { pointer, a, b }
-  wallMode: null, // DM working on walls: 'wall' | 'door' | 'erase'
+  wallMode: null, // DM working on walls: 'wall' | 'low' | 'door' | 'lock' | 'erase'
   wallDraw: null, // the wall being drawn: { pointer, a, b, sx, sy }
   live: null, // AbortController for the live stream
   pins: new Map(), // map id -> this person's private pins on it
@@ -299,6 +299,8 @@ function renderFogTools() {
   $('#map-view').classList.toggle('fog-drawing', !!map && ((!!state.fogMode && !!map.fog?.enabled) || !!state.wallMode));
   if (tools.hidden || !map) return;
   $('#map-fog-on').checked = !!map.fog?.enabled;
+  $('#map-fog-map').value = map.fog.map;
+  $('#map-fog-map').disabled = !map.fog.enabled;
   for (const b of tools.querySelectorAll('[data-fog-mode]')) {
     b.setAttribute('aria-pressed', String(state.fogMode === b.dataset.fogMode));
     b.disabled = !map.fog?.enabled;
@@ -307,30 +309,59 @@ function renderFogTools() {
   const sight = $('#map-sight-on');
   sight.checked = !!map.fog?.sight;
   sight.disabled = !map.fog?.enabled;
+  const memory = $('#map-memory-on');
+  memory.checked = map.fog.memory;
+  memory.disabled = !map.fog.enabled || !map.fog.sight || map.fog.map !== 'dark';
   for (const b of walls.querySelectorAll('[data-wall-mode]')) b.setAttribute('aria-pressed', String(state.wallMode === b.dataset.wallMode));
   $('#map-walls-draft').disabled = map.wall_draft.status === 'pending';
   walls.querySelector('[data-wall-action="clear-ai"]').disabled = !map.walls.some((w) => w.source === 'ai');
-  walls.querySelector('[data-wall-action="forget"]').disabled = !map.fog?.enabled || !map.fog.sight;
+  walls.querySelector('[data-wall-action="forget"]').disabled = !map.fog?.enabled || !map.fog.sight || !map.fog.memory;
+  const count = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const doors = map.walls.filter((w) => w.door).length;
+  const low = map.walls.filter((w) => w.kind === 'low').length;
   $('#map-wall-hint').textContent = !map.fog?.enabled
     ? 'Turn on Fog of war first. Then, with Line of sight, players see what their own token can see past the walls.'
     : map.fog.sight
-      ? `${map.walls.length - doors} wall${map.walls.length - doors === 1 ? '' : 's'}, ${doors} door${doors === 1 ? '' : 's'}. Players see what their own token can see, and places they've been stay dim.`
+      ? `${count(map.walls.length - doors - low, 'wall')}, ${count(low, 'obstacle')}, ${count(doors, 'door')}. Players see what their own token can see, and open doors next to them.`
       : 'Players only see what you reveal. Tick Line of sight to let their tokens see past the walls.';
 }
 
-/** Walls and doors (DM only; players never get them). Walls the AI drafted are a different colour. */
+/**
+ * Walls and doors. The DM sees them all (walls the AI drafted and obstacles
+ * in their own colours); players only get the doors they can see, to click.
+ */
 function renderWalls() {
   const map = state.current;
   const svg = $('#map-walls');
   svg.setAttribute('viewBox', `0 0 ${map.image.width} ${map.image.height}`);
+  svg.classList.toggle('players', !state.canEdit);
   svg.replaceChildren();
-  if (!state.canEdit) return;
+  const list = state.canEdit ? map.walls : (map.doors ?? []);
   const line = (w, cls) => svgEl('line', { x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, class: cls });
-  for (const w of map.walls) svg.append(line(w, 'wall-halo'));
-  for (const w of map.walls) svg.append(line(w, w.door ? `door${w.open ? ' open' : ''}` : `wall${w.source === 'ai' ? ' ai' : ''}`));
+  const cls = (w) => (w.door || !state.canEdit
+    ? `door${w.open ? ' open' : ''}${w.locked ? ' locked' : ''}`
+    : `wall${w.kind === 'low' ? ' low' : ''}${w.source === 'ai' ? ' ai' : ''}`);
+  for (const w of list) svg.append(line(w, 'wall-halo'));
+  for (const w of list) svg.append(line(w, cls(w)));
   const d = state.wallDraw;
-  if (d) svg.append(line({ x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y }, `wall-draft${state.wallMode === 'door' ? ' door' : ''}`));
+  if (d) svg.append(line({ x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y }, `wall-draft${state.wallMode === 'door' || state.wallMode === 'low' ? ` ${state.wallMode}` : ''}`));
+}
+
+/** Open or close a door (anyone: players only doors next to their token; the server checks). */
+async function toggleDoor(door) {
+  try {
+    const saved = await state.guarded(() => api('POST', `${base()}/${state.current.id}/doors/${door.id}/toggle`, {}));
+    if (saved) onMap(saved);
+  } catch (err) {
+    report(err);
+  }
+}
+
+/** The door under a click, if any (the DM's from all walls, a player's from the doors they can see). */
+function doorAt(clientX, clientY) {
+  const map = state.current;
+  const doors = state.canEdit ? map.walls.filter((w) => w.door) : (map.doors ?? []);
+  return nearestWall({ walls: doors }, toImage(clientX, clientY), SNAP_PX / state.view.k);
 }
 
 async function walls(body) {
@@ -687,13 +718,15 @@ function wallUp(e) {
   const click = Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 4;
   if (click) {
     const near = nearestWall(map, toImage(e.clientX, e.clientY), SNAP_PX / state.view.k);
+    const door = doorAt(e.clientX, e.clientY);
     if (state.wallMode === 'erase' && near) walls({ remove: near.id });
-    else if (state.wallMode === 'door' && near?.door) walls({ toggle: near.id });
+    else if (state.wallMode === 'door' && door) walls({ toggle: door.id });
+    else if (state.wallMode === 'lock' && door) walls({ lock: door.id });
     return;
   }
-  if (state.wallMode === 'erase') return;
+  if (state.wallMode === 'erase' || state.wallMode === 'lock') return;
   if (Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y) < 1) return;
-  walls({ add: { x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y, door: state.wallMode === 'door' } });
+  walls({ add: { x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y, door: state.wallMode === 'door', kind: state.wallMode === 'low' ? 'low' : 'wall' } });
 }
 
 /** Screen coordinates → the map image's pixels. */
@@ -765,6 +798,9 @@ function viewUp(e) {
   // A click on the map itself (not a drag) drops a pin when placing one, else clears the selection.
   if (p && Math.hypot(e.clientX - p.startX, e.clientY - p.startY) < 4 && !state.pointers.size) {
     if (state.pinMode && e.type === 'pointerup') return dropPin(toImage(e.clientX, e.clientY));
+    // A click on a door opens or closes it.
+    const door = e.type === 'pointerup' ? doorAt(e.clientX, e.clientY) : null;
+    if (door) return toggleDoor(door);
     select(null);
   }
 }
@@ -1205,6 +1241,8 @@ export function initMapActions() {
     b.addEventListener('click', () => setTool({ fogMode: state.fogMode === b.dataset.fogMode ? null : b.dataset.fogMode }));
   }
   $('#map-sight-on').addEventListener('change', (e) => fog({ sight: e.target.checked }));
+  $('#map-memory-on').addEventListener('change', (e) => fog({ memory: e.target.checked }));
+  $('#map-fog-map').addEventListener('change', (e) => fog({ map: e.target.value }));
   for (const b of document.querySelectorAll('[data-wall-mode]')) {
     b.addEventListener('click', () => setTool({ wallMode: state.wallMode === b.dataset.wallMode ? null : b.dataset.wallMode }));
   }

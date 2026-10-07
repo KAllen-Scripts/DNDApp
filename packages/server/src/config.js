@@ -18,7 +18,7 @@ const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
  * Bump this whenever chunking, prompts, schemas or the memory design change.
  * Every generated output is tagged with it so we know which approach made it.
  */
-export const PIPELINE_VERSION = 5;
+export const PIPELINE_VERSION = 6;
 
 const DEFAULT_MODEL = env.MODEL || 'claude-opus-5-5';
 

@@ -18,7 +18,7 @@ import { preparedTranscript } from './pipeline/prepare.js';
 import { SheetConflictError } from './sheets/store.js';
 import { SHEET_FORMAT } from '@dndapp/shared/sheet.js';
 import { parseRoll, rollDice, ROLL_MODES } from '@dndapp/shared/dice.js';
-import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, MAX_WALLS, snapToken, wallBetween } from '@dndapp/shared/map.js';
+import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, MAX_WALLS, WALL_KINDS, FOG_MAP, snapToken, wallBetween, doorReach, distanceToWall } from '@dndapp/shared/map.js';
 import { inspectImage } from './maps/read.js';
 import { isPdf, renderPdfPage } from './maps/pdf.js';
 import { createPlayerImages } from './maps/image.js';
@@ -1152,7 +1152,8 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   });
 
   /**
-   * Fog of war (DM): { enabled?, sight?, add?: {op: reveal | cover, x, y, w, h}, undo?, reset?: cover | reveal, forget? }.
+   * Fog of war (DM): { enabled?, sight?, map?: dark | shown, memory?, add?: {op: reveal | cover, x, y, w, h}, undo?, reset?: cover | reveal, forget? }.
+   * map: what players get outside their sight and the reveals (dark, or the map with no tokens). memory: keep a dim view of where they've been.
    * reset: cover hides the whole map again, reveal shows all of it; undo takes back the last rectangle.
    * sight: players also see what their own token can see past the walls. forget: players lose the dim view of places they saw before.
    */
@@ -1163,6 +1164,8 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       .object({
         enabled: z.boolean().optional(),
         sight: z.boolean().optional(),
+        map: z.enum(FOG_MAP).optional(),
+        memory: z.boolean().optional(),
         forget: z.boolean().optional(),
         add: z.object({ op: z.enum(FOG_OPS), x: z.number(), y: z.number(), w: z.number().positive(), h: z.number().positive() }).optional(),
         undo: z.boolean().optional(),
@@ -1173,6 +1176,8 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     const saved = maps.change(a.cid, map.id, (m) => {
       if (body.enabled !== undefined) m.fog.enabled = body.enabled;
       if (body.sight !== undefined) m.fog.sight = body.sight;
+      if (body.map !== undefined) m.fog.map = body.map;
+      if (body.memory !== undefined) m.fog.memory = body.memory;
       if (body.reset === 'cover') m.fog.shapes = [];
       if (body.reset === 'reveal') m.fog.shapes = [{ op: 'reveal', x: 0, y: 0, w: m.image.width, h: m.image.height }];
       if (body.undo) m.fog.shapes.pop();
@@ -1183,23 +1188,26 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   });
 
   const POINT = z.number().min(0).max(100_000);
-  const WALL = z.object({ x1: POINT, y1: POINT, x2: POINT, y2: POINT, door: z.boolean().default(false) });
+  const WALL = z.object({ x1: POINT, y1: POINT, x2: POINT, y2: POINT, door: z.boolean().default(false), kind: z.enum(WALL_KINDS).default('wall') });
 
   /**
-   * Walls and doors (DM): { add?: {x1, y1, x2, y2, door?}, remove?: id, toggle?: id (open or close a door), clear?: ai | all }.
-   * They block line of sight and players' tokens; players never get them.
+   * Walls and doors (DM): { add?: {x1, y1, x2, y2, door?, kind?: wall | low}, remove?: id, toggle?: id (open or close a door),
+   * lock?: id (lock or unlock a door), clear?: ai | all }. Walls block line of sight and players' tokens, obstacles ('low')
+   * only tokens. Players never get walls, only the doors they can see.
    */
   app.patch('/campaigns/:cid/maps/:mid/walls', async (request) => {
     const a = access(request, { dm: true });
     const { map } = viewableMap(request);
     const body = z
-      .object({ add: WALL.optional(), remove: z.string().max(20).optional(), toggle: z.string().max(20).optional(), clear: z.enum(['ai', 'all']).optional() })
+      .object({ add: WALL.optional(), remove: z.string().max(20).optional(), toggle: z.string().max(20).optional(), lock: z.string().max(20).optional(), clear: z.enum(['ai', 'all']).optional() })
       .parse(request.body ?? {});
     if (body.add && map.walls.length >= MAX_WALLS) throw new BadRequestError(`A map can have at most ${MAX_WALLS} walls.`);
-    for (const id of [body.remove, body.toggle]) {
+    for (const id of [body.remove, body.toggle, body.lock]) {
       if (id !== undefined && !map.walls.some((w) => w.id === id)) throw new NotFoundError('No such wall');
     }
-    if (body.toggle && !map.walls.find((w) => w.id === body.toggle).door) throw new BadRequestError("That's a wall, not a door.");
+    for (const id of [body.toggle, body.lock]) {
+      if (id && !map.walls.find((w) => w.id === id).door) throw new BadRequestError("That's a wall, not a door.");
+    }
     const saved = maps.change(a.cid, map.id, (m) => {
       if (body.clear === 'all') m.walls = [];
       if (body.clear === 'ai') m.walls = m.walls.filter((w) => w.source !== 'ai');
@@ -1207,9 +1215,36 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       if (body.toggle) {
         const door = m.walls.find((w) => w.id === body.toggle);
         door.open = !door.open;
+        if (door.open) door.locked = false;
+      }
+      if (body.lock) {
+        const door = m.walls.find((w) => w.id === body.lock);
+        door.locked = !door.locked;
+        if (door.locked) door.open = false;
       }
       if (body.add) m.walls.push({ ...body.add, id: newTokenId(), open: false, source: 'dm' });
     }, { by: request.user.id, reason: body.toggle ? 'door' : 'walls' });
+    return maps.view(saved, a);
+  });
+
+  /**
+   * Open or close a door. The DM can any; a player only a door they can see,
+   * that isn't locked, within reach (a square and a half) of one of their tokens.
+   */
+  app.post('/campaigns/:cid/maps/:mid/doors/:wid/toggle', async (request) => {
+    const a = access(request);
+    const { map, view } = viewableMap(request);
+    const door = (a.role === 'dm' ? map.walls : view.doors).find((w) => w.id === request.params.wid && (a.role !== 'dm' || w.door));
+    if (!door) throw new NotFoundError('No such door');
+    if (a.role !== 'dm') {
+      if (door.locked) throw new BadRequestError("It's locked.");
+      const near = map.tokens.some((t) => t.kind === 'pc' && t.user_id === request.user.id && distanceToWall(t, door) <= doorReach(map));
+      if (!near) throw new BadRequestError('Your character is too far away to reach that door.');
+    }
+    const saved = maps.change(a.cid, map.id, (m) => {
+      const d = m.walls.find((w) => w.id === door.id);
+      if (d && !(a.role !== 'dm' && d.locked)) d.open = !d.open;
+    }, { by: request.user.id, reason: 'door' });
     return maps.view(saved, a);
   });
 

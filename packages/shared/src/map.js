@@ -31,6 +31,18 @@ export const FOG_OPS = ['reveal', 'cover'];
 export const MAX_WALLS = 2000;
 /** Where a wall came from: drawn by the DM, or drafted by the AI from the picture. */
 export const WALL_SOURCES = ['dm', 'ai'];
+/**
+ * What a wall stops: 'wall' blocks sight and movement; 'low' (an obstacle:
+ * a building seen from above, a cliff, a fence) only blocks movement, so
+ * players see over it but can't cross it.
+ */
+export const WALL_KINDS = ['wall', 'low'];
+/**
+ * What players get of the map outside their sight and the DM's reveals:
+ * 'dark' (blacked out), 'grey' (greyed out: dimmed, no tokens) or 'shown'
+ * (the map as it is, but no tokens).
+ */
+export const FOG_MAP = ['dark', 'grey', 'shown'];
 /** On a map without a grid, a size-1 token is this fraction of the map's longer side. */
 const UNGRIDDED_TOKEN_FRACTION = 1 / 40;
 
@@ -223,7 +235,26 @@ export function normalizeFog(f, image = {}) {
     const h = num(s?.h, { min: 0, max: height - y, fallback: 0 });
     if (w > 0 && h > 0) shapes.push({ op: pick(s.op, FOG_OPS, 'reveal'), x: round(x, 1), y: round(y, 1), w: round(w, 1), h: round(h, 1) });
   }
-  return { enabled: f?.enabled === true, sight: f?.sight === true, shapes };
+  return {
+    enabled: f?.enabled === true,
+    sight: f?.sight === true,
+    // Players keep a dim view of where they've been (with line of sight).
+    memory: f?.memory !== false,
+    map: pick(f?.map, FOG_MAP, 'dark'),
+    shapes,
+  };
+}
+
+/** How far (image pixels) a player's token can reach to open or close a door: a square and a half. */
+export const doorReach = (map) => squarePx(map) * 1.5;
+
+/** Distance from a point to a wall. */
+export function distanceToWall(p, w) {
+  const dx = w.x2 - w.x1;
+  const dy = w.y2 - w.y1;
+  const len = dx * dx + dy * dy;
+  const t = len ? Math.max(0, Math.min(1, ((p.x - w.x1) * dx + (p.y - w.y1) * dy) / len)) : 0;
+  return Math.hypot(p.x - (w.x1 + t * dx), p.y - (w.y1 + t * dy));
 }
 
 /** Is this point under the fog (hidden from players)? */
@@ -262,7 +293,9 @@ export function fogRect(map, a, b) {
 
 /**
  * Walls: straight lines in image pixels that block sight (and players'
- * tokens). A door is a wall that can be open (blocks nothing) or closed.
+ * tokens). A door is a wall that can be open (blocks nothing) or closed,
+ * and locked (players can't open it). An obstacle ('low') blocks only
+ * movement.
  */
 export function normalizeWalls(list, image = {}) {
   const { width = 1, height = 1 } = image;
@@ -277,19 +310,24 @@ export function normalizeWalls(list, image = {}) {
     if (x1 == null || y1 == null || x2 == null || y2 == null || Math.hypot(x2 - x1, y2 - y1) < 1) continue;
     seen.add(w.id);
     const door = w.door === true;
+    const open = door && w.open === true;
     out.push({
       id: String(w.id),
       x1: round(x1, 1), y1: round(y1, 1), x2: round(x2, 1), y2: round(y2, 1),
+      kind: door ? 'wall' : pick(w.kind, WALL_KINDS, 'wall'),
       door,
-      open: door && w.open === true,
+      open,
+      locked: door && !open && w.locked === true,
       source: pick(w.source, WALL_SOURCES, 'dm'),
     });
   }
   return out;
 }
 
-/** The walls that block sight and movement right now (everything but open doors). */
+/** The walls that block movement right now (everything but open doors). */
 export const blockingWalls = (map) => (map.walls ?? []).filter((w) => !w.open);
+/** The walls that block sight right now (not open doors, not obstacles). */
+export const sightWalls = (map) => blockingWalls(map).filter((w) => w.kind !== 'low');
 
 const cross = (ax, ay, bx, by) => ax * by - ay * bx;
 
@@ -318,7 +356,7 @@ export function sightPolygon(map, origin) {
   const { width, height } = map.image;
   const ox = Math.min(width - 0.01, Math.max(0.01, origin.x));
   const oy = Math.min(height - 0.01, Math.max(0.01, origin.y));
-  const segs = blockingWalls(map).map((w) => [w.x1, w.y1, w.x2, w.y2]);
+  const segs = sightWalls(map).map((w) => [w.x1, w.y1, w.x2, w.y2]);
   segs.push([0, 0, width, 0], [width, 0, width, height], [width, height, 0, height], [0, height, 0, 0]);
   const angles = [];
   for (const [x1, y1, x2, y2] of segs) {
@@ -395,9 +433,9 @@ export function fogMask(map, { polygons = [], explored = [] } = {}) {
   if (!map.fog?.enabled) return [];
   const { width, height } = map.image;
   return [
-    { fill: 'cover', x: 0, y: 0, w: width, h: height },
+    { fill: map.fog.map === 'grey' ? 'dim' : 'cover', x: 0, y: 0, w: width, h: height },
     ...explored.map((r) => ({ fill: 'dim', ...r })),
-    ...map.fog.shapes.map((s) => ({ fill: s.op === 'reveal' ? 'clear' : 'cover', x: s.x, y: s.y, w: s.w, h: s.h })),
+    ...map.fog.shapes.map((s) => ({ fill: s.op === 'reveal' ? 'clear' : map.fog.map === 'grey' ? 'dim' : 'cover', x: s.x, y: s.y, w: s.w, h: s.h })),
     ...polygons.map((points) => ({ fill: 'clear', points })),
   ];
 }
@@ -410,10 +448,7 @@ export function nearestWall(map, p, maxDist) {
   let best = null;
   let bestD = maxDist;
   for (const w of map.walls ?? []) {
-    const dx = w.x2 - w.x1;
-    const dy = w.y2 - w.y1;
-    const t = Math.max(0, Math.min(1, ((p.x - w.x1) * dx + (p.y - w.y1) * dy) / (dx * dx + dy * dy)));
-    const d = Math.hypot(p.x - (w.x1 + t * dx), p.y - (w.y1 + t * dy));
+    const d = distanceToWall(p, w);
     if (d <= bestD) {
       best = w;
       bestD = d;

@@ -891,8 +891,12 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .map-walls .wall.ai { stroke: #b388ff; }
 .map-walls .door { stroke: #ffb74d; stroke-width: 4px; }
 .map-walls .door.open { stroke-dasharray: 4 6; }
+.map-walls .door.locked { stroke: #e0563f; }
+.map-walls .wall.low { stroke: #81c784; stroke-dasharray: 8 5; }
+.map-walls.players .wall-halo, .map-walls.players .door { stroke-width: 5px; }
 .map-walls .wall-draft { stroke: #f2d675; stroke-width: 3px; stroke-dasharray: 6 4; }
 .map-walls .wall-draft.door { stroke: #ffb74d; }
+.map-walls .wall-draft.low { stroke: #81c784; }
 .token.hidden-token { opacity: 0.5; border-style: dashed; }
 .token.down :is(.token-initials, .token-picture) { opacity: 0.45; }
 .token.down.has-picture .token-picture { filter: grayscale(1); }
