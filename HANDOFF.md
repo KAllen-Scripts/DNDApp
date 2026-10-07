@@ -17,6 +17,7 @@ Read this first when picking the project up on another machine or with another A
 - **Q&A handles general D&D questions and rich formatting** (new, 2026-10-06): questions like "stat block for a brown bear?" are answered straight from the model's knowledge without searching the campaign; answers can include tables and stat blocks (markdown/HTML, sanitised on the page).
 - **Q&A can look rules up in the group's books** (new, 2026-10-07): `search_books`, `read_book` and `book_contents` over the PDFs in `DND books`, still with no database. The AI picks the search terms itself, so vague questions work. See SPEC §5.3.
 - **Dice** (new, 2026-10-07, merged to `main`): a Dice button in the player header; click-to-roll from the sheet; the server rolls and 3D dice land on its numbers. 24 dice styles and special effects (trails, natural 20 / natural 1 / max-damage bursts, banners, shake, chimes). Rolls aren't saved or shared yet. See SPEC §6.5.
+- **Map prototype** (new, 2026-10-07, on branch `claude/project-thread-s0qd9w`, not merged): a Map tab with Leaflet to pan, zoom and drop named pins on a map image the player picks. Kept in that browser only (IndexedDB); nothing on the server or in the archive yet. See SPEC §6.6.
 - **Tests:** 66 passing (`npm test`). They're offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools.
 - **Electron dropped; it's a web page now** (owner's call: overkill when there's a server and address anyway). A basic player page (`packages/web/public`, no build step) is served by the server at `/`: log in, ask questions (streamed, clickable citations, past conversations), take notes. No DM/host screens yet.
 - **Logins: name + password**, set by the admin, who can also require a new password at next login (Active Directory style, enforced by the server). Anyone can change their own password. Schema v4.
@@ -41,6 +42,8 @@ Read this first when picking the project up on another machine or with another A
 8. Try **asking a question from the web page against the real AI** (streaming, citations, evidence in the browser), then use the page with the players in a real session. Include a general question ("stat block for a brown bear") and a campaign one, and check the AI picks the right path and the table/stat-block formatting looks right.
 9. Add **DM screens** to the web page: glossary; corrections; the archivist's questions; a full speaker-map editor. Which belong to the DM vs the host is part of the deferred DM-role design. (Accounts and session uploads are on the admin screen.)
 10. Buy the domain, set `PUBLIC_URL`, set up **Cloudflare Tunnel**, write a short player guide (address + "log in with what Kenny gave you").
+
+11. **Map, next (owner's call):** try the prototype (Map tab), then decide who puts maps up, whether maps and pins are shared or private, and whether the DM needs fog of war. Then move maps and pins to the server and the archive, filtered per viewer (SPEC §6.6).
 
 ## Getting running on a new machine
 
@@ -346,6 +349,15 @@ The owner asked for "more dice themes? Special effects? Nice fancy shit like tha
 - **Effects** (`dice-fx.js`, one canvas over the page, no libraries): trails behind each moving die by style (embers, snow, sparks, motes, stars, smoke, bubbles, glitter, petals), using the dice's positions projected from the 3D scene every frame. Natural 20: golden flash, two rings, stars and confetti from the d20 that shows it, a "Natural 20!" banner, and the result card shines. Natural 1: a red flash and a ring closing in on the die, smoke, red sparks, a "Natural 1" banner that falls away, and the page shakes. Maxed damage (no d20, 2+ dice all on their highest face): a sparkle and "Max damage!". Synthesised chimes (Web Audio) when sound is on. Without 3D, the bursts happen at the result card. Off with reduced motion or the Effects switch.
 - **Checked in headless Chromium** (software WebGL): every style thrown and looked at; natural 20, natural 1 and max damage forced by intercepting the roll response in the test (the server's real rolls are random), banners and shake confirmed; the earlier dice checks (faces match the server, advantage, d100, phone width) still pass. No page errors. `npm test`: 63 passing.
 - **Not checked:** how the styles and effects look on a real GPU (the software renderer is darker and slower, so trails and bursts last longer in it), on a phone, and the chimes by ear.
+
+### 2026-10-07: Map prototype
+
+The project's goal is an interactive map; this is a first prototype of the interaction only.
+
+- **Map tab** (`web/public/map.js`): Leaflet 1.9 (`CRS.Simple`, flat image coordinates) served from the npm package at `/vendor/leaflet.js` and `/vendor/leaflet.css`. Pan by dragging, zoom with the wheel, pinch or +/−. "Choose a map image" (any image the browser can show; a grid until then), "Place a pin" then tap: name it in its popup (shown as a label), drag it, or remove it. "Fit to screen", "Clear". Styled from the theme's colours.
+- **Kept in the browser only** (IndexedDB, per account per campaign), so nothing is written to the archive before the sharing design is decided. Private mode just means it isn't kept.
+- **Checked in headless Chromium:** grid, wheel zoom, drag, image chosen, pin placed and named, kept after reload, phone width. No page errors. `npm test`: 66 passing (the static-file test now also fetches Leaflet).
+- **Not checked:** pinch zoom on a real phone, Safari/Firefox, very large images (a 10k-pixel scan may be slow to draw).
 
 ## Verified vs. not verified
 

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Campaign Memory</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="vendor/leaflet.css">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="themes.css">
   <!-- Applies the chosen look before the page draws, so it doesn't flash. -->
@@ -114,6 +115,7 @@
         <button role="tab" data-tab="ask" aria-selected="true"><span class="tab-icon" aria-hidden="true">✦</span><span>Ask</span></button>
         <button role="tab" data-tab="notes" aria-selected="false"><span class="tab-icon" aria-hidden="true">✎</span><span>Notes</span></button>
         <button role="tab" data-tab="sheet" aria-selected="false"><span class="tab-icon" aria-hidden="true">⚔</span><span>Sheet</span></button>
+        <button role="tab" data-tab="map" aria-selected="false"><span class="tab-icon" aria-hidden="true">⌖</span><span>Map</span></button>
       </nav>
       <button id="dice-open" class="ghost dice-open" title="Roll dice">Dice</button>
       <button class="ghost look-open" title="Themes and layouts">Look</button>
@@ -175,6 +177,22 @@
         <button id="sheet-print" class="ghost">Print</button>
       </div>
       <div id="sheet" class="sheet"></div>
+    </section>
+
+    <!-- Map (map.js). A prototype: kept in this browser only. -->
+    <section id="tab-map" class="panel map-panel" hidden>
+      <div class="map-bar">
+        <button id="map-place" class="primary" aria-pressed="false">Place a pin</button>
+        <button id="map-image" class="ghost">Choose a map image</button>
+        <input id="map-file" type="file" accept="image/*" hidden>
+        <button id="map-fit" class="ghost">Fit to screen</button>
+        <button id="map-clear" class="ghost danger">Clear</button>
+        <span id="map-status" class="muted small" role="status"></span>
+      </div>
+      <div class="map-wrap">
+        <div id="map" class="map" aria-label="Map. Drag to move, scroll or pinch to zoom."></div>
+        <p id="map-empty" class="map-empty muted small">No map image yet, so here's a grid to try it on. Choose an image of your map to use that instead. It stays in this browser.</p>
+      </div>
     </section>
   </div>
 

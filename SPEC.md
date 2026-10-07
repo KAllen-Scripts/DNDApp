@@ -108,6 +108,7 @@ Electron was dropped (owner's call: overkill, since there's a server and an addr
 - **Player view:** ask questions (streamed answers, a status line while it searches, clickable citations that jump to the quoted transcript lines, follow-ups); **chats**: a list (drawer, or a sidebar in wide layouts) with Pinned and Recent sections and a filter; pin, rename or delete any chat. Deleting erases its questions and answers for good, but the bare `qa_log` rows stay so the hourly limit and usage figures still count them. Take notes (saved to today's session, listed by session date); character sheet (§6.4). Works on phones.
 - **Look** (per browser, saved in localStorage, applied before first paint by `look-boot.js`): 12 themes (colours, system fonts, background art; Tavern follows the device's light/dark), 4 layouts (classic, sidebar, full width, app with bottom tabs), 3 text sizes, 4 chat styles (bubbles, play script, letters, terminal), 6 sheet styles (match theme, official, grimoire, index cards, blueprint, terminal) and 5 sheet layouts (three columns, combat first, by ability like the 2024 sheet, tabs like the sheet apps, one column). All in `themes.css`, keyed by `data-*` attributes; previews in the dialog reuse the same CSS. Only system fonts, nothing loaded from outside. Printing is always black on white.
 - **Dice** (§6.5): a Dice button in the player header opens the dice tray; rolls from the sheet; 3D dice over the page; results and this session's history.
+- **Map** (§6.6, prototype): a Map tab to pan and zoom a map image and drop named pins. Kept in the browser for now.
 - **Not built yet: DM / host features** (split between DM and host to be decided with the DM role): glossary; corrections; answer the archivist's questions; a full speaker-map editor (links are currently set while uploading). Transcript upload is on the admin screen.
 - On each `turn` event from `/ask`, replace displayed text rather than appending.
 
@@ -285,6 +286,7 @@ The archivist's rules: openly happened → attendees (everyone if all attended);
 - [x] Usage and timing stats.
 - [x] Character sheets: automatic values with player overrides, upload, spells with lookup (§6.4).
 - [x] Dice: rolled by the server, shown as 3D dice landing on those numbers; click-to-roll from the sheet (§6.5).
+- [x] Map prototype: pan, zoom, named pins on a map image; kept in the browser only (§6.6).
 
 ### 6.2 Next
 
@@ -323,6 +325,14 @@ Owner's requirement (2026-10-07): an animated dice roller like D&D Beyond's, as 
 - **Page** (`web/public/dice.js`): the tray (dice buttons and a notation box, Normal / Advantage / Disadvantage for the next d20, dice style, 3D / effects / sound switches kept per browser, this session's rolls), the result card (total, every die with dropped ones struck through, natural 20 / natural 1, and a damage roll offered after an attack: doubled dice on a natural 20). On the sheet, clicking a save, skill, ability name, initiative or spell attack rolls a d20 plus that value; each attack has a roll button; death saves have one. Shift-click: advantage; Alt-click: disadvantage.
 - **Later (owner's call):** sharing rolls with the party or the DM live, DM-only rolls, and whether rolls go into the archive for the archivist. These need a live channel per campaign and decisions that are part of the DM role.
 
+### 6.6 Map (prototype)
+
+Goal (owner, 2026-10-07): an interactive map. This first prototype only tries the interaction: pan, zoom and place markers.
+
+- **Page** (`web/public/map.js`, Map tab): [Leaflet](https://leafletjs.com/) 1.9 with `CRS.Simple` (flat image coordinates, 1 unit per image pixel), served from the npm package at `/vendor/leaflet.js` and `/vendor/leaflet.css` like the other page modules. Drag to pan; wheel, pinch or +/− to zoom. "Choose a map image" picks an image from the player's device; without one, a 1000×1000 grid. "Place a pin", then tap the map: the pin opens a box to name it (the name shows as a label) or remove it; pins can be dragged. A new image of a different size offers to remove the pins, since they'd land in the wrong places. "Clear" removes the image and pins. Coloured from the theme.
+- **Storage: this browser only** (IndexedDB `dndapp-maps`, one entry per account per campaign: the image file, its size, and the pins). Nothing reaches the server or the archive yet, on purpose: archive files are never deleted, so the format waits until it's decided who owns a map and who sees it.
+- **Open (owner's call):** who puts maps up (the DM, any player?); are maps and pins shared with the party, private, or both (shared map, private pins); should the DM reveal parts of a map (fog of war); should pins link to what the archivist knows about a place. Once decided: maps and pins on the server and in the archive, filtered per viewer like everything else (§5.5).
+
 ## 7. Security & cost controls
 
 - **Accounts:** no self sign-up. The server admin creates accounts, sets passwords and assigns roles on the admin screen (`/admin/*` routes, admin login only); the DM role can't. The console only does `init` (create the admin login), `set-password` (recovery) and `list`. Accounts with history can only be blocked, not deleted (the archive refers to them by id). Names are unique (ignoring case). Passwords: at least 6 characters, stored as scrypt hashes, never in plain text, including the archive.
@@ -347,6 +357,7 @@ Owner's requirement (2026-10-07): an animated dice roller like D&D Beyond's, as 
 - Should the DM see players' character sheets, and should Q&A use them? (Currently only the player can.)
 - Should dice rolls be shared with the party or the DM live, can the DM roll in secret, and should rolls be archived for the archivist? (Currently private and not stored.)
 - **DM role (deferred by the owner):** what the DM can see and do, including whether the DM sees knowledge derived from players' private notes (currently yes).
+- Maps (§6.6): who uploads them, are they and their pins shared or private, and does the DM need fog of war?
 - What exact format does the recorder produce? Are speakers labelled reliably per Discord user?
 - Note-to-session matching is by date (with a 6am rollover). Is an explicit "session started" button needed?
 - Sessions must be processed in order. A late-uploaded earlier session is handled, but the archivist sees it after later ones until a rebuild.
