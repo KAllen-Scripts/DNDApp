@@ -13,8 +13,8 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { normalizeMap, normalizePins, isFogged, healthOf } from '@dndapp/shared/map.js';
-import { fogKey } from './image.js';
+import { normalizeMap, normalizePins, canSee, healthOf } from '@dndapp/shared/map.js';
+import { createSight } from './sight.js';
 import { diffJson, applyJson } from '../sheets/store.js';
 import { NotFoundError } from '../store.js';
 
@@ -37,6 +37,7 @@ export function replayMap(entries) {
 export function createMaps({ db, archive, store, pictures = null }) {
   const events = new EventEmitter();
   events.setMaxListeners(0);
+  const sight = createSight({ db });
 
   const fromRow = (r) => ({ id: r.id, campaign_id: r.campaign_id, ...normalizeMap(JSON.parse(r.data)), version: r.version, created_at: r.created_at, updated_at: r.updated_at });
   const row = (cid, id) => (isMapId(id) ? db.prepare('SELECT * FROM maps WHERE id = ? AND campaign_id = ?').get(id, cid) : null);
@@ -113,9 +114,12 @@ export function createMaps({ db, archive, store, pictures = null }) {
 
     /**
      * What this viewer may see of a map, or null if they may not see it at all.
-     * Players: only shown maps; no AI description or notes; no hidden tokens,
-     * and none under the fog except their own; NPCs' and enemies' hit points
-     * only as how hurt they look; no stat blocks or links to the DM's records. `image_key` changes when their image does.
+     * Players: only shown maps; no AI description or notes; no walls; no
+     * hidden tokens, and none they can't see (under the fog, or out of their
+     * token's sight) except their own; NPCs' and enemies' hit points only as
+     * how hurt they look; no stat blocks or links to the DM's records. Their
+     * fog comes as `fog.mask` (what they see, see fogMask), not the DM's
+     * rectangles. `image_key` changes when their image does.
      * Player character tokens carry `picture`: the key of their player's token picture, or null.
      */
     view(map, { role, userId }) {
@@ -126,15 +130,19 @@ export function createMaps({ db, archive, store, pictures = null }) {
       delete out.campaign_id;
       if (role === 'dm') return { ...out, image_key: 'dm', can_edit: true };
       if (!map.shown) return null;
+      const seen = sight.forPlayer(map, userId);
       return {
         ...out,
         description: '',
         source: null,
         reading: { status: map.reading.status, error: '', notes: '' },
+        walls: [],
+        wall_draft: { status: '', error: '', notes: '' },
+        fog: { enabled: map.fog.enabled, sight: map.fog.sight, shapes: [], mask: seen.mask },
         tokens: out.tokens
-          .filter((t) => t.user_id === userId || (!t.hidden && !isFogged(map, t.x, t.y)))
+          .filter((t) => t.user_id === userId || (!t.hidden && canSee(map, seen.polygons, t.x, t.y)))
           .map((t) => (t.kind === 'pc' ? { ...t, stats: null, record: null } : { ...t, hp: null, health: healthOf(t.hp), stats: null, record: null })),
-        image_key: fogKey(map),
+        image_key: seen.key,
         can_edit: false,
       };
     },
@@ -163,12 +171,25 @@ export function createMaps({ db, archive, store, pictures = null }) {
       return after;
     },
 
+    /** Forget where everyone has been on a map, and tell everyone looking at it. */
+    forgetExplored(campaignId, id) {
+      const map = maps.get(campaignId, id);
+      sight.forget(map.id);
+      events.emit('update', map);
+      return map;
+    },
+
     /** Reads cut short by a restart can't finish; say so, so the DM can run them again. */
     failInterrupted() {
       for (const r of db.prepare("SELECT * FROM maps WHERE json_extract(data, '$.reading.status') = 'pending' AND json_extract(data, '$.removed') IS NOT 1").all()) {
         maps.change(r.campaign_id, r.id, (m) => {
           m.reading = { ...m.reading, status: 'failed', error: 'The server restarted while reading this map. Read it again.' };
         }, { reason: 'read interrupted' });
+      }
+      for (const r of db.prepare("SELECT * FROM maps WHERE json_extract(data, '$.wall_draft.status') = 'pending' AND json_extract(data, '$.removed') IS NOT 1").all()) {
+        maps.change(r.campaign_id, r.id, (m) => {
+          m.wall_draft = { ...m.wall_draft, status: 'failed', error: 'The server restarted while the AI was drafting walls. Try again.' };
+        }, { reason: 'wall draft interrupted' });
       }
     },
   };

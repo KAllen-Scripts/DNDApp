@@ -468,3 +468,151 @@ test('private pins: only the person who placed them ever sees them, not even the
     await t.cleanup();
   }
 });
+
+test('walls and line of sight: players see their own side, through open doors, and keep a dim view of where they have been', async () => {
+  const t = await setup({ llm: mapLLM() });
+  try {
+    const png = await terrain(700, 490, { size: 35 });
+    const map = await importMap(t, png);
+    const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+    await t.request('PATCH', base, { body: { shown: true, grid: { size: 35, x: 0, y: 0 } } });
+    const add = async (body) => (await t.request('POST', `${base}/tokens`, { body })).json().token;
+    const thorin = await add({ kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 50, y: 50 });
+    await add({ kind: 'enemy', name: 'Goblin', x: 600, y: 400 });
+    const seen = async () => (await t.request('GET', base, { as: t.sam.token })).json();
+    const image = async () => (await t.request('GET', `${base}/image`, { as: t.sam.token })).rawPayload;
+    const pixel = async (buf, x, y) => (await sharp(buf).extract({ left: x, top: y, width: 1, height: 1 }).raw().toBuffer())[0];
+    const walls = (body, as) => t.request('PATCH', `${base}/walls`, { body, ...(as && { as }) });
+
+    // A wall down the middle with a door in it. Only the DM draws walls, and players never get them.
+    assert.equal((await walls({ add: { x1: 350, y1: 0, x2: 350, y2: 210 } }, t.sam.token)).statusCode, 403);
+    await walls({ add: { x1: 350, y1: 0, x2: 350, y2: 210 } });
+    await walls({ add: { x1: 350, y1: 210, x2: 350, y2: 280, door: true } });
+    const dm = (await walls({ add: { x1: 350, y1: 280, x2: 350, y2: 490 } })).json();
+    assert.equal(dm.walls.length, 3);
+    const door = dm.walls.find((w) => w.door);
+    assert.deepEqual({ ...door, id: 'x' }, { id: 'x', x1: 350, y1: 210, x2: 350, y2: 280, door: true, open: false, source: 'dm' });
+    assert.deepEqual((await seen()).walls, []);
+    assert.equal((await walls({ toggle: dm.walls[0].id })).statusCode, 400, 'only doors open');
+    assert.equal((await walls({ remove: 'nosuchwall' })).statusCode, 404);
+
+    // Line of sight on: Thorin (52.5, 52.5) sees his half of the map, not the goblin behind the wall.
+    assert.equal((await t.request('PATCH', `${base}/fog`, { as: t.sam.token, body: { sight: true } })).statusCode, 403);
+    await t.request('PATCH', `${base}/fog`, { body: { enabled: true, sight: true } });
+    let view = await seen();
+    assert.deepEqual(view.tokens.map((x) => x.name), ['Thorin']);
+    assert.deepEqual(view.fog.shapes, []);
+    assert.equal(view.fog.sight, true);
+    assert.ok(view.fog.mask.some((s) => s.points), 'his sight comes as a polygon');
+    let img = await image();
+    assert.equal(await pixel(img, 100, 300), await pixel(png, 100, 300));
+    assert.ok((await pixel(img, 600, 100)) < 30);
+    const closedKey = view.image_key;
+
+    // Open the door: he sees through it to the goblin (on the line from him through the doorway).
+    await walls({ toggle: door.id });
+    view = await seen();
+    assert.deepEqual(view.tokens.map((x) => x.name).sort(), ['Goblin', 'Thorin']);
+    assert.notEqual(view.image_key, closedKey);
+    img = await image();
+    assert.equal(await pixel(img, 500, 332), await pixel(png, 500, 332));
+    assert.ok((await pixel(img, 600, 60)) < 30, 'not round the corner');
+
+    // Close it again: the goblin is gone, and what he saw through the door stays, dimmed.
+    await walls({ toggle: door.id });
+    view = await seen();
+    assert.deepEqual(view.tokens.map((x) => x.name), ['Thorin']);
+    assert.ok(view.fog.mask.some((s) => s.fill === 'dim'));
+    img = await image();
+    const dim = await pixel(img, 500, 332);
+    const original = await pixel(png, 500, 332);
+    assert.ok(Math.abs(dim - (0.4 * original + 0.6 * 0x14)) < 15, `dim ${dim} from ${original}`);
+
+    // He can't walk through the wall or the closed door; the DM can put a token anywhere.
+    const move = (body, as = t.sam.token) => t.request('PATCH', `${base}/tokens/${thorin.id}`, { as, body });
+    const blocked = await move({ x: 400, y: 245 });
+    assert.equal(blocked.statusCode, 400);
+    assert.match(blocked.json().error, /wall in the way/);
+    assert.equal((await move({ x: 100, y: 400 })).statusCode, 200);
+    assert.equal((await move({ x: 52.5, y: 52.5 })).statusCode, 200);
+
+    // The DM makes everyone forget where they've been.
+    await t.request('PATCH', `${base}/fog`, { body: { forget: true } });
+    const inDim = (v, x, y) => v.fog.mask.some((s) => s.fill === 'dim' && x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h);
+    assert.ok(!inDim(await seen(), 500, 332), 'only where he can see now');
+    assert.ok((await pixel(await image(), 500, 332)) < 30);
+
+    // Through the open door he can walk.
+    await walls({ toggle: door.id });
+    assert.equal((await move({ x: 402.5, y: 245 })).statusCode, 200);
+    await walls({ toggle: door.id });
+    assert.equal((await move({ x: 52.5, y: 52.5 })).statusCode, 400, 'shut behind him');
+    assert.equal((await move({ x: 52.5, y: 52.5 }, t.dmToken)).statusCode, 200);
+
+    // DM rectangles still show outside sight; line of sight off leaves only them.
+    await t.request('PATCH', `${base}/fog`, { body: { add: { op: 'reveal', x: 560, y: 350, w: 140, h: 140 } } });
+    assert.deepEqual((await seen()).tokens.map((x) => x.name).sort(), ['Goblin', 'Thorin']);
+    await t.request('PATCH', `${base}/fog`, { body: { sight: false } });
+    view = await seen();
+    assert.ok(!view.fog.mask.some((s) => s.points || s.fill === 'dim'));
+    assert.ok((await pixel(await image(), 100, 300)) < 30);
+
+    await walls({ clear: 'all' });
+    assert.deepEqual(t.maps.get(t.campaign.id, map.id).walls, []);
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and can be cleared', async () => {
+  let draft = 0;
+  const t = await setup({
+    llm: mapLLM((opts) => {
+      if (opts.purpose !== 'map:walls') return readOut();
+      draft++;
+      return {
+        walls: [{ points: [{ x: 500, y: 0 }, { x: 500, y: 498 }, { x: 1000, y: 498 }] }],
+        doors: [{ from: { x: 502, y: 500 }, to: { x: 502, y: 700 } }],
+        notes: draft === 1 ? 'The tower walls are a guess.' : '',
+      };
+    }),
+  });
+  try {
+    const map = await importMap(t, await terrain(700, 490));
+    const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+    await t.request('PATCH', base, { body: { shown: true } });
+    await t.request('PATCH', `${base}/walls`, { body: { add: { x1: 10, y1: 10, x2: 100, y2: 10 } } });
+    assert.equal((await t.request('POST', `${base}/walls/draft`, { as: t.sam.token })).statusCode, 403);
+    const started = (await t.request('POST', `${base}/walls/draft`)).json();
+    assert.equal(started.wall_draft.status, 'pending');
+    const done = await until(() => {
+      const m = t.maps.get(t.campaign.id, map.id);
+      return m.wall_draft.status === 'done' && m;
+    });
+    assert.equal(done.wall_draft.notes, 'The tower walls are a guess.');
+    const ai = done.walls.filter((w) => w.source === 'ai');
+    // Positions are thousandths of the image; ends that nearly meet are joined (the door's top onto the wall's corner).
+    assert.deepEqual(ai.map(({ x1, y1, x2, y2, door }) => ({ x1, y1, x2, y2, door })), [
+      { x1: 350, y1: 0, x2: 350.5, y2: 244.3, door: false },
+      { x1: 350.5, y1: 244.3, x2: 700, y2: 244, door: false },
+      { x1: 350.5, y1: 244.3, x2: 351.4, y2: 343, door: true },
+    ]);
+    assert.equal(done.walls.filter((w) => w.source === 'dm').length, 1);
+    const call = t.llm.calls.find((c) => c.purpose === 'map:walls');
+    assert.equal(call.attachments.length, 1);
+    assert.match(call.prompt, /700 × 490/);
+    // Players never get the draft's notes.
+    assert.equal((await t.request('GET', base, { as: t.sam.token })).json().wall_draft.notes, '');
+
+    await t.request('POST', `${base}/walls/draft`);
+    const again = await until(() => {
+      const m = t.maps.get(t.campaign.id, map.id);
+      return m.wall_draft.status === 'done' && draft === 2 && m;
+    });
+    assert.equal(again.walls.length, 4, 'the old draft was replaced, not added to');
+    await t.request('PATCH', `${base}/walls`, { body: { clear: 'ai' } });
+    assert.deepEqual(t.maps.get(t.campaign.id, map.id).walls.map((w) => w.source), ['dm']);
+  } finally {
+    await t.cleanup();
+  }
+});

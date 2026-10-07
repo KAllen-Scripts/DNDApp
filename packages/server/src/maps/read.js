@@ -9,7 +9,7 @@
  */
 import sharp from 'sharp';
 import { z } from 'zod';
-import { MAP_KINDS, UNITS, normalizeGrid, normalizeScale } from '@dndapp/shared/map.js';
+import { MAP_KINDS, UNITS, MAX_WALLS, normalizeGrid, normalizeScale } from '@dndapp/shared/map.js';
 import { BadRequestError } from '../store.js';
 
 const FORMATS = { png: { ext: 'png', type: 'image/png' }, jpeg: { ext: 'jpg', type: 'image/jpeg' }, webp: { ext: 'webp', type: 'image/webp' } };
@@ -201,5 +201,81 @@ export function createMapReader({ llm }) {
         .join(' ');
       return { kind: out.kind, name: out.name, description: out.description, grid, scale, notes };
     },
+
+    /**
+     * Draft the walls and doors on a map from its picture, for the DM to
+     * correct: { walls: [{ x1, y1, x2, y2, door }] in image pixels, notes }.
+     * The AI's positions are rough, so wall ends that nearly meet are joined
+     * (gaps would let sight through).
+     */
+    async walls({ buf, width, height, campaignId, userId }) {
+      const small = await sharp(buf)
+        .rotate()
+        .resize({ width: AI_LONG_SIDE, height: AI_LONG_SIDE, fit: 'inside', withoutEnlargement: true })
+        .flatten({ background: '#ffffff' })
+        .jpeg({ quality: 85 })
+        .toBuffer();
+      const out = await llm.structured({
+        task: 'maps',
+        purpose: 'map:walls',
+        campaignId,
+        userId,
+        system: WALLS_SYSTEM,
+        attachments: [{ type: 'image', media_type: 'image/jpeg', data: small.toString('base64') }],
+        prompt: `Trace the walls and doors on this map. Give positions from 0 to 1000 across (x, left to right) and 0 to 1000 down (y, top to bottom) of the whole image, whatever its shape (the original is ${width} × ${height} pixels).`,
+        schema: WallsOut,
+      });
+      const px = (p) => ({ x: (Math.min(1000, Math.max(0, p.x)) / 1000) * width, y: (Math.min(1000, Math.max(0, p.y)) / 1000) * height });
+      const lines = [];
+      for (const wall of out.walls) {
+        const pts = wall.points.map(px);
+        for (let i = 1; i < pts.length; i++) lines.push({ a: pts[i - 1], b: pts[i], door: false });
+      }
+      for (const d of out.doors) lines.push({ a: px(d.from), b: px(d.to), door: true });
+      joinEnds(lines, Math.max(width, height) / 100);
+      const walls = lines
+        .filter((l) => Math.hypot(l.b.x - l.a.x, l.b.y - l.a.y) >= 1)
+        .slice(0, MAX_WALLS)
+        .map((l) => ({ x1: l.a.x, y1: l.a.y, x2: l.b.x, y2: l.b.y, door: l.door }));
+      return { walls, notes: out.notes };
+    },
   };
 }
+
+/** Move line ends that are within `tolerance` of each other onto the same point. */
+export function joinEnds(lines, tolerance) {
+  const ends = lines.flatMap((l) => [l.a, l.b]);
+  const groups = [];
+  for (const p of ends) {
+    const g = groups.find((x) => Math.hypot(x.x - p.x, x.y - p.y) <= tolerance);
+    if (g) {
+      g.members.push(p);
+      g.x = g.members.reduce((s, m) => s + m.x, 0) / g.members.length;
+      g.y = g.members.reduce((s, m) => s + m.y, 0) / g.members.length;
+    } else {
+      groups.push({ x: p.x, y: p.y, members: [p] });
+    }
+  }
+  for (const g of groups) {
+    for (const m of g.members) {
+      m.x = g.x;
+      m.y = g.y;
+    }
+  }
+  return lines;
+}
+
+const Point = z.object({ x: z.number(), y: z.number() });
+const WallsOut = z.object({
+  walls: z.array(z.object({ points: z.array(Point).min(2).describe('The wall as a line through these points, in order; a curved wall as several short straight pieces') }))
+    .describe('Every wall, as lines along its middle'),
+  doors: z.array(z.object({ from: Point, to: Point })).describe('Each door or gate, from one side of the doorway to the other'),
+  notes: z.string().describe("For the DM: anything you couldn't trace or are unsure of. Empty if nothing."),
+});
+
+const WALLS_SYSTEM = `You trace walls on maps a Dungeon Master imports into a D&D table app. The app uses them for line of sight: players only see what their token has a clear line to, so a wall you trace hides what is behind it, and a gap lets sight through.
+- Trace solid things a person can't see through: walls of buildings, rooms and towers, castle and city walls, cave and cliff edges at eye height. Not floors, furniture, tables, rubble, water, trees, bushes or roof edges seen from above (trace the walls under a roof where they must be).
+- Follow each wall along its middle as a line through points. Make walls that meet share the same point, and close rooms all the way round except at doors and open doorways.
+- Doors and gates go in doors, across the doorway. Leave open archways and gaps open.
+- Positions are from 0 to 1000 across and 0 to 1000 down the whole image. Be as accurate as you can; the DM corrects them afterwards.
+- A map with no walls (open countryside, a region map) gets no walls.`;

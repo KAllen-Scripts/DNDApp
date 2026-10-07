@@ -363,7 +363,7 @@ test('fog of war: the DM turns it on, reveals by dragging, undoes, reveals and c
     assert.ok(page.$('#map-fog rect.fog'));
     assert.ok(!page.$('[data-fog-mode=reveal]').disabled);
 
-    page.click('[data-fog-mode=reveal]');
+    // Everything starts covered, so turning fog on goes straight to revealing.
     assert.equal(page.$('[data-fog-mode=reveal]').getAttribute('aria-pressed'), 'true');
     assert.ok(page.$('#map-view').classList.contains('fog-drawing'));
     // Drag a rectangle: it's drawn while dragging, and snaps to the grid.
@@ -396,6 +396,103 @@ test('fog of war: the DM turns it on, reveals by dragging, undoes, reveals and c
     assert.ok(!page.$('#map-view').classList.contains('fog-drawing'));
     page.click('#map-fog-open');
     assert.ok(!page.visible('#map-fog-tools'));
+  });
+});
+
+test('walls: the DM draws walls and doors (snapped to wall ends and grid corners), opens a door, erases, and asks the AI for a draft', async () => {
+  const llm = createFakeLLM({
+    structured: async (opts) => (opts.purpose === 'map:walls'
+      ? { walls: [{ points: [{ x: 500, y: 0 }, { x: 500, y: 1000 }] }], doors: [], notes: 'Rough around the tower.' }
+      : mapReading()),
+  });
+  await withPage({
+    setup: { llm },
+    before: async (t) => ({ dana: await addDm(t), map: await importMap(t, { patch: SHOWN }) }),
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t) => {
+    await openMapTab(page);
+    const map = async () => (await mapsOf(t))[0];
+    page.click('#map-fog-open');
+    assert.ok(page.visible('#map-wall-tools'));
+    assert.ok(page.$('#map-sight-on').disabled, 'line of sight needs the fog on');
+    assert.match(page.text('#map-wall-hint'), /Turn on Fog of war first/);
+
+    // A wall: drawn while dragging; its start snaps to the grid corner (35, 35).
+    page.click('[data-wall-mode=wall]');
+    assert.equal(page.$('[data-wall-mode=wall]').getAttribute('aria-pressed'), 'true');
+    assert.ok(page.$('#map-view').classList.contains('fog-drawing'));
+    page.pointer('#map-view', 'pointerdown', { clientX: 40, clientY: 40 });
+    page.pointer('#map-view', 'pointermove', { clientX: 100, clientY: 90 });
+    assert.ok(page.$('#map-walls line.wall-draft'));
+    page.pointer('#map-view', 'pointerup', { clientX: 100, clientY: 90 });
+    await page.settle();
+    let walls = (await map()).walls;
+    assert.deepEqual(walls.map(({ x1, y1, x2, y2, door }) => ({ x1, y1, x2, y2, door })), [{ x1: 35, y1: 35, x2: 100, y2: 90, door: false }]);
+    assert.ok(page.$('#map-walls line.wall'));
+
+    // A door that starts on the wall's end, then a click on it opens it.
+    page.click('[data-wall-mode=door]');
+    drag(page, '#map-view', [[103, 93], [103, 140], [103, 160]]);
+    await page.settle();
+    walls = (await map()).walls;
+    const door = walls.find((w) => w.door);
+    assert.deepEqual({ x1: door.x1, y1: door.y1 }, { x1: 100, y1: 90 });
+    drag(page, '#map-view', [[101, 120]]);
+    await page.settle();
+    assert.equal((await map()).walls.find((w) => w.door).open, true);
+    assert.ok(page.$('#map-walls line.door.open'));
+
+    // Erase the wall with a click.
+    page.click('[data-wall-mode=erase]');
+    drag(page, '#map-view', [[60, 58]]);
+    await page.settle();
+    assert.deepEqual((await map()).walls.map((w) => w.door), [true]);
+
+    // Line of sight, once the fog is on (turning fog on goes straight to revealing).
+    page.type('#map-fog-on', true);
+    await page.settle();
+    assert.equal(page.$('[data-fog-mode=reveal]').getAttribute('aria-pressed'), 'true');
+    assert.equal(page.$('[data-wall-mode=erase]').getAttribute('aria-pressed'), 'false');
+    page.type('#map-sight-on', true);
+    await page.settle();
+    assert.equal((await map()).fog.sight, true);
+    assert.match(page.text('#map-wall-hint'), /0 walls, 1 door/);
+
+    // The AI's draft arrives live, in its own colour, and can be cleared.
+    page.click('#map-walls-draft');
+    await page.waitFor(() => page.$('#map-walls line.wall.ai'), { what: "the AI's walls" });
+    assert.equal((await map()).wall_draft.notes, 'Rough around the tower.');
+    page.click('[data-wall-action=clear-ai]');
+    await page.settle();
+    assert.ok(!page.$('#map-walls line.wall.ai'));
+    assert.ok(page.$('[data-wall-action=clear-ai]').disabled);
+  });
+});
+
+test('line of sight: a player sees what their token sees, live as the DM opens a door; never the walls', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const map = await importMap(t, { patch: SHOWN });
+      const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+      await addToken(t, map, { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 50, y: 50 });
+      await addToken(t, map, { kind: 'enemy', name: 'Goblin', x: 600, y: 400 });
+      await t.request('PATCH', `${base}/walls`, { body: { add: { x1: 350, y1: 0, x2: 350, y2: 210 } } });
+      const res = await t.request('PATCH', `${base}/walls`, { body: { add: { x1: 350, y1: 210, x2: 350, y2: 280, door: true } } });
+      await t.request('PATCH', `${base}/walls`, { body: { add: { x1: 350, y1: 280, x2: 350, y2: 490 } } });
+      await t.request('PATCH', `${base}/fog`, { body: { enabled: true, sight: true } });
+      return { base, door: res.json().walls.find((w) => w.door) };
+    },
+    page: (t) => ({ as: t.sam }),
+  }, async (page, t, { base, door }) => {
+    await openMapTab(page);
+    assert.ok(page.$('#map-fog mask polygon'), 'his sight is cut out of the fog');
+    assert.equal(page.$$('#map-walls line').length, 0);
+    assert.ok(!page.visible('#map-wall-tools'));
+    assert.ok(tokenEl(page, 'Thorin'));
+    assert.ok(!tokenEl(page, 'Goblin'));
+    await t.request('PATCH', `${base}/walls`, { body: { toggle: door.id } });
+    await page.waitFor(() => tokenEl(page, 'Goblin'), { what: 'the goblin through the open door' });
   });
 });
 

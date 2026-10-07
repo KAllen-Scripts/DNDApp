@@ -14,6 +14,7 @@ import DOMPurify from './vendor/purify.js';
 import {
   TOKEN_KINDS, TOKEN_KIND_NAMES, TOKEN_SIZES, TOKEN_SIZE_NAMES, TOKEN_COLORS, UNITS,
   CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf,
+  fogMask, FOG_MASK_FILL, snapWallPoint, nearestWall,
 } from './shared/map.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -36,6 +37,8 @@ const state = {
   draftGrid: undefined, // grid being edited in the settings dialog (shown live)
   fogMode: null, // DM drawing fog: 'reveal' | 'cover'
   fogDraw: null, // the rectangle being drawn: { pointer, a, b }
+  wallMode: null, // DM working on walls: 'wall' | 'door' | 'erase'
+  wallDraw: null, // the wall being drawn: { pointer, a, b, sx, sy }
   live: null, // AbortController for the live stream
   pins: new Map(), // map id -> this person's private pins on it
   pinMode: false, // the next click on the map drops a pin
@@ -211,6 +214,7 @@ function render() {
   stage.style.height = `${height}px`;
   renderGrid();
   renderFog();
+  renderWalls();
   renderTokens();
   renderPins();
   renderSelection();
@@ -219,6 +223,8 @@ function render() {
   const reading = map.reading.status;
   if (reading === 'pending') status('The AI is reading this map…');
   else if (reading === 'failed' && state.canEdit) status(map.reading.error || "The AI couldn't read this map.", true);
+  else if (state.canEdit && map.wall_draft.status === 'pending') status('The AI is tracing the walls…');
+  else if (state.canEdit && map.wall_draft.status === 'failed') status(map.wall_draft.error || "The AI couldn't draft walls.", true);
   else status([KIND_LABELS[map.kind], scaleText(map), state.canEdit && !map.shown ? 'hidden from players' : ''].filter(Boolean).join(' · '));
 }
 
@@ -253,7 +259,11 @@ const svgEl = (tag, attrs) => {
   return el;
 };
 
-/** Fog of war: the DM sees it shaded; players see covered parts dark (their image is blacked out there too). */
+/**
+ * Fog of war: the DM sees their rectangles shaded; players see what the
+ * server worked out for them (covered parts dark, places seen before dim;
+ * their image is blacked out there too).
+ */
 function renderFog() {
   const map = state.current;
   const svg = $('#map-fog');
@@ -261,10 +271,15 @@ function renderFog() {
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
   svg.classList.toggle('dm', state.canEdit);
   svg.replaceChildren();
-  if (map.fog?.enabled) {
+  const shapes = state.canEdit ? fogMask(map) : (map.fog?.mask ?? []);
+  if (shapes.length) {
     const mask = svgEl('mask', { id: 'map-fog-mask', maskUnits: 'userSpaceOnUse', x: 0, y: 0, width, height });
-    mask.append(svgEl('rect', { width, height, fill: 'white' }));
-    for (const r of map.fog.shapes) mask.append(svgEl('rect', { x: r.x, y: r.y, width: r.w, height: r.h, fill: r.op === 'reveal' ? 'black' : 'white' }));
+    for (const r of shapes) {
+      const fill = FOG_MASK_FILL[r.fill];
+      mask.append(r.points
+        ? svgEl('polygon', { points: r.points.map((p) => p.join(',')).join(' '), fill })
+        : svgEl('rect', { x: r.x, y: r.y, width: r.w, height: r.h, fill }));
+    }
     const defs = svgEl('defs', {});
     defs.append(mask);
     svg.append(defs, svgEl('rect', { width, height, class: 'fog', mask: 'url(#map-fog-mask)' }));
@@ -278,7 +293,10 @@ function renderFog() {
 function renderFogTools() {
   const map = state.current;
   const tools = $('#map-fog-tools');
+  const walls = $('#map-wall-tools');
+  walls.hidden = tools.hidden;
   $('#map-fog-open').setAttribute('aria-pressed', String(!tools.hidden));
+  $('#map-view').classList.toggle('fog-drawing', !!map && ((!!state.fogMode && !!map.fog?.enabled) || !!state.wallMode));
   if (tools.hidden || !map) return;
   $('#map-fog-on').checked = !!map.fog?.enabled;
   for (const b of tools.querySelectorAll('[data-fog-mode]')) {
@@ -286,7 +304,51 @@ function renderFogTools() {
     b.disabled = !map.fog?.enabled;
   }
   for (const b of tools.querySelectorAll('[data-fog-action]')) b.disabled = !map.fog?.enabled;
-  $('#map-view').classList.toggle('fog-drawing', !!state.fogMode && !!map.fog?.enabled);
+  const sight = $('#map-sight-on');
+  sight.checked = !!map.fog?.sight;
+  sight.disabled = !map.fog?.enabled;
+  for (const b of walls.querySelectorAll('[data-wall-mode]')) b.setAttribute('aria-pressed', String(state.wallMode === b.dataset.wallMode));
+  $('#map-walls-draft').disabled = map.wall_draft.status === 'pending';
+  walls.querySelector('[data-wall-action="clear-ai"]').disabled = !map.walls.some((w) => w.source === 'ai');
+  walls.querySelector('[data-wall-action="forget"]').disabled = !map.fog?.enabled || !map.fog.sight;
+  const doors = map.walls.filter((w) => w.door).length;
+  $('#map-wall-hint').textContent = !map.fog?.enabled
+    ? 'Turn on Fog of war first. Then, with Line of sight, players see what their own token can see past the walls.'
+    : map.fog.sight
+      ? `${map.walls.length - doors} wall${map.walls.length - doors === 1 ? '' : 's'}, ${doors} door${doors === 1 ? '' : 's'}. Players see what their own token can see, and places they've been stay dim.`
+      : 'Players only see what you reveal. Tick Line of sight to let their tokens see past the walls.';
+}
+
+/** Walls and doors (DM only; players never get them). Walls the AI drafted are a different colour. */
+function renderWalls() {
+  const map = state.current;
+  const svg = $('#map-walls');
+  svg.setAttribute('viewBox', `0 0 ${map.image.width} ${map.image.height}`);
+  svg.replaceChildren();
+  if (!state.canEdit) return;
+  const line = (w, cls) => svgEl('line', { x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, class: cls });
+  for (const w of map.walls) svg.append(line(w, 'wall-halo'));
+  for (const w of map.walls) svg.append(line(w, w.door ? `door${w.open ? ' open' : ''}` : `wall${w.source === 'ai' ? ' ai' : ''}`));
+  const d = state.wallDraw;
+  if (d) svg.append(line({ x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y }, `wall-draft${state.wallMode === 'door' ? ' door' : ''}`));
+}
+
+async function walls(body) {
+  try {
+    const saved = await state.guarded(() => api('PATCH', `${base()}/${state.current.id}/walls`, body));
+    if (saved) onMap(saved);
+  } catch (err) {
+    report(err);
+  }
+}
+
+/** Set the DM's tool: a fog mode, a wall mode, or none (they're exclusive, and exclusive with placing a pin). */
+function setTool({ fogMode = null, wallMode = null }) {
+  state.fogMode = fogMode;
+  state.wallMode = wallMode;
+  if (fogMode || wallMode) state.pinMode = false;
+  renderPinTool();
+  renderFogTools();
 }
 
 async function fog(body) {
@@ -612,6 +674,28 @@ function zoomAt(px, py, factor) {
   applyView();
 }
 
+/** How close (screen pixels) a wall end snaps to another wall's end or a grid corner, and how close a click picks a wall. */
+const SNAP_PX = 12;
+
+/** Finish drawing a wall or door, or (a click, not a drag) erase a wall or open/close a door. */
+function wallUp(e) {
+  const d = state.wallDraw;
+  state.wallDraw = null;
+  renderWalls();
+  if (e.type !== 'pointerup') return;
+  const map = state.current;
+  const click = Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 4;
+  if (click) {
+    const near = nearestWall(map, toImage(e.clientX, e.clientY), SNAP_PX / state.view.k);
+    if (state.wallMode === 'erase' && near) walls({ remove: near.id });
+    else if (state.wallMode === 'door' && near?.door) walls({ toggle: near.id });
+    return;
+  }
+  if (state.wallMode === 'erase') return;
+  if (Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y) < 1) return;
+  walls({ add: { x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y, door: state.wallMode === 'door' } });
+}
+
 /** Screen coordinates → the map image's pixels. */
 function toImage(clientX, clientY) {
   const box = $('#map-view').getBoundingClientRect();
@@ -626,6 +710,11 @@ function viewDown(e) {
     state.fogDraw = { pointer: e.pointerId, a: at, b: at };
     return;
   }
+  if (state.wallMode && !state.pointers.size && !state.wallDraw) {
+    const at = snapWallPoint(state.current, toImage(e.clientX, e.clientY), SNAP_PX / state.view.k);
+    state.wallDraw = { pointer: e.pointerId, a: at, b: at, sx: e.clientX, sy: e.clientY };
+    return;
+  }
   state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY });
 }
 
@@ -635,6 +724,10 @@ function viewMove(e) {
   if (state.fogDraw?.pointer === e.pointerId) {
     state.fogDraw.b = toImage(e.clientX, e.clientY);
     return renderFog();
+  }
+  if (state.wallDraw?.pointer === e.pointerId) {
+    state.wallDraw.b = snapWallPoint(state.current, toImage(e.clientX, e.clientY), SNAP_PX / state.view.k);
+    return renderWalls();
   }
   const p = state.pointers.get(e.pointerId);
   if (!p) return;
@@ -666,6 +759,7 @@ function viewUp(e) {
     if (r.w > 0 && r.h > 0) fog({ add: { op: state.fogMode, ...r } });
     return;
   }
+  if (state.wallDraw?.pointer === e.pointerId) return wallUp(e);
   const p = state.pointers.get(e.pointerId);
   state.pointers.delete(e.pointerId);
   // A click on the map itself (not a drag) drops a pin when placing one, else clears the selection.
@@ -1096,16 +1190,41 @@ export function initMapActions() {
   $('#map-fog-open').addEventListener('click', () => {
     const tools = $('#map-fog-tools');
     tools.hidden = !tools.hidden;
-    if (tools.hidden) state.fogMode = null;
+    if (tools.hidden) setTool({});
     renderFogTools();
   });
-  $('#map-fog-on').addEventListener('change', (e) => fog({ enabled: e.target.checked }));
+  $('#map-fog-on').addEventListener('change', (e) => {
+    const on = e.target.checked;
+    fog({ enabled: on }).then(() => {
+      // Everything starts covered, so go straight to revealing (unless line of sight is doing it).
+      if (on && state.current?.fog?.enabled && !state.current.fog.sight) setTool({ fogMode: 'reveal' });
+      else if (!on && state.fogMode) setTool({});
+    });
+  });
   for (const b of document.querySelectorAll('[data-fog-mode]')) {
+    b.addEventListener('click', () => setTool({ fogMode: state.fogMode === b.dataset.fogMode ? null : b.dataset.fogMode }));
+  }
+  $('#map-sight-on').addEventListener('change', (e) => fog({ sight: e.target.checked }));
+  for (const b of document.querySelectorAll('[data-wall-mode]')) {
+    b.addEventListener('click', () => setTool({ wallMode: state.wallMode === b.dataset.wallMode ? null : b.dataset.wallMode }));
+  }
+  $('#map-walls-draft').addEventListener('click', async () => {
+    const map = state.current;
+    if (map.walls.some((w) => w.source === 'ai') && !confirm("Replace the AI's walls with a new draft? Walls you drew stay.")) return;
+    try {
+      const saved = await state.guarded(() => api('POST', `${base()}/${map.id}/walls/draft`, {}));
+      if (saved) onMap(saved);
+    } catch (err) {
+      report(err);
+    }
+  });
+  for (const b of document.querySelectorAll('[data-wall-action]')) {
     b.addEventListener('click', () => {
-      state.fogMode = state.fogMode === b.dataset.fogMode ? null : b.dataset.fogMode;
-      if (state.fogMode) state.pinMode = false;
-      renderPinTool();
-      renderFogTools();
+      if (b.dataset.wallAction === 'clear-ai') {
+        if (confirm('Remove all the walls the AI drafted? Walls you drew stay.')) walls({ clear: 'ai' });
+      } else if (confirm('Make players forget the places they saw before?')) {
+        fog({ forget: true });
+      }
     });
   }
   for (const b of document.querySelectorAll('[data-fog-action]')) {
@@ -1118,7 +1237,7 @@ export function initMapActions() {
   $('#map-settings').addEventListener('click', settingsDialog);
   $('#map-pin').addEventListener('click', () => {
     state.pinMode = !state.pinMode;
-    if (state.pinMode) state.fogMode = null;
+    if (state.pinMode) Object.assign(state, { fogMode: null, wallMode: null });
     renderFogTools();
     renderPinTool();
     if (state.pinMode) status('Click the map where the pin goes. Only you will see it.');

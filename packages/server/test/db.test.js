@@ -23,41 +23,41 @@ function olderDb(file, version, change) {
   db.close();
 }
 
-test('a new database: folders made, current schema, version 9', () => {
+test('a new database: folders made, current schema, version 10', () => {
   const file = tmp();
   const db = openDb(file);
   try {
     assert.ok(fs.existsSync(file));
-    assert.equal(db.pragma('user_version', { simple: true }), 9);
-    for (const t of ['campaigns', 'users', 'sessions', 'kb_records', 'character_sheets', 'maps', 'map_pins', 'character_pictures', 'conversations']) assert.ok(tables(db).includes(t), t);
+    assert.equal(db.pragma('user_version', { simple: true }), 10);
+    for (const t of ['campaigns', 'users', 'sessions', 'kb_records', 'character_sheets', 'maps', 'map_pins', 'map_explored', 'character_pictures', 'conversations']) assert.ok(tables(db).includes(t), t);
     assert.equal(db.pragma('foreign_keys', { simple: true }), 1);
   } finally {
     db.close();
   }
   // Opening it again changes nothing.
   const again = openDb(file);
-  assert.equal(again.pragma('user_version', { simple: true }), 9);
+  assert.equal(again.pragma('user_version', { simple: true }), 10);
   again.close();
   const mem = openDb(':memory:');
-  assert.equal(mem.pragma('user_version', { simple: true }), 9);
+  assert.equal(mem.pragma('user_version', { simple: true }), 10);
   mem.close();
 });
 
-test('v4 (the live install) and v5 → v9: conversations can be pinned and deleted; maps and picture tables added', () => {
+test('v4 (the live install) and v5 → v10: conversations can be pinned and deleted; maps, picture and explored tables added', () => {
   const file = tmp();
   olderDb(file, 4, (db) => {
-    db.exec('ALTER TABLE conversations DROP COLUMN pinned; ALTER TABLE conversations DROP COLUMN deleted_at; DROP TABLE maps; DROP TABLE map_pins; DROP TABLE character_sheets; DROP TABLE character_pictures');
+    db.exec('ALTER TABLE conversations DROP COLUMN pinned; ALTER TABLE conversations DROP COLUMN deleted_at; DROP TABLE map_explored; DROP TABLE maps; DROP TABLE map_pins; DROP TABLE character_sheets; DROP TABLE character_pictures');
     db.prepare("INSERT INTO campaigns (name, slug) VALUES ('Old', 'old')").run();
     db.prepare("INSERT INTO users (name, password_hash) VALUES ('Sam', 'scrypt$x$y')").run();
     db.prepare('INSERT INTO conversations (campaign_id, user_id, title) VALUES (1, 1, ?)').run('Where is the mill?');
   });
   const db = openDb(file);
   try {
-    assert.equal(db.pragma('user_version', { simple: true }), 9);
+    assert.equal(db.pragma('user_version', { simple: true }), 10);
     assert.ok(columns(db, 'conversations').includes('pinned'));
     assert.ok(columns(db, 'conversations').includes('deleted_at'));
     assert.deepEqual(db.prepare('SELECT title, pinned, deleted_at FROM conversations').get(), { title: 'Where is the mill?', pinned: 0, deleted_at: null });
-    assert.ok(tables(db).includes('maps') && tables(db).includes('map_pins') && tables(db).includes('character_sheets') && tables(db).includes('character_pictures'));
+    assert.ok(tables(db).includes('maps') && tables(db).includes('map_pins') && tables(db).includes('character_sheets') && tables(db).includes('character_pictures') && tables(db).includes('map_explored'));
     assert.equal(db.prepare('SELECT password_hash FROM users').get().password_hash, 'scrypt$x$y');
   } finally {
     db.close();

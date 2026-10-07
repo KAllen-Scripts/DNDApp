@@ -881,6 +881,15 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .map-fog-tools { padding: 0.35rem 0.5rem; border: 1px dashed var(--border); border-radius: var(--radius); }
 .map-bar button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 .map-view.fog-drawing { cursor: crosshair; }
+.map-walls { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.map-walls line { stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.map-walls .wall-halo { stroke: rgb(0 0 0 / 0.6); stroke-width: 6px; }
+.map-walls .wall { stroke: #4fc3f7; stroke-width: 3px; }
+.map-walls .wall.ai { stroke: #b388ff; }
+.map-walls .door { stroke: #ffb74d; stroke-width: 4px; }
+.map-walls .door.open { stroke-dasharray: 4 6; }
+.map-walls .wall-draft { stroke: #f2d675; stroke-width: 3px; stroke-dasharray: 6 4; }
+.map-walls .wall-draft.door { stroke: #ffb74d; }
 .token.hidden-token { opacity: 0.5; border-style: dashed; }
 .token.down :is(.token-initials, .token-picture) { opacity: 0.45; }
 .token.down.has-picture .token-picture { filter: grayscale(1); }

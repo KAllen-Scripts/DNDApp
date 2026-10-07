@@ -127,6 +127,18 @@ CREATE TABLE IF NOT EXISTS map_pins (
   PRIMARY KEY (map_id, user_id)
 );
 
+-- Where each player has seen on a map with line of sight on (shown to them dimmed).
+-- Not archived: a convenience, forgotten if the database is rebuilt. See maps/sight.js.
+CREATE TABLE IF NOT EXISTS map_explored (
+  map_id      TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL,
+  data        TEXT NOT NULL,      -- base64 bitset, one bit per cell, row by row
+  cols        INTEGER NOT NULL,
+  rows        INTEGER NOT NULL,
+  updated_at  TEXT NOT NULL,
+  PRIMARY KEY (map_id, user_id)
+);
+
 -- A player's token and full picture of their character (files in the archive under characters/<user id>/).
 CREATE TABLE IF NOT EXISTS character_pictures (
   campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
