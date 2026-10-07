@@ -9,6 +9,7 @@ import { loadSheet, initSheetActions, flush as flushSheet } from './sheet.js';
 import { marked } from './vendor/marked.js';
 import DOMPurify from './vendor/purify.js';
 import { initLook } from './look.js';
+import { initDice, setDiceCampaign } from './dice.js';
 
 const $ = (sel) => document.querySelector(sel);
 const CAMPAIGN_KEY = 'dndapp.campaign'; // last campaign chosen in this browser (pre-selected next time)
@@ -164,6 +165,7 @@ async function enterCampaign(campaign) {
   $('#character').textContent = describe(campaign);
   $('#switch-campaign').hidden = state.me.campaigns.length < 2;
   newConversation();
+  setDiceCampaign({ campaignId: campaign.id, guarded });
   await Promise.all([loadConversations(), loadNotes(), loadSheet({ campaignId: campaign.id, guarded })]);
 }
 
@@ -632,5 +634,6 @@ $('#note-form textarea').addEventListener('keydown', (e) => {
 });
 
 initSheetActions();
+initDice();
 initLook();
 start().catch((err) => showLogin(err.message));

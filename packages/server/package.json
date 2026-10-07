@@ -12,6 +12,7 @@
     "rebuild": "node src/cli/rebuild.js"
   },
   "dependencies": {
+    "@3d-dice/dice-box-threejs": "^0.0.12",
     "@anthropic-ai/claude-agent-sdk": "^0.3.288",
     "@anthropic-ai/sdk": "^0.131.0",
     "@dndapp/shared": "^0.1.0",

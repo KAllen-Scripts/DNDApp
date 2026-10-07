@@ -62,6 +62,12 @@ Each player has a **Sheet** tab, laid out like the official 5e sheet (core stats
 - **Spells**: type a name to add one, and its details are filled in from (1) the SRD 5.1 spell list built into the server, (2) the PDFs in the books folder, or (3) the AI's own knowledge, labelled as such. Every detail can be edited. Details are only replaced when the player asks.
 - **Books**: drop PDFs into `DND books` next to this repo (`BOOKS_DIR` in `.env` to change it). Scanned books need an OCR text layer. The server reads them into memory at start-up (a few seconds; nothing is stored). EPUBs aren't read.
 
+### Dice
+
+The **Dice** button in the player's header opens a dice tray: click dice to build a roll (or type one, like `2d6+3` or `d%`), choose advantage or disadvantage for the next d20, and see this session's rolls. On the Sheet tab, clicking a save, skill, ability name, initiative or spell attack rolls it, and the dice button next to an attack rolls to hit, then offers its damage (doubled dice on a natural 20). Shift-click rolls with advantage, Alt-click with disadvantage.
+
+The **server rolls** (a secure random number). The page then throws 3D dice with real physics and relabels their faces so they land on the server's numbers, so a roll can't be faked from the browser. The 3D dice ([dice-box-threejs](https://github.com/3d-dice/dice-box-threejs), MIT) are served by this server and only loaded the first time someone rolls; they take the theme's accent colour. 3D and sound can be switched off in the tray; with reduced motion on, or without WebGL, the result just appears. Rolls aren't saved or shown to anyone else yet.
+
 ### The public address
 
 `PUBLIC_URL` in `.env` is the address players use (a placeholder, `https://dnd.example.xyz`, until the domain is bought). It's the only place the URL is set. The web page is served by this server and calls it with relative paths, so the page itself never needs the URL. The server prints it on start-up.
@@ -148,6 +154,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/sheet/download` | Your sheet as a file (`{format: "dndapp-sheet", sheet}`) that can be uploaded again |
 | GET | `/campaigns/:cid/spells?q=` | Spell name suggestions (SRD and your books) |
 | GET | `/campaigns/:cid/spells/lookup?name=` | A spell's details: SRD, else your books (tidied by the AI), else the AI's memory. 404 if not found; 429 past `SHEET_AI_PER_HOUR` AI calls |
+| POST | `/campaigns/:cid/roll` | Roll dice: `{notation: "1d20+5", mode?: normal \| advantage \| disadvantage}` → `{notation, mode, terms, total, natural}`. d2–d20 and d100, up to 50 dice. Not saved |
 | GET | `/campaigns/:cid/usage` | AI usage this month by step and provider, plus average answer times (DM) |
 
 `/ask` streams these events: `conversation`, `turn`, `tool` (what it's searching), `text` (answer tokens), `done` (`answer`, `evidence` (the transcript lines behind each citation), cost, `durationMs`), and `error`. On each new `turn`, replace any text you've displayed rather than appending to it.
@@ -163,3 +170,5 @@ Tests use a fake AI (the fake archivist calls the real knowledge-base tools) and
 ## Licences
 
 Spell text in `packages/server/src/sheets/srd-spells.json` is from the System Reference Document 5.1 by Wizards of the Coast LLC, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/legalcode), as prepared by the [5e-bits/5e-database](https://github.com/5e-bits/5e-database) project (MIT).
+
+The 3D dice and their sounds are [@3d-dice/dice-box-threejs](https://github.com/3d-dice/dice-box-threejs) (MIT), which bundles [Three.js](https://threejs.org) and [cannon-es](https://github.com/pmndrs/cannon-es) (both MIT).

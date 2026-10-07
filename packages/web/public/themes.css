@@ -233,7 +233,7 @@
 }
 :root[data-theme="pixel"] .prof-mark::before, :root[data-theme="pixel"] .mark { border-radius: 0; }
 :root[data-theme="pixel"] :is(.a, .card, .chats, .look-card) { border-width: 3px; }
-:root[data-theme="pixel"] button:not(.icon-btn, .cite, .link, .chat-open, .prof-mark, .reset, [role="tab"]) { border-width: 3px; box-shadow: 3px 3px 0 #000; text-transform: uppercase; }
+:root[data-theme="pixel"] button:not(.icon-btn, .cite, .link, .chat-open, .prof-mark, .reset, .roll-name, [role="tab"]) { border-width: 3px; box-shadow: 3px 3px 0 #000; text-transform: uppercase; }
 :root[data-theme="pixel"] button:not(.icon-btn, .cite, .link, .chat-open):active { transform: translate(3px, 3px); box-shadow: none; }
 :root[data-theme="pixel"] h1, :root[data-theme="pixel"] .chat-title, :root[data-theme="pixel"] .tabs button { text-transform: uppercase; letter-spacing: 0.08em; }
 :root[data-theme="pixel"] .chat-title::before { content: "▶ "; color: var(--accent); }
@@ -296,6 +296,9 @@
 :root[data-layout="app"] .tab-icon { display: block; font-size: 1.35rem; line-height: 1.1; }
 :root[data-layout="app"] #app-view > .topbar { padding-block: 0.5rem; }
 :root[data-layout="app"] #app-view > .topbar .ghost { padding: 0.35rem 0.7rem; font-size: 0.9rem; }
+/* Above the tabs along the bottom. */
+:root[data-layout="app"] .dice-result { bottom: calc(5.2rem + env(safe-area-inset-bottom)); }
+@media (max-width: 560px) { :root[data-layout="app"] .dice-panel { bottom: calc(4.3rem + env(safe-area-inset-bottom)); } }
 
 /* Text size: everything is in rem, so this scales the whole page. */
 :root[data-density="compact"] { --base-size: 14px; }

@@ -8,14 +8,15 @@ Read this first when picking the project up on another machine or with another A
 
 ---
 
-## Current state (2026-10-06)
+## Current state (2026-10-07)
 
 - **Server: built and working end to end with real AI calls.** Player notes → transcript upload (with date) → attendance → **archivist** (an AI with full authority over the knowledge base) → per-player Q&A with privacy. Verified with a realistic two-session privacy scenario through Claude Code (see the change log).
 - **Character sheets** (new, 2026-10-06): a Sheet tab per player per campaign, laid out like the official 5e sheet, with automatic values the player can override (overrides are always kept), autosave with version checks, upload of existing sheets (PDF, photo, text, own JSON) read by the AI, and spells looked up by name from the SRD, then the PDFs in `DND books`, then the AI. Schema v5. See SPEC §6.4.
 - **Chats can be pinned, renamed and deleted; the page has themes and layouts** (new, 2026-10-06): a chat list replaces the old dropdown; a Look dialog offers 12 themes, 4 layouts, 3 text sizes, 4 chat styles, 6 sheet styles and 5 sheet layouts, saved per browser. Schema v6.
 - **Character sheet tidied, two new sheet layouts** (2026-10-06, merged to `main` 2026-10-07): every box shares one set of sizes and lines up, in every style and layout; new "By ability" (2024 sheet) and "Tabs" (like the sheet apps) layouts; spell slots and death saves are tick circles.
 - **Q&A handles general D&D questions and rich formatting** (new, 2026-10-06): questions like "stat block for a brown bear?" are answered straight from the model's knowledge without searching the campaign; answers can include tables and stat blocks (markdown/HTML, sanitised on the page).
-- **Tests:** 55 passing (`npm test`). They're offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools.
+- **Dice** (new, 2026-10-07, branch `claude/character-sheet-layout-polish-iwmybe`): a Dice button in the player header; click-to-roll from the sheet; the server rolls and 3D dice land on its numbers. Rolls aren't saved or shared yet. See SPEC §6.5.
+- **Tests:** 63 passing (`npm test`). They're offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools.
 - **Electron dropped; it's a web page now** (owner's call: overkill when there's a server and address anyway). A basic player page (`packages/web/public`, no build step) is served by the server at `/`: log in, ask questions (streamed, clickable citations, past conversations), take notes. No DM/host screens yet.
 - **Logins: name + password**, set by the admin, who can also require a new password at next login (Active Directory style, enforced by the server). Anyone can change their own password. Schema v4.
 - **Multiple campaigns supported throughout.** Players in several campaigns pick one after logging in; the admin chooses each account's campaigns (plural) when adding it and can change them later.
@@ -31,12 +32,13 @@ Read this first when picking the project up on another machine or with another A
 
 1. Get a **real transcript** from the recorder. Upload it on the admin screen (check the speaker preview: if the names come out wrong, adapt `packages/shared/src/transcript.js`), link every speaker to an account, let it process, and inspect the knowledge base (`GET /campaigns/:cid/kb`) and the archivist's questions. Measure archivist time and Q&A latency.
 2. **DM role: deferred.** The owner said to leave it for now. When it's designed, decide what the DM can see (including knowledge derived from players' private notes, currently visible to the `dm` role) and do.
-3. **Try the tidied sheet for real:** each sheet layout and style in the Look dialog, on a laptop and a phone (Safari/Firefox untested).
-4. **Character sheets with real players:** have someone upload their real sheet (a D&D Beyond PDF and a phone photo are the likely cases) and check what the AI got wrong. Then decide with the owner: should Q&A read the asker's sheet, and can the DM see sheets (part of the DM role)?
-5. Show the players the **Look** dialog and see which themes and sheet layouts they actually use; prune or add.
-6. Try **asking a question from the web page against the real AI** (streaming, citations, evidence in the browser), then use the page with the players in a real session. Include a general question ("stat block for a brown bear") and a campaign one, and check the AI picks the right path and the table/stat-block formatting looks right.
-7. Add **DM screens** to the web page: glossary; corrections; the archivist's questions; a full speaker-map editor. Which belong to the DM vs the host is part of the deferred DM-role design. (Accounts and session uploads are on the admin screen.)
-8. Buy the domain, set `PUBLIC_URL`, set up **Cloudflare Tunnel**, write a short player guide (address + "log in with what Kenny gave you").
+3. **Try the tidied sheet and the dice for real:** each sheet layout and style in the Look dialog, and some rolls, on a laptop and a phone (Safari/Firefox untested; the 3D dice need WebGL, and were only seen in headless Chromium's software renderer).
+4. **Dice, next (owner's call):** should rolls be shared with the party and/or the DM live (D&D Beyond's game log), can the DM roll in secret, and should rolls go into the archive for the archivist? Needs a live channel per campaign; ties into the DM role.
+5. **Character sheets with real players:** have someone upload their real sheet (a D&D Beyond PDF and a phone photo are the likely cases) and check what the AI got wrong. Then decide with the owner: should Q&A read the asker's sheet, and can the DM see sheets (part of the DM role)?
+6. Show the players the **Look** dialog and see which themes and sheet layouts they actually use; prune or add.
+7. Try **asking a question from the web page against the real AI** (streaming, citations, evidence in the browser), then use the page with the players in a real session. Include a general question ("stat block for a brown bear") and a campaign one, and check the AI picks the right path and the table/stat-block formatting looks right.
+8. Add **DM screens** to the web page: glossary; corrections; the archivist's questions; a full speaker-map editor. Which belong to the DM vs the host is part of the deferred DM-role design. (Accounts and session uploads are on the admin screen.)
+9. Buy the domain, set `PUBLIC_URL`, set up **Cloudflare Tunnel**, write a short player guide (address + "log in with what Kenny gave you").
 
 ## Getting running on a new machine
 
@@ -104,6 +106,7 @@ Details are in SPEC §3–5.
 | Spell sources: SRD, then the books, then the AI's memory | SRD is exact and free; the books cover the group's other spells (the AI only tidies OCR); the AI is a labelled last resort. Details are replaced only when the player asks. |
 | Sheets private to their player | Same rule as notes. DM access is part of the deferred DM role. |
 | Sheet saves carry a version; stale saves get 409 | So a phone and a laptop can't silently overwrite each other. |
+| **The server decides dice rolls; the 3D dice are animated to land on them** | Owner's call (2026-10-07): fine as long as it looks the same to the player. D&D Beyond lets the browser's physics decide; server rolls are evenly random and can't be faked from the page, which matters once rolls are shared. The library really throws the dice, then relabels faces. |
 
 ## Change log
 
@@ -309,6 +312,18 @@ What was untidy (from the owner's screenshot and screenshots of every style and 
 - **Checked in headless Chromium** (throwaway server on port 4411, temp data dir, a filled-in 6th-level multiclass sheet and an empty one): every layout at 1280, 1000, 800 and 390px wide; every sheet style; Tavern on a dark device, Arcane, Frost, 8-bit, Ancient Scroll; the app page layout on a phone; the Look dialog; print preview of the tabs layout. Driven through the real page: switching layouts from the Look dialog, tabs (click, arrow keys, remembered after reload), death-save and slot circles, inspiration, a skill mark, and ↺ on a typed AC all saved to the server correctly. No page errors. `npm test`: 55 passing.
 - **Not checked:** a real phone, Safari/Firefox (container queries need Safari 16+ / Firefox 110+), printing on paper.
 
+### 2026-10-07: 3D dice, rolled by the server
+
+The owner asked how possible a fully animated dice roller like D&D Beyond's would be, then (after hearing that D&D Beyond lets the browser's physics decide, while this would have the server decide and the dice land on its numbers) said to go ahead as long as it looks exactly the same to the player.
+
+- **Rolling** (`shared/src/dice.js`, `POST /campaigns/:cid/roll`): notation like `1d20+5`, `2d6+1d4-1`, `d%` (d2–d20 and d100, up to 50 dice, numbers up to 999); advantage/disadvantage when there's exactly one d20; `crypto.randomInt` on the server; the result lists every die (dropped ones marked) and the natural d20. Anyone in the campaign can roll; rolls aren't saved. `findRoll` reads the dice out of an attack's damage text (`1d8+2 piercing` → `1d8+2`).
+- **3D dice:** `@3d-dice/dice-box-threejs` 0.0.12 (MIT; Three.js + cannon-es bundled into one ES module, ~700 KB), served at `/vendor/dice/dice-box.js` with its sounds under `/vendor/dice/sounds/` (no textures needed), loaded on the first roll. It runs the real physics throw first, then swaps the face labels so the face that lands up shows the server's number (checked in the browser: every die landed on the server's value, including advantage and a percentile 100 as "00" + "0"). The dice take the theme's accent colours and tumble over the whole page, then fade.
+- **Page** (`web/public/dice.js`): a Dice button in the player header opens the tray (dice buttons that build the notation, a notation box, Normal / Advantage / Disadvantage for the next d20, 3D and sound switches kept per browser, this session's rolls; a bottom sheet on phones). Results appear in a card at the bottom: total, each die, natural 20 / natural 1, and after an attack, a damage button (doubled dice on a natural 20). On the sheet (`sheet.js`): clicking a save, skill, ability name, initiative or spell attack rolls d20 + that value; attacks have a roll button; death saves have "Roll a death save". Shift-click = advantage, Alt-click = disadvantage. Reduced motion, no WebGL, or 3D switched off: the result appears straight away.
+- **Tests:** 63 (shared: parsing, refusing bad notation, damage text, totals, advantage/disadvantage, naturals; server: the endpoint, all 20 faces come up, advantage keeps the higher, bad notation and outsiders refused, the bundle and sounds are served, no path escape).
+- **Checked in headless Chromium** (software WebGL) against a throwaway server: rolling Stealth, an attack with advantage then its damage, and a typed `2d6+1d100+3` from the tray, each comparing the faces the 3D dice landed on with the server's numbers (all matched); bad notation explained; at 1280 and 390px wide; reduced motion. No page errors (apart from the deliberate 400).
+- **Installing:** done with npm 11, so the lockfile only gained the new packages.
+- **Not checked:** real phones and GPUs, Safari/Firefox, how the sounds feel, many dice at once on a slow phone (3D is skipped above 30 dice).
+
 ## Verified vs. not verified
 
 | Verified for real | Not yet verified |
@@ -324,6 +339,7 @@ What was untidy (from the owner's screenshot and screenshots of every style and 
 | v3 → v4 migration on a copy of the real database, then on the real one | Several people using the page at once |
 | The owner using the admin screen in a real browser | A real uploaded character sheet (D&D Beyond PDF, phone photo) |
 | Character sheet in headless Edge; spell lookup (SRD, PHB scan, AI memory) and PDF sheet upload through real Claude Code | Sheet attachments on the API provider |
+| 3D dice landing on the server's rolls, in headless Chromium (software WebGL) | 3D dice on real phones and GPUs; Safari/Firefox |
 
 ## Gotchas and lessons
 

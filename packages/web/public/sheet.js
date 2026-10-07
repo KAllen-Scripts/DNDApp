@@ -14,6 +14,8 @@ import {
   ABILITIES, ABILITY_NAMES, SKILLS, CLASSES, RACES, BACKGROUNDS, ALIGNMENTS, SCHOOLS,
   computeSheet, coerceDerived, formatBonus, normalizeSheet, normalizeSpell,
 } from './shared/sheet.js';
+import { d20Plus, findRoll } from './shared/dice.js';
+import { roll, rollModeFromEvent, D20_ICON } from './dice.js';
 
 const $ = (sel) => document.querySelector(sel);
 const LEVEL_NAMES = ['Cantrips', '1st level', '2nd level', '3rd level', '4th level', '5th level', '6th level', '7th level', '8th level', '9th level'];
@@ -261,8 +263,8 @@ const lbl = (text) => h('span', { class: 'lbl' }, text);
 const labelled = (text, control, cls = '') => h('label', { class: `fld ${cls}` }, control, lbl(text));
 /** A titled box. */
 const box = (title, cls, ...children) => h('section', { class: `sh-box ${cls}` }, title && h('h3', {}, title), ...children);
-/** A value with its label underneath (armour class, hit points, spell save DC...). */
-const stat = (control, label, cls = '') => h('label', { class: `stat ${cls}` }, control, lbl(label));
+/** A value with its label underneath (armour class, hit points, spell save DC...); the label rolls it if get is given. */
+const stat = (control, label, cls = '', get) => h('label', { class: `stat ${cls}` }, control, get ? rollButton(label, get, 'lbl') : lbl(label));
 /** A one-line box, lined up with the save and skill lists: a value, then what it is. */
 const line = (control, label, cls = '') => h('label', { class: `sh-line ${cls}` }, h('span'), h('span', { class: 'line-val' }, control), lbl(label));
 const col = (...blocks) => h('div', { class: 'sh-col' }, blocks);
@@ -271,6 +273,22 @@ const section = (title, ...content) => h('details', { class: 'sh-section', open:
 const removeButton = (title, onclick) => h('button', { type: 'button', class: 'icon-x', title, 'aria-label': title, onclick }, '×');
 const addButton = (text, onclick) => h('button', { type: 'button', class: 'add-row', onclick }, `+ ${text}`);
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * A name you click to roll (a save, skill, ability...). get() gives
+ * { notation, label, then } at the moment of the click, so it uses the
+ * current values. Shift-click: advantage; Alt-click: disadvantage.
+ */
+function rollButton(content, get, cls = '') {
+  const b = h('button', { type: 'button', class: `roll-name ${cls}`, title: 'Click to roll (Shift: advantage, Alt: disadvantage)' }, content);
+  b.addEventListener('click', (e) => {
+    const r = get();
+    roll(r.notation, { label: r.label, mode: rollModeFromEvent(e), then: r.then });
+  });
+  return b;
+}
+/** A d20 plus an automatic value: "Stealth" → 1d20+2. */
+const check = (key, label) => () => ({ notation: d20Plus(state.calc.values[key]), label });
 
 function datalist(id, options) {
   return h('datalist', { id }, options.map((o) => h('option', { value: o })));
@@ -335,7 +353,7 @@ function abilityTiles() {
   return h('div', { class: 'abilities' },
     ABILITIES.map((a) =>
       h('div', { class: 'ability' },
-        lbl(ABILITY_NAMES[a]),
+        rollButton(ABILITY_NAMES[a], check(`mod.${a}`, `${ABILITY_NAMES[a]} check`), 'lbl'),
         auto(`mod.${a}`, { kind: 'bonus', label: `${ABILITY_NAMES[a]} modifier`, cls: 'mod' }),
         field(`abilities.${a}`, { label: `${ABILITY_NAMES[a]} score`, kind: 'int', cls: 'score' }),
       ),
@@ -349,7 +367,7 @@ function abilityGroup(a) {
   score.title = 'Score';
   return h('section', { class: 'sh-box ability-group' },
     h('div', { class: 'ability-head' },
-      h('h3', {}, ABILITY_NAMES[a]),
+      h('h3', {}, rollButton(ABILITY_NAMES[a], check(`mod.${a}`, `${ABILITY_NAMES[a]} check`))),
       auto(`mod.${a}`, { kind: 'bonus', label: `${ABILITY_NAMES[a]} modifier`, cls: 'mod' }),
       score,
     ),
@@ -361,7 +379,7 @@ function saveRow(a, name = ABILITY_NAMES[a]) {
   return h('li', {},
     autoCheck(`save_prof.${a}`, `Proficient in ${ABILITY_NAMES[a]} saves`),
     auto(`save.${a}`, { kind: 'bonus', label: `${ABILITY_NAMES[a]} save` }),
-    h('span', { class: 'row-name' }, name),
+    rollButton(name, check(`save.${a}`, `${ABILITY_NAMES[a]} save`), 'row-name'),
   );
 }
 
@@ -385,7 +403,7 @@ function skillRow(k, withAbility = true) {
   return h('li', {},
     mark,
     auto(`skill.${k}`, { kind: 'bonus', label: name }),
-    h('span', { class: 'row-name' }, name, withAbility && h('span', { class: 'muted small' }, ` (${cap(ability)})`)),
+    rollButton([name, withAbility && h('span', { class: 'muted small' }, ` (${cap(ability)})`)], check(`skill.${k}`, name), 'row-name'),
   );
 }
 
@@ -414,7 +432,7 @@ const core = () => h('div', { class: 'core' }, abilityTiles(), h('div', { class:
 const vitals = () =>
   h('div', { class: 'vitals' },
     stat(auto('ac', { label: 'Armour class' }), 'Armour class', 'big'),
-    stat(auto('initiative', { kind: 'bonus', label: 'Initiative' }), 'Initiative', 'big'),
+    stat(auto('initiative', { kind: 'bonus', label: 'Initiative' }), 'Initiative', 'big', check('initiative', 'Initiative')),
     stat(auto('speed', { label: 'Speed (feet)' }), 'Speed', 'big'),
   );
 
@@ -440,6 +458,7 @@ const deathSaves = () =>
     h('div', { class: 'ds' },
       ['successes', 'failures'].map((kind) => h('div', { class: `ds-row ds-${kind}` }, h('span', {}, cap(kind)), pips(`death_saves.${kind}`, cap(kind), 3))),
     ),
+    h('button', { type: 'button', class: 'ghost ds-roll', onclick: (e) => roll('1d20', { label: 'Death save', mode: rollModeFromEvent(e) }) }, 'Roll a death save'),
   );
 
 const combat = () => h('div', { class: 'combat' }, vitals(), hp(), h('div', { class: 'pair' }, hitDice(), deathSaves()));
@@ -448,12 +467,13 @@ function attacks() {
   const list = h('div', { class: 'sh-table attacks' });
   const draw = () => {
     list.replaceChildren(
-      ...(state.sheet.attacks.length ? [h('div', { class: 'tr th' }, lbl('Name'), lbl('Atk bonus'), lbl('Damage / type'), h('span'))] : []),
+      ...(state.sheet.attacks.length ? [h('div', { class: 'tr th' }, lbl('Name'), lbl('Atk bonus'), lbl('Damage / type'), h('span'), h('span'))] : []),
       ...state.sheet.attacks.map((_, i) =>
         h('div', { class: 'tr' },
           field(`attacks.${i}.name`, { label: 'Attack name', placeholder: 'Name' }),
           field(`attacks.${i}.bonus`, { label: 'Attack bonus', placeholder: '+0', cls: 'num' }),
           field(`attacks.${i}.damage`, { label: 'Damage and type', placeholder: 'Damage / type' }),
+          attackRoll(i),
           removeButton('Remove this attack', () => { state.sheet.attacks.splice(i, 1); draw(); changed(); }),
         ),
       ),
@@ -462,6 +482,19 @@ function attacks() {
   };
   draw();
   return box('Attacks & spellcasting', 'attacks-box', list);
+}
+
+/** Roll an attack to hit, with its damage (from the damage box) offered afterwards. */
+function attackRoll(i) {
+  const b = h('button', { type: 'button', class: 'icon-roll', title: 'Roll to hit (Shift: advantage, Alt: disadvantage)', 'aria-label': 'Roll this attack' });
+  b.innerHTML = D20_ICON;
+  b.addEventListener('click', (e) => {
+    const a = state.sheet.attacks[i];
+    const name = a.name.trim() || 'Attack';
+    const damage = findRoll(a.damage);
+    roll(d20Plus(parseInt(a.bonus, 10) || 0), { label: `${name}: to hit`, mode: rollModeFromEvent(e), then: damage && { label: `${name}: damage`, notation: damage } });
+  });
+  return b;
 }
 
 // Everything else.
@@ -664,7 +697,7 @@ function spells() {
       stat(classPick, 'Spellcasting class', 'pick'),
       stat(abilityWrap, 'Spellcasting ability', 'pick'),
       stat(auto('spell_dc', { label: 'Spell save DC' }), 'Spell save DC', 'big'),
-      stat(auto('spell_attack', { kind: 'bonus', label: 'Spell attack bonus' }), 'Spell attack bonus', 'big'),
+      stat(auto('spell_attack', { kind: 'bonus', label: 'Spell attack bonus' }), 'Spell attack bonus', 'big', check('spell_attack', 'Spell attack')),
     ),
     h('div', { class: 'slots' }, [1, 2, 3, 4, 5, 6, 7, 8, 9].map(slotTile), pact),
     h('p', { class: 'muted small slot-help' }, 'Slots per long rest are worked out for you (type a number to change one). Tick a circle when you use a slot.'),

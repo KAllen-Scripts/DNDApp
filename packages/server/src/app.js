@@ -2,6 +2,7 @@
  * HTTP API. Clients only display what these endpoints return and send what
  * players type; all processing happens on this server.
  */
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +17,7 @@ import { RateLimitError } from './qa/agent.js';
 import { preparedTranscript } from './pipeline/prepare.js';
 import { SheetConflictError } from './sheets/store.js';
 import { SHEET_FORMAT } from '@dndapp/shared/sheet.js';
+import { parseRoll, rollDice, ROLL_MODES } from '@dndapp/shared/dice.js';
 
 /** Open a Server-Sent Events stream on a request. */
 function openSse(request, reply) {
@@ -56,6 +58,7 @@ const CONTENT_TYPES = {
   '.png': 'image/png',
   '.ico': 'image/x-icon',
   '.json': 'application/json',
+  '.mp3': 'audio/mpeg',
 };
 
 /**
@@ -75,16 +78,25 @@ function serveWebPage(app, dir) {
     if (url === '/index.html') app.get('/', { config: { public: true } }, send);
   }
   // Modules the page imports from packages: the character sheet rules (shared with the server, so the page can
-  // show automatic values as players type), and markdown + HTML sanitising for answers.
+  // show automatic values as players type), dice notation, markdown + HTML sanitising for answers, and the 3D
+  // dice (Three.js and the physics are bundled into that one file).
   const modules = {
     '/shared/sheet.js': '@dndapp/shared/sheet.js',
+    '/shared/dice.js': '@dndapp/shared/dice.js',
     '/vendor/marked.js': 'marked',
     '/vendor/purify.js': 'dompurify',
+    '/vendor/dice/dice-box.js': '@3d-dice/dice-box-threejs',
   };
+  const sendFile = (file, type) => async (request, reply) =>
+    reply.type(type).header('Cache-Control', 'no-cache').header('X-Content-Type-Options', 'nosniff').send(fs.readFileSync(file));
   for (const [url, spec] of Object.entries(modules)) {
-    const file = fileURLToPath(import.meta.resolve(spec));
-    app.get(url, { config: { public: true } }, async (request, reply) =>
-      reply.type(CONTENT_TYPES['.js']).header('Cache-Control', 'no-cache').header('X-Content-Type-Options', 'nosniff').send(fs.readFileSync(file)));
+    app.get(url, { config: { public: true } }, sendFile(fileURLToPath(import.meta.resolve(spec)), CONTENT_TYPES['.js']));
+  }
+  // The dice's sounds, from the same package (dice-box.js asks for /vendor/dice/sounds/...).
+  const sounds = path.resolve(path.dirname(fileURLToPath(import.meta.resolve('@3d-dice/dice-box-threejs'))), '../public/sounds');
+  for (const name of fs.existsSync(sounds) ? fs.readdirSync(sounds, { recursive: true }) : []) {
+    if (path.extname(name) !== '.mp3') continue;
+    app.get(`/vendor/dice/sounds/${name.split(path.sep).join('/')}`, { config: { public: true } }, sendFile(path.join(sounds, name), CONTENT_TYPES['.mp3']));
   }
 }
 
@@ -670,6 +682,27 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     const spell = await spells.lookup(name, { campaignId: cid, userId: request.user.id, beforeAi: sheetAiAllowed(request.user.id) });
     if (!spell) throw new NotFoundError(`No spell called "${name}" was found in the SRD, your books, or the AI's memory.`);
     return spell;
+  });
+
+  // ---------- dice ----------
+
+  /**
+   * Roll dice: { notation: "1d20+5", mode: normal | advantage | disadvantage }.
+   * The server decides every roll (a secure random number); the page only
+   * animates the dice landing on these numbers. Rolls aren't saved.
+   */
+  app.post('/campaigns/:cid/roll', async (request) => {
+    access(request);
+    const { notation, mode } = z
+      .object({ notation: z.string().max(100), mode: z.enum(ROLL_MODES).default('normal') })
+      .parse(request.body);
+    let parsed;
+    try {
+      parsed = parseRoll(notation);
+    } catch (err) {
+      throw new BadRequestError(err.message);
+    }
+    return rollDice(parsed, { mode, random: (sides) => crypto.randomInt(1, sides + 1) });
   });
 
   // ---------- corrections & archivist questions (DM) ----------

@@ -355,6 +355,78 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
   .access-name { grid-column: 1 / -1; }
 }
 
+/* ---------- dice (dice.js) ---------- */
+.dice-open { display: inline-flex; align-items: center; gap: 0.4rem; }
+.dice-open svg, .icon-roll svg { width: 1.15rem; height: 1.15rem; flex: none; }
+.dice-open.has-mode { border-color: var(--accent); color: var(--accent); }
+/* The tray: a panel under the header, not a dialog, so you can keep using the sheet. */
+.dice-panel {
+  position: fixed; z-index: 9; top: 4rem; right: 16px; width: min(23rem, calc(100vw - 32px)); max-height: calc(100vh - 5rem); overflow-y: auto;
+  display: grid; gap: 0.75rem; padding: 0.9rem 1rem 1rem;
+  background: linear-gradient(var(--surface), var(--surface)), var(--bg); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.28);
+}
+.dice-panel-head { display: flex; align-items: center; justify-content: space-between; }
+.dice-panel-head h2 { margin: 0; font-size: 1.1rem; }
+.dice-form { display: grid; gap: 0.5rem; }
+.dice-buttons { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.3rem; }
+.dice-buttons .die { padding: 0.45rem 0; font-size: 0.85rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.dice-buttons .die:hover { border-color: var(--accent); color: var(--accent); }
+.dice-input { display: flex; gap: 0.4rem; }
+.dice-input input { flex: 1; min-width: 0; font-variant-numeric: tabular-nums; }
+.dice-input button { flex: none; padding: 0.5rem 0.8rem; }
+.dice-form .error:empty { display: none; }
+.dice-mode-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.dice-modes { display: flex; gap: 0.2rem; padding: 0.2rem; border-radius: 9px; background: var(--surface-2); }
+.dice-modes button { border: none; background: none; padding: 0.3rem 0.65rem; border-radius: 7px; font-size: 0.85rem; }
+.dice-modes button[aria-pressed="true"] { background: var(--surface); color: var(--accent); font-weight: 700; box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }
+.dice-hint { margin: 0; }
+.dice-settings { display: flex; align-items: center; gap: 0.4rem 1rem; flex-wrap: wrap; }
+.dice-settings label.check { flex: none; }
+.dice-settings .muted:empty { display: none; }
+.dice-history-title { margin: 0.2rem 0 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.dice-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.15rem; }
+.dice-history li { display: grid; grid-template-columns: 2.6rem minmax(0, 1fr) auto; gap: 0.5rem; align-items: center; padding: 0.3rem 0.2rem; border-top: 1px solid var(--border); }
+.dice-history li:first-child { border-top: none; }
+.dice-history .dh-none { display: block; }
+.dh-total { font: 700 1.2rem/1 var(--font-head); text-align: center; font-variant-numeric: tabular-nums; }
+.dh-what { display: grid; min-width: 0; }
+.dh-what strong { font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The 3D dice tumble across the whole window, over everything but the result. */
+.dice-stage { position: fixed; inset: 0; z-index: 8; pointer-events: none; opacity: 0; transition: opacity 0.5s; }
+.dice-stage.rolling { opacity: 1; }
+.dice-stage.fading { opacity: 0; }
+.dice-stage canvas { display: block; }
+
+.dice-result {
+  position: fixed; z-index: 10; left: 50%; bottom: calc(1.25rem + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  width: min(26rem, calc(100vw - 32px)); padding: 0.65rem 0.9rem 0.8rem;
+  background: linear-gradient(var(--surface), var(--surface)), var(--bg); border: 1px solid var(--border); border-top: 4px solid var(--accent);
+  border-radius: 12px; box-shadow: 0 12px 34px rgb(0 0 0 / 0.3); animation: dice-pop 0.22s ease-out;
+}
+@keyframes dice-pop { from { opacity: 0; transform: translate(-50%, 0.6rem) scale(0.97); } }
+.dr-head { display: flex; align-items: center; gap: 0.5rem; }
+.dr-label { flex: 1; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dr-mode { font-size: 0.72rem; font-weight: 700; padding: 0.05rem 0.5rem; border-radius: 999px; background: var(--surface-2); color: var(--accent); }
+.dr-close { width: 1.8rem; height: 1.8rem; border: none; background: none; font-size: 1.2rem; }
+.dr-body { display: flex; align-items: center; gap: 0.9rem; margin-top: 0.25rem; }
+.dr-total { min-width: 2ch; font: 700 2.6rem/1 var(--font-head); color: var(--head-color); text-align: center; font-variant-numeric: tabular-nums; }
+.dr-detail { display: grid; gap: 0.1rem; color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.dr-detail s { opacity: 0.7; }
+.dr-nat { color: var(--accent); font-size: 0.95rem; }
+.dice-result.crit { border-top-color: #c9a227; }
+.dice-result.crit :is(.dr-total, .dr-nat) { color: #c9a227; }
+.dice-result.fumble :is(.dr-total, .dr-nat) { color: var(--error); }
+.dice-result.error { border-top-color: var(--error); }
+.dr-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; }
+.dr-actions button { padding: 0.35rem 0.8rem; font-size: 0.9rem; }
+@media (max-width: 560px) {
+  .dice-open span { display: none; }
+  .dice-panel { top: auto; bottom: 0; right: 0; left: 0; width: auto; max-height: 80vh; border-radius: 16px 16px 0 0; padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
+}
+@media print { .dice-open, .dice-panel, .dice-stage, .dice-result { display: none !important; } }
+
 /* ---------- character sheet ---------- */
 #app-view.wide { max-width: 1280px; }
 .sheet-panel { overflow-y: auto; }
@@ -425,13 +497,23 @@ input.num, .sheet .num { text-align: center; }
 .sh-table .th { margin-bottom: -0.15rem; }
 .sh-table .th .lbl { padding-left: 0.1rem; }
 .classes .tr { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) var(--num) var(--ctl); }
-.attacks .tr { grid-template-columns: minmax(0, 1.25fr) 4.2rem minmax(0, 1.4fr) var(--ctl); }
+.attacks .tr { grid-template-columns: minmax(0, 1.25fr) 4.2rem minmax(0, 1.4fr) var(--ctl) var(--ctl); }
 .classes .th > :nth-child(3), .attacks .th > :nth-child(2) { text-align: center; padding: 0; white-space: nowrap; }
 .sheet button.icon-x {
   display: grid; place-items: center; width: var(--ctl); height: var(--ctl); padding: 0;
   background: transparent; color: var(--muted); font-size: 1.05rem; line-height: 1;
 }
 .sheet button.icon-x:hover { color: var(--error); border-color: var(--error); }
+/* Click a save, skill, ability, initiative or spell attack to roll it (dice.js). */
+.sheet button.roll-name {
+  display: block; width: fit-content; max-width: 100%; height: auto; padding: 0;
+  border: none; border-radius: 3px; background: none; text-align: left; cursor: pointer;
+}
+.sheet button.roll-name:hover { color: var(--accent); text-decoration: underline dotted; text-underline-offset: 0.2em; }
+.stat > button.roll-name, .ability > button.roll-name { margin-inline: auto; text-align: center; }
+.sheet button.icon-roll { display: grid; place-items: center; width: var(--ctl); height: var(--ctl); padding: 0; color: var(--accent); background: transparent; }
+.sheet button.icon-roll:hover { border-color: var(--accent); }
+.ds-roll { align-self: center; margin-top: 0.4rem; padding: 0.25rem 0.7rem; font-size: 0.8rem; }
 .sheet button.add-row {
   height: var(--ctl); width: 100%; padding: 0 0.7rem; text-align: left; font-size: 0.85rem;
   color: var(--accent); background: transparent; border: 1px dashed var(--border);
@@ -439,7 +521,7 @@ input.num, .sheet .num { text-align: center; }
 .sheet button.add-row:hover { border-style: solid; border-color: var(--accent); }
 /* Narrow boxes: damage goes on its own line, so names and damage aren't cut off. */
 @container (max-width: 400px) {
-  .attacks .tr { grid-template-columns: minmax(0, 1fr) var(--num) var(--ctl); padding-bottom: 0.35rem; border-bottom: 1px dashed var(--border); }
+  .attacks .tr { grid-template-columns: minmax(0, 1fr) var(--num) var(--ctl) var(--ctl); padding-bottom: 0.35rem; border-bottom: 1px dashed var(--border); }
   .attacks .tr > :nth-child(3) { grid-column: 1 / -1; grid-row: 2; }
   .attacks .th { display: none; }
 }

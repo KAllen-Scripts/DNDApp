@@ -104,12 +104,17 @@ test('the web page is served without logging in; API routes still need a login',
     assert.match(page.headers['content-type'], /text\/html/);
     assert.equal((await t.app.inject({ method: 'GET', url: '/app.js' })).statusCode, 200);
     // Modules the page imports from packages: sheet rules, and markdown + sanitising for answers.
-    for (const url of ['/shared/sheet.js', '/vendor/marked.js', '/vendor/purify.js']) {
+    for (const url of ['/shared/sheet.js', '/shared/dice.js', '/vendor/marked.js', '/vendor/purify.js', '/vendor/dice/dice-box.js']) {
       const res = await t.app.inject({ method: 'GET', url });
       assert.equal(res.statusCode, 200, url);
       assert.match(res.headers['content-type'], /javascript/);
       assert.match(res.body, /\bexport\b/);
     }
+    // The 3D dice's sounds come from the same package.
+    const sound = await t.app.inject({ method: 'GET', url: '/vendor/dice/sounds/dicehit/dicehit_plastic1.mp3' });
+    assert.equal(sound.statusCode, 200);
+    assert.equal(sound.headers['content-type'], 'audio/mpeg');
+    assert.notEqual((await t.app.inject({ method: 'GET', url: '/vendor/dice/sounds/../../package.json' })).statusCode, 200);
     assert.notEqual((await t.app.inject({ method: 'GET', url: '/../package.json' })).statusCode, 200);
     assert.equal((await t.app.inject({ method: 'GET', url: `/campaigns/${t.campaign.id}` })).statusCode, 401);
   } finally {
@@ -944,6 +949,51 @@ test('accounts, campaigns, notes and corrections are restored from the archive',
     } finally {
       fresh.db.close();
     }
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('dice: the server rolls for people in the campaign; advantage keeps the higher d20', async () => {
+  const t = await setup();
+  try {
+    const roll = (body, as = t.sam.token) => t.request('POST', `/campaigns/${t.campaign.id}/roll`, { body, as });
+    const res = await roll({ notation: '2d6 + 3' });
+    assert.equal(res.statusCode, 200);
+    const r = res.json();
+    assert.equal(r.notation, '2d6+3');
+    assert.equal(r.terms[0].dice.length, 2);
+    for (const d of r.terms[0].dice) assert.ok(d.value >= 1 && d.value <= 6);
+    assert.equal(r.total, r.terms[0].dice[0].value + r.terms[0].dice[1].value + 3);
+
+    // Every face comes up, and nothing outside 1..20.
+    const seen = new Set();
+    for (let i = 0; i < 400; i++) {
+      const { total, natural } = (await roll({ notation: '1d20' })).json();
+      assert.ok(total >= 1 && total <= 20);
+      assert.equal(natural, total);
+      seen.add(total);
+    }
+    assert.equal(seen.size, 20);
+
+    for (let i = 0; i < 30; i++) {
+      const adv = (await roll({ notation: '1d20+1', mode: 'advantage' })).json();
+      const [a, b] = adv.terms[0].dice;
+      assert.equal(adv.mode, 'advantage');
+      assert.equal(adv.natural, Math.max(a.value, b.value));
+      assert.equal(adv.total, adv.natural + 1);
+      assert.equal([a, b].filter((d) => d.kept).length, 1);
+    }
+
+    const bad = await roll({ notation: '1d7' });
+    assert.equal(bad.statusCode, 400);
+    assert.match(bad.json().error, /d7/);
+    assert.equal((await roll({ notation: '1d20', mode: 'cheat' })).statusCode, 400);
+
+    // Only people in the campaign.
+    await t.auth.createUser('Outsider', { password: PASSWORD });
+    const { token } = await t.auth.login('Outsider', PASSWORD);
+    assert.equal((await roll({ notation: '1d20' }, token)).statusCode, 403);
   } finally {
     await t.cleanup();
   }

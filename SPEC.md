@@ -1,6 +1,6 @@
 # DNDApp — Project Spec
 
-> Status: v0.9 (2026-10-06). Character sheets added (§6.4), with five layouts.
+> Status: v0.10 (2026-10-07). 3D dice rolled by the server (§6.5). v0.9 (2026-10-06): character sheets (§6.4), with five layouts.
 > Previously v0.8 (2026-10-04). Server built and tested end to end with real AI calls, including the archivist and privacy. Web page served by the server: name + password logins (with admin-forced password changes), multiple campaigns, a player view (ask, notes) and an admin screen (accounts, campaigns, roles, session uploads with speaker linking). No DM screens yet.
 > This is the source of truth for scope and design. Update it when decisions change. For the history of changes and where work left off, see [HANDOFF.md](HANDOFF.md).
 
@@ -106,6 +106,7 @@ Electron was dropped (owner's call: overkill, since there's a server and an addr
 - **Sessions** (on each campaign card, admin): past uploads (number, date, title, matched player notes, attendance, status with progress; refreshed every few seconds while processing; Retry/Process when failed or unprocessed) and **dates with player notes but no transcript**. Upload form: session number (default next), date played (default the newest date with waiting notes, else today's note date), optional title, transcript file or pasted text. Choosing a transcript calls the preview, which lists each speaker name with an account dropdown (current link, or a guess from account/character names). On upload, links are validated before anything is archived, and merged into the speaker map before processing is queued, so attendance uses them. Warns about an existing number, a date another session already has, and unlinked names. The admin login is for management only and isn't in any campaign; an admin who plays uses a separate, ordinary player account (§5.5 applies to it like anyone else).
 - **Player view:** ask questions (streamed answers, a status line while it searches, clickable citations that jump to the quoted transcript lines, follow-ups); **chats**: a list (drawer, or a sidebar in wide layouts) with Pinned and Recent sections and a filter; pin, rename or delete any chat. Deleting erases its questions and answers for good, but the bare `qa_log` rows stay so the hourly limit and usage figures still count them. Take notes (saved to today's session, listed by session date); character sheet (§6.4). Works on phones.
 - **Look** (per browser, saved in localStorage, applied before first paint by `look-boot.js`): 12 themes (colours, system fonts, background art; Tavern follows the device's light/dark), 4 layouts (classic, sidebar, full width, app with bottom tabs), 3 text sizes, 4 chat styles (bubbles, play script, letters, terminal), 6 sheet styles (match theme, official, grimoire, index cards, blueprint, terminal) and 5 sheet layouts (three columns, combat first, by ability like the 2024 sheet, tabs like the sheet apps, one column). All in `themes.css`, keyed by `data-*` attributes; previews in the dialog reuse the same CSS. Only system fonts, nothing loaded from outside. Printing is always black on white.
+- **Dice** (§6.5): a Dice button in the player header opens the dice tray; rolls from the sheet; 3D dice over the page; results and this session's history.
 - **Not built yet: DM / host features** (split between DM and host to be decided with the DM role): glossary; corrections; answer the archivist's questions; a full speaker-map editor (links are currently set while uploading). Transcript upload is on the admin screen.
 - On each `turn` event from `/ask`, replace displayed text rather than appending.
 
@@ -281,6 +282,7 @@ The archivist's rules: openly happened → attendees (everyone if all attended);
 - [x] Rebuild and restore from the archive.
 - [x] Usage and timing stats.
 - [x] Character sheets: automatic values with player overrides, upload, spells with lookup (§6.4).
+- [x] Dice: rolled by the server, shown as 3D dice landing on those numbers; click-to-roll from the sheet (§6.5).
 
 ### 6.2 Next
 
@@ -309,6 +311,15 @@ Owner's requirements (2026-10-06): structured like a normal 5e sheet; autofill w
 - **Spell lookup:** (1) SRD 5.1 (319 spells, bundled; exact name or a small typo); (2) the books folder, with no database: PDFs are read into memory at start-up (~1.7s for the PHB); a spell is found by its printed heading (a capitalised line followed by "1st-level evocation" / "Evocation cantrip", tolerant of OCR errors, fuzzy-matched), its text is cut out up to the next heading, and the AI tidies the scan into fields without changing the wording; (3) the AI's memory, labelled "AI memory" and told to say not-found rather than guess. Book and AI results are cached in memory. Each spell records its source and page. Measured with Claude Code: ~0.5s SRD, ~7s book or memory.
 - **Limits:** `SHEET_AI_PER_HOUR` (60) AI calls per player for uploads and non-SRD lookups; 5 MB per save; 30 MB PDFs.
 
+### 6.5 Dice
+
+Owner's requirement (2026-10-07): an animated dice roller like D&D Beyond's, as long as it looks exactly the same to the player. D&D Beyond lets the physics in the browser decide the roll; here **the server decides** and the dice are animated to land on its numbers, which looks the same, is evenly random, and can't be faked from the page (that matters once rolls are shared).
+
+- **Rolling:** `POST /campaigns/:cid/roll` (anyone in the campaign) with notation (`1d20+5`, `2d6+1d4-1`, `d%`; d2, d4, d6, d8, d10, d12, d20, d100; up to 50 dice) and a mode. Advantage/disadvantage applies when the roll has exactly one d20: it's rolled twice and the higher/lower kept. Numbers come from `crypto.randomInt`. Parsing and the arithmetic are in `shared/src/dice.js` (the page uses the same file to read dice out of an attack's damage, e.g. `1d8+2 piercing`). Rolls are **not stored** and nobody else sees them yet.
+- **3D:** [dice-box-threejs](https://github.com/3d-dice/dice-box-threejs) (Three.js + cannon-es, one self-contained ES module) is served at `/vendor/dice/dice-box.js` and its sounds under `/vendor/dice/sounds/`, loaded the first time someone rolls (~700 KB). It simulates a real throw, then swaps face labels so the face that lands up shows the server's number. A d100 is a tens die and a units die. Dice take the theme's accent colours. Off with reduced motion, without WebGL, or when switched off in the tray; then the result just appears.
+- **Page** (`web/public/dice.js`): the tray (dice buttons and a notation box, Normal / Advantage / Disadvantage for the next d20, 3D and sound switches kept per browser, this session's rolls), the result card (total, every die with dropped ones struck through, natural 20 / natural 1, and a damage roll offered after an attack: doubled dice on a natural 20). On the sheet, clicking a save, skill, ability name, initiative or spell attack rolls a d20 plus that value; each attack has a roll button; death saves have one. Shift-click: advantage; Alt-click: disadvantage.
+- **Later (owner's call):** sharing rolls with the party or the DM live, DM-only rolls, and whether rolls go into the archive for the archivist. These need a live channel per campaign and decisions that are part of the DM role.
+
 ## 7. Security & cost controls
 
 - **Accounts:** no self sign-up. The server admin creates accounts, sets passwords and assigns roles on the admin screen (`/admin/*` routes, admin login only); the DM role can't. The console only does `init` (create the admin login), `set-password` (recovery) and `list`. Accounts with history can only be blocked, not deleted (the archive refers to them by id). Names are unique (ignoring case). Passwords: at least 6 characters, stored as scrypt hashes, never in plain text, including the archive.
@@ -331,6 +342,7 @@ Owner's requirements (2026-10-06): structured like a normal 5e sheet; autofill w
 ## 9. Open questions
 
 - Should the DM see players' character sheets, and should Q&A use them? (Currently only the player can.)
+- Should dice rolls be shared with the party or the DM live, can the DM roll in secret, and should rolls be archived for the archivist? (Currently private and not stored.)
 - **DM role (deferred by the owner):** what the DM can see and do, including whether the DM sees knowledge derived from players' private notes (currently yes).
 - What exact format does the recorder produce? Are speakers labelled reliably per Discord user?
 - Note-to-session matching is by date (with a 6am rollover). Is an explicit "session started" button needed?
