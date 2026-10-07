@@ -24,7 +24,7 @@ Read this first when picking the project up on another machine or with another A
 - **Admin screen** on the web page (admin login only): accounts (add with campaign access, edit access, set password, require password change, log out everywhere, block, delete if unused) and campaigns (colour-coded cards; create with unique names, delete keeping the archive, add people as player/DM, change roles, remove). The admin login is management only; Kenny plays through a separate player account, which gets normal player privacy. The console only has `init`, `set-password` (recovery) and `list`.
 - **Public URL:** `PUBLIC_URL` (in `config.js`, overridable in `.env`) is the one place it's set. Placeholder `https://dnd.example.xyz` until the domain is bought.
 - **Hosting:** not set up. Cloudflare Tunnel is decided (domain not bought yet).
-- **Git:** everything is on `main`, including the sheet tidy-up and new sheet layouts (merged 2026-10-07). The book tools are on `claude/dnd-pdf-reference-system-7m7nz8`, not merged yet.
+- **Git:** everything is on `main`, including the sheet tidy-up and new sheet layouts (merged 2026-10-07). The book tools (Q&A searching the rulebooks) were merged to `main` on 2026-10-07.
 - **Live install on the owner's machine:** `data/` holds the admin login ("admin") and a player account for Kenny; the database is on schema v4 and becomes v6 the next time the server starts (v5 adds `character_sheets`; v6 adds `pinned` and `deleted_at` to `conversations`; nothing else changes). The owner has been using the admin screen in a real browser. Start the server with `npm start` (or `node packages/server/src/index.js`), then open http://127.0.0.1:4400.
 - **Real transcript:** none tested yet. The parser is built to an assumed format.
 
