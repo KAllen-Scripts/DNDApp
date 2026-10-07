@@ -70,9 +70,19 @@ The **server rolls** (a secure random number). The page then throws 3D dice with
 
 ### Maps
 
-The **Map** tab shows maps the DM imported: a battle map, a town, a region, anything (PNG, JPEG or WebP). After an import the AI reads the map in the background: what kind it is, a name, whether it has a grid and its scale. Where it sees a grid, the server measures the exact square size from the image, so tokens line up. The DM can correct the grid (it's drawn over the map while the settings are open) and the scale under **Map settings**, and decides when players can see the map (new maps start hidden).
+The **Map** tab shows maps the DM imported: a battle map, a town, a region, anything (PNG, JPEG or WebP, or one page of a PDF). After an import the AI reads the map in the background: what kind it is, a name, whether it has a grid and its scale. Where it sees a grid, the server measures the exact square size from the image, so tokens line up. The DM can correct the grid (it's drawn over the map while the settings are open) and the scale under **Map settings**, and decides when players can see the map (new maps start hidden).
 
 The DM adds **tokens** for player characters (tied to a player), NPCs and enemies, with a size from Tiny to Gargantuan and a colour. **Players can drag their own token; the DM can drag any.** Tokens snap to the grid, the distance moved shows while dragging, and every move appears live on everyone's screen. Drag the map to pan; zoom with the mouse wheel or by pinching. The image and every change are archived.
+
+For running a fight, the DM has:
+
+- **Fog**: turn on fog of war and drag rectangles to reveal or cover parts of the map. Players' copy of the image is blacked out on the server, and tokens under the fog are hidden from them.
+- **Hit points and conditions** on each token (type `-7`, `+5` or `12` in the selection bar). Players see enemies' and NPCs' health only as unhurt, hurt, bloodied or down.
+- **Hidden** tokens that players don't see at all.
+- **Stat block (AI)**: the AI fills in an enemy's 5e stat block, hit points and size. Only the DM sees it.
+- **From the campaign's records**: put someone the archivist knows about on the map and read their record from there.
+
+Everyone can drop **pins** with a note on a map; only the person who placed them sees them, not even the DM.
 
 ### The public address
 
@@ -84,7 +94,7 @@ The first time a transcript is processed, the server downloads a small search mo
 
 Everything lives in `data/` (git-ignored):
 
-- `data/archive/` is the permanent record: accounts, original transcripts, player notes, character sheets (every change, plus uploaded files), maps (the images as imported, and every change), speaker map, glossary, DM corrections, and a snapshot of the knowledge base after every archivist run. **Back this folder up.**
+- `data/archive/` is the permanent record: accounts, original transcripts, player notes, character sheets (every change, plus uploaded files), maps (the images or PDFs as imported, every change, and everyone's private pins), speaker map, glossary, DM corrections, and a snapshot of the knowledge base after every archivist run. **Back this folder up.**
 - `data/dndapp.sqlite` is the working database. It can be rebuilt from the archive.
 
 ### Rebuilding
@@ -161,13 +171,19 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/spells?q=` | Spell name suggestions (SRD and your books) |
 | GET | `/campaigns/:cid/spells/lookup?name=` | A spell's details: SRD, else your books (tidied by the AI), else the AI's memory. 404 if not found; 429 past `SHEET_AI_PER_HOUR` AI calls |
 | POST | `/campaigns/:cid/roll` | Roll dice: `{notation: "1d20+5", mode?: normal \| advantage \| disadvantage}` → `{notation, mode, terms, total, natural}`. d2–d20 and d100, up to 50 dice. Not saved |
-| GET / POST | `/campaigns/:cid/maps` | Maps you can see `{can_edit, maps}` (players: only shown maps, without the AI's description) / import one (DM) `{filename, data (base64), name?}`; the AI reads it in the background. 429 past `MAP_AI_PER_HOUR` reads |
+| GET / POST | `/campaigns/:cid/maps` | Maps you can see `{can_edit, maps}` (players: only shown maps, without the AI's description) / import one (DM) `{filename, data (base64), name?, page?}` (an image, or a PDF and the page to use, default 1); the AI reads it in the background. 429 past `MAP_AI_PER_HOUR` AI calls |
 | GET | `/campaigns/:cid/maps/events` | Live changes (SSE): `map` (the map as you may see it), `gone` `{id}` |
 | GET / PATCH / DELETE | `/campaigns/:cid/maps/:mid` | One map / change it (DM) `{name?, shown?, grid?: {size, x, y} \| null, scale?: {distance, unit, per: square \| width} \| null}` / remove it (DM; kept in the archive) |
-| GET | `/campaigns/:cid/maps/:mid/image` | The image as imported |
+| GET | `/campaigns/:cid/maps/:mid/image` | The image as imported (players: with the fog blacked out) |
+| PATCH | `/campaigns/:cid/maps/:mid/fog` | Fog of war (DM) `{enabled?, add?: {op: reveal \| cover, x, y, w, h}, undo?, reset?: reveal \| cover}` |
+| GET | `/campaigns/:cid/maps/records` | The campaign's records, people first, for linking a token (DM) |
+| GET | `/campaigns/:cid/maps/records/:rid` | One record (DM); `?title=` finds it if its id changed |
 | POST | `/campaigns/:cid/maps/:mid/read` | Read the map with the AI again (DM) |
-| POST | `/campaigns/:cid/maps/:mid/tokens` | Add a token (DM) `{kind: pc \| npc \| enemy, name?, user_id?, size?, color?, x?, y?}` |
-| PATCH / DELETE | `/campaigns/:cid/maps/:mid/tokens/:tid` | Move `{x, y}` (the DM, or the player it belongs to) or change (DM) a token / remove it (DM). Snapped to the grid by the server |
+| POST | `/campaigns/:cid/maps/:mid/tokens` | Add a token (DM) `{kind: pc \| npc \| enemy, name?, user_id?, size?, color?, x?, y?, hp?: {current, max}, conditions?, hidden?, record?: {id}}` |
+| PATCH / DELETE | `/campaigns/:cid/maps/:mid/tokens/:tid` | Change a token: the player it belongs to may set `{x, y, hp, conditions}`, the DM anything / remove it (DM). Snapped to the grid by the server |
+| POST | `/campaigns/:cid/maps/:mid/tokens/:tid/stats` | Fill the token's stat block with the AI (DM) `{name?}`; 404 if the AI doesn't know the creature |
+| GET / POST | `/campaigns/:cid/maps/:mid/pins` | Your own pins on the map `{pins}` / add one `{x, y, label?, color?}` |
+| PATCH / DELETE | `/campaigns/:cid/maps/:mid/pins/:pid` | Move or relabel one of your pins / remove it |
 | GET | `/campaigns/:cid/usage` | AI usage this month by step and provider, plus average answer times (DM) |
 
 `/ask` streams these events: `conversation`, `turn`, `tool` (what it's searching), `text` (answer tokens), `done` (`answer`, `evidence` (the transcript lines behind each citation), cost, `durationMs`), and `error`. On each new `turn`, replace any text you've displayed rather than appending to it.

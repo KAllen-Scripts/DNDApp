@@ -1,6 +1,6 @@
 # DNDApp — Project Spec
 
-> Status: v0.11 (2026-10-07). Maps: imported by the DM, read by the AI, tokens moved live (§6.6).
+> Status: v0.12 (2026-10-07). Maps: imported by the DM (images or a PDF page), read by the AI, tokens moved live, fog of war, hit points and conditions, hidden tokens, AI stat blocks, NPCs from the records, private pins (§6.6).
 > Previously v0.10 (2026-10-07). Q&A can look rules up in the group's own books (§5.3); 3D dice rolled by the server (§6.5).
 > Previously v0.9 (2026-10-06). Character sheets added (§6.4), with five layouts.
 > Previously v0.8 (2026-10-04). Server built and tested end to end with real AI calls, including the archivist and privacy. Web page served by the server: name + password logins (with admin-forced password changes), multiple campaigns, a player view (ask, notes) and an admin screen (accounts, campaigns, roles, session uploads with speaker linking). No DM screens yet.
@@ -82,7 +82,7 @@ DNDApp/
         qa/               agent.js, tools.js
         sheets/           store.js (sheets, archived as diffs), import.js (uploaded sheets), spells.js (lookup),
                           books.js + pdf.js (reading the books folder: spell headings, page search, contents), srd-spells.json (SRD 5.1 spells)
-        maps/             store.js (maps, archived as diffs; who sees what), read.js (the AI's reading, measuring the grid)
+        maps/             store.js (maps and pins, archived; who sees what), read.js (the AI's reading, measuring the grid), image.js (players' fogged image), stats.js (AI stat blocks), pdf.js (drawing a PDF page)
         cli/              admin.js (init, set-password, list), rebuild.js
       test/               offline tests (fake AI); fixtures/privacy-scenario/ = manual real-AI scenario
     web/public/  the web page, served by the server at / (no build step):
@@ -111,7 +111,7 @@ Electron was dropped (owner's call: overkill, since there's a server and an addr
 - **Player view:** ask questions (streamed answers, a status line while it searches, clickable citations that jump to the quoted transcript lines, follow-ups); **chats**: a list (drawer, or a sidebar in wide layouts) with Pinned and Recent sections and a filter; pin, rename or delete any chat. Deleting erases its questions and answers for good, but the bare `qa_log` rows stay so the hourly limit and usage figures still count them. Take notes (saved to today's session, listed by session date); character sheet (§6.4). Works on phones.
 - **Look** (per browser, saved in localStorage, applied before first paint by `look-boot.js`): 12 themes (colours, system fonts, background art; Tavern follows the device's light/dark), 4 layouts (classic, sidebar, full width, app with bottom tabs), 3 text sizes, 4 chat styles (bubbles, play script, letters, terminal), 6 sheet styles (match theme, official, grimoire, index cards, blueprint, terminal) and 5 sheet layouts (three columns, combat first, by ability like the 2024 sheet, tabs like the sheet apps, one column). All in `themes.css`, keyed by `data-*` attributes; previews in the dialog reuse the same CSS. Only system fonts, nothing loaded from outside. Printing is always black on white.
 - **Dice** (§6.5): a Dice button in the player header opens the dice tray; rolls from the sheet; 3D dice over the page; results and this session's history.
-- **Map** (§6.6): a Map tab. The DM imports maps and places tokens; players see shown maps and move their own token; changes are live.
+- **Map** (§6.6): a Map tab. The DM imports maps (or a PDF page), places tokens, runs the fog, tracks hit points and conditions, and gets stat blocks and records; players see shown maps, move their own token and keep private pins; changes are live.
 - **Not built yet: DM / host features** (split between DM and host to be decided with the DM role): glossary; corrections; answer the archivist's questions; a full speaker-map editor (links are currently set while uploading). Transcript upload is on the admin screen.
 - On each `turn` event from `/ask`, replace displayed text rather than appending.
 
@@ -138,7 +138,7 @@ All AI calls go through `src/llm/` (operations: `structured`, `text`, `agent`). 
 | Q&A | Claude Opus 5.5 | medium | 12 per question |
 | Sheet upload (`import`) | Claude Opus 5.5 | medium | none (one structured call, file attached) |
 | Spell from a book or memory (`spells`) | Claude Opus 5.5 | low | none (one structured call) |
-| Reading an imported map (`maps`) | Claude Opus 5.5 | medium | none (one structured call, image attached) |
+| Reading an imported map, and a creature's stat block (`maps`) | Claude Opus 5.5 | medium | none (one structured call each; the map's image attached) |
 
 `structured()` takes optional attachments (images, PDFs); the Claude Code provider sends them as a streamed user message.
 
@@ -173,7 +173,8 @@ Also accepted: `[MM:SS]`, fractional seconds, no brackets, `0:01:30 - Name: text
 | `sessions` | source | Number, date played, checksum, processing status. |
 | `player_notes` | source | Private notes with author and session date. |
 | `character_sheets` | source | One sheet per player per campaign (JSON), with a version that goes up on each save. Schema v5. |
-| `maps` | source | Maps the DM imported (JSON: image, grid, scale, tokens, shown), with a version. Schema v7. |
+| `maps` | source | Maps the DM imported (JSON: image, source page, grid, scale, fog, tokens, shown), with a version. Schema v7. |
+| `map_pins` | source | Each person's private pins on a map (JSON list), only ever sent to them. Schema v8. |
 | `corrections` | source | DM corrections with `after_session` (where to replay them in a rebuild). |
 | `attendance` | derived | Who was at each session. |
 | `kb_records` | derived | The archivist's knowledge base (§5.1). |
@@ -197,6 +198,8 @@ data/archive/
     character-sheets/uploads/         uploaded sheet files, as uploaded
     maps/<id>/image.<ext>             a map the DM imported, as uploaded
     maps/<id>/changes.jsonl           append-only: each change to that map (first line = whole map)
+    maps/<id>/source.pdf              the PDF, when the map is a page of one
+    maps/<id>/pins/<user id>.jsonl    append-only: someone's private pins on that map (the whole list each time)
     sessions/0001/transcript.txt      read-only, sha256 in meta.json
     outputs/v<PIPELINE_VERSION>/<timestamp>-<run>/report.json, journal.json, knowledge_base.json, questions.json
     deleted.json                      only if the admin deleted the campaign (restore skips it; nothing else is touched)
@@ -204,7 +207,7 @@ data/archive/
 
 - **Deleting a campaign** removes it and everything derived or mirrored from it from the database (foreign-key cascades), but never touches the archive: the folder gets `deleted.json` and restore skips it. New campaigns never reuse an existing archive folder's slug. Undo by hand: remove the marker, restart, rebuild.
 - A transcript can never be replaced (different bytes for an existing session number → 409).
-- **Restore:** on start-up, accounts, campaigns, members, sessions, speakers, glossary, corrections, notes, character sheets and maps (both replayed from their change lines) missing from the database are restored from the archive, and notes are re-indexed. Then run a rebuild to regenerate the knowledge base.
+- **Restore:** on start-up, accounts, campaigns, members, sessions, speakers, glossary, corrections, notes, character sheets and maps (both replayed from their change lines), and private map pins missing from the database are restored from the archive, and notes are re-indexed. Then run a rebuild to regenerate the knowledge base.
 - **Rebuild:** `npm run rebuild -- --campaign <id> --yes` (or `POST /rebuild`) wipes all derived data, re-indexes notes, then replays every session in order, each correction right after the session it was made against. The archivist is non-deterministic, so a rebuild gives an equivalent knowledge base, not an identical one.
 - Bump `PIPELINE_VERSION` (now 4) when prompts, tools or the memory design change.
 
@@ -260,7 +263,7 @@ Who-knows-what is decided by the archivist and enforced by the server:
 | Transcript (search, read, evidence, `/transcript` endpoint) | Attendees of that session. DMs see all. |
 | Player note (search, list) | **Only its author**, not even the DM. |
 | Character sheet | **Only its player.** Not the DM (deferred with the DM role), not Q&A, not the archivist. The admin login has none. |
-| Map | The DM: everything. Players: only maps the DM has shown, without the AI's description and reading notes; they can move only their own token. Not the archivist or Q&A (yet). |
+| Map | The DM: everything except players' private pins. Players: only maps the DM has shown, without the AI's description and reading notes, stat blocks, record links, hidden tokens, or anything under the fog (the image itself is blacked out there on the server); NPCs' and enemies' hit points only as how hurt they look; they can change only their own token. Private pins: only their owner. Not the archivist or Q&A (yet). |
 | Archivist | Sees everything, including all notes; decides `known_by`. |
 
 The archivist's rules: openly happened → attendees (everyone if all attended); only in a player's note → that player; whispered/secret perception → that player; absent players don't know unless told later (then widen); mixed records get split; when in doubt, restrict.
@@ -295,6 +298,7 @@ The archivist's rules: openly happened → attendees (everyone if all attended);
 - [x] Character sheets: automatic values with player overrides, upload, spells with lookup (§6.4).
 - [x] Dice: rolled by the server, shown as 3D dice landing on those numbers; click-to-roll from the sheet (§6.5).
 - [x] Maps: the DM imports any map, the AI reads its grid and scale, tokens for characters, enemies and NPCs, players move their own, live for everyone (§6.6).
+- [x] Maps: fog of war, hit points and conditions, hidden tokens, AI stat blocks, NPCs from the records, PDF page import, private pins (§6.6).
 
 ### 6.2 Next
 
@@ -338,13 +342,20 @@ Owner's requirement (2026-10-07): an animated dice roller like D&D Beyond's, as 
 Owner's requirements (2026-10-07): no premade maps. The DM imports their own map (a battle map, a town, a region, anything); the map itself is just the terrain. The AI reads it and turns it into something interactive. The DM then adds tokens by hand for characters, enemies and NPCs. **Players move their own token; the DM can move any.** Everyone sees moves live.
 
 - **Import** (DM, Map tab): a PNG, JPEG or WebP image (up to the upload limit). The image is archived exactly as uploaded (`maps/<id>/image.<ext>`); the page shows that file. The map starts hidden from players.
+- **A page of a PDF** (adventures and map packs often come as PDFs): the DM picks the page number. The server draws that page with pdf.js on a native canvas (`@napi-rs/canvas`), 3000 px on the long side (at most 6× the page's size), on white, and uses the PNG as the map's image. The PDF is archived next to it (`maps/<id>/source.pdf`) and the map records which page (`source`).
 - **Reading (AI, in the background after import, or "Read again"):** the server makes a smaller JPEG copy (2000 px on the long side) and asks the AI (`maps` task) what kind of map it is, a name, a short description of the terrain for the DM, whether it has a grid (and roughly how many squares across and down), and its scale (from a scale bar or labels, e.g. "1 square = 5 ft" or "the map is 30 miles across"). Where the AI sees a grid, the server measures it exactly from the full image's pixels (`detectGrid`: edge strength per column and row, the repeat distance near the AI's estimate, then the offset), because the AI's counts are only approximate. A grid with no scale gets 5 ft per square. The DM can correct the grid (square size and offset, shown on the map while editing) and the scale. The map is usable while it's being read; a read interrupted by a restart is marked failed and can be run again.
 - **Tokens:** the DM adds them with a kind (player character, NPC, enemy), a name, a size (Tiny to Gargantuan: ½, 1, 2, 3, 4 squares) and a colour. A player character token is tied to a player in the campaign (named after their character); that player can move it. On a grid, tokens snap to squares; on a map without one they're placed freely, sized relative to the map. While dragging, the page shows the distance moved (5e counting on a grid: every square, diagonals included, is one square; straight-line distance otherwise).
-- **Who can do what (server-enforced):** only the DM imports, renames, shows/hides, changes the grid or scale, re-reads, removes maps, and adds, edits or removes tokens. A player can only move a token tied to them, and only on a map they can see. Players see a map only when the DM has shown it, and never see the AI's description or reading notes (they could give away something the DM hasn't revealed). The admin login acts as DM in the API, as elsewhere.
+- **Fog of war** (DM, "Fog"): when it's on, players see only the parts the DM has revealed. The DM drags rectangles to reveal or cover again (snapped to squares on a grid), can undo, reveal all or cover all. Fog is a list of shapes applied in order (`fog.shapes`, up to 1000). It's enforced on the server: players get a copy of the image with the covered parts blacked out (`maps/image.js`, cached by a hash of the fog), so nothing under the fog reaches their browser, and tokens under the fog are left out for them (except their own). The DM sees the fog as a shade over the map.
+- **Hit points and conditions:** a token can have hit points (current and max) and any of the 5e conditions plus concentrating. The DM sets them; a player can set their own token's. In the selection bar, typing `-7`, `+5` or `12` changes current hit points. Players see the numbers only for player characters; for NPCs and enemies they get how hurt it looks (unhurt, hurt, bloodied at half or less, down), drawn as a bar.
+- **Hidden tokens:** the DM can hide a token from players (an ambush, someone lurking). Players never get it; the DM sees it faded.
+- **Stat blocks (AI, DM only):** for an enemy or NPC token, the DM can have the AI fill in its 5e stat block from its own knowledge (task `maps`, purpose `map:stats`): name, AC, hit point formula, speed, challenge and the block as Markdown. It also sets the token's hit points (the average) and size, unless the DM already set them. A new enemy is looked up automatically (a checkbox in the add dialog). The DM can look up a different creature instead (e.g. the token is "Boss" but it's a Bugbear). If the AI doesn't know the creature, nothing changes. Players never get stat blocks.
+- **NPCs from the campaign's records:** when adding a token, the DM can pick someone from the archivist's records (people and creatures first; the archivist names its kinds freely, so that's a guess from the kind). The token is named after them and linked to the record (`record: { id, title }`), and the DM can open what the records say about them from the map. The title is kept with the id because ids change when the knowledge base is rebuilt; the record is found by title then. Players only get the token's name.
+- **Private pins:** anyone who can see a map can drop pins on it with a label and colour, as notes to themselves. Only they ever see their pins, not even the DM. They're kept apart from the map (`map_pins` table, schema v8; `maps/<id>/pins/<user id>.jsonl` in the archive, the whole list on each line), never sent over the live stream, and restored from the archive. Up to 100 per person per map. They stay the same size on screen at any zoom.
+- **Who can do what (server-enforced):** only the DM imports, renames, shows/hides, changes the grid, scale or fog, re-reads, removes maps, and adds, edits or removes tokens. A player can only change a token tied to them (move it, its hit points and conditions), and only on a map they can see. Players see a map only when the DM has shown it, and never see the AI's description or reading notes (they could give away something the DM hasn't revealed), stat blocks, record links, hidden tokens, or anything under the fog. The admin login acts as DM in the API, as elsewhere.
 - **Live:** `GET /campaigns/:cid/maps/events` (SSE) sends each change to everyone with the map open, filtered per viewer (a map being hidden is sent as `gone` to players).
 - **Stored like sheets:** each map is one JSON document (`maps` table, schema v7) with a version. Every change appends only what changed to `maps/<id>/changes.jsonl` in the archive (the first line is the whole map), so restore replays it. Removing a map only marks it removed; nothing in the archive is deleted.
 - Shared geometry (snapping, distances, sizes) is in `shared/src/map.js`, served to the page at `/shared/map.js`.
-- **Later:** importing a page from a PDF; fog of war and walls; enemy HP and conditions on tokens; tokens hidden from players; filling an enemy's stat block with the AI; picking NPCs from the archivist's records; a ruler; letting the archivist know what happened on a map.
+- **Later:** walls and line of sight (fog that follows what tokens can see); a ruler; initiative order; letting the archivist know what happened on a map. 3D renders of maps were looked into and parked by the owner (2026-10-07).
 
 ## 7. Security & cost controls
 
