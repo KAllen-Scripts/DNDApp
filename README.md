@@ -196,6 +196,24 @@ npm test
 
 Tests use a fake AI (the fake archivist calls the real knowledge-base tools) and a fake search model, so they're free and run offline.
 
+The web page is tested without a browser: `packages/web/test/page.js` loads the real page in jsdom against a real test server. A page test looks like:
+
+```js
+import { withPage } from './helpers.js';
+
+test('notes: a player saves a note', async () => {
+  await withPage({ page: (t) => ({ as: t.sam }) }, async (page, t) => {
+    page.click('[data-tab=notes]');
+    page.type('#note-form textarea', 'The miller lied.');
+    page.submit('#note-form');
+    await page.settle();
+    // assert on page.$(...), page.requests, or the server through t
+  });
+});
+```
+
+`withPage` fails the test if the page throws. See the existing tests in `packages/web/test/` for dialogs, uploads, dragging and live updates.
+
 ## Licences
 
 Spell text in `packages/server/src/sheets/srd-spells.json` is from the System Reference Document 5.1 by Wizards of the Coast LLC, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/legalcode), as prepared by the [5e-bits/5e-database](https://github.com/5e-bits/5e-database) project (MIT).
