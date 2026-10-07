@@ -113,7 +113,7 @@ function serveWebPage(app, dir) {
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date like 2026-10-03');
 
-export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, maps, mapReader, archive, config, logger = true }) {
+export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, maps, mapReader, statBlocks, archive, config, logger = true }) {
   const app = Fastify({ logger, bodyLimit: config.maxUploadBytes });
 
   app.setErrorHandler((err, request, reply) => {
@@ -909,6 +909,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     hp: z.object({ current: z.number().int().nullable(), max: z.number().int().positive().nullable() }).nullable(),
     conditions: z.array(z.enum(CONDITIONS)).max(CONDITIONS.length),
     hidden: z.boolean(),
+    stats: z.object({ text: z.string().max(8000), ac: z.number().int().nullable().optional(), hp_formula: z.string().max(40).optional(), speed: z.string().max(120).optional(), challenge: z.string().max(40).optional() }).nullable(),
   });
   // What a player may change on their own token; everything else is the DM's.
   const OWNER_FIELDS = new Set(['x', 'y', 'hp', 'conditions']);
@@ -962,6 +963,30 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       if (t.kind !== 'pc') t.user_id = null;
       Object.assign(t, snapToken(m, t, t.x, t.y));
     }, { by: request.user.id, reason: moving ? 'token moved' : 'token changed' });
+    return { map: maps.view(saved, a), token: saved.tokens.find((t) => t.id === token.id) };
+  });
+
+  /**
+   * Fill a token's stat block with the AI (DM): { name? } (default: the
+   * token's name). Sets its hit points and size too, unless the DM already
+   * did. 404 if the AI doesn't know the creature.
+   */
+  app.post('/campaigns/:cid/maps/:mid/tokens/:tid/stats', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const token = map.tokens.find((t) => t.id === request.params.tid);
+    if (!token) throw new NotFoundError('No such token');
+    const { name } = z.object({ name: z.string().trim().min(1).max(100).optional() }).parse(request.body ?? {});
+    mapAiAllowed(request.user.id);
+    const found = await statBlocks.lookup(name ?? token.name, { campaignId: a.cid, userId: request.user.id });
+    if (!found) throw new NotFoundError(`The AI doesn't know a creature called "${name ?? token.name}". Try its proper name, like "Goblin" or "Adult Red Dragon".`);
+    const saved = maps.change(a.cid, map.id, (m) => {
+      const t = m.tokens.find((x) => x.id === token.id);
+      if (!t) return;
+      t.stats = found.stats;
+      if (!t.hp && found.hp) t.hp = { current: found.hp, max: found.hp };
+      if (found.size && t.size === 1) Object.assign(t, { size: found.size }, snapToken(m, { size: found.size }, t.x, t.y));
+    }, { by: request.user.id, reason: 'stat block' });
     return { map: maps.view(saved, a), token: saved.tokens.find((t) => t.id === token.id) };
   });
 

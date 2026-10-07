@@ -18,6 +18,7 @@ import { createSheets } from './sheets/store.js';
 import { createSheetImport } from './sheets/import.js';
 import { createMaps } from './maps/store.js';
 import { createMapReader } from './maps/read.js';
+import { createStatBlocks } from './maps/stats.js';
 
 export async function createContext({ config = defaultConfig, paths = defaultPaths, llm, embedder, log } = {}) {
   const db = openDb(paths.db);
@@ -40,6 +41,7 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const sheetImport = createSheetImport({ llm });
   const maps = createMaps({ db, archive, store });
   const mapReader = createMapReader({ llm });
+  const statBlocks = createStatBlocks({ llm });
 
   // If the database was lost or replaced, bring back accounts and campaigns from the archive.
   const restored = store.restoreFromArchive();
@@ -49,5 +51,5 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   }
   maps.failInterrupted();
 
-  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, pipeline, jobs, qa, books, spells, sheets, sheetImport, maps, mapReader, restored };
+  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, pipeline, jobs, qa, books, spells, sheets, sheetImport, maps, mapReader, statBlocks, restored };
 }

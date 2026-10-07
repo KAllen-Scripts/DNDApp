@@ -13,7 +13,7 @@ test('normalizeMap keeps known fields only and drops a per-square scale without 
   assert.equal(m.evil, undefined);
   assert.equal(m.scale, null);
   assert.equal(m.shown, false);
-  assert.deepEqual(m.tokens, [{ id: 'abc123', kind: 'pc', name: 'Player character', user_id: 4, color: '#2f6fb3', size: 1, x: 100, y: 0, hp: null, conditions: [], hidden: false }]);
+  assert.deepEqual(m.tokens, [{ id: 'abc123', kind: 'pc', name: 'Player character', user_id: 4, color: '#2f6fb3', size: 1, x: 100, y: 0, hp: null, conditions: [], hidden: false, stats: null }]);
 });
 
 test('snapToken: Medium in the middle of a square, Large on a corner, always on the map', () => {

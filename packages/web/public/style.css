@@ -881,3 +881,7 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .map-selection select { width: auto; padding: 0.25rem 0.4rem; font-size: 0.85rem; }
 .chip { display: inline-flex; align-items: center; gap: 0.2rem; padding: 0.05rem 0.45rem; border-radius: 1em; background: var(--surface-2); font-size: 0.8rem; }
 .chip-x { border: none; background: none; padding: 0 0.1rem; color: var(--muted); font-size: 0.75rem; cursor: pointer; }
+.map-dialog .stat-text { max-height: 55vh; overflow-y: auto; box-shadow: none; }
+.map-dialog .stat-text table { border-collapse: collapse; }
+.map-dialog .stat-text th, .map-dialog .stat-text td { border: 1px solid var(--border); padding: 0.2rem 0.45rem; text-align: center; }
+.map-dialog-actions input { flex: 1; min-width: 10rem; }

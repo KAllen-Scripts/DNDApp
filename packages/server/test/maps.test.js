@@ -325,3 +325,38 @@ test('tokens: hit points and conditions; players see how hurt enemies look, neve
     await t.cleanup();
   }
 });
+
+test('stat blocks: the AI fills one in for the DM; players never get it', async () => {
+  const ogreBlock = {
+    found: true, name: 'Ogre', size: 'large', ac: 11, hp_average: 59, hp_formula: '7d10 + 21', speed: '40 ft.', challenge: '2 (450 XP)',
+    stat_block: '**Ogre** Large giant\n\n**Armor Class** 11\n\n**Greatclub.** +6 to hit, 2d8 + 4 bludgeoning.',
+  };
+  const llm = mapLLM((opts) => (opts.purpose === 'map:stats' ? (opts.prompt.includes('Zorblax') ? { ...ogreBlock, found: false } : ogreBlock) : readOut()));
+  const t = await setup({ llm });
+  try {
+    const map = await importMap(t, await terrain(700, 490, { size: 35 }));
+    const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+    await t.request('PATCH', base, { body: { shown: true, grid: { size: 35, x: 0, y: 0 } } });
+    const ogre = (await t.request('POST', `${base}/tokens`, { body: { kind: 'enemy', name: 'Ogre 1', x: 100, y: 100 } })).json().token;
+    assert.equal((await t.request('POST', `${base}/tokens/${ogre.id}/stats`, { as: t.sam.token })).statusCode, 403);
+    const res = await t.request('POST', `${base}/tokens/${ogre.id}/stats`);
+    assert.equal(res.statusCode, 200);
+    const filled = res.json().token;
+    assert.equal(filled.stats.ac, 11);
+    assert.equal(filled.stats.source, 'ai');
+    assert.match(filled.stats.text, /Greatclub/);
+    assert.deepEqual(filled.hp, { current: 59, max: 59 });
+    assert.equal(filled.size, 2); // Large, and re-snapped to a corner
+    assert.deepEqual({ x: filled.x, y: filled.y }, { x: 105, y: 105 });
+    assert.match(llm.calls.find((c) => c.purpose === 'map:stats').prompt, /Ogre 1/);
+
+    const seen = (await t.request('GET', base, { as: t.sam.token })).json().tokens[0];
+    assert.equal(seen.stats, null);
+    assert.equal(seen.health, 'unhurt');
+
+    const bad = (await t.request('POST', `${base}/tokens`, { body: { kind: 'enemy', name: 'Zorblax' } })).json().token;
+    assert.equal((await t.request('POST', `${base}/tokens/${bad.id}/stats`)).statusCode, 404);
+  } finally {
+    await t.cleanup();
+  }
+});

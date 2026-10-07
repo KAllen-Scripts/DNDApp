@@ -9,6 +9,8 @@
  * the server decides where a token really ends up.
  */
 import { api, listen, fileUrl, h, storage, LoggedOut } from './api.js';
+import { marked } from './vendor/marked.js';
+import DOMPurify from './vendor/purify.js';
 import {
   TOKEN_KINDS, TOKEN_KIND_NAMES, TOKEN_SIZES, TOKEN_SIZE_NAMES, TOKEN_COLORS, UNITS,
   CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf,
@@ -387,6 +389,8 @@ function renderSelection() {
       ...tokenControls(token),
       h('span', { class: 'spacer' }),
       canMove(token) && !state.canEdit ? h('span', { class: 'muted small' }, 'Drag to move') : null,
+      state.canEdit && token.stats ? h('button', { class: 'ghost', onclick: () => statsDialog(token) }, 'Stat block') : null,
+      state.canEdit && !token.stats && token.kind !== 'pc' ? h('button', { class: 'ghost', title: 'Fill in its stat block, hit points and size with the AI', onclick: () => fillStats(token) }, 'Stat block (AI)') : null,
       state.canEdit ? h('button', { class: 'ghost', onclick: () => tokenDialog(token) }, 'Edit') : null,
       state.canEdit ? h('button', { class: 'ghost danger', onclick: () => removeToken(token) }, 'Remove') : null,
       h('button', { class: 'ghost icon-btn', 'aria-label': 'Close', onclick: () => select(null) }, '✕'),
@@ -668,11 +672,14 @@ async function tokenDialog(token = null) {
   const color = h('input', { type: 'color', value: token?.color ?? TOKEN_COLORS[kind.value] });
   const hpMax = h('input', { type: 'number', min: '1', step: '1', value: token?.hp?.max ?? '', placeholder: 'unknown' });
   const hidden = h('input', { type: 'checkbox', checked: !!token?.hidden });
+  const lookUp = h('input', { type: 'checkbox', checked: true });
+  const lookUpField = h('label', { class: 'map-check' }, lookUp, ' Fill in its stat block, hit points and size with the AI');
   let colorTouched = !!token;
   color.addEventListener('input', () => (colorTouched = true));
   const playerField = field('Player', player);
   const sync = () => {
     playerField.hidden = kind.value !== 'pc';
+    lookUpField.hidden = !!token || kind.value !== 'enemy';
     if (!colorTouched) color.value = TOKEN_COLORS[kind.value];
   };
   kind.addEventListener('change', sync);
@@ -706,6 +713,7 @@ async function tokenDialog(token = null) {
       const res = await api('POST', `${base()}/${map.id}/tokens`, { ...body, ...middle });
       onMap(res.map);
       select(res.token.id);
+      if (kind.value === 'enemy' && lookUp.checked && body.name) fillStats(res.token);
     }
   };
   dialog.replaceChildren(
@@ -719,12 +727,50 @@ async function tokenDialog(token = null) {
       field('Name', name),
       h('div', { class: 'map-row' }, field('Size', size), field('Colour', color), field('Max HP', hpMax)),
       h('label', { class: 'map-check' }, hidden, ' Hidden from players (an ambush, someone lurking)'),
+      lookUpField,
       token ? null : h('p', { class: 'muted small' }, 'It appears in the middle of what you can see; drag it into place.'),
       h('div', { class: 'map-dialog-actions' },
         h('span', { class: 'spacer' }),
         h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel'),
         h('button', { class: 'primary' }, token ? 'Save' : 'Add'),
       ),
+    ),
+  );
+  dialog.onclose = null;
+  dialog.showModal();
+}
+
+/** Ask the AI for a creature's stat block (DM). Hit points and size come with it unless already set. */
+async function fillStats(token, name) {
+  status(`Looking up ${name ?? token.name}…`);
+  try {
+    const res = await state.guarded(() => api('POST', `${base()}/${state.current.id}/tokens/${token.id}/stats`, name ? { name } : {}));
+    if (!res) return;
+    onMap(res.map);
+    status(`Stat block for ${res.token.name}: ${res.token.stats.name} (from the AI's memory; check it against the book if it matters).`);
+  } catch (err) {
+    report(err);
+  }
+}
+
+/** A token's stat block (DM only), with a way to look up a different creature. */
+function statsDialog(token) {
+  const dialog = $('#map-dialog');
+  const st = token.stats;
+  const body = h('div', { class: 'a stat-text' });
+  body.innerHTML = DOMPurify.sanitize(marked.parse(st.text), { FORBID_TAGS: ['img', 'a', 'style', 'form', 'input', 'button'], FORBID_ATTR: ['style'] });
+  const other = h('input', { placeholder: 'Another creature, e.g. Bugbear', maxLength: 100 });
+  dialog.replaceChildren(
+    h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => {
+      e.preventDefault();
+      if (other.value.trim()) fillStats(token, other.value.trim());
+      dialog.close();
+    } },
+      h('h2', {}, `${token.name}: ${st.name || 'stat block'}`),
+      h('p', { class: 'muted small' }, [st.ac != null ? `AC ${st.ac}` : '', st.hp_formula ? `HP ${st.hp_formula}` : '', st.speed, st.challenge ? `CR ${st.challenge}` : ''].filter(Boolean).join(' · ')),
+      body,
+      h('p', { class: 'muted small' }, st.source === 'ai' ? "From the AI's memory of the 5e rules. Only you see this." : 'Only you see this.'),
+      h('div', { class: 'map-dialog-actions' }, other, h('button', { class: 'ghost' }, 'Look up instead'), h('span', { class: 'spacer' }), h('button', { type: 'button', class: 'primary', onclick: () => dialog.close() }, 'Close')),
     ),
   );
   dialog.onclose = null;

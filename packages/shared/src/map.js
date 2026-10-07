@@ -61,6 +61,23 @@ export function normalizeToken(t = {}, map) {
     conditions: [...new Set((Array.isArray(t.conditions) ? t.conditions : []).filter((c) => CONDITIONS.includes(c)))],
     // Only the DM sees hidden tokens (an ambush, a lurking NPC).
     hidden: t.hidden === true,
+    stats: normalizeStats(t.stats),
+  };
+}
+
+/** A creature's stat block (the DM's; players never get it). */
+export function normalizeStats(st) {
+  if (!st || typeof st !== 'object') return null;
+  const text = longStr(st.text, 8000);
+  if (!text) return null;
+  return {
+    name: str(st.name, 100),
+    ac: num(st.ac, { min: 0, max: 99, fallback: null }),
+    hp_formula: str(st.hp_formula, 40),
+    speed: str(st.speed, 120),
+    challenge: str(st.challenge, 40),
+    text,
+    source: pick(st.source, ['ai', 'manual'], 'manual'),
   };
 }
 
