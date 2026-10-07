@@ -236,15 +236,14 @@ function renderGrid() {
   svg.setAttribute('viewBox', `0 0 ${map.image.width} ${map.image.height}`);
   svg.replaceChildren();
   if (!grid || !showGrid) return;
-  const ns = 'http://www.w3.org/2000/svg';
   const lines = [];
   for (let x = grid.x; x <= map.image.width; x += grid.size) lines.push(`M${x} 0V${map.image.height}`);
   for (let y = grid.y; y <= map.image.height; y += grid.size) lines.push(`M0 ${y}H${map.image.width}`);
   if (lines.length > 4000) return; // a mistyped tiny square; don't freeze the page
-  const path = document.createElementNS(ns, 'path');
-  path.setAttribute('d', lines.join(''));
-  path.setAttribute('class', state.draftGrid !== undefined ? 'editing' : '');
-  svg.append(path);
+  // A dark outline under a light line, so the grid shows on both dark and light maps.
+  const d = lines.join('');
+  const editing = state.draftGrid !== undefined ? ' editing' : '';
+  svg.append(svgEl('path', { d, class: `halo${editing}` }), svgEl('path', { d, class: `line${editing}` }));
 }
 
 const SVG = 'http://www.w3.org/2000/svg';

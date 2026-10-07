@@ -438,6 +438,10 @@ The owner asked for the rest of the map list to be built, one at a time, in this
 - Not done: a project `.npmrc` with `ignore-scripts=true` would make plain `npm install` work, but it would also silently skip install scripts of packages added later. Left for the owner to decide. The old setup note suggesting `npm rebuild better-sqlite3` was wrong for v13 and has been corrected.
 - Created the admin login "admin" on the laptop with `npm run admin -- init`; logging in over HTTP worked.
 
+### 2026-10-07: Map grid easier to see
+
+- The grid was one 1px black line at 45% opacity, which got lost on dark or busy maps. Each line is now drawn twice: a 3px dark outline with a 1px light line on top, so it shows on light and dark maps (`renderGrid` in `map.js`, `.map-grid` in `style.css`). The grid is still drawn in the accent colour while it's being edited. Tests pass; not yet checked by eye on a real map.
+
 ### 2026-10-07: Faster dice, and rollers to choose from
 
 Owner's report: "the dice is too slow", not the PC. Profiled in headless Chromium (software WebGL, so frame rates are pessimistic; what was measured is CPU and simulated time):
