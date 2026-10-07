@@ -6,13 +6,34 @@ async function open(buf) {
   return pdfjs.getDocument({ data: new Uint8Array(buf), verbosity: 0, isEvalSupported: false });
 }
 
+/** The PDF's bookmarks, flattened: { title, page (1-based), depth }. Empty if it has none. */
+async function readOutline(doc) {
+  const out = [];
+  async function walk(items, depth) {
+    for (const item of items ?? []) {
+      try {
+        const dest = typeof item.dest === 'string' ? await doc.getDestination(item.dest) : item.dest;
+        const ref = Array.isArray(dest) ? dest[0] : null;
+        const index = typeof ref === 'number' ? ref : ref ? await doc.getPageIndex(ref) : null;
+        if (index != null && item.title?.trim()) out.push({ title: item.title.trim(), page: index + 1, depth });
+      } catch {
+        // a broken bookmark: skip it
+      }
+      await walk(item.items, depth + 1);
+    }
+  }
+  await walk(await doc.getOutline(), 0);
+  return out;
+}
+
 /**
  * @param {Buffer} buf
- * @param {{ maxPages?: number }} [opts]
- * @returns {Promise<{ pages: string[], pageCount: number, fields: {name: string, value: string}[] }>}
- *   pages: each page's text, one line per line of print; fields: filled-in form fields.
+ * @param {{ maxPages?: number, outline?: boolean }} [opts]
+ * @returns {Promise<{ pages: string[], pageCount: number, fields: {name: string, value: string}[], outline: {title: string, page: number, depth: number}[] }>}
+ *   pages: each page's text, one line per line of print; fields: filled-in form fields;
+ *   outline: the bookmarks (only when asked for).
  */
-export async function readPdf(buf, { maxPages = Infinity } = {}) {
+export async function readPdf(buf, { maxPages = Infinity, outline = false } = {}) {
   const task = await open(buf);
   const doc = await task.promise;
   try {
@@ -32,7 +53,7 @@ export async function readPdf(buf, { maxPages = Infinity } = {}) {
         if (value != null && String(value).trim()) fields.push({ name, value: String(value).trim() });
       }
     }
-    return { pages, pageCount: doc.numPages, fields };
+    return { pages, pageCount: doc.numPages, fields, outline: outline ? await readOutline(doc) : [] };
   } finally {
     await task.destroy();
   }

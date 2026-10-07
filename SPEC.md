@@ -1,6 +1,7 @@
 # DNDApp — Project Spec
 
-> Status: v0.9 (2026-10-06). Character sheets added (§6.4), with five layouts.
+> Status: v0.10 (2026-10-07). Q&A can look rules up in the group's own books (§5.3).
+> Previously v0.9 (2026-10-06). Character sheets added (§6.4), with five layouts.
 > Previously v0.8 (2026-10-04). Server built and tested end to end with real AI calls, including the archivist and privacy. Web page served by the server: name + password logins (with admin-forced password changes), multiple campaigns, a player view (ask, notes) and an admin screen (accounts, campaigns, roles, session uploads with speaker linking). No DM screens yet.
 > This is the source of truth for scope and design. Update it when decisions change. For the history of changes and where work left off, see [HANDOFF.md](HANDOFF.md).
 
@@ -78,7 +79,7 @@ DNDApp/
         pipeline/         prepare.js (speakers, glossary, chunking), ingest.js (attendance, indexing, archivist run)
         qa/               agent.js, tools.js
         sheets/           store.js (sheets, archived as diffs), import.js (uploaded sheets), spells.js (lookup),
-                          books.js + pdf.js (reading the books folder), srd-spells.json (SRD 5.1 spells)
+                          books.js + pdf.js (reading the books folder: spell headings, page search, contents), srd-spells.json (SRD 5.1 spells)
         cli/              admin.js (init, set-password, list), rebuild.js
       test/               offline tests (fake AI); fixtures/privacy-scenario/ = manual real-AI scenario
     web/public/  the web page, served by the server at / (no build step):
@@ -196,7 +197,7 @@ data/archive/
 - A transcript can never be replaced (different bytes for an existing session number → 409).
 - **Restore:** on start-up, accounts, campaigns, members, sessions, speakers, glossary, corrections, notes and character sheets (replayed from their change lines) missing from the database are restored from the archive, and notes are re-indexed. Then run a rebuild to regenerate the knowledge base.
 - **Rebuild:** `npm run rebuild -- --campaign <id> --yes` (or `POST /rebuild`) wipes all derived data, re-indexes notes, then replays every session in order, each correction right after the session it was made against. The archivist is non-deterministic, so a rebuild gives an equivalent knowledge base, not an identical one.
-- Bump `PIPELINE_VERSION` (now 3) when prompts, tools or the memory design change.
+- Bump `PIPELINE_VERSION` (now 4) when prompts, tools or the memory design change.
 
 ## 5. Knowledge base and Q&A (core design)
 
@@ -229,6 +230,7 @@ Per DM correction (job `correct`): the archivist gets the correction and its sta
 1. **Pre-search** (free): the server searches the knowledge base, transcripts and the asker's own notes for the question (~3,000 tokens) and sends the results with it.
 2. **System prompt**: rules, who is asking, the archivist's guide, and pinned records the asker may see. The model first decides whether the question is **general D&D knowledge** (rules, spells, a standard creature's stat block) or **about this campaign**. General questions are welcome and answered straight from the model's own 5e knowledge with no tool calls (noting any house rule the pre-search turned up); campaign questions are researched and answered only from the sources.
 3. **Tools** (read-only, filtered to the asker): `search_kb`, `list_records`, `get_records`, `list_sessions`, `search_transcript`, `read_transcript`, `search_my_notes`.
+3a. **The group's books** (only when `BOOKS_DIR` has PDFs; they're listed in the system prompt with their page ranges): `search_books` (1–8 terms the model writes itself, not the player's sentence; keyword search over the page text held in memory, rarer terms and pages matching several terms rank higher, a term in a heading counts double, OCR mix-ups and line-end hyphens are folded; returns up to 8 pages with a snippet), `read_book` (1–2 pages), `book_contents` (the PDF's bookmarks, else the capitalised headings on each page). Pages are numbered as printed when the scan's page numbers can be read (a consistent offset from the PDF's numbering), else by PDF page. No database and nothing stored: the text is read from the PDFs at start-up. The model answers simple rules questions from its own knowledge as before and uses the books when the exact wording matters, the player asks what the book says, or it isn't sure. Vague questions: it works out which rule is meant, searches with the book's terms plus synonyms, searches again or browses the contents if that misses, and asks when it can't tell. Book pages are cited as `(Player's Handbook p. 195)`; they aren't campaign sources, so there's no `[S…]` citation or evidence for them. The books aren't campaign data, so everyone in any campaign may search them.
 4. **Answer** with citations `[S12]`, `[S12 01:23:45]`, `[S12 01:23:45-01:24:10]`. Evidence (the cited transcript lines) is attached server-side, only for sessions the asker attended.
 5. Follow-ups include the last 3 Q&As and the last answer's sources.
 6. **Formatting:** answers are markdown, optionally with HTML (tables, stat blocks with `class="stat-block"`). The page renders them with `marked` and sanitises with DOMPurify to an allowlist (no links, images, scripts or style attributes), then turns citations into buttons, including inside tables. Both libraries are served from `node_modules` at `/vendor/marked.js` and `/vendor/purify.js`.

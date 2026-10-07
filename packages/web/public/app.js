@@ -497,6 +497,9 @@ const TOOL_LABELS = {
   search_transcript: 'Searching the session transcripts',
   read_transcript: 'Reading a session transcript',
   search_my_notes: 'Searching your notes',
+  search_books: 'Searching the rulebooks',
+  read_book: 'Reading the rulebook',
+  book_contents: 'Checking the rulebook contents',
 };
 
 $('#ask-form').addEventListener('submit', (e) => {
