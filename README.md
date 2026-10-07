@@ -91,6 +91,16 @@ Everyone can drop **pins** with a note on a map; only the person who placed them
 
 `PUBLIC_URL` in `.env` is the address players use (a placeholder, `https://dnd.example.xyz`, until the domain is bought). It's the only place the URL is set. The web page is served by this server and calls it with relative paths, so the page itself never needs the URL. The server prints it on start-up.
 
+### Letting players in safely
+
+The server is meant to run on your own PC with players reaching it over the internet through **Cloudflare Tunnel** (SPEC §3.4). Keep it that way:
+
+- Keep `HOST=127.0.0.1`. `cloudflared` on the same PC connects out to Cloudflare, so nothing on your router is opened and players get https. Don't port-forward 4400 and don't set `HOST=0.0.0.0`: logins and passwords would cross the internet unencrypted. The server warns at start-up if `HOST` isn't local or `PUBLIC_URL` isn't https.
+- If Windows asks whether Node.js may accept connections, say no (or private networks only). The tunnel doesn't need it.
+- `TRUST_PROXY` (default `loopback`) lets the server see players' real addresses through a tunnel on this PC, for limiting password guesses. Leave it alone unless the proxy runs on another machine.
+
+What the server does on its own: every page and API response carries security headers (the page only runs its own scripts, can't be put in a frame on another site, and sends no referrer); requests other than uploads are limited to 1 MB, and logins to 16 KB; 30 wrong passwords from one address in 15 minutes stop logins from there (as well as 10 per name); a login can hold at most 20 live connections (map moves, job progress), and those end as soon as the login is logged out, blocked or removed from the campaign; unexpected errors are logged, and people are only told something went wrong (no folder names from your PC); players see that processing failed, not why. The AI runs with no file, shell or web tools (see above), so a transcript, note or picture can't make it touch your PC.
+
 The first time a transcript is processed, the server downloads a small search model (~25 MB) into `data/models`.
 
 ### Data

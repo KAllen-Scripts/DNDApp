@@ -25,18 +25,34 @@ import { createPlayerImages } from './maps/image.js';
 import { newTokenId, isMapId } from './maps/store.js';
 import { PICTURE_KINDS, MAX_PICTURE_BYTES } from './characters/pictures.js';
 
-/** Open a Server-Sent Events stream on a request. */
-function openSse(request, reply) {
+/**
+ * Open a Server-Sent Events stream on a request. `stillAllowed`, if given, is
+ * checked with every keep-alive; the stream ends once it returns false (the
+ * login ended, or the account was blocked or left the campaign).
+ */
+function openSse(request, reply, { stillAllowed } = {}) {
   reply.hijack();
   reply.raw.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no',
+    'X-Content-Type-Options': 'nosniff',
   });
-  const keepAlive = setInterval(() => reply.raw.write(': ping\n\n'), 20_000);
+  // Send the headers now, so the page knows the stream is open before the first event.
+  reply.raw.flushHeaders();
   let closed = false;
   const onClose = [];
+  const end = () => {
+    clearInterval(keepAlive);
+    if (closed) return;
+    closed = true;
+    reply.raw.end();
+  };
+  const keepAlive = setInterval(() => {
+    if (stillAllowed && !stillAllowed()) return end();
+    if (!closed) reply.raw.write(': ping\n\n');
+  }, 20_000);
   // The response's 'close' fires when the client disconnects. (The request's
   // 'close' fires as soon as the body has been read, so it can't be used here.)
   reply.raw.on('close', () => {
@@ -48,10 +64,7 @@ function openSse(request, reply) {
     send(event, data) {
       if (!closed) reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     },
-    end() {
-      clearInterval(keepAlive);
-      if (!closed) reply.raw.end();
-    },
+    end,
     onClose: (f) => onClose.push(f),
   };
 }
@@ -115,8 +128,93 @@ function serveWebPage(app, dir) {
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date like 2026-10-03');
 
+/** Requests other than uploads are small; this keeps anyone from sending the server huge bodies. */
+const SMALL_BODY = 1024 * 1024;
+
+/**
+ * Sent with every response. The page only loads its own files (no inline
+ * scripts, nothing from other sites), can't be framed by another site, and
+ * doesn't leak its address to links.
+ */
+export const SECURITY_HEADERS = {
+  'Content-Security-Policy': [
+    "default-src 'self'",
+    "script-src 'self'",
+    // The page sets styles from script (theme colours, positions on the map).
+    "style-src 'self' 'unsafe-inline'",
+    // Pictures behind the login are fetched with the token and shown as blob: URLs.
+    "img-src 'self' data: blob:",
+    "media-src 'self' blob:",
+    "connect-src 'self'",
+    "font-src 'self' data:",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join('; '),
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'no-referrer',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Resource-Policy': 'same-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+};
+
+const SERVER_ERROR = 'Something went wrong on the server. The details are in its log.';
+
+/**
+ * What a person may be told about an unexpected error. File-system and
+ * database errors and programming mistakes can show folder names on the host's
+ * machine or how the server works, so they get a general message (the log has
+ * the details); errors from the AI explain themselves and are passed on.
+ */
+export function publicMessage(err) {
+  const code = typeof err?.code === 'string' ? err.code : '';
+  if (/^E[A-Z]+$/.test(code) || code.startsWith('SQLITE') || err?.path || err?.syscall) return SERVER_ERROR;
+  if (err instanceof TypeError || err instanceof ReferenceError || err instanceof RangeError || err instanceof SyntaxError) return SERVER_ERROR;
+  return String(err?.message ?? err ?? SERVER_ERROR);
+}
+
+const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost']);
+
+/**
+ * Start-up warnings about how the server is reachable. Logins and passwords
+ * are only safe across the internet over https, which a tunnel or reverse
+ * proxy in front of this server provides.
+ */
+export function exposureWarnings({ host, publicUrl }) {
+  const warnings = [];
+  if (!LOOPBACK.has(host)) {
+    warnings.push(
+      `HOST is ${host}, so other machines can reach this server directly over plain http, where passwords and logins can be read in transit. ` +
+        'Keep HOST=127.0.0.1 and let players in through an https tunnel or reverse proxy (see README, "Letting players in safely").',
+    );
+  }
+  if (publicUrl && !publicUrl.startsWith('https://')) {
+    warnings.push(`PUBLIC_URL (${publicUrl}) isn't https. Players' passwords would cross the internet unencrypted.`);
+  }
+  return warnings;
+}
+
+const trustProxySetting = (v) => (v === 'true' ? true : v === 'false' || v === 'off' || v === '' ? false : v);
+
 export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, maps, mapReader, statBlocks, pictures, pictureDescriber, archive, config, logger = true }) {
-  const app = Fastify({ logger, bodyLimit: config.maxUploadBytes });
+  const app = Fastify({
+    logger,
+    bodyLimit: SMALL_BODY,
+    // Believe X-Forwarded-For only from a proxy on this machine (a tunnel), so request.ip is the player's address.
+    trustProxy: trustProxySetting(config.trustProxy ?? 'loopback'),
+    // Give up on requests that take this long to arrive (slow uploads still have plenty of time).
+    requestTimeout: 10 * 60 * 1000,
+  });
+  // Upload routes accept bigger bodies than everything else.
+  const upload = { bodyLimit: config.maxUploadBytes };
+
+  app.addHook('onSend', async (request, reply) => {
+    for (const [k, v] of Object.entries(SECURITY_HEADERS)) if (!reply.hasHeader(k)) reply.header(k, v);
+    if (config.publicUrl?.startsWith('https://')) reply.header('Strict-Transport-Security', 'max-age=31536000');
+  });
 
   app.setErrorHandler((err, request, reply) => {
     // Saving a sheet that changed elsewhere: send the current one so the page can reload it.
@@ -131,7 +229,10 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       : err instanceof ZodError ? 400
       : (err.statusCode ?? 500);
     if (status >= 500) request.log.error(err);
-    const message = err instanceof ZodError ? err.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') : err.message;
+    const message =
+      err instanceof ZodError ? err.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')
+      : status >= 500 ? publicMessage(err)
+      : err.message;
     reply.status(status).send({ error: message });
   });
 
@@ -164,6 +265,40 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     return { campaign, role, cid, membership, userId: request.user.id };
   }
 
+  // Live streams open per account, so one login can't tie up the server with thousands.
+  const openStreams = new Map();
+
+  /**
+   * Open a live stream for someone in a campaign (after access() said yes).
+   * current() is their access as it is now, or null: streams check it with
+   * every update, so they end when the login ends or the account is blocked or
+   * leaves the campaign, and a DM who becomes a player gets what players get.
+   */
+  function openLiveStream(request, reply, a) {
+    const uid = request.user.id;
+    const max = config.maxStreamsPerUser ?? 20;
+    if ((openStreams.get(uid) ?? 0) >= max) throw new RateLimitError('Too many live connections are open for your login. Close some tabs, then reload.');
+    const header = request.headers.authorization;
+    const current = () => {
+      const user = auth.check(header);
+      if (!user || user.must_change_password) return null;
+      const membership = auth.membership(a.cid, uid);
+      if (!membership && !user.is_admin) return null;
+      return { ...a, membership, role: membership?.role ?? 'dm' };
+    };
+    const sse = openSse(request, reply, { stillAllowed: () => !!current() });
+    openStreams.set(uid, (openStreams.get(uid) ?? 0) + 1);
+    sse.onClose(() => {
+      const n = (openStreams.get(uid) ?? 1) - 1;
+      if (n > 0) openStreams.set(uid, n);
+      else openStreams.delete(uid);
+    });
+    return { sse, current };
+  }
+
+  // Processing errors can carry details of the host's machine; players only learn that something failed.
+  const forViewer = (role, item) => (role === 'dm' || !item.error ? item : { ...item, error: 'Processing failed.' });
+
   const attended = (sessionId, userId) =>
     !!db.prepare('SELECT 1 FROM attendance WHERE session_id = ? AND user_id = ?').get(sessionId, userId) ||
     !db.prepare('SELECT 1 FROM attendance WHERE session_id = ?').get(sessionId);
@@ -173,12 +308,12 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   app.get('/health', { config: { public: true } }, async () => ({ ok: true }));
 
   /** Log in with the name and password the admin set. Returns a token for the Authorization header. */
-  app.post('/login', { config: { public: true } }, async (request) => {
+  app.post('/login', { config: { public: true }, bodyLimit: 16 * 1024 }, async (request) => {
     const { name, password } = z.object({ name: z.string().min(1).max(100), password: z.string().min(1).max(200) }).parse(request.body);
-    return auth.login(name, password);
+    return auth.login(name, password, request.ip);
   });
 
-  app.post('/logout', { config: { public: true } }, async (request) => {
+  app.post('/logout', { config: { public: true }, bodyLimit: 16 * 1024 }, async (request) => {
     auth.logout(request.headers.authorization);
     return { ok: true };
   });
@@ -462,7 +597,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     return db
       .prepare('SELECT id, number, title, played_on, status, error, pipeline_version, created_at FROM sessions WHERE campaign_id = ? ORDER BY number')
       .all(cid)
-      .map(({ id, ...s }) => ({ ...s, attended: role === 'dm' || attended(id, request.user.id) }));
+      .map(({ id, ...s }) => forViewer(role, { ...s, attended: role === 'dm' || attended(id, request.user.id) }));
   });
 
   /**
@@ -485,7 +620,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   };
 
   /** Check a transcript before uploading it: line count, length, and who speaks (DM). */
-  app.post('/campaigns/:cid/sessions/preview', async (request) => {
+  app.post('/campaigns/:cid/sessions/preview', upload, async (request) => {
     const { cid } = access(request, { dm: true });
     const { transcript } = z.object({ transcript: z.string().min(1) }).parse(request.body);
     const utterances = parseOrFail(transcript);
@@ -518,7 +653,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     store.setSpeakers(cid, [...map.values()]);
   }
 
-  app.post('/campaigns/:cid/sessions', async (request, reply) => {
+  app.post('/campaigns/:cid/sessions', upload, async (request, reply) => {
     const { cid } = access(request, { dm: true });
     const isText = typeof request.body === 'string';
     const meta = z
@@ -563,7 +698,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     const attendees = db
       .prepare('SELECT u.id, u.name FROM attendance a JOIN users u ON u.id = a.user_id WHERE a.session_id = ? ORDER BY u.name')
       .all(session.id);
-    return { session, attendees, attended: role === 'dm' || attended(session.id, request.user.id) };
+    return { session: forViewer(role, session), attendees, attended: role === 'dm' || attended(session.id, request.user.id) };
   });
 
   /** Transcript lines. Players only get sessions they attended. */
@@ -651,7 +786,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
    * file or a sheet downloaded from here. The file is archived as uploaded,
    * read (by the AI unless it's one of ours) and saved as your sheet.
    */
-  app.post('/campaigns/:cid/sheet/import', async (request) => {
+  app.post('/campaigns/:cid/sheet/import', upload, async (request) => {
     const { cid, campaign } = sheetOwner(request);
     const { filename, data, version } = z
       .object({ filename: z.string().max(200).default('sheet'), data: z.string().min(1), version: z.number().int().min(0).optional() })
@@ -753,7 +888,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       } catch (err) {
         // The picture is saved either way; say why there's no description.
         if (!(err instanceof RateLimitError || err instanceof SpendingCapError)) request.log.warn(err);
-        described = { error: `Your picture is saved, but the AI couldn't describe it: ${err.message}` };
+        described = { error: `Your picture is saved, but the AI couldn't describe it: ${publicMessage(err)}` };
       }
     }
     return { pictures: pictures.view(cid, request.user.id), ...described };
@@ -864,7 +999,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
         app.log.warn(err);
         try {
           maps.change(cid, map.id, (m) => {
-            m.reading = { status: 'failed', error: `The AI couldn't read this map: ${err.message}`, notes: '' };
+            m.reading = { status: 'failed', error: `The AI couldn't read this map: ${publicMessage(err)}`, notes: '' };
           }, { reason: 'read failed' });
         } catch {
           // removed while it was being read
@@ -883,7 +1018,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
    * archived as uploaded and the AI reads it in the background; the map
    * starts hidden from players.
    */
-  app.post('/campaigns/:cid/maps', async (request, reply) => {
+  app.post('/campaigns/:cid/maps', upload, async (request, reply) => {
     const a = access(request, { dm: true });
     const { filename, data, name, page } = z
       .object({ filename: z.string().max(200).default('map'), data: z.string().min(1), name: z.string().trim().max(100).optional(), page: z.number().int().positive().optional() })
@@ -936,10 +1071,12 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
 
   /** Live changes to the maps this viewer can see (SSE): map {map} | gone {id}. */
   app.get('/campaigns/:cid/maps/events', async (request, reply) => {
-    const a = access(request);
-    const sse = openSse(request, reply);
+    const { cid } = access(request);
+    const { sse, current } = openLiveStream(request, reply, { cid, userId: request.user.id });
     const listener = (map) => {
-      if (map.campaign_id !== a.cid) return;
+      if (map.campaign_id !== cid) return;
+      const a = current();
+      if (!a) return sse.end();
       const view = maps.view(map, a);
       if (view) sse.send('map', view);
       else sse.send('gone', { id: map.id });
@@ -1231,14 +1368,22 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
 
   // ---------- jobs ----------
 
-  app.get('/campaigns/:cid/jobs', async (request) => jobs.list(access(request).cid));
+  app.get('/campaigns/:cid/jobs', async (request) => {
+    const { cid, role } = access(request);
+    return jobs.list(cid).map((j) => forViewer(role, j));
+  });
 
   /** Live job progress (SSE). Sends the current state of recent jobs, then updates. */
   app.get('/campaigns/:cid/jobs/events', async (request, reply) => {
-    const { cid } = access(request);
-    const sse = openSse(request, reply);
-    for (const j of jobs.list(cid, 5).reverse()) sse.send('job', j);
-    const listener = (job) => job.campaign_id === cid && sse.send('job', job);
+    const { cid, role, userId } = access(request);
+    const { sse, current } = openLiveStream(request, reply, { cid, role, userId });
+    for (const j of jobs.list(cid, 5).reverse()) sse.send('job', forViewer(role, j));
+    const listener = (job) => {
+      if (job.campaign_id !== cid) return;
+      const now = current();
+      if (!now) return sse.end();
+      sse.send('job', forViewer(now.role, job));
+    };
     jobs.events.on('update', listener);
     sse.onClose(() => jobs.events.off('update', listener));
   });
@@ -1271,7 +1416,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       });
     } catch (err) {
       request.log.warn(err);
-      sse.send('error', { error: err.message });
+      sse.send('error', { error: publicMessage(err) });
     } finally {
       sse.end();
     }

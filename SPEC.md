@@ -120,6 +120,8 @@ Electron was dropped (owner's call: overkill, since there's a server and an addr
 
 **Decision: Cloudflare Tunnel** with a cheap domain (e.g. a numbers-only `.xyz`, ~$1/year), using Cloudflare's free plan. `cloudflared` on the host connects out to Cloudflare: no port forwarding, no static IP, home IP hidden. The server listens only on `127.0.0.1`. Every request except `/health`, `/login` and the web page's files needs a login. **`PUBLIC_URL`** (config/`.env`) is the single place the public address is set; it's a placeholder until the domain is bought. HTTPS JSON plus SSE for job progress and streamed answers.
 
+Hardening (2026-10-07 audit): every response carries a Content-Security-Policy (own scripts only, no framing), `X-Frame-Options`, `nosniff`, `Referrer-Policy: no-referrer` and, with an https `PUBLIC_URL`, HSTS. Bodies are limited to 1 MB except upload routes (`MAX_UPLOAD_MB`). Logins are limited per name and per address (`TRUST_PROXY=loopback` so the tunnel's forwarded address is believed). Live streams are capped per login and re-check the login and membership with every update and keep-alive. Unexpected errors (file system, database, programming) reach people only as a general message; processing errors reach players only as "failed".
+
 Rejected: Tailscale (each player installs it), port forwarding (CGNAT, exposes home IP), SSH (would give players host access).
 
 ### 3.5 AI providers and models

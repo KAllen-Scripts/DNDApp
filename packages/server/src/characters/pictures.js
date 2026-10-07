@@ -20,6 +20,8 @@ import { BadRequestError, NotFoundError } from '../store.js';
 export const PICTURE_KINDS = ['token', 'picture'];
 const FORMATS = { png: { ext: 'png', type: 'image/png' }, jpeg: { ext: 'jpg', type: 'image/jpeg' }, webp: { ext: 'webp', type: 'image/webp' }, gif: { ext: 'gif', type: 'image/gif' } };
 export const MAX_PICTURE_BYTES = 10 * 1024 * 1024;
+// A small file can claim a huge size and take gigabytes to open; real photos are well under this.
+export const MAX_PICTURE_PIXELS = 100_000_000;
 const TOKEN_PX = 256; // tokens are drawn small; this is sharp on a zoomed-in map
 const PICTURE_PX = 1600; // the full picture as shown on the sheet
 const AI_PX = 1568;
@@ -51,6 +53,7 @@ export async function inspectPicture(buf) {
   }
   const format = FORMATS[meta.format];
   if (!format) throw new BadRequestError('Use a PNG, JPEG, WebP or GIF picture.');
+  if (!(meta.width * meta.height <= MAX_PICTURE_PIXELS)) throw new BadRequestError('That picture has too many pixels. Use a smaller one.');
   const turned = (meta.orientation ?? 1) >= 5;
   return { ...format, width: turned ? meta.height : meta.width, height: turned ? meta.width : meta.height };
 }
