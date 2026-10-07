@@ -389,6 +389,7 @@ function renderSelection() {
       ...tokenControls(token),
       h('span', { class: 'spacer' }),
       canMove(token) && !state.canEdit ? h('span', { class: 'muted small' }, 'Drag to move') : null,
+      state.canEdit && token.record ? h('button', { class: 'ghost', title: `What the campaign's records say about ${token.record.title}`, onclick: () => recordDialog(token) }, 'Record') : null,
       state.canEdit && token.stats ? h('button', { class: 'ghost', onclick: () => statsDialog(token) }, 'Stat block') : null,
       state.canEdit && !token.stats && token.kind !== 'pc' ? h('button', { class: 'ghost', title: 'Fill in its stat block, hit points and size with the AI', onclick: () => fillStats(token) }, 'Stat block (AI)') : null,
       state.canEdit ? h('button', { class: 'ghost', onclick: () => tokenDialog(token) }, 'Edit') : null,
@@ -672,6 +673,23 @@ async function tokenDialog(token = null) {
   const color = h('input', { type: 'color', value: token?.color ?? TOKEN_COLORS[kind.value] });
   const hpMax = h('input', { type: 'number', min: '1', step: '1', value: token?.hp?.max ?? '', placeholder: 'unknown' });
   const hidden = h('input', { type: 'checkbox', checked: !!token?.hidden });
+  // Someone from the campaign's records (what the archivist has written down about them).
+  const { records } = (await state.guarded(() => api('GET', `${base()}/records`))) ?? { records: [] };
+  const recordOption = (r) => new Option(`${r.title}${r.person ? '' : ` (${r.kind})`}`, r.id);
+  const record = h('select', {}, new Option('Nobody in particular', ''),
+    h('optgroup', { label: 'People and creatures' }, ...records.filter((r) => r.person).map(recordOption)),
+    h('optgroup', { label: 'Everything else' }, ...records.filter((r) => !r.person).map(recordOption)));
+  if (token?.record && !records.some((r) => r.id === token.record.id)) record.append(new Option(token.record.title, token.record.id));
+  record.value = token?.record?.id ?? '';
+  const recordField = field("From the campaign's records", record);
+  recordField.hidden = !records.length && !token?.record;
+  record.addEventListener('change', () => {
+    const r = records.find((x) => String(x.id) === record.value);
+    if (!r) return;
+    if (!token || !name.value.trim()) name.value = r.title.slice(0, 80);
+    if (!token && kind.value === 'pc') kind.value = 'npc';
+    sync();
+  });
   const lookUp = h('input', { type: 'checkbox', checked: true });
   const lookUpField = h('label', { class: 'map-check' }, lookUp, ' Fill in its stat block, hit points and size with the AI');
   let colorTouched = !!token;
@@ -699,6 +717,7 @@ async function tokenDialog(token = null) {
       color: color.value,
       hidden: hidden.checked,
     };
+    if (record.value !== String(token?.record?.id ?? '')) body.record = record.value ? { id: Number(record.value) } : null;
     const max = Number(hpMax.value) > 0 ? Math.round(Number(hpMax.value)) : null;
     if (max !== (token?.hp?.max ?? null)) {
       // A new maximum: keep the damage taken so far, or start at full.
@@ -722,6 +741,7 @@ async function tokenDialog(token = null) {
       state.guarded(save).then(() => dialog.close()).catch(report);
     } },
       h('h2', {}, token ? 'Change token' : 'Add a token'),
+      recordField,
       field('Kind', kind),
       playerField,
       field('Name', name),
@@ -738,6 +758,32 @@ async function tokenDialog(token = null) {
   );
   dialog.onclose = null;
   dialog.showModal();
+}
+
+/** What the campaign's records say about the person a token stands for (DM only). */
+async function recordDialog(token) {
+  try {
+    const r = await state.guarded(() => api('GET', `${base()}/records/${token.record.id}?title=${encodeURIComponent(token.record.title)}`));
+    if (!r) return;
+    const dialog = $('#map-dialog');
+    const body = h('div', { class: 'a stat-text' });
+    body.innerHTML = DOMPurify.sanitize(marked.parse(r.body || '_Nothing written down yet._'), { FORBID_TAGS: ['img', 'a', 'style', 'form', 'input', 'button'], FORBID_ATTR: ['style'] });
+    const data = Object.keys(r.data ?? {}).length ? h('pre', { class: 'small' }, JSON.stringify(r.data, null, 2)) : null;
+    dialog.replaceChildren(
+      h('form', { method: 'dialog', class: 'map-dialog-inner' },
+        h('h2', {}, r.title),
+        h('p', { class: 'muted small' }, [r.kind, r.status, ...(r.tags ?? [])].filter(Boolean).join(' · ')),
+        body,
+        data,
+        h('p', { class: 'muted small' }, 'From the archivist, as the campaign has it now. Only you see this.'),
+        h('div', { class: 'map-dialog-actions' }, h('span', { class: 'spacer' }), h('button', { class: 'primary' }, 'Close')),
+      ),
+    );
+    dialog.onclose = null;
+    dialog.showModal();
+  } catch (err) {
+    report(err);
+  }
 }
 
 /** Ask the AI for a creature's stat block (DM). Hit points and size come with it unless already set. */

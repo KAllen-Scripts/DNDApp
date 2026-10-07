@@ -360,3 +360,36 @@ test('stat blocks: the AI fills one in for the DM; players never get it', async 
     await t.cleanup();
   }
 });
+
+test("NPCs from the campaign's records: the DM picks one; players only see the name", async () => {
+  const t = await setup({ llm: mapLLM() });
+  try {
+    const cid = t.campaign.id;
+    const hal = await t.kb.create(cid, 'r', { kind: 'npc', title: 'Hal the innkeeper', body: 'Secretly a cultist.' });
+    await t.kb.create(cid, 'r', { kind: 'location', title: 'The Prancing Pony' });
+    const map = await importMap(t, await terrain(700, 490, { size: 35 }));
+    const base = `/campaigns/${cid}/maps`;
+    await t.request('PATCH', `${base}/${map.id}`, { body: { shown: true } });
+
+    assert.equal((await t.request('GET', `${base}/records`, { as: t.sam.token })).statusCode, 403);
+    const { records } = (await t.request('GET', `${base}/records`)).json();
+    assert.deepEqual(records.map((r) => [r.title, r.person]), [['Hal the innkeeper', true], ['The Prancing Pony', false]]);
+
+    const bad = await t.request('POST', `${base}/${map.id}/tokens`, { body: { kind: 'npc', name: 'X', record: { id: 99999 } } });
+    assert.equal(bad.statusCode, 400);
+    const token = (await t.request('POST', `${base}/${map.id}/tokens`, { body: { kind: 'npc', name: 'Hal', record: { id: hal.id } } })).json().token;
+    assert.deepEqual(token.record, { id: hal.id, title: 'Hal the innkeeper' });
+
+    const rec = (await t.request('GET', `${base}/records/${hal.id}`)).json();
+    assert.equal(rec.body, 'Secretly a cultist.');
+    assert.equal((await t.request('GET', `${base}/records/${hal.id}`, { as: t.sam.token })).statusCode, 403);
+    // A rebuilt knowledge base gives records new ids; the title still finds it.
+    assert.equal((await t.request('GET', `${base}/records/99999?title=${encodeURIComponent('Hal the innkeeper')}`)).json().id, hal.id);
+
+    const seen = (await t.request('GET', `${base}/${map.id}`, { as: t.sam.token })).json().tokens[0];
+    assert.equal(seen.name, 'Hal');
+    assert.equal(seen.record, null);
+  } finally {
+    await t.cleanup();
+  }
+});

@@ -112,7 +112,7 @@ export function createMaps({ db, archive, store }) {
      * What this viewer may see of a map, or null if they may not see it at all.
      * Players: only shown maps; no AI description or notes; no hidden tokens,
      * and none under the fog except their own; NPCs' and enemies' hit points
-     * only as how hurt they look; no stat blocks. `image_key` changes when their image does.
+     * only as how hurt they look; no stat blocks or links to the DM's records. `image_key` changes when their image does.
      */
     view(map, { role, userId }) {
       if (!map || map.removed) return null;
@@ -126,7 +126,7 @@ export function createMaps({ db, archive, store }) {
         reading: { status: map.reading.status, error: '', notes: '' },
         tokens: map.tokens
           .filter((t) => t.user_id === userId || (!t.hidden && !isFogged(map, t.x, t.y)))
-          .map((t) => (t.kind === 'pc' ? { ...t, stats: null } : { ...t, hp: null, health: healthOf(t.hp), stats: null })),
+          .map((t) => (t.kind === 'pc' ? { ...t, stats: null, record: null } : { ...t, hp: null, health: healthOf(t.hp), stats: null, record: null })),
         image_key: fogKey(map),
         can_edit: false,
       };

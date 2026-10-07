@@ -62,8 +62,22 @@ export function normalizeToken(t = {}, map) {
     // Only the DM sees hidden tokens (an ambush, a lurking NPC).
     hidden: t.hidden === true,
     stats: normalizeStats(t.stats),
+    // The archivist's record this token stands for (the DM's; players only get the name).
+    // The title is kept too: record ids can change when the knowledge base is rebuilt.
+    record: normalizeRecordLink(t.record),
   };
 }
+
+/** A link from a token to a knowledge-base record: { id, title } or null. */
+export function normalizeRecordLink(r) {
+  if (!r || typeof r !== 'object') return null;
+  const id = Number(r.id);
+  const title = str(r.title, 200);
+  return Number.isInteger(id) && id > 0 && title ? { id, title } : null;
+}
+
+/** Record kinds that sound like someone you could put on a map (the archivist names kinds freely). */
+export const PERSON_KIND = /npc|person|people|character|creature|monster|villain|ally|allies|enem|faction member|figure|beast|foe/i;
 
 /** A creature's stat block (the DM's; players never get it). */
 export function normalizeStats(st) {

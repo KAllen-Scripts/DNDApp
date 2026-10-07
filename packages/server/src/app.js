@@ -18,7 +18,7 @@ import { preparedTranscript } from './pipeline/prepare.js';
 import { SheetConflictError } from './sheets/store.js';
 import { SHEET_FORMAT } from '@dndapp/shared/sheet.js';
 import { parseRoll, rollDice, ROLL_MODES } from '@dndapp/shared/dice.js';
-import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, snapToken } from '@dndapp/shared/map.js';
+import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, snapToken } from '@dndapp/shared/map.js';
 import { inspectImage } from './maps/read.js';
 import { createPlayerImages } from './maps/image.js';
 import { newTokenId, isMapId } from './maps/store.js';
@@ -800,6 +800,31 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     return maps.view(maps.get(a.cid, map.id), a);
   });
 
+  /**
+   * The campaign's records, for putting someone from them on a map (DM):
+   * { records: [{ id, kind, title, status, person }] }, people first. The
+   * archivist names its kinds freely, so `person` is only a guess from the kind.
+   */
+  app.get('/campaigns/:cid/maps/records', async (request) => {
+    const a = access(request, { dm: true });
+    const records = kb.list(a.cid).map((r) => ({ id: r.id, kind: r.kind, title: r.title, status: r.status, person: PERSON_KIND.test(r.kind) }));
+    records.sort((x, y) => Number(y.person) - Number(x.person) || x.kind.localeCompare(y.kind) || x.title.localeCompare(y.title));
+    return { records };
+  });
+
+  /**
+   * One record (DM), for a token linked to it. Record ids can change when the
+   * knowledge base is rebuilt, so ?title= finds it by title if the id is gone.
+   */
+  app.get('/campaigns/:cid/maps/records/:rid', async (request) => {
+    const a = access(request, { dm: true });
+    const { title } = z.object({ title: z.string().max(200).optional() }).parse(request.query ?? {});
+    let [r] = /^\d+$/.test(request.params.rid) ? kb.getMany(a.cid, [Number(request.params.rid)]) : [];
+    if ((!r || (title && r.title !== title)) && title) r = kb.list(a.cid).find((x) => x.title === title) ?? r;
+    if (!r) throw new NotFoundError('That record is gone. The archivist may have merged or renamed it.');
+    return { id: r.id, kind: r.kind, title: r.title, status: r.status, body: r.body, data: r.data, tags: r.tags };
+  });
+
   /** Live changes to the maps this viewer can see (SSE): map {map} | gone {id}. */
   app.get('/campaigns/:cid/maps/events', async (request, reply) => {
     const a = access(request);
@@ -909,10 +934,19 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     hp: z.object({ current: z.number().int().nullable(), max: z.number().int().positive().nullable() }).nullable(),
     conditions: z.array(z.enum(CONDITIONS)).max(CONDITIONS.length),
     hidden: z.boolean(),
+    record: z.object({ id: z.number().int().positive(), title: z.string().max(200).optional() }).nullable(),
     stats: z.object({ text: z.string().max(8000), ac: z.number().int().nullable().optional(), hp_formula: z.string().max(40).optional(), speed: z.string().max(120).optional(), challenge: z.string().max(40).optional() }).nullable(),
   });
   // What a player may change on their own token; everything else is the DM's.
   const OWNER_FIELDS = new Set(['x', 'y', 'hp', 'conditions']);
+
+  /** A token linked to a record gets that record's current title (the DM only sends the id). */
+  const linkRecord = (cid, body) => {
+    if (!body.record) return;
+    const [r] = kb.getMany(cid, [body.record.id]);
+    if (!r) throw new BadRequestError('No such record.');
+    body.record = { id: r.id, title: r.title };
+  };
 
   /** A player character token belongs to someone in this campaign. */
   const checkTokenOwner = (cid, token) => {
@@ -928,6 +962,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     const body = TOKEN.partial().required({ kind: true }).parse(request.body ?? {});
     if (map.tokens.length >= MAX_TOKENS) throw new BadRequestError(`A map can have at most ${MAX_TOKENS} tokens.`);
     checkTokenOwner(a.cid, body);
+    linkRecord(a.cid, body);
     const id = newTokenId();
     const saved = maps.change(a.cid, map.id, (m) => {
       const token = { size: 1, ...body, id, x: body.x ?? m.image.width / 2, y: body.y ?? m.image.height / 2 };
@@ -956,6 +991,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       if (!Object.keys(body).every((k) => OWNER_FIELDS.has(k))) throw new AuthError('Only the DM can change that', 403);
     }
     checkTokenOwner(a.cid, { ...token, ...body });
+    linkRecord(a.cid, body);
     const saved = maps.change(a.cid, map.id, (m) => {
       const t = m.tokens.find((x) => x.id === token.id);
       if (!t) return;
