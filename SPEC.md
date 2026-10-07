@@ -62,7 +62,8 @@ Hard design problems:
 ```
 DNDApp/
   packages/
-    shared/    transcript parser, citation format, sheet.js (character sheet rules; served to the page at /shared/sheet.js)
+    shared/    transcript parser, citation format, sheet.js (character sheet rules; served to the page at /shared/sheet.js),
+               dice.js (dice notation), map.js (map documents, snapping, distances; served at /shared/map.js)
     server/
       src/
         app.js            HTTP routes
@@ -81,10 +82,11 @@ DNDApp/
         qa/               agent.js, tools.js
         sheets/           store.js (sheets, archived as diffs), import.js (uploaded sheets), spells.js (lookup),
                           books.js + pdf.js (reading the books folder: spell headings, page search, contents), srd-spells.json (SRD 5.1 spells)
+        maps/             store.js (maps, archived as diffs; who sees what), read.js (the AI's reading, measuring the grid)
         cli/              admin.js (init, set-password, list), rebuild.js
       test/               offline tests (fake AI); fixtures/privacy-scenario/ = manual real-AI scenario
     web/public/  the web page, served by the server at / (no build step):
-                 index.html, app.js (login, password, campaign picker, Ask, Notes), sheet.js (Sheet tab), admin.js (admin screen),
+                 index.html, app.js (login, password, campaign picker, Ask, Notes), sheet.js (Sheet tab), map.js (Map tab), admin.js (admin screen),
                  admin-sessions.js (sessions + upload on each campaign card), api.js (requests, SSE, element helper),
                  style.css, icon.svg
   SPEC.md  HANDOFF.md  README.md  AGENTS.md  CLAUDE.md
@@ -170,6 +172,7 @@ Also accepted: `[MM:SS]`, fractional seconds, no brackets, `0:01:30 - Name: text
 | `sessions` | source | Number, date played, checksum, processing status. |
 | `player_notes` | source | Private notes with author and session date. |
 | `character_sheets` | source | One sheet per player per campaign (JSON), with a version that goes up on each save. Schema v5. |
+| `maps` | source | Maps the DM imported (JSON: image, grid, scale, tokens, shown), with a version. Schema v7. |
 | `corrections` | source | DM corrections with `after_session` (where to replay them in a rebuild). |
 | `attendance` | derived | Who was at each session. |
 | `kb_records` | derived | The archivist's knowledge base (§5.1). |
@@ -191,6 +194,8 @@ data/archive/
     player-notes/<YYYY-MM-DD>.jsonl   append-only
     character-sheets/<user id>.jsonl  append-only: each save's changes (first line = whole sheet)
     character-sheets/uploads/         uploaded sheet files, as uploaded
+    maps/<id>/image.<ext>             a map the DM imported, as uploaded
+    maps/<id>/changes.jsonl           append-only: each change to that map (first line = whole map)
     sessions/0001/transcript.txt      read-only, sha256 in meta.json
     outputs/v<PIPELINE_VERSION>/<timestamp>-<run>/report.json, journal.json, knowledge_base.json, questions.json
     deleted.json                      only if the admin deleted the campaign (restore skips it; nothing else is touched)
@@ -198,7 +203,7 @@ data/archive/
 
 - **Deleting a campaign** removes it and everything derived or mirrored from it from the database (foreign-key cascades), but never touches the archive: the folder gets `deleted.json` and restore skips it. New campaigns never reuse an existing archive folder's slug. Undo by hand: remove the marker, restart, rebuild.
 - A transcript can never be replaced (different bytes for an existing session number → 409).
-- **Restore:** on start-up, accounts, campaigns, members, sessions, speakers, glossary, corrections, notes and character sheets (replayed from their change lines) missing from the database are restored from the archive, and notes are re-indexed. Then run a rebuild to regenerate the knowledge base.
+- **Restore:** on start-up, accounts, campaigns, members, sessions, speakers, glossary, corrections, notes, character sheets and maps (both replayed from their change lines) missing from the database are restored from the archive, and notes are re-indexed. Then run a rebuild to regenerate the knowledge base.
 - **Rebuild:** `npm run rebuild -- --campaign <id> --yes` (or `POST /rebuild`) wipes all derived data, re-indexes notes, then replays every session in order, each correction right after the session it was made against. The archivist is non-deterministic, so a rebuild gives an equivalent knowledge base, not an identical one.
 - Bump `PIPELINE_VERSION` (now 4) when prompts, tools or the memory design change.
 
@@ -254,6 +259,7 @@ Who-knows-what is decided by the archivist and enforced by the server:
 | Transcript (search, read, evidence, `/transcript` endpoint) | Attendees of that session. DMs see all. |
 | Player note (search, list) | **Only its author**, not even the DM. |
 | Character sheet | **Only its player.** Not the DM (deferred with the DM role), not Q&A, not the archivist. The admin login has none. |
+| Map | The DM: everything. Players: only maps the DM has shown, without the AI's description and reading notes; they can move only their own token. Not the archivist or Q&A (yet). |
 | Archivist | Sees everything, including all notes; decides `known_by`. |
 
 The archivist's rules: openly happened → attendees (everyone if all attended); only in a player's note → that player; whispered/secret perception → that player; absent players don't know unless told later (then widen); mixed records get split; when in doubt, restrict.

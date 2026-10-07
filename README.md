@@ -68,6 +68,12 @@ The **Dice** button in the player's header opens a dice tray: click dice to buil
 
 The **server rolls** (a secure random number). The page then throws 3D dice with real physics and relabels their faces so they land on the server's numbers, so a roll can't be faked from the browser. The 3D dice ([dice-box-threejs](https://github.com/3d-dice/dice-box-threejs), MIT) are served by this server and only loaded the first time someone rolls; by default they take the theme's accent colour, and the tray has 23 other **dice styles** (Dragonfire, Frost, Necrotic, Thylean Bronze, Here Be Dragons, Glitter Party...; textures load only for the style in use). **Effects:** each style's dice leave a trail while they roll (embers, snow, sparks, stars, smoke, bubbles, petals); a natural 20 gets a golden burst and banner, a natural 1 a red flash, smoke and a shake, and damage with every die on its highest face a sparkle, with small chimes when sound is on. 3D, effects and sound can each be switched off in the tray; with reduced motion on, or without WebGL, the result just appears. Rolls aren't saved or shown to anyone else yet.
 
+### Maps
+
+The **Map** tab shows maps the DM imported: a battle map, a town, a region, anything (PNG, JPEG or WebP). After an import the AI reads the map in the background: what kind it is, a name, whether it has a grid and its scale. Where it sees a grid, the server measures the exact square size from the image, so tokens line up. The DM can correct the grid (it's drawn over the map while the settings are open) and the scale under **Map settings**, and decides when players can see the map (new maps start hidden).
+
+The DM adds **tokens** for player characters (tied to a player), NPCs and enemies, with a size from Tiny to Gargantuan and a colour. **Players can drag their own token; the DM can drag any.** Tokens snap to the grid, the distance moved shows while dragging, and every move appears live on everyone's screen. Drag the map to pan; zoom with the mouse wheel or by pinching. The image and every change are archived.
+
 ### The public address
 
 `PUBLIC_URL` in `.env` is the address players use (a placeholder, `https://dnd.example.xyz`, until the domain is bought). It's the only place the URL is set. The web page is served by this server and calls it with relative paths, so the page itself never needs the URL. The server prints it on start-up.
@@ -78,7 +84,7 @@ The first time a transcript is processed, the server downloads a small search mo
 
 Everything lives in `data/` (git-ignored):
 
-- `data/archive/` is the permanent record: accounts, original transcripts, player notes, character sheets (every change, plus uploaded files), speaker map, glossary, DM corrections, and a snapshot of the knowledge base after every archivist run. **Back this folder up.**
+- `data/archive/` is the permanent record: accounts, original transcripts, player notes, character sheets (every change, plus uploaded files), maps (the images as imported, and every change), speaker map, glossary, DM corrections, and a snapshot of the knowledge base after every archivist run. **Back this folder up.**
 - `data/dndapp.sqlite` is the working database. It can be rebuilt from the archive.
 
 ### Rebuilding
@@ -155,6 +161,13 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/spells?q=` | Spell name suggestions (SRD and your books) |
 | GET | `/campaigns/:cid/spells/lookup?name=` | A spell's details: SRD, else your books (tidied by the AI), else the AI's memory. 404 if not found; 429 past `SHEET_AI_PER_HOUR` AI calls |
 | POST | `/campaigns/:cid/roll` | Roll dice: `{notation: "1d20+5", mode?: normal \| advantage \| disadvantage}` → `{notation, mode, terms, total, natural}`. d2–d20 and d100, up to 50 dice. Not saved |
+| GET / POST | `/campaigns/:cid/maps` | Maps you can see `{can_edit, maps}` (players: only shown maps, without the AI's description) / import one (DM) `{filename, data (base64), name?}`; the AI reads it in the background. 429 past `MAP_AI_PER_HOUR` reads |
+| GET | `/campaigns/:cid/maps/events` | Live changes (SSE): `map` (the map as you may see it), `gone` `{id}` |
+| GET / PATCH / DELETE | `/campaigns/:cid/maps/:mid` | One map / change it (DM) `{name?, shown?, grid?: {size, x, y} \| null, scale?: {distance, unit, per: square \| width} \| null}` / remove it (DM; kept in the archive) |
+| GET | `/campaigns/:cid/maps/:mid/image` | The image as imported |
+| POST | `/campaigns/:cid/maps/:mid/read` | Read the map with the AI again (DM) |
+| POST | `/campaigns/:cid/maps/:mid/tokens` | Add a token (DM) `{kind: pc \| npc \| enemy, name?, user_id?, size?, color?, x?, y?}` |
+| PATCH / DELETE | `/campaigns/:cid/maps/:mid/tokens/:tid` | Move `{x, y}` (the DM, or the player it belongs to) or change (DM) a token / remove it (DM). Snapped to the grid by the server |
 | GET | `/campaigns/:cid/usage` | AI usage this month by step and provider, plus average answer times (DM) |
 
 `/ask` streams these events: `conversation`, `turn`, `tool` (what it's searching), `text` (answer tokens), `done` (`answer`, `evidence` (the transcript lines behind each citation), cost, `durationMs`), and `error`. On each new `turn`, replace any text you've displayed rather than appending to it.

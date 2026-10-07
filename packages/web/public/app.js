@@ -10,6 +10,7 @@ import { marked } from './vendor/marked.js';
 import DOMPurify from './vendor/purify.js';
 import { initLook } from './look.js';
 import { initDice, setDiceCampaign } from './dice.js';
+import { loadMaps, initMapActions, stopMaps } from './map.js';
 
 const $ = (sel) => document.querySelector(sel);
 const CAMPAIGN_KEY = 'dndapp.campaign'; // last campaign chosen in this browser (pre-selected next time)
@@ -41,6 +42,7 @@ function hideAll() {
 }
 
 function showLogin(message) {
+  stopMaps();
   setToken(null);
   tabCampaign.set(null);
   state.me = null;
@@ -151,6 +153,7 @@ $('#campaign-form').addEventListener('submit', (e) => {
 
 $('#switch-campaign').addEventListener('click', async () => {
   await flushSheet();
+  stopMaps();
   showCampaignPicker();
 });
 
@@ -166,7 +169,12 @@ async function enterCampaign(campaign) {
   $('#switch-campaign').hidden = state.me.campaigns.length < 2;
   newConversation();
   setDiceCampaign({ campaignId: campaign.id, guarded });
-  await Promise.all([loadConversations(), loadNotes(), loadSheet({ campaignId: campaign.id, guarded })]);
+  await Promise.all([
+    loadConversations(),
+    loadNotes(),
+    loadSheet({ campaignId: campaign.id, guarded }),
+    loadMaps({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
+  ]);
 }
 
 const base = () => `/campaigns/${state.campaign.id}`;
@@ -195,6 +203,7 @@ $('#login-form').addEventListener('submit', async (e) => {
 for (const button of document.querySelectorAll('.logout')) {
   button.addEventListener('click', async () => {
     await flushSheet().catch(() => {});
+    stopMaps();
     await api('POST', '/logout').catch(() => {});
     showLogin();
   });
@@ -209,9 +218,9 @@ for (const tab of document.querySelectorAll('[data-tab]')) {
       t.setAttribute('aria-selected', String(on));
       $(`#tab-${t.dataset.tab}`).hidden = !on;
     }
-    // The sheet needs more room than Ask and Notes.
-    $('#app-view').classList.toggle('wide', tab.dataset.tab === 'sheet');
-    if (tab.dataset.tab !== 'sheet') $(`#tab-${tab.dataset.tab} textarea`)?.focus();
+    // The sheet and maps need more room than Ask and Notes.
+    $('#app-view').classList.toggle('wide', tab.dataset.tab === 'sheet' || tab.dataset.tab === 'map');
+    if (tab.dataset.tab === 'ask' || tab.dataset.tab === 'notes') $(`#tab-${tab.dataset.tab} textarea`)?.focus();
   });
 }
 
@@ -637,6 +646,7 @@ $('#note-form textarea').addEventListener('keydown', (e) => {
 });
 
 initSheetActions();
+initMapActions();
 initDice();
 initLook();
 start().catch((err) => showLogin(err.message));

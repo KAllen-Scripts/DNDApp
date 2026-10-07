@@ -45,6 +45,16 @@ export async function stream(path, body, onEvent) {
     headers: { authorization: `Bearer ${getToken()}`, 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
+  await readEvents(res, onEvent);
+}
+
+/** Listen to a GET Server-Sent Events stream until it ends or `signal` aborts it. */
+export async function listen(path, onEvent, { signal } = {}) {
+  const res = await fetch(path, { headers: { authorization: `Bearer ${getToken()}` }, signal });
+  await readEvents(res, onEvent);
+}
+
+async function readEvents(res, onEvent) {
   if (res.status === 401) throw new LoggedOut();
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Request failed (${res.status})`);
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -66,6 +76,14 @@ export async function stream(path, body, onEvent) {
       if (data) onEvent(event, JSON.parse(data));
     }
   }
+}
+
+/** Fetch a file that needs the login (an <img> can't send it) and return a URL for it. */
+export async function fileUrl(path) {
+  const res = await fetch(path, { headers: { authorization: `Bearer ${getToken()}` } });
+  if (res.status === 401) throw new LoggedOut();
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Request failed (${res.status})`);
+  return URL.createObjectURL(await res.blob());
 }
 
 /** Build an element: h('button', { class: 'ghost', onclick }, 'Text', child, ...) */

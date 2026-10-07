@@ -787,3 +787,72 @@ details.spell > summary::-webkit-details-marker { display: none; }
   .sh-box, .sh-line, .ability, .stat, .slot, details.spell { break-inside: avoid; }
   textarea { resize: none; border: none; }
 }
+
+/* ---------- maps (map.js) ---------- */
+
+.map-panel { min-height: 0; }
+.map-bar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.map-bar #map-status { flex: 1; min-width: 10rem; }
+.map-bar button, .map-bar select { padding: 0.35rem 0.8rem; font-size: 0.9rem; }
+.map-bar select { max-width: 14rem; }
+.map-panel:not(.can-edit) .dm-only { display: none; }
+.map-check { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; }
+.map-check input { width: auto; margin: 0; }
+.map-view {
+  position: relative; flex: 1; min-height: 18rem; overflow: hidden; touch-action: none; user-select: none;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); cursor: grab;
+}
+.map-view:active { cursor: grabbing; }
+.map-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.map-stage img { display: block; width: 100%; height: 100%; pointer-events: none; }
+.map-grid { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.map-grid path { fill: none; stroke: rgb(0 0 0 / 0.45); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.map-grid path.editing { stroke: var(--accent); stroke-width: 1.5px; }
+.map-tokens { position: absolute; inset: 0; }
+.map-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 2rem; text-align: center; margin: 0; }
+
+.token {
+  position: absolute; box-sizing: border-box; border-radius: 50%; display: grid; place-items: center;
+  background: var(--token); color: #fff; border: 0.08em solid rgb(255 255 255 / 0.9);
+  box-shadow: 0 0.06em 0.25em rgb(0 0 0 / 0.55); font-weight: 700; line-height: 1; cursor: pointer;
+  transition: left 0.15s ease, top 0.15s ease;
+}
+.token.movable { cursor: grab; }
+.token.dragging { transition: none; cursor: grabbing; opacity: 0.85; z-index: 2; }
+.token.mine { border-color: #ffd54a; }
+.token.selected { outline: 0.1em solid var(--accent); outline-offset: 0.08em; z-index: 1; }
+.token:focus-visible { outline: 0.1em solid var(--accent); outline-offset: 0.08em; }
+.token-enemy { border-radius: 18%; }
+.token-initials { font-size: 1em; text-shadow: 0 0.04em 0.1em rgb(0 0 0 / 0.6); pointer-events: none; }
+.token-name {
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 0.15em;
+  font-size: 0.5em; font-weight: 600; white-space: nowrap; padding: 0.05em 0.35em; border-radius: 0.3em;
+  background: rgb(0 0 0 / 0.65); color: #fff; pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) { .token { transition: none; } }
+
+.map-measure {
+  position: absolute; z-index: 3; pointer-events: none; padding: 0.15rem 0.5rem; border-radius: 6px;
+  background: var(--accent); color: var(--accent-text); font-weight: 700; font-size: 0.9rem; box-shadow: var(--shadow);
+}
+.map-selection {
+  position: absolute; left: 0.5rem; right: 0.5rem; bottom: 0.5rem; z-index: 3; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+  padding: 0.4rem 0.6rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 2px 10px rgb(0 0 0 / 0.2);
+  cursor: default;
+}
+.map-selection button { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+.map-selection .swatch { width: 1rem; height: 1rem; border-radius: 50%; flex: none; }
+.map-selection .spacer, .map-dialog-actions .spacer { flex: 1; }
+
+.map-dialog { width: min(32rem, calc(100vw - 32px)); padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: inherit; }
+.map-dialog::backdrop { background: rgb(0 0 0 / 0.35); }
+.map-dialog-inner { display: grid; gap: 0.6rem; padding: 1rem 1.1rem; }
+.map-dialog h2 { margin: 0; font-size: 1.15rem; }
+.map-dialog h3 { margin: 0.4rem 0 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.map-dialog p { margin: 0; }
+.map-field { display: grid; gap: 0.2rem; font-size: 0.9rem; }
+.map-field input[type="color"] { height: 2.2rem; padding: 0.1rem; }
+.map-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 0.5rem; }
+.map-row[hidden] { display: none; }
+.map-ai { white-space: pre-wrap; max-height: 10rem; overflow-y: auto; }
+.map-dialog-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
