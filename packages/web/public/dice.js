@@ -25,6 +25,7 @@ const MODE_NAMES = { normal: 'Normal', advantage: 'Advantage', disadvantage: 'Di
  * "none" shows only the result.
  */
 export const ROLLERS = {
+  deluxe: { name: 'Deluxe 3D', about: 'The fanciest: glossy, metal and see-through dice with reflections, soft shadows, glowing numbers and sounds', module: './dice-deluxe.js', hold: 2200 },
   classic: { name: 'Classic 3D', about: 'Full physics with shadows (slowest, about 3.5 s a roll)', module: '/vendor/dice/dice-box.js', hold: 2600 },
   quick: { name: 'Quick 3D', about: 'The same 3D dice, no shadows, landing in about 1.5 s', module: './dice-quick.js', hold: 1800 },
   lite: { name: 'Lite', about: '3D-looking dice drawn without WebGL or physics, about 1.2 s', module: './dice-lite.js', hold: 1600, options: { mode: 'lite' } },
@@ -185,6 +186,11 @@ function getBox(key) {
   return boxes.get(key);
 }
 
+/** Start loading the roller while the tray is open, so the first roll doesn't wait for it. */
+function warmUp() {
+  if (animated()) getBox(rollerKey()).catch(() => {});
+}
+
 const diceCount = (result) => result.terms.reduce((n, t) => n + (t.dice?.length ?? 0) * (t.sides === 100 ? 2 : 1), 0);
 
 /**
@@ -306,7 +312,10 @@ function celebrate(result, box = null) {
   let at = null;
   if (box?.diceList?.length) {
     const mesh = kind === 'max' ? box.diceList[0] : box.diceList.find((m) => m.shape === 'd20' && Number(m.getLastValue?.().value) === result.natural);
-    if (mesh) at = onScreen(box, mesh);
+    if (mesh) {
+      at = onScreen(box, mesh);
+      box.glow?.(mesh, kind);
+    }
   }
   if (!at) {
     const card = $('#dice-result').getBoundingClientRect();
@@ -513,7 +522,7 @@ export function initDice() {
     h('div', { class: 'dice-settings' },
       h('label', { class: 'check' }, h('input', { id: 'dice-3d', type: 'checkbox', onchange: (e) => { state.settings.threeD = e.target.checked; saveSettings(); } }), 'Animated dice'),
       h('label', { class: 'dice-roller' }, 'Roller',
-        h('select', { id: 'dice-roller', onchange: (e) => { state.settings.roller = e.target.value; saveSettings(); drawSettings(); } },
+        h('select', { id: 'dice-roller', onchange: (e) => { state.settings.roller = e.target.value; saveSettings(); drawSettings(); warmUp(); } },
           h('option', { value: '' }, "Server's choice"),
           Object.entries(ROLLERS).map(([k, r]) => h('option', { value: k, title: r.about }, r.name)))),
       h('label', { class: 'check' }, h('input', { id: 'dice-effects', type: 'checkbox', onchange: (e) => { state.settings.effects = e.target.checked; saveSettings(); } }), 'Effects'),
@@ -527,7 +536,10 @@ export function initDice() {
   const toggle = (show = panel.hidden) => {
     panel.hidden = !show;
     open.setAttribute('aria-expanded', String(show));
-    if (show) input.focus();
+    if (show) {
+      input.focus();
+      warmUp();
+    }
   };
   open.setAttribute('aria-expanded', 'false');
   open.setAttribute('aria-controls', 'dice-panel');
