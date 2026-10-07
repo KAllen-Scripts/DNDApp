@@ -32,7 +32,14 @@ export const config = {
   dataDir: path.resolve(repoRoot, env.DATA_DIR || 'data'),
   // The player web page, served by this server at "/".
   webDir: path.resolve(repoRoot, env.WEB_DIR || 'packages/web/public'),
+  // Largest upload (transcripts, sheet files, maps). Other requests are limited to 1 MB.
   maxUploadBytes: num(env.MAX_UPLOAD_MB, 50) * 1024 * 1024,
+  // Which proxies to believe about the caller's real address (X-Forwarded-For), for
+  // limiting password guesses. 'loopback' suits a tunnel or reverse proxy running on
+  // this machine; it can't be faked by anyone connecting from outside.
+  trustProxy: env.TRUST_PROXY || 'loopback',
+  // Live streams (map moves, job progress) one account may have open at once.
+  maxStreamsPerUser: num(env.MAX_STREAMS_PER_USER, 20),
   // The group's rulebooks (PDFs), used to look up spells for character sheets.
   // Next to the repo by default: Desktop/Code/DND books.
   booksDir: path.resolve(repoRoot, env.BOOKS_DIR || '../DND books'),
@@ -42,6 +49,8 @@ export const config = {
     loginDays: num(env.LOGIN_DAYS, 30),
     // Failed logins allowed per name in 15 minutes.
     maxFailedLogins: num(env.MAX_FAILED_LOGINS, 10),
+    // Failed logins allowed from one network address (whatever the names) in 15 minutes.
+    maxFailedLoginsPerAddress: num(env.MAX_FAILED_LOGINS_PER_ADDRESS, 30),
   },
 
   llm: {

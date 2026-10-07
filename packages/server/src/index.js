@@ -1,5 +1,5 @@
 import { createContext } from './context.js';
-import { buildApp } from './app.js';
+import { buildApp, exposureWarnings } from './app.js';
 
 const ctx = await createContext();
 const app = buildApp(ctx);
@@ -19,6 +19,7 @@ ctx.books.load().then(() => {
 });
 await app.listen({ host: ctx.config.host, port: ctx.config.port });
 app.log.info(`Player web page: ${ctx.config.publicUrl} (locally: http://${ctx.config.host}:${ctx.config.port})`);
+for (const warning of exposureWarnings(ctx.config)) app.log.warn(warning);
 const noPassword = ctx.db.prepare('SELECT name FROM users WHERE password_hash IS NULL AND revoked_at IS NULL').all();
 if (noPassword.length) {
   app.log.warn(`These accounts have no password and can't log in: ${noPassword.map((u) => u.name).join(', ')}. Set one with: npm run admin -- set-password "<name>" "<password>"`);

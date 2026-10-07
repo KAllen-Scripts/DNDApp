@@ -50,8 +50,9 @@ function validatePassword(password) {
  * @param {object} o
  * @param {number} [o.loginDays]  a login ends after this many days without use
  * @param {number} [o.maxFailedLogins]  failed attempts per name per 15 minutes before logins are refused
+ * @param {number} [o.maxFailedLoginsPerAddress]  failed attempts from one network address (any names) per 15 minutes
  */
-export function createAuth({ db, archive, loginDays = 30, maxFailedLogins = 10 }) {
+export function createAuth({ db, archive, loginDays = 30, maxFailedLogins = 10, maxFailedLoginsPerAddress = 30 }) {
   const archiveAccounts = () =>
     archive.saveAccounts(
       db.prepare('SELECT id, name, password_hash, must_change_password, is_admin, revoked_at, created_at FROM users ORDER BY id').all(),
@@ -69,11 +70,30 @@ export function createAuth({ db, archive, loginDays = 30, maxFailedLogins = 10 }
   const publicUser = (id) => db.prepare('SELECT id, name, is_admin, must_change_password FROM users WHERE id = ?').get(id);
   const endLogins = (userId) => db.prepare('DELETE FROM logins WHERE user_id = ?').run(userId);
 
-  // Failed login attempts per lower-cased name: timestamps within the window.
+  // Failed login attempts per lower-cased name ("name:...") and per network address ("ip:..."): timestamps within the window.
   const failures = new Map();
   const WINDOW_MS = 15 * 60 * 1000;
   const recentFailures = (key) => (failures.get(key) ?? []).filter((t) => Date.now() - t < WINDOW_MS);
+  const addFailure = (key) => {
+    // Forget names and addresses with nothing recent, so made-up names can't fill the server's memory.
+    if (failures.size > 1000) for (const k of failures.keys()) if (!recentFailures(k).length) failures.delete(k);
+    failures.set(key, [...recentFailures(key), Date.now()]);
+  };
   let dummyHash = null;
+
+  /** The account and login behind an Authorization header, or null. Read-only. */
+  const lookup = (header) => {
+    const m = /^Bearer\s+(\S+)$/i.exec(header ?? '');
+    if (!m) return null;
+    const hash = sha256(m[1]);
+    const user = db
+      .prepare(
+        `SELECT u.id, u.name, u.is_admin, u.must_change_password FROM logins l JOIN users u ON u.id = l.user_id
+         WHERE l.token_hash = ? AND u.revoked_at IS NULL AND l.last_used_at >= datetime('now', ?)`,
+      )
+      .get(hash, `-${loginDays} days`);
+    return user ? { user, hash } : null;
+  };
 
   return {
     /** Create an account. Names are unique (ignoring case); they're what people log in with. */
@@ -109,10 +129,15 @@ export function createAuth({ db, archive, loginDays = 30, maxFailedLogins = 10 }
       archiveAccounts();
     },
 
-    /** @returns {Promise<{ token: string, user: object }>} */
-    async login(name, password) {
+    /**
+     * @param {string} [address]  the caller's network address, for limiting guesses from one place
+     * @returns {Promise<{ token: string, user: object }>}
+     */
+    async login(name, password, address = null) {
       const key = cleanName(name).toLowerCase();
-      if (recentFailures(key).length >= maxFailedLogins) {
+      const nameKey = `name:${key}`;
+      const addressKey = address ? `ip:${address}` : null;
+      if (recentFailures(nameKey).length >= maxFailedLogins || (addressKey && recentFailures(addressKey).length >= maxFailedLoginsPerAddress)) {
         throw new AuthError('Too many failed attempts. Try again in 15 minutes.', 429);
       }
       const row = db.prepare('SELECT * FROM users WHERE name = ? COLLATE NOCASE AND revoked_at IS NULL').get(key);
@@ -120,10 +145,11 @@ export function createAuth({ db, archive, loginDays = 30, maxFailedLogins = 10 }
       dummyHash ??= await hashPassword('not-a-real-password');
       const ok = await checkPassword(String(password ?? ''), row?.password_hash ?? dummyHash);
       if (!row || !ok) {
-        failures.set(key, [...recentFailures(key), Date.now()]);
+        addFailure(nameKey);
+        if (addressKey) addFailure(addressKey);
         throw new AuthError('Wrong name or password');
       }
-      failures.delete(key);
+      failures.delete(nameKey);
       const token = newToken();
       db.prepare('INSERT INTO logins (token_hash, user_id) VALUES (?, ?)').run(sha256(token), row.id);
       return { token, user: publicUser(row.id) };
@@ -135,19 +161,19 @@ export function createAuth({ db, archive, loginDays = 30, maxFailedLogins = 10 }
     },
 
     authenticate(header) {
-      const m = /^Bearer\s+(\S+)$/i.exec(header ?? '');
-      if (!m) throw new AuthError('Not logged in');
-      const hash = sha256(m[1]);
-      const user = db
-        .prepare(
-          `SELECT u.id, u.name, u.is_admin, u.must_change_password FROM logins l JOIN users u ON u.id = l.user_id
-           WHERE l.token_hash = ? AND u.revoked_at IS NULL AND l.last_used_at >= datetime('now', ?)`,
-        )
-        .get(hash, `-${loginDays} days`);
-      if (!user) throw new AuthError('Not logged in, or your login has expired. Please log in.');
-      db.prepare("UPDATE logins SET last_used_at = datetime('now') WHERE token_hash = ?").run(hash);
-      return user;
+      if (!/^Bearer\s+(\S+)$/i.test(header ?? '')) throw new AuthError('Not logged in');
+      const found = lookup(header);
+      if (!found) throw new AuthError('Not logged in, or your login has expired. Please log in.');
+      db.prepare("UPDATE logins SET last_used_at = datetime('now') WHERE token_hash = ?").run(found.hash);
+      return found.user;
     },
+
+    /**
+     * Whether a login still works (not logged out, expired or blocked), without
+     * counting as a use. Live streams check this so they stop when a login ends.
+     * @returns {object | null} the account
+     */
+    check: (header) => lookup(header)?.user ?? null,
 
     /** Block an account and log it out everywhere. Setting a new password re-enables it. */
     revoke(userId) {
