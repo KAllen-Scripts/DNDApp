@@ -856,3 +856,12 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .map-row[hidden] { display: none; }
 .map-ai { white-space: pre-wrap; max-height: 10rem; overflow-y: auto; }
 .map-dialog-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
+.map-fog { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.map-fog .fog { fill: #14110d; }
+.map-fog.dm .fog { fill: rgb(20 17 13 / 0.55); }
+.map-fog .fog-draft { fill: none; stroke-width: 3px; vector-effect: non-scaling-stroke; stroke-dasharray: 6 4; }
+.map-fog .fog-draft.reveal { stroke: #f2d675; }
+.map-fog .fog-draft.cover { stroke: #e0563f; }
+.map-fog-tools { padding: 0.35rem 0.5rem; border: 1px dashed var(--border); border-radius: var(--radius); }
+.map-bar button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.map-view.fog-drawing { cursor: crosshair; }

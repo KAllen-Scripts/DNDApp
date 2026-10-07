@@ -240,3 +240,50 @@ test('maps: a failed read can be run again; DM corrections survive; restore repl
     await t.cleanup();
   }
 });
+
+test('fog of war: players get covered parts blacked out and no tokens hidden in the fog', async () => {
+  const t = await setup({ llm: mapLLM() });
+  try {
+    const png = await terrain(700, 490, { size: 35 });
+    const map = await importMap(t, png);
+    const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+    await t.request('PATCH', base, { body: { shown: true, grid: { size: 35, x: 0, y: 0 } } });
+    const add = async (body) => (await t.request('POST', `${base}/tokens`, { body })).json().token;
+    await add({ kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 50, y: 50 });
+    const goblin = await add({ kind: 'enemy', name: 'Goblin', x: 600, y: 400 });
+    const seen = async () => (await t.request('GET', base, { as: t.sam.token })).json();
+
+    assert.equal((await t.request('PATCH', `${base}/fog`, { as: t.sam.token, body: { enabled: true } })).statusCode, 403);
+    await t.request('PATCH', `${base}/fog`, { body: { enabled: true } });
+    // Everything covered: Sam still sees his own token, not the goblin.
+    assert.deepEqual((await seen()).tokens.map((x) => x.name), ['Thorin']);
+    assert.equal((await t.request('PATCH', `${base}/tokens/${goblin.id}`, { as: t.sam.token, body: { x: 1, y: 1 } })).statusCode, 404);
+    const fogged = await seen();
+    assert.notEqual(fogged.image_key, 'clear');
+
+    // The image players get is dark where covered; the DM's is the original.
+    const pixel = async (buf, x, y) => (await sharp(buf).extract({ left: x, top: y, width: 1, height: 1 }).raw().toBuffer())[0];
+    const playerImg = (await t.request('GET', `${base}/image`, { as: t.sam.token })).rawPayload;
+    assert.ok((await pixel(playerImg, 600, 400)) < 30);
+    assert.deepEqual((await t.request('GET', `${base}/image`)).rawPayload, png);
+
+    // Reveal the bottom-right room (snapped to squares on the page; any rectangle here).
+    await t.request('PATCH', `${base}/fog`, { body: { add: { op: 'reveal', x: 560, y: 350, w: 140, h: 140 } } });
+    const revealed = await seen();
+    assert.deepEqual(revealed.tokens.map((x) => x.name).sort(), ['Goblin', 'Thorin']);
+    assert.notEqual(revealed.image_key, fogged.image_key);
+    const after = (await t.request('GET', `${base}/image`, { as: t.sam.token })).rawPayload;
+    assert.equal(await pixel(after, 600, 401), await pixel(png, 600, 401));
+    // Cover part of it again, then undo that.
+    await t.request('PATCH', `${base}/fog`, { body: { add: { op: 'cover', x: 605, y: 395, w: 15, h: 15 } } }); // the goblin snapped to (612.5, 402.5)
+    assert.deepEqual((await seen()).tokens.map((x) => x.name), ['Thorin']);
+    await t.request('PATCH', `${base}/fog`, { body: { undo: true } });
+    assert.equal((await seen()).tokens.length, 2);
+    await t.request('PATCH', `${base}/fog`, { body: { reset: 'cover' } });
+    assert.equal((await seen()).tokens.length, 1);
+    await t.request('PATCH', `${base}/fog`, { body: { enabled: false } });
+    assert.equal((await seen()).image_key, 'clear');
+  } finally {
+    await t.cleanup();
+  }
+});

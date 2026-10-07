@@ -20,6 +20,8 @@ export const UNITS = ['ft', 'm', 'mi', 'km'];
 /** What a scale's distance covers: one grid square, or the whole width of the image. */
 export const SCALE_PER = ['square', 'width'];
 export const MAX_TOKENS = 300;
+export const MAX_FOG_SHAPES = 1000;
+export const FOG_OPS = ['reveal', 'cover'];
 /** On a map without a grid, a size-1 token is this fraction of the map's longer side. */
 const UNGRIDDED_TOKEN_FRACTION = 1 / 40;
 
@@ -96,6 +98,7 @@ export function normalizeMap(input = {}) {
       error: str(m.reading?.error, 500),
       notes: longStr(m.reading?.notes, 2000),
     },
+    fog: normalizeFog(m.fog, image),
     tokens: [],
   };
   // A scale per square means nothing without a grid.
@@ -108,6 +111,56 @@ export function normalizeMap(input = {}) {
     out.tokens.push(token);
   }
   return out;
+}
+
+/**
+ * Fog of war: while it's on, the whole map starts covered and the DM's
+ * rectangles reveal or cover parts of it, later ones on top of earlier ones.
+ */
+export function normalizeFog(f, image = {}) {
+  const width = image.width ?? 1;
+  const height = image.height ?? 1;
+  const shapes = [];
+  for (const s of Array.isArray(f?.shapes) ? f.shapes.slice(-MAX_FOG_SHAPES) : []) {
+    const x = num(s?.x, { min: 0, max: width, fallback: 0 });
+    const y = num(s?.y, { min: 0, max: height, fallback: 0 });
+    const w = num(s?.w, { min: 0, max: width - x, fallback: 0 });
+    const h = num(s?.h, { min: 0, max: height - y, fallback: 0 });
+    if (w > 0 && h > 0) shapes.push({ op: pick(s.op, FOG_OPS, 'reveal'), x: round(x, 1), y: round(y, 1), w: round(w, 1), h: round(h, 1) });
+  }
+  return { enabled: f?.enabled === true, shapes };
+}
+
+/** Is this point under the fog (hidden from players)? */
+export function isFogged(map, x, y) {
+  if (!map.fog?.enabled) return false;
+  let covered = true;
+  for (const s of map.fog.shapes) {
+    if (x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h) covered = s.op === 'cover';
+  }
+  return covered;
+}
+
+/**
+ * A rectangle between two corners, lined up with the grid's squares when
+ * there is one (so revealing a room takes whole squares).
+ */
+export function fogRect(map, a, b) {
+  let x0 = Math.min(a.x, b.x);
+  let y0 = Math.min(a.y, b.y);
+  let x1 = Math.max(a.x, b.x);
+  let y1 = Math.max(a.y, b.y);
+  if (map.grid) {
+    const { size: g, x: gx, y: gy } = map.grid;
+    x0 = Math.floor((x0 - gx) / g) * g + gx;
+    y0 = Math.floor((y0 - gy) / g) * g + gy;
+    x1 = Math.ceil((x1 - gx) / g) * g + gx;
+    y1 = Math.ceil((y1 - gy) / g) * g + gy;
+  }
+  const { width, height } = map.image;
+  x0 = Math.max(0, x0);
+  y0 = Math.max(0, y0);
+  return { x: x0, y: y0, w: Math.min(width, x1) - x0, h: Math.min(height, y1) - y0 };
 }
 
 /** How many image pixels one "square" of token size is: the grid square, or a share of the map. */

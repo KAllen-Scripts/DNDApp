@@ -13,7 +13,8 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { normalizeMap } from '@dndapp/shared/map.js';
+import { normalizeMap, isFogged } from '@dndapp/shared/map.js';
+import { fogKey } from './image.js';
 import { diffJson, applyJson } from '../sheets/store.js';
 import { NotFoundError } from '../store.js';
 
@@ -107,14 +108,25 @@ export function createMaps({ db, archive, store }) {
       return { path: archive.mapImagePath(store.getCampaign(campaignId).slug, id, map.image.file), type: map.image.type };
     },
 
-    /** What this viewer may see of a map, or null if they may not see it at all. */
-    view(map, { role }) {
+    /**
+     * What this viewer may see of a map, or null if they may not see it at all.
+     * Players: only shown maps; no AI description or notes; no tokens under
+     * the fog except their own. `image_key` changes when their image does.
+     */
+    view(map, { role, userId }) {
       if (!map || map.removed) return null;
       const out = { ...map };
       delete out.campaign_id;
-      if (role === 'dm') return { ...out, can_edit: true };
+      if (role === 'dm') return { ...out, image_key: 'dm', can_edit: true };
       if (!map.shown) return null;
-      return { ...out, description: '', reading: { status: map.reading.status, error: '', notes: '' }, can_edit: false };
+      return {
+        ...out,
+        description: '',
+        reading: { status: map.reading.status, error: '', notes: '' },
+        tokens: map.tokens.filter((t) => t.user_id === userId || !isFogged(map, t.x, t.y)),
+        image_key: fogKey(map),
+        can_edit: false,
+      };
     },
 
     /** Reads cut short by a restart can't finish; say so, so the DM can run them again. */

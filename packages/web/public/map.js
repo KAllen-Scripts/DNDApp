@@ -11,7 +11,7 @@
 import { api, listen, fileUrl, h, storage, LoggedOut } from './api.js';
 import {
   TOKEN_KINDS, TOKEN_KIND_NAMES, TOKEN_SIZES, TOKEN_SIZE_NAMES, TOKEN_COLORS, UNITS,
-  snapToken, tokenPx, measure, formatDistance,
+  snapToken, tokenPx, measure, formatDistance, fogRect,
 } from './shared/map.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -25,13 +25,15 @@ const state = {
   canEdit: false,
   maps: [],
   current: null, // the map on screen
-  images: new Map(), // map id -> object URL of its image
+  images: new Map(), // map id -> { key, url } of its image (players' changes with the fog)
   view: { x: 0, y: 0, k: 1 }, // screen = image * k + (x, y)
   fitted: false,
   selected: null, // token id
   drag: null, // a token being moved: { id, start, pointer, x, y, moved }
   pointers: new Map(), // pointers down on the background (panning, pinching)
   draftGrid: undefined, // grid being edited in the settings dialog (shown live)
+  fogMode: null, // DM drawing fog: 'reveal' | 'cover'
+  fogDraw: null, // the rectangle being drawn: { pointer, a, b }
   live: null, // AbortController for the live stream
 };
 
@@ -56,7 +58,7 @@ const report = (err) => {
 export async function loadMaps({ campaignId, userId, guarded }) {
   state.live?.abort();
   Object.assign(state, { campaignId, userId, guarded, current: null, selected: null, fitted: false });
-  for (const url of state.images.values()) URL.revokeObjectURL(url);
+  for (const { url } of state.images.values()) URL.revokeObjectURL(url);
   state.images.clear();
   const { can_edit, maps } = await api('GET', base());
   state.canEdit = can_edit;
@@ -131,11 +133,21 @@ async function show(map) {
   renderPicker();
   render();
   if (!map) return;
+  await loadImage(map);
+  if (state.current?.id === map.id) fit();
+}
+
+/** Fetch the map's image if this viewer's version of it changed (players: the fog moved). */
+async function loadImage(map) {
   try {
-    if (!state.images.has(map.id)) state.images.set(map.id, await fileUrl(`${base()}/${map.id}/image`));
-    if (state.current?.id !== map.id) return;
-    $('#map-image').src = state.images.get(map.id);
-    fit();
+    let entry = state.images.get(map.id);
+    if (entry?.key !== map.image_key) {
+      const url = await fileUrl(`${base()}/${map.id}/image?v=${encodeURIComponent(map.image_key)}`);
+      if (entry) URL.revokeObjectURL(entry.url);
+      entry = { key: map.image_key, url };
+      state.images.set(map.id, entry);
+    }
+    if (state.current?.id === map.id && $('#map-image').getAttribute('src') !== entry.url) $('#map-image').src = entry.url;
   } catch (err) {
     report(err);
   }
@@ -174,8 +186,11 @@ function render() {
   stage.style.width = `${width}px`;
   stage.style.height = `${height}px`;
   renderGrid();
+  renderFog();
   renderTokens();
   renderSelection();
+  renderFogTools();
+  if (state.images.has(map.id) && state.images.get(map.id).key !== map.image_key) loadImage(map);
   const reading = map.reading.status;
   if (reading === 'pending') status('The AI is reading this map…');
   else if (reading === 'failed' && state.canEdit) status(map.reading.error || "The AI couldn't read this map.", true);
@@ -205,6 +220,58 @@ function renderGrid() {
   path.setAttribute('d', lines.join(''));
   path.setAttribute('class', state.draftGrid !== undefined ? 'editing' : '');
   svg.append(path);
+}
+
+const SVG = 'http://www.w3.org/2000/svg';
+const svgEl = (tag, attrs) => {
+  const el = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+};
+
+/** Fog of war: the DM sees it shaded; players see covered parts dark (their image is blacked out there too). */
+function renderFog() {
+  const map = state.current;
+  const svg = $('#map-fog');
+  const { width, height } = map.image;
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.classList.toggle('dm', state.canEdit);
+  svg.replaceChildren();
+  if (map.fog?.enabled) {
+    const mask = svgEl('mask', { id: 'map-fog-mask', maskUnits: 'userSpaceOnUse', x: 0, y: 0, width, height });
+    mask.append(svgEl('rect', { width, height, fill: 'white' }));
+    for (const r of map.fog.shapes) mask.append(svgEl('rect', { x: r.x, y: r.y, width: r.w, height: r.h, fill: r.op === 'reveal' ? 'black' : 'white' }));
+    const defs = svgEl('defs', {});
+    defs.append(mask);
+    svg.append(defs, svgEl('rect', { width, height, class: 'fog', mask: 'url(#map-fog-mask)' }));
+  }
+  if (state.fogDraw) {
+    const r = fogRect(map, state.fogDraw.a, state.fogDraw.b);
+    svg.append(svgEl('rect', { x: r.x, y: r.y, width: r.w, height: r.h, class: `fog-draft ${state.fogMode}` }));
+  }
+}
+
+function renderFogTools() {
+  const map = state.current;
+  const tools = $('#map-fog-tools');
+  $('#map-fog-open').setAttribute('aria-pressed', String(!tools.hidden));
+  if (tools.hidden || !map) return;
+  $('#map-fog-on').checked = !!map.fog?.enabled;
+  for (const b of tools.querySelectorAll('[data-fog-mode]')) {
+    b.setAttribute('aria-pressed', String(state.fogMode === b.dataset.fogMode));
+    b.disabled = !map.fog?.enabled;
+  }
+  for (const b of tools.querySelectorAll('[data-fog-action]')) b.disabled = !map.fog?.enabled;
+  $('#map-view').classList.toggle('fog-drawing', !!state.fogMode && !!map.fog?.enabled);
+}
+
+async function fog(body) {
+  try {
+    const saved = await state.guarded(() => api('PATCH', `${base()}/${state.current.id}/fog`, body));
+    if (saved) onMap(saved);
+  } catch (err) {
+    report(err);
+  }
 }
 
 const initials = (name) =>
@@ -302,13 +369,22 @@ function toImage(clientX, clientY) {
 }
 
 function viewDown(e) {
-  if (!state.current || e.target.closest('.token')) return;
+  if (!state.current || e.target.closest('.token, .map-selection')) return;
   e.currentTarget.setPointerCapture(e.pointerId);
+  if (state.fogMode && state.current.fog?.enabled && !state.pointers.size && !state.fogDraw) {
+    const at = toImage(e.clientX, e.clientY);
+    state.fogDraw = { pointer: e.pointerId, a: at, b: at };
+    return;
+  }
   state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY });
 }
 
 function viewMove(e) {
   if (state.drag) return tokenMove(e);
+  if (state.fogDraw?.pointer === e.pointerId) {
+    state.fogDraw.b = toImage(e.clientX, e.clientY);
+    return renderFog();
+  }
   const p = state.pointers.get(e.pointerId);
   if (!p) return;
   const box = $('#map-view').getBoundingClientRect();
@@ -331,6 +407,13 @@ function viewMove(e) {
 
 function viewUp(e) {
   if (state.drag) return tokenUp(e);
+  if (state.fogDraw?.pointer === e.pointerId) {
+    const r = fogRect(state.current, state.fogDraw.a, state.fogDraw.b);
+    state.fogDraw = null;
+    renderFog();
+    if (r.w > 0 && r.h > 0) fog({ add: { op: state.fogMode, ...r } });
+    return;
+  }
   const p = state.pointers.get(e.pointerId);
   state.pointers.delete(e.pointerId);
   // A click on the map itself (not a drag) clears the selection.
@@ -624,5 +707,25 @@ export function initMapActions() {
     if (file) state.guarded(() => importMap(file)).catch(report);
   });
   $('#map-add-token').addEventListener('click', () => tokenDialog().catch(report));
+  $('#map-fog-open').addEventListener('click', () => {
+    const tools = $('#map-fog-tools');
+    tools.hidden = !tools.hidden;
+    if (tools.hidden) state.fogMode = null;
+    renderFogTools();
+  });
+  $('#map-fog-on').addEventListener('change', (e) => fog({ enabled: e.target.checked }));
+  for (const b of document.querySelectorAll('[data-fog-mode]')) {
+    b.addEventListener('click', () => {
+      state.fogMode = state.fogMode === b.dataset.fogMode ? null : b.dataset.fogMode;
+      renderFogTools();
+    });
+  }
+  for (const b of document.querySelectorAll('[data-fog-action]')) {
+    b.addEventListener('click', () => {
+      const action = b.dataset.fogAction;
+      if (action === 'undo') return fog({ undo: true });
+      if (confirm(action === 'reveal' ? 'Reveal the whole map to players?' : 'Cover the whole map again?')) fog({ reset: action });
+    });
+  }
   $('#map-settings').addEventListener('click', settingsDialog);
 }

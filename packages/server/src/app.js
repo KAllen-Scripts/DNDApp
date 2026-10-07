@@ -18,8 +18,9 @@ import { preparedTranscript } from './pipeline/prepare.js';
 import { SheetConflictError } from './sheets/store.js';
 import { SHEET_FORMAT } from '@dndapp/shared/sheet.js';
 import { parseRoll, rollDice, ROLL_MODES } from '@dndapp/shared/dice.js';
-import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, snapToken } from '@dndapp/shared/map.js';
+import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, snapToken } from '@dndapp/shared/map.js';
 import { inspectImage } from './maps/read.js';
+import { createPlayerImages } from './maps/image.js';
 import { newTokenId, isMapId } from './maps/store.js';
 
 /** Open a Server-Sent Events stream on a request. */
@@ -158,7 +159,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     if (!membership && !request.user.is_admin) throw new AuthError('Not a member of this campaign', 403);
     const role = membership?.role ?? 'dm'; // admins act as DM
     if (dm && role !== 'dm') throw new AuthError('Only the DM can do that', 403);
-    return { campaign, role, cid, membership };
+    return { campaign, role, cid, membership, userId: request.user.id };
   }
 
   const attended = (sessionId, userId) =>
@@ -815,12 +816,18 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
 
   app.get('/campaigns/:cid/maps/:mid', async (request) => viewableMap(request).view);
 
-  /** The map's image, exactly as imported. */
+  const playerImages = createPlayerImages();
+
+  /** The map's image: as imported for the DM; for players, with the fog's covered parts blacked out. */
   app.get('/campaigns/:cid/maps/:mid/image', async (request, reply) => {
-    const { cid, map } = viewableMap(request);
+    const { cid, map, role } = viewableMap(request);
     const { path: file, type } = maps.imagePath(cid, map.id);
-    // The file never changes, so the browser can keep it.
-    return reply.type(type).header('Cache-Control', 'private, max-age=31536000, immutable').header('X-Content-Type-Options', 'nosniff').send(fs.createReadStream(file));
+    reply.type(type).header('X-Content-Type-Options', 'nosniff');
+    if (role === 'dm') {
+      // The file never changes, so the browser can keep it.
+      return reply.header('Cache-Control', 'private, max-age=31536000, immutable').send(fs.createReadStream(file));
+    }
+    return reply.header('Cache-Control', 'private, no-cache').send(await playerImages.get(map, file));
   });
 
   const GRID = z.object({ size: z.number().positive(), x: z.number(), y: z.number() }).nullable();
@@ -842,6 +849,32 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       if (body.grid !== undefined) m.grid = body.grid;
       if (body.scale !== undefined) m.scale = body.scale;
     }, { by: request.user.id });
+    return maps.view(saved, a);
+  });
+
+  /**
+   * Fog of war (DM): { enabled?, add?: {op: reveal | cover, x, y, w, h}, undo?, reset?: cover | reveal }.
+   * reset: cover hides the whole map again, reveal shows all of it; undo takes back the last rectangle.
+   */
+  app.patch('/campaigns/:cid/maps/:mid/fog', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const body = z
+      .object({
+        enabled: z.boolean().optional(),
+        add: z.object({ op: z.enum(FOG_OPS), x: z.number(), y: z.number(), w: z.number().positive(), h: z.number().positive() }).optional(),
+        undo: z.boolean().optional(),
+        reset: z.enum(['cover', 'reveal']).optional(),
+      })
+      .parse(request.body ?? {});
+    if (body.add && map.fog.shapes.length >= MAX_FOG_SHAPES) throw new BadRequestError('That map has too many fog changes. Use "Cover all" or "Reveal all" to start again.');
+    const saved = maps.change(a.cid, map.id, (m) => {
+      if (body.enabled !== undefined) m.fog.enabled = body.enabled;
+      if (body.reset === 'cover') m.fog.shapes = [];
+      if (body.reset === 'reveal') m.fog.shapes = [{ op: 'reveal', x: 0, y: 0, w: m.image.width, h: m.image.height }];
+      if (body.undo) m.fog.shapes.pop();
+      if (body.add) m.fog.shapes.push(body.add);
+    }, { by: request.user.id, reason: 'fog' });
     return maps.view(saved, a);
   });
 
@@ -905,8 +938,9 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
    */
   app.patch('/campaigns/:cid/maps/:mid/tokens/:tid', async (request) => {
     const a = access(request);
-    const { map } = viewableMap(request);
-    const token = map.tokens.find((t) => t.id === request.params.tid);
+    const { map, view } = viewableMap(request);
+    // Only tokens this viewer can see (players don't get to find tokens under the fog).
+    const token = view.tokens.find((t) => t.id === request.params.tid);
     if (!token) throw new NotFoundError('No such token');
     const body = TOKEN.partial().parse(request.body ?? {});
     const moving = Object.keys(body).every((k) => k === 'x' || k === 'y');

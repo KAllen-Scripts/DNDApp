@@ -186,14 +186,25 @@
         <label class="map-check small"><input type="checkbox" id="map-show-grid"> Grid</label>
         <button id="map-fit" class="ghost map-needs-map" title="Fit the whole map on screen">Fit</button>
         <button id="map-add-token" class="ghost dm-only map-needs-map">Add token</button>
+        <button id="map-fog-open" class="ghost dm-only map-needs-map" aria-pressed="false">Fog</button>
         <button id="map-settings" class="ghost dm-only map-needs-map">Map settings</button>
         <button id="map-import" class="ghost dm-only">Import map</button>
         <input id="map-file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+      </div>
+      <div id="map-fog-tools" class="map-bar map-fog-tools dm-only" hidden>
+        <label class="map-check small"><input type="checkbox" id="map-fog-on"> Fog of war</label>
+        <button class="ghost" data-fog-mode="reveal" aria-pressed="false" title="Drag on the map to show that part to players">Reveal</button>
+        <button class="ghost" data-fog-mode="cover" aria-pressed="false" title="Drag on the map to hide that part again">Cover</button>
+        <button class="ghost" data-fog-action="undo">Undo</button>
+        <button class="ghost" data-fog-action="reveal">Reveal all</button>
+        <button class="ghost" data-fog-action="cover">Cover all</button>
+        <span class="muted small">Players only see revealed parts, and no tokens hidden in the fog.</span>
       </div>
       <div id="map-view" class="map-view">
         <div id="map-stage" class="map-stage" hidden>
           <img id="map-image" alt="" draggable="false">
           <svg id="map-grid" class="map-grid" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <svg id="map-fog" class="map-fog" preserveAspectRatio="none" aria-hidden="true"></svg>
           <div id="map-tokens" class="map-tokens"></div>
         </div>
         <p id="map-empty" class="map-empty muted" hidden></p>
