@@ -18,10 +18,13 @@ packages/
 Requires Node.js 22 or newer, and Claude Code logged in on this machine (it uses your Claude subscription).
 
 ```sh
-npm install
+npm install --ignore-scripts
+npm rebuild onnxruntime-node protobufjs
 npm run admin -- init "Admin" "admin-password"
 npm start
 ```
+
+Use `--ignore-scripts` (also when adding packages). A plain `npm install` makes npm 11 try to compile `better-sqlite3`, which fails without Python and C++ build tools, even though the package already includes prebuilt binaries. Details in [HANDOFF.md](HANDOFF.md) under "Getting running on a new machine".
 
 To use the Anthropic API instead of your subscription, copy `.env.example` to `.env`, set `LLM_PROVIDER=api` and add `ANTHROPIC_API_KEY`. Other settings (models, effort, limits) are in the same file.
 

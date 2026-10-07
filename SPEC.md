@@ -95,6 +95,7 @@ DNDApp/
 ### 3.2 Server
 
 - Node.js (22+; developed on 24) with **Fastify**.
+- Native modules (`better-sqlite3`, `sharp`, `@napi-rs/canvas`, `onnxruntime-node`) must come prebuilt; the host isn't expected to have a compiler or Python. Install with `npm install --ignore-scripts`, because npm 11 otherwise tries to compile `better-sqlite3` (see HANDOFF "Getting running on a new machine").
 - **SQLite** (`better-sqlite3`), one file. FTS5 for keyword search; vectors as blobs, searched by brute force in memory.
 - One background job at a time, in order (the archivist builds each session on the last). Interrupted jobs resume after a restart.
 

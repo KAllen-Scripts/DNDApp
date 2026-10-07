@@ -28,6 +28,7 @@ Read this first when picking the project up on another machine or with another A
 - **Hosting:** not set up. Cloudflare Tunnel is decided (domain not bought yet).
 - **Git:** everything is on `main`, including the sheet tidy-up and new sheet layouts (merged 2026-10-07). The book tools (Q&A searching the rulebooks) were merged to `main` on 2026-10-07.
 - **Live install on the owner's machine:** `data/` holds the admin login ("admin") and a player account for Kenny; the database is on schema v4 and becomes v7 the next time the server starts (v5 adds `character_sheets`; v6 adds `pinned` and `deleted_at` to `conversations`; v7 adds `maps`; nothing else changes). The owner has been using the admin screen in a real browser. Start the server with `npm start` (or `node packages/server/src/index.js`), then open http://127.0.0.1:4400.
+- **Second install, the owner's laptop** (2026-10-07): Node upgraded from 16.17 to 24.19, dependencies installed with the `--ignore-scripts` workaround (see "Getting running on a new machine"), 164 tests passing, server starts. `data/` there started empty; it now has only the admin login "admin" (no campaigns or player accounts yet).
 - **Real transcript:** none tested yet. The parser is built to an assumed format.
 
 ## Next steps
@@ -44,13 +45,17 @@ Read this first when picking the project up on another machine or with another A
 8. Try **asking a question from the web page against the real AI** (streaming, citations, evidence in the browser), then use the page with the players in a real session. Include a general question ("stat block for a brown bear") and a campaign one, and check the AI picks the right path and the table/stat-block formatting looks right.
 9. Add **DM screens** to the web page: glossary; corrections; the archivist's questions; a full speaker-map editor. Which belong to the DM vs the host is part of the deferred DM-role design. (Accounts and session uploads are on the admin screen.)
 10. Buy the domain, set `PUBLIC_URL`, set up **Cloudflare Tunnel**, write a short player guide (address + "log in with what Kenny gave you").
+11. **Install workaround (owner's call):** keep typing `npm install --ignore-scripts`, or add `ignore-scripts=true` to a project `.npmrc` so plain `npm install` works (downside: later packages' install scripts are skipped silently). Revisit when npm fixes the `gypfile` bug or `better-sqlite3` changes how it ships binaries.
 
 
 ## Getting running on a new machine
 
 1. Install **Node.js 22+** (developed on 24.21) and **Claude Code**, and log in to Claude Code with the host's Claude account. The server uses that login by default.
-2. `git clone https://github.com/KAllen-Scripts/DNDApp.git`, then `npm install` in the repo root.
-   - npm 11 may warn that install scripts for `better-sqlite3`, `onnxruntime-node` and `protobufjs` are "not yet covered by allowScripts". Everything worked on Windows x64 anyway (prebuilt binaries). If `better-sqlite3` fails to load on another platform, run `npm install-scripts approve better-sqlite3` and reinstall.
+2. `git clone https://github.com/KAllen-Scripts/DNDApp.git`, then in the repo root: `npm install --ignore-scripts`, then `npm rebuild onnxruntime-node protobufjs`.
+   - **Don't use a plain `npm install`** on a machine without Python and the C++ build tools (most Windows machines). It fails on `better-sqlite3` with `gyp ERR! find Python`. `better-sqlite3` 13 ships prebuilt binaries in the package (`prebuilds/win32-x64.node` etc.) and opts out of compiling with `gypfile: false`, but npm 11 loses that opt-out when the lockfile says `hasInstallScript: true` (arborist `rebuild.js` reloads the scripts but keeps the lockfile's package data, which has no `gypfile`), so it runs `node-gyp rebuild` anyway. Installing with `--ignore-scripts` skips that. The only other install scripts are `onnxruntime-node` (downloads extra binaries on Linux only; Windows x64 ones are bundled) and `protobufjs` (a version check), so the rebuild line is a formality on Windows.
+   - The same applies to adding a package later: `npm install <pkg> --ignore-scripts`. Never `npm rebuild better-sqlite3`.
+   - npm 11 may warn that install scripts are "not yet covered by allowScripts". Harmless.
+   - Check it worked: `npm test`, then `npm start`.
 3. **Data is not in git** (`data/` is ignored). To move a live setup, copy `data/archive/` (the source of truth). With only the archive, the server restores accounts (passwords keep working; everyone logs in again), campaigns, notes and corrections on start-up; then run a rebuild to regenerate the knowledge base. Copy `data/dndapp.sqlite` too to skip the rebuild.
 4. First-time setup: `npm run admin -- init "Admin" "password"` (creates the admin login only), then `npm start`, open `http://127.0.0.1:4400` and log in as admin. On the admin screen: create the campaign, the accounts (including Kenny's own player account), and set who's the DM.
    - **Database upgrades are automatic** on start-up (`db/index.js`). From before logins (schema v2): accounts keep their ids but have no password; set one for each with `npm run admin -- set-password "<name>" "<password>"` (the server warns on start-up about accounts without one). v3 → v4 just adds `must_change_password` (off).
@@ -397,6 +402,14 @@ The owner asked for the rest of the map list to be built, one at a time, in this
 - No app behaviour changed (test helpers only; `terrain()` moved into the server test helpers). Two things noticed and left alone: setting your own password on the admin screen logs out every login, including the browser you're using; `normalizeScale({distance: 0})` gives 0.001 rather than "no scale" (the page never sends 0).
 - `npm test`: 164 passing (was 82).
 
+### 2026-10-07: Setting up on the owner's laptop (Node and install problems)
+
+- `npm start` failed with `Cannot find package 'fastify'`: the laptop had Node 16.17 (the project needs 22+) and nothing installed. Installed Node 24.19 LTS with `winget install OpenJS.NodeJS.LTS`.
+- A plain `npm install` then failed: npm tried to compile `better-sqlite3` with node-gyp, which needs Python and the C++ build tools (not on the laptop). It shouldn't have tried: `better-sqlite3` 13 bundles prebuilt binaries for every platform we'd use and sets `gypfile: false`. Cause: an npm 11 bug. The lockfile marks it `hasInstallScript: true`, and when arborist reloads the package's scripts it keeps the lockfile's package data (which has no `gypfile` field), sees `binding.gyp`, and adds `node-gyp rebuild`.
+- Fixed by installing with `npm install --ignore-scripts`, then `npm rebuild onnxruntime-node protobufjs` (the other two packages with install scripts; neither does anything needed on Windows x64). Checked that `better-sqlite3`, `sharp`, `@napi-rs/canvas` and `onnxruntime-node` all load, `npm test` passes (164), and the server starts. The lockfile didn't change.
+- Not done: a project `.npmrc` with `ignore-scripts=true` would make plain `npm install` work, but it would also silently skip install scripts of packages added later. Left for the owner to decide. The old setup note suggesting `npm rebuild better-sqlite3` was wrong for v13 and has been corrected.
+- Created the admin login "admin" on the laptop with `npm run admin -- init`; logging in over HTTP worked.
+
 ## Verified vs. not verified
 
 | Verified for real | Not yet verified |
@@ -434,4 +447,6 @@ The owner asked for the rest of the map list to be built, one at a time, in this
 - **Windows:** archived transcripts are made read-only (`chmod 0o444`). Tests clean up temp dirs with `fs.rmSync(..., { force: true })`, which works.
 - **Testing:** `test/helpers.js` has `setup()` (an admin account "Kenny" who is also the campaign's DM, plus players Sam/Thorin and Alex/Lyra, all logged in, with a speaker map; `PASSWORD` is every test account's password), `createFakeLLM` (archivist runs call a function that drives the real tools, `defaultArchivist` by default; Q&A follows a script of tool calls and answers), `createFakeAnthropic`, and `fakeEmbedder`. Jobs run async: call `jobs.idle()` before asserting, and `jobs.stop()` before closing the DB.
 - **Shell editing:** multi-line `node -e`/heredoc replacements with backticks and regexes broke several times; direct file edits were more reliable.
-- **`npm install` without access to NuGet** (e.g. a sandbox): `onnxruntime-node`'s install script downloads from nuget.org and fails. `npm install --ignore-scripts`, then `npm rebuild better-sqlite3 protobufjs`, gives a working install (the embedding model still runs). Older npm rewrites `package-lock.json` (drops `libc` fields); don't commit that.
+- **`npm install` without access to NuGet** (e.g. a sandbox): `onnxruntime-node`'s install script downloads from nuget.org and fails. `npm install --ignore-scripts`, then `npm rebuild protobufjs`, gives a working install (the embedding model still runs). Older npm rewrites `package-lock.json` (drops `libc` fields); don't commit that.
+- **`better-sqlite3` and node-gyp:** a plain `npm install` (or `npm rebuild better-sqlite3`) tries to compile it and fails without Python and C++ build tools, even though the package ships prebuilt binaries. Always install with `--ignore-scripts`; see "Getting running on a new machine" step 2.
+- **Node version:** an old Node (16 was found on the owner's laptop) fails at `npm start` with `Cannot find package 'fastify'` if nothing was installed, and the dependencies need 22+ anyway. Check `node --version` first. After installing a new Node, restart VS Code so its terminals pick it up. `winget install OpenJS.NodeJS.LTS` works (it asks for admin rights).
