@@ -25,7 +25,7 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit. Everything
 
 **Numbers:** schema **v12**, `PIPELINE_VERSION` **9**, **286 tests** passing (`npm test`: server 124, shared 49, web 113). Tests are offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools; the page is tested in jsdom against a real test server (`packages/web/test/page.js`). Headless Chromium is only needed for what jsdom can't show (real layout, WebGL dice, touch). There's no CI: `npm test` is the check.
 
-**Git:** `main` has PRs #1–#15 merged. The housekeeping PR (branch `claude/project-thread-cuyr7n`) is open, waiting for the owner's OK: the DM's leftover sheet removed, duplicated code merged, dead code removed, the server's routes and the map page split into files, dice cut to Deluxe and Classic, and SPEC/HANDOFF/README brought up to date. Merges to `main` need the owner's OK.
+**Git:** `main` has PRs #1–#15 merged. The housekeeping PR #16 (branch `claude/project-thread-cuyr7n`) is open, waiting for the owner's OK: the DM's leftover sheet removed, duplicated code merged, dead code removed, the server's routes and the map page split into files, dice cut to Deluxe and Classic, and SPEC/HANDOFF/README brought up to date. Merges to `main` need the owner's OK.
 
 **Installs:**
 - **Owner's PC** (the server): `data/` holds the admin login ("admin") and a player account for Kenny. The database upgrades itself to v12 on the next start. Start with `npm start`, open http://127.0.0.1:4400. `.env` is in the repo root (copy of `.env.example`).
@@ -37,7 +37,7 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit. Everything
 
 ## Next steps
 
-1. **Housekeeping PR:** the owner reviews and OKs the merge.
+1. **Housekeeping PR #16:** the owner reviews and OKs the merge.
 2. **Try things for real** (the owner, with the group; each line is one feature that has only been tested offline):
    - **Real transcript:** upload one from the recorder on the admin screen (check the speaker preview; if names come out wrong, adapt `packages/shared/src/transcript.js`), link speakers to accounts, process, then look at the knowledge base (`GET /campaigns/:cid/kb`) and the archivist's questions. Time the archivist and Q&A.
    - **Ask in the browser with the real AI:** a general question ("stat block for a brown bear"), a campaign one, and vague and exact rules questions against the books (check the page numbers it cites match the paper books).
