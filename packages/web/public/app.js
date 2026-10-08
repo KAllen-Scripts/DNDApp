@@ -7,8 +7,8 @@
 import { api, stream, storage, getToken, setToken, LoggedOut, h } from './api.js';
 import { showAdmin } from './admin.js';
 import { loadSheet, initSheetActions, flush as flushSheet } from './sheet.js';
-import { marked } from './vendor/marked.js';
-import DOMPurify from './vendor/purify.js';
+import { markdownFragment } from './markdown.js';
+import { CITATION_RE } from './shared/citations.js';
 import { initLook } from './look.js';
 import { initDice, setDiceCampaign } from './dice.js';
 import { loadMaps, initMapActions, stopMaps, placeCreature } from './map.js';
@@ -287,26 +287,9 @@ for (const tab of document.querySelectorAll('[data-tab]')) {
 
 // ---------- answers: text, citations, evidence ----------
 
-// Same format as CITATION_RE in packages/shared: [S12], [S12 01:23:45], [S12 01:23:45-01:24:10]
-const CITATION_RE = /\[S(\d+)(?:\s+(\d{1,2}:\d{2}:\d{2})(?:\s*[-–]\s*(\d{1,2}:\d{2}:\d{2}))?)?\]/g;
 const citationKey = (num, from, to) => `S${num}${from ? ` ${from}${to ? `-${to}` : ''}` : ''}`;
 
 const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-
-// What an answer may contain: markdown, plus HTML for formatting (tables, stat blocks). Nothing that runs,
-// loads, links out or restyles the page; the text can quote transcripts, so it's never trusted.
-const ANSWER_HTML = {
-  ALLOWED_TAGS: [
-    'p', 'br', 'hr', 'strong', 'b', 'em', 'i', 'u', 's', 'del', 'small', 'sub', 'sup', 'code', 'pre', 'blockquote',
-    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'dl', 'dt', 'dd',
-    'table', 'caption', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'colgroup', 'col',
-    'div', 'span', 'section', 'details', 'summary',
-  ],
-  ALLOWED_ATTR: ['class', 'colspan', 'rowspan', 'scope', 'align', 'start', 'open'],
-};
-
-// Markdown that's still streaming can end mid-table or mid-tag; marked and the sanitiser cope with both.
-marked.use({ gfm: true, breaks: true });
 
 /** Citations in text -> buttons that jump to the evidence (plain labels when there's no evidence for them). */
 function linkCitations(root, sources) {
@@ -331,7 +314,7 @@ function linkCitations(root, sources) {
 
 /** Answer text (markdown and/or HTML) -> sanitised HTML, with citations as buttons. */
 function renderAnswer(text, evidence = []) {
-  const root = DOMPurify.sanitize(marked.parse(text.trim()), { ...ANSWER_HTML, RETURN_DOM_FRAGMENT: true });
+  const root = markdownFragment(text);
   // Wide tables scroll inside the answer rather than stretching the page.
   for (const table of root.querySelectorAll('table')) {
     const wrap = document.createElement('div');

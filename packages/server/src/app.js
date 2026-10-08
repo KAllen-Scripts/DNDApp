@@ -103,10 +103,11 @@ function serveWebPage(app, dir) {
     if (url === '/index.html') app.get('/', { config: { public: true } }, send);
   }
   // Modules the page imports from packages: the character sheet rules (shared with the server, so the page can
-  // show automatic values as players type), dice notation, map geometry (snapping and measuring while dragging), markdown + HTML sanitising for answers, and the 3D
-  // dice (Three.js and the physics are bundled into that one file).
+  // show automatic values as players type), dice notation, map geometry (snapping and measuring while dragging),
+  // the citation format, markdown + HTML sanitising, and the 3D dice (Three.js and the physics are bundled into that one file).
   const modules = {
     '/shared/sheet.js': '@dndapp/shared/sheet.js',
+    '/shared/citations.js': '@dndapp/shared/citations.js',
     '/shared/dice.js': '@dndapp/shared/dice.js',
     '/shared/map.js': '@dndapp/shared/map.js',
     '/vendor/marked.js': 'marked',

@@ -145,6 +145,15 @@ test('creatures tab: Find online shows a searching card, then the creature the A
     assert.equal(page.$('#creatures .creature-source a').getAttribute('href'), 'https://www.gmbinder.com/share/ember');
     await page.waitFor(() => page.$('#creatures .creature-face img'));
     assert.match(page.text('#creatures-status'), /Found Ember Wyrmling \(unofficial/);
-    assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/creatures`)).json().creatures[0].stats.source, 'web');
+    const [creature] = (await t.request('GET', `/campaigns/${t.campaign.id}/creatures`)).json().creatures;
+    assert.equal(creature.stats.source, 'web');
+    page.click(button(page, '#creatures .creature', 'Stat block'));
+    assert.match(page.text('#creature-dialog'), /Found on the web by the AI; check it\./);
+    page.$('#creature-dialog').close();
+
+    // Placed on a map, the token's stat block still says where it came from.
+    const map = await importMap(t);
+    const placed = await t.request('POST', `/campaigns/${t.campaign.id}/maps/${map.id}/creatures/${creature.id}`, { body: {} });
+    assert.equal(placed.json().tokens[0].stats.source, 'web');
   });
 });

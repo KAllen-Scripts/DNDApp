@@ -9,8 +9,8 @@
  * the server decides where a token really ends up.
  */
 import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from './api.js';
-import { marked } from './vendor/marked.js';
-import DOMPurify from './vendor/purify.js';
+import { markdownBox } from './markdown.js';
+import { showStatBlock, statsFound } from './stat-block.js';
 import {
   TOKEN_KINDS, TOKEN_KIND_NAMES, TOKEN_SIZES, TOKEN_SIZE_NAMES, TOKEN_COLORS, UNITS,
   CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf,
@@ -1948,8 +1948,7 @@ async function recordDialog(token) {
     const r = await state.guarded(() => api('GET', `${base()}/records/${token.record.id}?title=${encodeURIComponent(token.record.title)}`));
     if (!r) return;
     const dialog = $('#map-dialog');
-    const body = h('div', { class: 'a stat-text' });
-    body.innerHTML = DOMPurify.sanitize(marked.parse(r.body || '_Nothing written down yet._'), { FORBID_TAGS: ['img', 'a', 'style', 'form', 'input', 'button'], FORBID_ATTR: ['style'] });
+    const body = markdownBox(r.body || '_Nothing written down yet._', { class: 'a stat-text' });
     const data = Object.keys(r.data ?? {}).length ? h('pre', { class: 'small' }, JSON.stringify(r.data, null, 2)) : null;
     dialog.replaceChildren(
       h('form', { method: 'dialog', class: 'map-dialog-inner' },
@@ -2009,35 +2008,14 @@ async function fillStats(token, name) {
     const res = await state.guarded(() => api('POST', `${base()}/${state.current.id}/tokens/${token.id}/stats`, name ? { name } : {}));
     if (!res) return;
     onMap(res.map);
-    status(`Stat block for ${res.token.name}: ${res.token.stats.name} (from the AI's memory; check it against the book if it matters).`);
+    status(statsFound(res.token.name, res.token.stats.name));
   } catch (err) {
     report(err);
   }
 }
 
 /** A token's stat block (DM only), with a way to look up a different creature. */
-function statsDialog(token) {
-  const dialog = $('#map-dialog');
-  const st = token.stats;
-  const body = h('div', { class: 'a stat-text' });
-  body.innerHTML = DOMPurify.sanitize(marked.parse(st.text), { FORBID_TAGS: ['img', 'a', 'style', 'form', 'input', 'button'], FORBID_ATTR: ['style'] });
-  const other = h('input', { placeholder: 'Another creature, e.g. Bugbear', maxLength: 100 });
-  dialog.replaceChildren(
-    h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => {
-      e.preventDefault();
-      if (other.value.trim()) fillStats(token, other.value.trim());
-      dialog.close();
-    } },
-      h('h2', {}, `${token.name}: ${st.name || 'stat block'}`),
-      h('p', { class: 'muted small' }, [st.ac != null ? `AC ${st.ac}` : '', st.hp_formula ? `HP ${st.hp_formula}` : '', st.speed, st.challenge ? `CR ${st.challenge}` : ''].filter(Boolean).join(' · ')),
-      body,
-      h('p', { class: 'muted small' }, st.source === 'ai' ? "From the AI's memory of the 5e rules. Only you see this." : 'Only you see this.'),
-      h('div', { class: 'map-dialog-actions' }, other, h('button', { class: 'ghost' }, 'Look up instead'), h('span', { class: 'spacer' }), h('button', { type: 'button', class: 'primary', onclick: () => dialog.close() }, 'Close')),
-    ),
-  );
-  dialog.onclose = null;
-  dialog.showModal();
-}
+const statsDialog = (token) => showStatBlock($('#map-dialog'), { title: token.name, stats: token.stats, onLookup: (name) => fillStats(token, name) });
 
 async function removeToken(token) {
   if (!confirm(`Remove ${token.name} from the map?`)) return;
