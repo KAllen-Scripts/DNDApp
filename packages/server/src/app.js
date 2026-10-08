@@ -241,7 +241,7 @@ export function exposureWarnings({ host, publicUrl }) {
 
 const trustProxySetting = (v) => (v === 'true' ? true : v === 'false' || v === 'off' || v === '' ? false : v);
 
-export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, maps, mapReader, statBlocks, pictures, pictureDescriber, handouts, creatures, archive, config, logger = true }) {
+export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, handouts, creatures, archive, config, logger = true }) {
   const app = Fastify({
     logger,
     bodyLimit: SMALL_BODY,
@@ -2197,6 +2197,40 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   });
 
   /**
+   * Have the AI find a creature online (DM): { query }, e.g. "Hollow Knight
+   * from the Grimhollow book" or "a crystal golem". Official or not; it
+   * searches the web, writes up the stat block and brings a picture. Runs in
+   * the background: the creature is listed at once with finding.status
+   * 'pending', then filled in (or 'failed', with an error). 202.
+   */
+  app.post('/campaigns/:cid/creatures/find', async (request, reply) => {
+    const a = access(request, { dm: true });
+    const { query } = z.object({ query: z.string().trim().min(2).max(200) }).parse(request.body ?? {});
+    mapAiAllowed(request.user.id);
+    const c = creatures.create(a.cid, { name: query.slice(0, 80), kind: 'enemy', finding: { query, status: 'pending' } }, { by: request.user.id });
+    const fail = (error) => {
+      try {
+        creatures.update(a.cid, c.id, { finding: { query, status: 'failed', error } });
+      } catch { /* removed meanwhile */ }
+    };
+    (async () => {
+      try {
+        const found = await creatureFinder.find(query, { campaignId: a.cid, userId: request.user.id });
+        if (!found) return fail(`The AI couldn't find "${query}" anywhere. Try another name, or add where it's from.`);
+        creatures.get(a.cid, c.id); // still wanted?
+        const art = found.picture ? await creatures.savePicture(a.cid, c.id, found.picture) : null;
+        creatures.update(a.cid, c.id, { ...found.fields, art, finding: null });
+      } catch (err) {
+        if (err instanceof NotFoundError) return;
+        request.log.error(err);
+        fail(`The search went wrong: ${err.message}`);
+      }
+    })();
+    reply.status(202);
+    return creatures.view(c);
+  });
+
+  /**
    * Put a creature on a map (DM): { count? (1-20), x?, y?, hidden?, name? }.
    * Each token gets its picture, stat block, hit points and the rest; a group
    * is numbered ("Goblin 1".."Goblin 4", carrying on from any already there)
@@ -2206,6 +2240,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     const a = access(request, { dm: true });
     const { map } = viewableMap(request);
     const c = creatures.get(a.cid, request.params.crid);
+    if (c.finding) throw new BadRequestError(c.finding.status === 'pending' ? 'The AI is still looking for that one.' : "The AI didn't find that one.");
     const body = z.object({ count: z.number().int().min(1).max(20).default(1), x: z.number().optional(), y: z.number().optional(), hidden: z.boolean().default(false), name: z.string().trim().min(1).max(80).optional() }).parse(request.body ?? {});
     if (map.tokens.length + body.count > MAX_TOKENS) throw new BadRequestError(`A map can have at most ${MAX_TOKENS} tokens.`);
     // The picture goes with the map's own token pictures (once per map), so the map stays whole on its own.

@@ -55,6 +55,10 @@ export function normalizeCreature(c = {}) {
     art: c.art && typeof c.art.file === 'string' ? { file: c.art.file, type: String(c.art.type) } : null,
     record: c.record && Number.isInteger(Number(c.record.id)) ? { id: Number(c.record.id), title: str(c.record.title, 200) } : null,
     notes: str(c.notes, MAX_CREATURE_NOTES),
+    // Found online by the AI: the page it came from (and the picture's address).
+    source: c.source && /^https?:\/\//.test(c.source.url ?? '') ? { url: str(c.source.url, 1000), title: str(c.source.title, 200), official: !!c.source.official, picture: c.source.picture ? str(c.source.picture, 1000) : null } : null,
+    // Being looked up online: { query, status: 'pending' | 'failed', error? }; null once found.
+    finding: c.finding && ['pending', 'failed'].includes(c.finding.status) ? { query: str(c.finding.query, 200), status: c.finding.status, error: c.finding.error ? str(c.finding.error, 500) : null } : null,
     created_by: c.created_by ?? null,
     created_at: String(c.created_at ?? ''),
     updated_at: String(c.updated_at ?? c.created_at ?? ''),
@@ -121,6 +125,14 @@ export function createCreatures({ db, archive, store }) {
       const file = `creature-${crypto.randomBytes(5).toString('hex')}.${meta.ext}`;
       archive.saveCreatureImage(store.getCampaign(cid).slug, id, file, buf);
       return { file, type: meta.type };
+    },
+
+    /** Lookups cut short by a restart can't finish; say so, so the DM can search again. */
+    failInterrupted() {
+      for (const r of db.prepare("SELECT campaign_id, data FROM creatures WHERE json_extract(data, '$.finding.status') = 'pending'").all()) {
+        const c = normalizeCreature(JSON.parse(r.data));
+        write(r.campaign_id, { ...c, finding: { ...c.finding, status: 'failed', error: 'The server restarted while the AI was searching. Search again.' }, updated_at: new Date().toISOString() });
+      }
     },
 
     picturePath: (cid, c) => archive.creatureImagePath(store.getCampaign(cid).slug, c.id, c.art.file),

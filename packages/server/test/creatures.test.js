@@ -223,3 +223,121 @@ test('creatures come back from the archive after losing the database', async () 
     await t.cleanup();
   }
 });
+
+// ---------- finding creatures online ----------
+
+const wyrmling = {
+  found: true, name: 'Ember Wyrmling', kind: 'enemy', size: 'medium', ac: 16, hp_average: 33, hp_formula: '6d8 + 6', speed: '30 ft., fly 60 ft.',
+  speed_feet: 30, darkvision_feet: 60, challenge: '2 (450 XP)', stat_block: '**Ember Wyrmling** Medium dragon (homebrew)\n\n**Armor Class** 16',
+  source_url: 'https://www.gmbinder.com/share/ember', source_title: 'Ember Wyrmling (GM Binder)', official: false,
+  image_urls: ['https://broken.example/x.png', 'https://img.example/ember.png'],
+};
+
+async function waitFound(t, id) {
+  for (let i = 0; i < 200; i++) {
+    const c = (await t.request('GET', `/campaigns/${t.campaign.id}/creatures`)).json().creatures.find((x) => x.id === id);
+    if (c?.finding?.status !== 'pending') return c;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error('still searching');
+}
+
+test('isPublicAddress: the home network, this machine and reserved ranges are never public', async () => {
+  const { isPublicAddress } = await import('../src/net/fetch-public.js');
+  for (const ip of ['127.0.0.1', '10.1.2.3', '192.168.1.20', '172.16.5.5', '169.254.169.254', '100.64.0.1', '0.0.0.0', '::1', 'fe80::1', 'fd12::3', '::ffff:192.168.1.1', '::ffff:7f00:1', 'nonsense']) {
+    assert.equal(isPublicAddress(ip), false, ip);
+  }
+  for (const ip of ['8.8.8.8', '151.101.1.69', '2606:4700::1111', '::ffff:8.8.8.8']) assert.equal(isPublicAddress(ip), true, ip);
+});
+
+test('fetchPublic refuses addresses on this machine or the home network, other ports and other protocols', async () => {
+  const { fetchPublic } = await import('../src/net/fetch-public.js');
+  const t = await setup();
+  try {
+    await t.app.listen({ port: 0, host: '127.0.0.1' });
+    const { port } = t.app.server.address();
+    await assert.rejects(fetchPublic('http://127.0.0.1/'), /not on the public internet/);
+    await assert.rejects(fetchPublic('http://localhost/'), /not on the public internet/);
+    await assert.rejects(fetchPublic('http://[::1]/'), /not on the public internet/);
+    await assert.rejects(fetchPublic(`http://127.0.0.1:${port}/`), /usual web ports/);
+    await assert.rejects(fetchPublic('file:///etc/passwd'), /Only http and https/);
+    await assert.rejects(fetchPublic('http://user:pw@example.com/'), /login/);
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('find online: the AI searches the web, the stat block, source and first working picture are saved; players can\'t', async () => {
+  const picture = await terrain(70, 70);
+  const fetched = [];
+  const llm = createFakeLLM({
+    research: () => 'Found the Ember Wyrmling on GM Binder (homebrew). Picture: https://img.example/ember.png',
+    structured: (opts) => (opts.purpose === 'creature:tidy' ? wyrmling : readOut),
+  });
+  const t = await setup({ llm, fetchImage: async (url) => { fetched.push(url); if (url.includes('broken')) throw new Error('404'); return { buf: picture }; } });
+  try {
+    const base = `/campaigns/${t.campaign.id}/creatures`;
+    assert.equal((await t.request('POST', `${base}/find`, { as: t.sam.token, body: { query: 'ember wyrmling' } })).statusCode, 403);
+    assert.equal((await t.request('POST', `${base}/find`, { body: { query: 'x' } })).statusCode, 400);
+    const res = await t.request('POST', `${base}/find`, { body: { query: 'ember wyrmling' } });
+    assert.equal(res.statusCode, 202, res.body);
+    assert.equal(res.json().finding.status, 'pending');
+    const c = await waitFound(t, res.json().id);
+    assert.equal(c.finding, null);
+    assert.equal(c.name, 'Ember Wyrmling');
+    assert.equal(c.kind, 'enemy');
+    assert.equal(c.hp_max, 33);
+    assert.equal(c.speed, 30);
+    assert.equal(c.darkvision, 60);
+    assert.equal(c.stats.source, 'web');
+    assert.equal(c.stats.ac, 16);
+    assert.deepEqual(c.source, { url: 'https://www.gmbinder.com/share/ember', title: 'Ember Wyrmling (GM Binder)', official: false, picture: 'https://img.example/ember.png' });
+    assert.deepEqual(fetched, ['https://broken.example/x.png', 'https://img.example/ember.png'], 'tries the pictures in order');
+    assert.ok(c.picture);
+    assert.equal((await t.request('GET', `${base}/${c.id}/picture`)).statusCode, 200);
+    assert.match(t.llm.calls.find((x) => x.purpose === 'creature:find').prompt, /ember wyrmling/);
+    assert.match(t.llm.calls.find((x) => x.purpose === 'creature:tidy').prompt, /GM Binder/);
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('find online: nothing found says so; while searching it can\'t be placed; a restart mid-search marks it failed', async () => {
+  let release;
+  const gate = new Promise((r) => (release = r));
+  const llm = createFakeLLM({
+    research: async (opts) => (opts.prompt.includes('Zorblax') ? 'Nothing anywhere.' : (await gate, 'notes')),
+    structured: (opts) => (opts.purpose === 'creature:tidy' ? { ...wyrmling, found: !opts.prompt.includes('Zorblax'), image_urls: [] } : readOut),
+  });
+  const t = await setup({ llm, fetchImage: async () => { throw new Error('no'); } });
+  try {
+    const base = `/campaigns/${t.campaign.id}/creatures`;
+    const none = await waitFound(t, (await t.request('POST', `${base}/find`, { body: { query: 'Zorblax' } })).json().id);
+    assert.equal(none.finding.status, 'failed');
+    assert.match(none.finding.error, /couldn't find "Zorblax"/);
+
+    const map = await importMap(t);
+    const slow = (await t.request('POST', `${base}/find`, { body: { query: 'ember wyrmling' } })).json();
+    const placing = await t.request('POST', `${map.base}/creatures/${slow.id}`, { body: {} });
+    assert.equal(placing.statusCode, 400);
+    assert.match(placing.json().error, /still looking/);
+
+    // The server stops before the search ends: the next start says so.
+    const ctx = await createContext({ config: t.config, paths: { archive: t.archive.root, db: path.join(t.dir, 'db.sqlite'), models: path.join(t.dir, 'models') }, llm: createFakeLLM(), embedder: fakeEmbedder, log: { error() {} } });
+    try {
+      const after = ctx.creatures.list(t.campaign.id).find((x) => x.id === slow.id);
+      assert.equal(after.finding.status, 'failed');
+      assert.match(after.finding.error, /restarted/);
+    } finally {
+      ctx.jobs.stop();
+      ctx.db.close();
+    }
+    release();
+    let done;
+    for (let i = 0; i < 200 && (done = (await t.request('GET', base)).json().creatures.find((x) => x.id === slow.id)).finding; i++) await new Promise((r) => setTimeout(r, 10));
+    assert.equal(done.finding, null, 'the search that was still running finishes it after all');
+    assert.equal(done.picture, null, 'no picture worked');
+  } finally {
+    await t.cleanup();
+  }
+});

@@ -112,6 +112,26 @@ export function createApiProvider({ config, usage, client = new Anthropic() }) {
     },
 
     /**
+     * Look something up on the web with Anthropic's web search and fetch
+     * (they run on Anthropic's side). Returns the answer as text. The
+     * 20260209 tools need Opus/Sonnet 4.6 or later.
+     */
+    async research({ task, purpose, system, prompt, campaignId, userId, maxSearches = 8 }) {
+      const tools = [
+        { type: 'web_search_20260209', name: 'web_search', max_uses: maxSearches },
+        { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: maxSearches },
+      ];
+      const messages = [{ role: 'user', content: prompt }];
+      // A long search can pause the turn; send it back to carry on.
+      for (let i = 0; i < 5; i++) {
+        const { message } = await call({ system, tools, messages, max_tokens: 32000 }, { task, purpose, campaignId, userId });
+        if (message.stop_reason !== 'pause_turn') return textOf(message).trim();
+        messages.push({ role: 'assistant', content: message.content });
+      }
+      throw new LLMError(`${purpose}: the search didn't finish.`);
+    },
+
+    /**
      * Manual tool loop with caps on tool calls and cost. When a cap is hit the
      * model is told to answer with what it has and tools are switched off.
      */

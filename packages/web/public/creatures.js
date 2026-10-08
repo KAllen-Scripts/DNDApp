@@ -19,6 +19,7 @@ const state = {
   filter: '',
   pictures: new Map(), // `${id}:${key}` -> object URL
   place: null, // (creature) => void, from map.js
+  poll: null, // timer while the AI is searching for one
 };
 
 const base = () => `/campaigns/${state.campaignId}/creatures`;
@@ -38,11 +39,34 @@ const report = (err) => {
 export async function loadCreatures({ campaignId, guarded }) {
   for (const url of state.pictures.values()) URL.revokeObjectURL(url);
   state.pictures.clear();
+  clearTimeout(state.poll);
   Object.assign(state, { campaignId, guarded, list: [], filter: '' });
   $('#creatures-filter').value = '';
   status('');
   state.list = (await api('GET', base())).creatures;
   draw();
+}
+
+/** While the AI is searching the web for one, check back every few seconds. */
+function watchSearches() {
+  clearTimeout(state.poll);
+  if (!state.list.some((c) => c.finding?.status === 'pending')) return;
+  const cid = state.campaignId;
+  state.poll = setTimeout(async () => {
+    if (state.campaignId !== cid) return;
+    try {
+      const was = new Map(state.list.map((c) => [c.id, c.finding?.status]));
+      state.list = (await api('GET', base())).creatures;
+      for (const c of state.list) {
+        if (was.get(c.id) !== 'pending' || c.finding?.status === 'pending') continue;
+        status(c.finding ? `The AI couldn't find "${c.finding.query}".` : `Found ${c.name}${c.source ? ` (${c.source.official ? 'official' : 'unofficial'}, from ${c.source.title || 'the web'})` : ''}. Check its stat block before you use it.`, !!c.finding);
+      }
+      draw();
+    } catch (err) {
+      if (err instanceof LoggedOut) return state.guarded(() => { throw err; });
+      watchSearches();
+    }
+  }, 3000);
 }
 
 /** The creatures as last loaded (map.js offers them in Add token). */
@@ -98,6 +122,7 @@ function summary(c) {
 }
 
 function draw() {
+  watchSearches();
   const box = $('#creatures');
   const q = state.filter.trim().toLowerCase();
   const shown = state.list.filter((c) => !q || c.name.toLowerCase().includes(q) || c.notes.toLowerCase().includes(q));
@@ -105,13 +130,14 @@ function draw() {
     return box.replaceChildren(h('p', { class: 'muted' }, 'No creatures yet. Make the enemies and NPCs you need once here, then put them on any map with "Place on map" (or Add token on the map). You can also save a token that is already on a map.'));
   }
   if (!shown.length) return box.replaceChildren(h('p', { class: 'muted' }, 'None match.'));
-  box.replaceChildren(...shown.map((c) => h('article', { class: `creature card ${c.kind}`, 'data-id': c.id },
+  box.replaceChildren(...shown.map((c) => (c.finding ? searchCard(c) : h('article', { class: `creature card ${c.kind}`, 'data-id': c.id },
     face(c),
     h('div', { class: 'creature-body' },
       h('div', { class: 'creature-head' },
         h('h3', {}, c.name),
         h('span', { class: `chip creature-kind ${c.kind}` }, KIND_NAMES[c.kind])),
       h('p', { class: 'muted small' }, summary(c)),
+      sourceLine(c),
       c.notes ? h('p', { class: 'creature-notes small' }, c.notes) : null,
       h('div', { class: 'creature-actions' },
         h('button', { type: 'button', class: 'primary', onclick: () => state.place?.(c) }, 'Place on map'),
@@ -121,7 +147,69 @@ function draw() {
           : h('button', { type: 'button', class: 'ghost', title: 'Fill in its stat block, hit points and size with the AI', onclick: () => fillStats(c) }, 'Stat block (AI)'),
         h('button', { type: 'button', class: 'ghost', onclick: () => choosePicture(c) }, c.picture ? 'New picture' : 'Picture'),
         h('button', { type: 'button', class: 'ghost danger', onclick: () => remove(c) }, 'Remove'))),
-  )));
+  ))));
+}
+
+/** One the AI is still searching for, or couldn't find. */
+function searchCard(c) {
+  const pending = c.finding.status === 'pending';
+  return h('article', { class: `creature card searching${pending ? ' pending' : ' failed'}`, 'data-id': c.id },
+    h('span', { class: 'creature-face', 'aria-hidden': 'true' }, pending ? '…' : '?'),
+    h('div', { class: 'creature-body' },
+      h('div', { class: 'creature-head' }, h('h3', {}, c.finding.query)),
+      h('p', { class: pending ? 'muted small' : 'error small', role: 'status' }, pending ? 'The AI is searching the web for it. This can take a minute or two.' : c.finding.error),
+      h('div', { class: 'creature-actions' },
+        pending ? null : h('button', { type: 'button', class: 'ghost', onclick: () => findOnline(c.finding.query, c) }, 'Search again'),
+        h('button', { type: 'button', class: 'ghost danger', onclick: () => remove(c) }, pending ? 'Cancel' : 'Remove'))));
+}
+
+/** Where one found online came from, as a link. */
+function sourceLine(c) {
+  if (!c.source) return null;
+  return h('p', { class: 'muted small creature-source' }, c.source.official ? 'Official · from ' : 'Unofficial · from ',
+    h('a', { href: c.source.url, target: '_blank', rel: 'noopener noreferrer' }, c.source.title || new URL(c.source.url).hostname));
+}
+
+// ---------- finding one online ----------
+
+function findDialog() {
+  const dialog = $('#creature-dialog');
+  const query = h('input', { name: 'query', maxLength: 200, minLength: 2, required: true, placeholder: 'e.g. Ember Wyrmling, a crystal golem, the Hollow King from Grimhollow' });
+  dialog.replaceChildren(
+    h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => {
+      e.preventDefault();
+      findOnline(query.value.trim());
+      dialog.close();
+    } },
+      h('h2', {}, 'Find a creature online'),
+      field('What are you looking for?', query),
+      h('p', { class: 'muted small' }, "The AI searches the web, official sources or not (homebrew sites, wikis, forums), writes up its stat block and brings a picture. Say where it's from if you know. Check what it found before you use it."),
+      h('div', { class: 'map-dialog-actions' },
+        h('span', { class: 'spacer' }),
+        h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel'),
+        h('button', { class: 'primary' }, 'Search')),
+    ),
+  );
+  dialog.showModal();
+  query.focus();
+}
+
+/** Start a search (again, replacing `old`). The card shows until the AI is done. */
+async function findOnline(query, old = null) {
+  if (query.length < 2) return;
+  try {
+    const res = await state.guarded(() => api('POST', `${base()}/find`, { query }));
+    if (!res) return;
+    if (old) {
+      await state.guarded(() => api('DELETE', `${base()}/${old.id}`)).catch(() => {});
+      state.list = state.list.filter((x) => x.id !== old.id);
+    }
+    state.list.push(res);
+    draw();
+    status(`Searching the web for "${query}"…`);
+  } catch (err) {
+    report(err);
+  }
 }
 
 // ---------- making and changing one ----------
@@ -231,7 +319,7 @@ function statsDialog(c) {
       h('h2', {}, `${c.name}: ${st.name || 'stat block'}`),
       h('p', { class: 'muted small' }, [st.ac != null ? `AC ${st.ac}` : '', st.hp_formula ? `HP ${st.hp_formula}` : '', st.speed, st.challenge ? `CR ${st.challenge}` : ''].filter(Boolean).join(' · ')),
       body,
-      h('p', { class: 'muted small' }, st.source === 'ai' ? "From the AI's memory of the 5e rules. Only you see this." : 'Only you see this.'),
+      h('p', { class: 'muted small' }, st.source === 'ai' ? "From the AI's memory of the 5e rules. Only you see this." : st.source === 'web' ? 'Found on the web by the AI; check it. Only you see this.' : 'Only you see this.'),
       h('div', { class: 'map-dialog-actions' }, other, h('button', { class: 'ghost' }, 'Look up instead'), h('span', { class: 'spacer' }), h('button', { type: 'button', class: 'primary', onclick: () => dialog.close() }, 'Close')),
     ),
   );
@@ -276,6 +364,7 @@ async function remove(c) {
 export function initCreatureActions({ place }) {
   state.place = place;
   $('#creature-new').addEventListener('click', () => editDialog());
+  $('#creature-find').addEventListener('click', () => findDialog());
   $('#creatures-filter').addEventListener('input', (e) => {
     state.filter = e.target.value;
     draw();

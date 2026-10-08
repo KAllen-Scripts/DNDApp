@@ -1805,7 +1805,7 @@ async function tokenDialog(token = null) {
     sync();
   });
   // One of the DM's saved creatures instead (the Creatures tab).
-  const saved = token ? [] : creatureList();
+  const saved = token ? [] : creatureList().filter((c) => !c.finding);
   const fromLibrary = h('select', {}, new Option('Make a new one here', ''), ...saved.map((c) => new Option(`${c.name} (${c.kind === 'npc' ? 'NPC' : 'enemy'})`, c.id)));
   fromLibrary.addEventListener('change', () => {
     const c = saved.find((x) => x.id === fromLibrary.value);

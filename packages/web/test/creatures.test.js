@@ -112,3 +112,36 @@ test('map: Add token offers the DM\'s creatures, and a token on the map can be s
     assert.match(page.text('#creatures'), /Ogre/);
   });
 });
+
+test('creatures tab: Find online shows a searching card, then the creature the AI found on the web with its source and picture', async () => {
+  const found = {
+    found: true, name: 'Ember Wyrmling', kind: 'enemy', size: 'medium', ac: 16, hp_average: 33, hp_formula: '6d8 + 6', speed: '30 ft.',
+    speed_feet: 30, darkvision_feet: 60, challenge: '2 (450 XP)', stat_block: '**Ember Wyrmling**', source_url: 'https://www.gmbinder.com/share/ember',
+    source_title: 'Ember Wyrmling (GM Binder)', official: false, image_urls: ['https://img.example/ember.png'],
+  };
+  const picture = await terrain(64, 64);
+  await withPage({
+    setup: {
+      llm: createFakeLLM({ research: () => 'notes', structured: (opts) => (opts.purpose === 'creature:tidy' ? found : mapReading()) }),
+      fetchImage: async () => ({ buf: picture }),
+    },
+    before: async (t) => ({ dana: await addDm(t) }),
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t) => {
+    page.click('[data-tab=creatures]');
+    page.click('#creature-find');
+    const form = page.$('#creature-dialog form');
+    assert.match(page.text(form), /Find a creature online/);
+    page.type(form.querySelector('[name=query]'), 'ember wyrmling');
+    page.submit(form);
+    await page.waitFor(() => page.$('#creatures .creature.searching'));
+    assert.match(page.text('#creatures'), /searching the web/);
+    await page.waitFor(() => page.text('#creatures').includes('Ember Wyrmling (GM Binder)'), { timeout: 8000 });
+    assert.match(page.text('#creatures .creature'), /AC 16 · HP 33/);
+    assert.match(page.text('#creatures .creature'), /Unofficial · from Ember Wyrmling \(GM Binder\)/);
+    assert.equal(page.$('#creatures .creature-source a').getAttribute('href'), 'https://www.gmbinder.com/share/ember');
+    await page.waitFor(() => page.$('#creatures .creature-face img'));
+    assert.match(page.text('#creatures-status'), /Found Ember Wyrmling \(unofficial/);
+    assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/creatures`)).json().creatures[0].stats.source, 'web');
+  });
+});

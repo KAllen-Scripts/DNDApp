@@ -272,6 +272,11 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
 .creature-notes { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 4.5em; overflow: hidden; }
 .creature-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.2rem; }
 .creature-actions button { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
+.creature.searching .creature-face { color: var(--muted); }
+.creature.pending .creature-face { animation: creature-wait 1.4s ease-in-out infinite; }
+@keyframes creature-wait { 50% { opacity: 0.4; } }
+@media (prefers-reduced-motion: reduce) { .creature.pending .creature-face { animation: none; } }
+.creature-source a { color: inherit; }
 
 @media (max-width: 560px) {
   .topbar { gap: 0.5rem; }
