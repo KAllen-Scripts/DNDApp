@@ -97,3 +97,55 @@ test('lights: the DM turns on darkness, places a torch and a brazier, and erases
     assert.equal(page.$('#map-selection [aria-label="Light carried"]').value, 'torch');
   });
 });
+
+test('pings and sketches: shown live for a moment; other players\' only where you can see; Alt+click pings', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const map = await importMap(t, { patch: SHOWN });
+      await addToken(t, map, { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 52.5, y: 52.5 });
+      await addToken(t, map, { kind: 'pc', name: 'Lyra', user_id: t.alex.id, x: 612.5, y: 402.5, color: '#aa3399' });
+      // Fog: Sam only sees the top-left quarter.
+      await t.request('PATCH', `/campaigns/${t.campaign.id}/maps/${map.id}/fog`, { body: { enabled: true, add: { op: 'reveal', x: 0, y: 0, w: 350, h: 245 } } });
+      return { map };
+    },
+    page: (t) => ({ as: t.sam }),
+  }, async (page, t, { map }) => {
+    await openMapTab(page);
+    const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+    const pings = () => page.$$('#map-signals .ping-mark');
+
+    // The DM pings somewhere fogged: Sam still sees it (the DM is pointing).
+    await t.request('POST', `${base}/ping`, { body: { x: 600, y: 400 } });
+    await page.waitFor(() => pings().length === 1, { what: "the DM's ping" });
+    assert.equal(pings()[0].getAttribute('style'), '--sig:#ffd54a');
+    assert.match(page.text('#map-status'), /pinged the map/);
+    // Alex pings where Sam can't see: nothing. Then where he can: Lyra's colour.
+    await t.request('POST', `${base}/ping`, { as: t.alex.token, body: { x: 600, y: 400 } });
+    await t.request('POST', `${base}/ping`, { as: t.alex.token, body: { x: 100, y: 100 } });
+    await page.waitFor(() => pings().some((p) => p.getAttribute('style') === '--sig:#aa3399'), { what: "Alex's ping" });
+    assert.equal(pings().length, 2);
+
+    // Sam pings with the tool, and with Alt+click.
+    page.click('#map-ping');
+    assert.equal(page.$('#map-ping').getAttribute('aria-pressed'), 'true');
+    click(page, 200, 150);
+    await page.waitFor(() => pings().length === 3, { what: "Sam's ping" });
+    page.click('#map-ping');
+    page.pointer('#map-view', 'pointerdown', { clientX: 120, clientY: 120, altKey: true });
+    page.pointer('#map-view', 'pointerup', { clientX: 120, clientY: 120, altKey: true });
+    await page.waitFor(() => pings().length === 4, { what: 'the Alt+click ping' });
+
+    // A sketch: drawn while dragging, then everyone's.
+    page.click('#map-draw');
+    page.pointer('#map-view', 'pointerdown', { clientX: 50, clientY: 200 });
+    for (let x = 60; x <= 200; x += 20) page.pointer('#map-view', 'pointermove', { clientX: x, clientY: 200 + (x % 40) });
+    assert.ok(page.$('#map-signals polyline'), 'drawn while dragging');
+    page.pointer('#map-view', 'pointerup', { clientX: 200, clientY: 200 });
+    await page.waitFor(() => page.$('#map-signals polyline[data-signal]'), { what: 'the sketch' });
+    assert.equal(page.$('#map-signals polyline[data-signal]').getAttribute('points').split(' ').length, 9);
+
+    // Pings go after a few seconds.
+    await page.waitFor(() => pings().length === 0, { what: 'the pings to go', timeout: 6000 });
+  });
+});

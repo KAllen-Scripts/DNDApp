@@ -980,3 +980,10 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .map-walls .light-dot { fill: #ffd54a; stroke: #000; stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
 .map-walls .light-dim.ai { stroke: #b388ff; }
 .map-fog-tools select { width: auto; padding: 0.3rem 0.4rem; font-size: 0.85rem; }
+.map-signals { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.map-signals .ping { fill: none; stroke: var(--sig); stroke-width: 4px; vector-effect: non-scaling-stroke; transform-box: fill-box; transform-origin: center; animation: map-ping 0.9s ease-out 3; }
+.map-signals .ping-dot { fill: var(--sig); stroke: #000; stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+.map-signals .stroke { fill: none; stroke: var(--sig); stroke-width: 4px; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; transition: opacity 3s linear; }
+.map-signals .stroke.fading { opacity: 0; }
+@keyframes map-ping { from { transform: scale(0.3); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .map-signals .ping { animation: none; } }

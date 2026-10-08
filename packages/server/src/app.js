@@ -19,7 +19,7 @@ import { preparedTranscript } from './pipeline/prepare.js';
 import { SheetConflictError } from './sheets/store.js';
 import { SHEET_FORMAT, computeSheet } from '@dndapp/shared/sheet.js';
 import { parseRoll, rollDice, ROLL_MODES } from '@dndapp/shared/dice.js';
-import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, MAX_WALLS, WALL_KINDS, FOG_MAP, TEMPLATE_SHAPES, MAX_TEMPLATES, MAX_LIGHTS, snapToken, wallBetween, doorReach, distanceToWall, dexModifier, stepTurn } from '@dndapp/shared/map.js';
+import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, MAX_WALLS, WALL_KINDS, FOG_MAP, TEMPLATE_SHAPES, MAX_TEMPLATES, MAX_LIGHTS, snapToken, wallBetween, doorReach, distanceToWall, dexModifier, stepTurn, canSee } from '@dndapp/shared/map.js';
 import { inspectImage } from './maps/read.js';
 import { isPdf, renderPdfPage } from './maps/pdf.js';
 import { createPlayerImages } from './maps/image.js';
@@ -1150,8 +1150,75 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       if (view) sse.send('map', view);
       else sse.send('gone', { id: map.id });
     };
+    // Pings and quick drawings: to everyone who can see the map; a player gets other players' only where they can see them.
+    const signal = (sig) => {
+      if (sig.campaign_id !== cid) return;
+      const a = current();
+      if (!a) return sse.end();
+      let map;
+      try {
+        map = maps.get(cid, sig.map_id);
+      } catch {
+        return;
+      }
+      const view = maps.view(map, a);
+      if (!view) return;
+      if (a.role !== 'dm' && !sig.from_dm && sig.by !== request.user.id) {
+        const { polygons } = maps.sightFor(map, request.user.id);
+        if (!sig.points.some(([x, y]) => canSee(map, polygons, x, y))) return;
+      }
+      const { campaign_id: _c, from_dm: _d, ...out } = sig;
+      sse.send(sig.kind, out);
+    };
     maps.events.on('update', listener);
-    sse.onClose(() => maps.events.off('update', listener));
+    maps.events.on('signal', signal);
+    sse.onClose(() => {
+      maps.events.off('update', listener);
+      maps.events.off('signal', signal);
+    });
+  });
+
+  // Pings and drawings per person: at most SIGNALS_PER_WINDOW in SIGNAL_WINDOW ms.
+  const SIGNAL_WINDOW = 10_000;
+  const SIGNALS_PER_WINDOW = 20;
+  const signalTimes = new Map();
+  const signalAllowed = (userId) => {
+    const since = Date.now() - SIGNAL_WINDOW;
+    const recent = (signalTimes.get(userId) ?? []).filter((t) => t > since);
+    if (recent.length >= SIGNALS_PER_WINDOW) throw new RateLimitError('Slow down a little with the pings.');
+    recent.push(Date.now());
+    signalTimes.set(userId, recent);
+  };
+
+  /** Send a ping or a drawing to everyone looking at the map (not saved). Its colour: the sender's token, or gold for the DM. */
+  function sendSignal(request, kind, points) {
+    const a = access(request);
+    const { map } = viewableMap(request);
+    signalAllowed(request.user.id);
+    const own = map.tokens.find((t) => t.kind === 'pc' && t.user_id === request.user.id);
+    maps.events.emit('signal', {
+      kind,
+      campaign_id: a.cid,
+      map_id: map.id,
+      by: request.user.id,
+      name: own?.name ?? request.user.name,
+      color: a.role === 'dm' ? '#ffd54a' : own?.color ?? '#4fc3f7',
+      from_dm: a.role === 'dm',
+      points: points.map(([x, y]) => [Math.round(Math.min(map.image.width, Math.max(0, x)) * 10) / 10, Math.round(Math.min(map.image.height, Math.max(0, y)) * 10) / 10]),
+    });
+    return { ok: true };
+  }
+
+  /** Ping a spot on the map: { x, y }. Everyone looking sees it for a moment (players: the DM's, and other players' where they can see). */
+  app.post('/campaigns/:cid/maps/:mid/ping', async (request) => {
+    const { x, y } = z.object({ x: z.number(), y: z.number() }).parse(request.body ?? {});
+    return sendSignal(request, 'ping', [[x, y]]);
+  });
+
+  /** A quick drawing: { points: [[x, y], ...] } (up to 500). It fades after a while on everyone's screen; nothing is saved. */
+  app.post('/campaigns/:cid/maps/:mid/draw', async (request) => {
+    const { points } = z.object({ points: z.array(z.tuple([z.number(), z.number()])).min(2).max(500) }).parse(request.body ?? {});
+    return sendSignal(request, 'draw', points);
   });
 
   app.get('/campaigns/:cid/maps/:mid', async (request) => viewableMap(request).view);

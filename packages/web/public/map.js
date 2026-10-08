@@ -55,6 +55,10 @@ const state = {
   caught: new Set(), // tokens inside the selected (or placed) template
   combatOpen: false, // the turn order panel is open
   combatActive: new Map(), // map id -> whether it had a fight when last drawn (the panel opens when one starts)
+  pinging: false, // the Ping tool: a click on the map pings it
+  drawing: false, // the Draw tool: dragging sketches on the map
+  stroke: null, // the sketch being drawn: { pointer, points }
+  signals: [], // pings and sketches on screen: { id, kind, map_id, points, color, name, until }
 };
 
 const base = () => `/campaigns/${state.campaignId}/maps`;
@@ -104,6 +108,7 @@ function startLive() {
           wait = 1000;
           if (event === 'map') onMap(data);
           else if (event === 'gone') onGone(data.id);
+          else if (event === 'ping' || event === 'draw') onSignal(event, data);
         }, { signal: controller.signal });
       } catch (err) {
         if (controller.signal.aborted) return;
@@ -215,6 +220,7 @@ function render() {
     $('#map-ruler-line').replaceChildren();
     renderSelection();
     renderCombat();
+    $('#map-signals').replaceChildren();
     empty.hidden = false;
     empty.textContent = state.canEdit
       ? 'No maps yet. Import one: a battle map, a town, a region, anything. The AI reads its grid and scale, then you can add tokens.'
@@ -237,6 +243,7 @@ function render() {
   renderSelection();
   renderFogTools();
   renderCombat();
+  renderSignals();
   if (state.images.has(map.id) && state.images.get(map.id).key !== map.image_key) loadImage(map);
   const reading = map.reading.status;
   if (reading === 'pending') status('The AI is reading this map…');
@@ -426,7 +433,7 @@ async function walls(body) {
 function setTool({ fogMode = null, wallMode = null }) {
   state.fogMode = fogMode;
   state.wallMode = wallMode;
-  if (fogMode || wallMode) Object.assign(state, { pinMode: false, measuring: false, templateDraft: null, ruler: null });
+  if (fogMode || wallMode) Object.assign(state, { pinMode: false, measuring: false, templateDraft: null, ruler: null, pinging: false, drawing: false });
   renderPinTool();
   renderFogTools();
   renderMeasureTools();
@@ -570,7 +577,7 @@ async function dropPin(at) {
 
 function renderPinTool() {
   $('#map-pin').setAttribute('aria-pressed', String(state.pinMode));
-  $('#map-view').classList.toggle('pin-placing', state.pinMode);
+  $('#map-view').classList.toggle('pin-placing', state.pinMode || state.pinging || state.drawing);
 }
 
 function pinDown(e, pin) {
@@ -820,6 +827,16 @@ function toImage(clientX, clientY) {
 function viewDown(e) {
   if (!state.current || e.target.closest('.map-selection, .map-combat')) return;
   // Measuring and placing a template can start on a token; otherwise tokens and pins handle their own pointers.
+  // Alt+click pings, whatever tool is on.
+  if (e.altKey && !state.pointers.size) {
+    e.preventDefault();
+    return ping(toImage(e.clientX, e.clientY));
+  }
+  if (state.drawing && !state.pointers.size && !state.stroke) {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    state.stroke = { pointer: e.pointerId, points: [toImage(e.clientX, e.clientY)] };
+    return renderSignals();
+  }
   const aiming = state.measuring || !!state.templateDraft;
   if (e.target.closest('.token, .map-pin') && !aiming) return;
   e.currentTarget.setPointerCapture(e.pointerId);
@@ -862,6 +879,12 @@ function viewMove(e) {
   if (state.ruler?.pointer === e.pointerId && !state.ruler.done) {
     state.ruler.b = rulerPoint(toImage(e.clientX, e.clientY));
     return renderRuler();
+  }
+  if (state.stroke?.pointer === e.pointerId) {
+    const at = toImage(e.clientX, e.clientY);
+    const last = state.stroke.points.at(-1);
+    if (Math.hypot(at.x - last.x, at.y - last.y) * state.view.k >= 3) state.stroke.points.push(at);
+    return renderSignals();
   }
   if (state.templatePlace?.pointer === e.pointerId) {
     state.templatePlace.b = toImage(e.clientX, e.clientY);
@@ -907,6 +930,7 @@ function viewUp(e) {
     return renderRuler();
   }
   if (state.templatePlace?.pointer === e.pointerId) return placeTemplate(e);
+  if (state.stroke?.pointer === e.pointerId) return finishStroke(e);
   if (state.templateDrag?.pointer === e.pointerId) return templateUp(e);
   if (state.fogDraw?.pointer === e.pointerId) {
     const r = fogRect(state.current, state.fogDraw.a, state.fogDraw.b);
@@ -921,6 +945,7 @@ function viewUp(e) {
   // A click on the map itself (not a drag) drops a pin when placing one, else clears the selection.
   if (p && Math.hypot(e.clientX - p.startX, e.clientY - p.startY) < 4 && !state.pointers.size) {
     if (state.pinMode && e.type === 'pointerup') return dropPin(toImage(e.clientX, e.clientY));
+    if (state.pinging && e.type === 'pointerup') return ping(toImage(e.clientX, e.clientY));
     // A click on a door opens or closes it.
     const door = e.type === 'pointerup' ? doorAt(e.clientX, e.clientY) : null;
     if (door) return toggleDoor(door);
@@ -935,7 +960,7 @@ function viewUp(e) {
 // ---------- moving tokens ----------
 
 function tokenDown(e, token) {
-  if (state.measuring || state.templateDraft) return; // the map view measures or aims from here
+  if (state.measuring || state.templateDraft || state.drawing || e.altKey) return; // the map view measures, aims, sketches or pings from here
   e.stopPropagation();
   if (!canMove(token)) return select(token.id);
   $('#map-view').setPointerCapture(e.pointerId);
@@ -993,6 +1018,75 @@ async function tokenUp(e) {
   }
 }
 
+// ---------- pings and quick drawings ----------
+
+const PING_MS = 2700;
+const STROKE_MS = 20_000;
+
+/** Ping a spot: everyone looking at the map sees it (the server decides who). */
+async function ping(at) {
+  try {
+    await state.guarded(() => api('POST', `${base()}/${state.current.id}/ping`, { x: at.x, y: at.y }));
+  } catch (err) {
+    report(err);
+  }
+}
+
+/** Send the sketch just drawn (a short line is shared as it is; long ones are thinned out). */
+async function finishStroke(e) {
+  const stroke = state.stroke;
+  state.stroke = null;
+  renderSignals();
+  if (e.type !== 'pointerup' || stroke.points.length < 2) return;
+  const step = Math.ceil(stroke.points.length / 500);
+  const points = stroke.points.filter((_, i) => i % step === 0 || i === stroke.points.length - 1).map((p) => [p.x, p.y]);
+  try {
+    await state.guarded(() => api('POST', `${base()}/${state.current.id}/draw`, { points }));
+  } catch (err) {
+    report(err);
+  }
+}
+
+let signalCount = 0;
+
+/** A ping or sketch from the server: shown for a while on the map it's on. */
+function onSignal(kind, data) {
+  const ms = kind === 'ping' ? PING_MS : STROKE_MS;
+  const sig = { ...data, id: ++signalCount, kind, until: Date.now() + ms };
+  state.signals.push(sig);
+  if (state.current?.id === data.map_id) {
+    renderSignals();
+    if (kind === 'ping') status(`${data.name} pinged the map.`);
+  }
+  // A sketch starts fading a few seconds before it goes.
+  if (kind === 'draw') setTimeout(() => document.querySelector(`#map-signals [data-signal="${sig.id}"]`)?.classList.add('fading'), ms - 3000);
+  setTimeout(() => {
+    state.signals = state.signals.filter((x) => x !== sig);
+    if (state.current) renderSignals();
+  }, ms);
+}
+
+function renderSignals() {
+  const map = state.current;
+  const svg = $('#map-signals');
+  if (!map) return svg.replaceChildren();
+  svg.setAttribute('viewBox', `0 0 ${map.image.width} ${map.image.height}`);
+  const r = squarePx(map) * 0.7;
+  const line = (points, extra = {}) => svgEl('polyline', { points: points.map((p) => (Array.isArray(p) ? p : [p.x, p.y]).join(',')).join(' '), class: 'stroke', ...extra });
+  svg.replaceChildren(
+    ...state.signals.filter((sig) => sig.map_id === map.id).map((sig) => {
+      if (sig.kind === 'draw') return line(sig.points, { style: `--sig:${sig.color}`, 'data-signal': sig.id });
+      const [x, y] = sig.points[0];
+      const g = svgEl('g', { style: `--sig:${sig.color}`, 'data-signal': sig.id, class: 'ping-mark' });
+      const title = svgEl('title', {});
+      title.textContent = `${sig.name} pinged here`;
+      g.append(title, svgEl('circle', { cx: x, cy: y, r, class: 'ping' }), svgEl('circle', { cx: x, cy: y, r: r / 6, class: 'ping-dot' }));
+      return g;
+    }),
+    ...(state.stroke ? [line(state.stroke.points, { style: '--sig:var(--accent)' })] : []),
+  );
+}
+
 // ---------- measuring ----------
 
 /** Where a ruler end goes: the middle of a square on a grid, else where the pointer is. */
@@ -1031,6 +1125,9 @@ function renderRuler() {
 
 function renderMeasureTools() {
   $('#map-ruler').setAttribute('aria-pressed', String(state.measuring));
+  $('#map-ping').setAttribute('aria-pressed', String(state.pinging));
+  $('#map-draw').setAttribute('aria-pressed', String(state.drawing));
+  $('#map-view').classList.toggle('pin-placing', state.pinMode || state.pinging || state.drawing);
   $('#map-template').setAttribute('aria-pressed', String(!!state.templateDraft));
   $('#map-view').classList.toggle('measuring', state.measuring || !!state.templateDraft);
 }
@@ -1211,7 +1308,7 @@ async function templateDialog() {
       if (!(n > 0)) return;
       setTool({});
       state.templateDraft = { shape: shape.value, size: n, width: shape.value === 'line' ? Number(width.value) || 5 * FOOT[unit] : null, label: label.value.trim(), color: color.value };
-      Object.assign(state, { measuring: false, ruler: null, pinMode: false });
+      Object.assign(state, { measuring: false, ruler: null, pinMode: false, pinging: false, drawing: false });
       renderPinTool();
       renderMeasureTools();
       renderRuler();
@@ -1656,7 +1753,7 @@ export function stopMaps() {
   state.live = null;
   state.pins.clear();
   state.pinMode = false;
-  Object.assign(state, { measuring: false, ruler: null, templateDraft: null, templatePlace: null, combatOpen: false });
+  Object.assign(state, { measuring: false, ruler: null, templateDraft: null, templatePlace: null, combatOpen: false, pinging: false, drawing: false, stroke: null, signals: [] });
   state.combatActive.clear();
   players = null;
 }
@@ -1748,7 +1845,7 @@ export function initMapActions() {
   $('#map-settings').addEventListener('click', settingsDialog);
   $('#map-pin').addEventListener('click', () => {
     state.pinMode = !state.pinMode;
-    if (state.pinMode) Object.assign(state, { fogMode: null, wallMode: null, measuring: false, templateDraft: null, ruler: null });
+    if (state.pinMode) Object.assign(state, { fogMode: null, wallMode: null, measuring: false, templateDraft: null, ruler: null, pinging: false, drawing: false });
     renderFogTools();
     renderPinTool();
     renderMeasureTools();
@@ -1758,12 +1855,23 @@ export function initMapActions() {
   $('#map-ruler').addEventListener('click', () => {
     const on = !state.measuring;
     setTool({});
-    Object.assign(state, { measuring: on, templateDraft: null, ruler: null, pinMode: false });
+    Object.assign(state, { measuring: on, templateDraft: null, ruler: null, pinMode: false, pinging: false, drawing: false });
     renderPinTool();
     renderMeasureTools();
     if (state.current) renderRuler();
     if (on) status(state.current?.scale ? 'Drag on the map to measure. Only you see it.' : "This map has no scale yet, so distances can't be measured.", !state.current?.scale);
   });
+  for (const [id, key] of [['#map-ping', 'pinging'], ['#map-draw', 'drawing']]) {
+    $(id).addEventListener('click', () => {
+      const on = !state[key];
+      setTool({});
+      Object.assign(state, { measuring: false, ruler: null, templateDraft: null, pinMode: false, pinging: false, drawing: false, [key]: on });
+      renderPinTool();
+      renderMeasureTools();
+      if (state.current) renderRuler();
+      if (on) status(key === 'pinging' ? 'Click the map to point everyone there.' : 'Drag on the map to sketch. Everyone sees it for a little while.');
+    });
+  }
   $('#map-template').addEventListener('click', () => {
     if (state.templateDraft) {
       state.templateDraft = null;

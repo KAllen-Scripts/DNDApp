@@ -174,6 +174,11 @@ export function createMaps({ db, archive, store, pictures = null }) {
       };
     },
 
+    /** What a player's tokens see on a map now (see sight.forPlayer). */
+    sightFor(map, userId) {
+      return sight.forPlayer(map, userId);
+    },
+
     /** Someone's private pins on a map. Only ever sent to that person. */
     pins(campaignId, id, userId) {
       const map = maps.get(campaignId, id);
