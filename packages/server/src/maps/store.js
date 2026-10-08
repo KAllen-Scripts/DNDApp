@@ -16,6 +16,7 @@ import { EventEmitter } from 'node:events';
 import { normalizeMap, normalizePins, canSee, healthOf, speedFromText } from '@dndapp/shared/map.js';
 import { computeSheet } from '@dndapp/shared/sheet.js';
 import { createSight } from './sight.js';
+import { mapEvents } from './events.js';
 import { diffJson, applyJson } from '../sheets/store.js';
 import { NotFoundError } from '../store.js';
 
@@ -146,6 +147,11 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
     /** Every archived change line of a map, oldest first. */
     history(campaignId, id) {
       return archive.readMapChanges(store.getCampaign(campaignId).slug, id);
+    },
+
+    /** What happened on the maps players saw on a session date, for the archivist (see mapEvents). */
+    eventsOn(campaignId, date, rolloverHour) {
+      return mapEvents(maps.allIds(campaignId).map((id) => ({ id, entries: maps.history(campaignId, id) })), { date, rolloverHour });
     },
 
     /** Every map ever made in the campaign, removed ones too. */

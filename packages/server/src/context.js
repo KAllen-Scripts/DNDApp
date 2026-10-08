@@ -32,17 +32,18 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   }
   const search = createSearch({ db, embedder });
   const kb = createKB({ db, search, config });
-  const archivist = createArchivist({ db, store, kb, search, llm, config });
+  const sheets = createSheets({ db, archive, store });
+  const pictures = createPictures({ db, archive, store });
+  const maps = createMaps({ db, archive, store, pictures, sheets });
+  // What happened on the maps on a session's day goes to the archivist with the transcript.
+  const archivist = createArchivist({ db, store, kb, search, llm, config, mapEvents: (cid, date) => maps.eventsOn(cid, date, config.notes.rolloverHour) });
   const pipeline = createPipeline({ db, store, archive, search, kb, archivist, config });
   const jobs = createJobs({ db, store, search, pipeline, log });
   const books = createBooks({ dir: config.booksDir, log });
   const qa = createQA({ db, store, kb, search, books, llm, config });
   const spells = createSpells({ books, llm });
-  const sheets = createSheets({ db, archive, store });
   const sheetImport = createSheetImport({ llm });
-  const pictures = createPictures({ db, archive, store });
   const pictureDescriber = createPictureDescriber({ llm });
-  const maps = createMaps({ db, archive, store, pictures, sheets });
   const mapReader = createMapReader({ llm });
   const statBlocks = createStatBlocks({ llm });
 
