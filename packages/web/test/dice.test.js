@@ -168,6 +168,8 @@ test("dice: Deluxe is the default; a roller this browser picked that no longer e
     page.click('#dice-open');
     assert.equal(page.$('#dice-roller').value, '');
     assert.equal(page.$('#dice-roller').options[0].textContent, "Server's choice (Deluxe 3D)");
+    // Opening the tray preloads Deluxe; let that finish (it can't start in jsdom) before the page closes.
+    await page.waitFor(() => /so it uses Classic 3D/.test(page.text('#dice-3d-note')), { timeout: 8000 });
   });
 });
 
