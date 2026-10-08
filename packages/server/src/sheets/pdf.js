@@ -27,6 +27,30 @@ async function readOutline(doc) {
 }
 
 /**
+ * A page's text items joined into lines. A space goes between two items only
+ * where the print has a gap: OCR layers split words into pieces (drop caps,
+ * small capitals: "H" + "eavy") and give spaces as items of their own.
+ */
+export function joinItems(items) {
+  let out = '';
+  let prev = null;
+  for (const it of items) {
+    if (prev && !prev.hasEOL) {
+      const size = Math.abs(it.transform[3]) || it.height || 10;
+      const sameLine = Math.abs(it.transform[5] - prev.transform[5]) < size / 2;
+      const gap = it.transform[4] - (prev.transform[4] + prev.width);
+      const spaced = /\s$/.test(prev.str) || /^\s/.test(it.str) || !prev.str || !it.str;
+      if (!spaced && !(sameLine && gap > -size / 2 && gap < size * 0.12)) out += ' ';
+    }
+    out += it.str;
+    if (it.hasEOL) out += '\n';
+    prev = it;
+  }
+  // Runs of spaces (an OCR word, a space item, a gap) count as one.
+  return out.replace(/[ \t]{2,}/g, ' ').replace(/ +\n/g, '\n');
+}
+
+/**
  * @param {Buffer} buf
  * @param {{ maxPages?: number, outline?: boolean }} [opts]
  * @returns {Promise<{ pages: string[], pageCount: number, fields: {name: string, value: string}[], outline: {title: string, page: number, depth: number}[] }>}
@@ -41,7 +65,7 @@ export async function readPdf(buf, { maxPages = Infinity, outline = false } = {}
     for (let i = 1; i <= Math.min(doc.numPages, maxPages); i++) {
       const page = await doc.getPage(i);
       const { items } = await page.getTextContent();
-      pages.push(items.map((it) => it.str + (it.hasEOL ? '\n' : ' ')).join(''));
+      pages.push(joinItems(items));
       page.cleanup();
     }
     const fields = [];

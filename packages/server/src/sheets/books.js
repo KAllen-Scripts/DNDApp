@@ -19,8 +19,9 @@ import path from 'node:path';
 import { distance } from 'fastest-levenshtein';
 import { readPdf } from './pdf.js';
 
-// "1st-level evocation", "Evocation cantrip", and OCR mangles like "3rd~evelevoeaUon".
-const LEVEL_LINE = /^\s*(?:[0-9IlOo]{1,2}\s*(?:st|nd|rd|th)\s*[-–~.]?\s*[lI|]?\s*ev|[a-z]+\s*cantrip)/i;
+// "1st-level evocation", "Evocation cantrip", OCR mangles like "3rd~evelevoeaUon",
+// and the 2024 books' "Level 1 Evocation (Wizard)".
+const LEVEL_LINE = /^\s*(?:[0-9IlOo]{1,2}\s*(?:st|nd|rd|th)\s*[-–~.]?\s*[lI|]?\s*ev|[a-z]+\s*cantrip|[lI|]eve[lI|]\s*[0-9IlOo]\s+[a-z])/i;
 const SMALL_WORDS = new Set(['of', 'from', 'and', 'the', 'to', 'a', 'an', 'in', 'on', 'with', 'for', 'or']);
 
 /** Compare names despite OCR mix-ups (l/1/I, 0/O) and punctuation. */
@@ -56,10 +57,18 @@ export const normText = (s) =>
  * (page numbers in headers and footers). Null unless most numbered pages agree.
  */
 function printedOffset(pages) {
+  const onlyNumber = (lines) => lines.map((l) => /^\s*(\d{1,3})\s*$/.exec(l)?.[1]);
+  // Running footers that carry the number: "CHAPTER 2 | RUNNING THE GAME 45", "46 CHAPTER 2 | ...".
+  const inFooter = (lines) =>
+    [...lines.slice(0, 2), ...lines.slice(-2)].flatMap((l) => [/^\s*(\d{1,3})\s+\D/.exec(l)?.[1], /\D\s(\d{1,3})\s*$/.exec(l)?.[1]]);
+  return vote(pages, onlyNumber) ?? vote(pages, inFooter);
+}
+
+function vote(pages, numbersOn) {
   const votes = new Map();
   let numbered = 0;
   pages.forEach((p, i) => {
-    const nums = new Set(p.lines.map((l) => /^\s*(\d{1,3})\s*$/.exec(l)?.[1]).filter(Boolean).map(Number));
+    const nums = new Set(numbersOn(p.lines).filter(Boolean).map(Number));
     if (nums.size) numbered++;
     for (const n of nums) votes.set(n - (i + 1), (votes.get(n - (i + 1)) ?? 0) + 1);
   });
@@ -67,14 +76,35 @@ function printedOffset(pages) {
   return n >= 3 && n >= numbered / 2 ? offset : null;
 }
 
+/**
+ * A book's title from its file name, without the extras that downloaded
+ * files carry ("Dungeon Masters Guide (2024) -- Christopher Perkins -- ...").
+ */
+export const bookTitle = (file) => file.replace(/\.pdf$/i, '').split(/\s+--\s+/)[0].replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** The year the book was first printed, from its credits page ("First Printing: August 2014"). */
+function printedYear(texts) {
+  const front = texts.slice(0, 12).join('\n');
+  const year = /first\s+printing\W+(?:[a-z]+\s+)?((?:19|20)\d\d)/i.exec(front) ?? /(?:©|\(c\)|copyright)\s*((?:19|20)\d\d)/i.exec(front);
+  return year ? Number(year[1]) : null;
+}
+
+/** Lines broken with a hyphen are joined again ("ori-\ngin"); a capital after it keeps the words apart. */
+const joinHyphens = (text) => text.replace(/(\p{L})\s?-\s*\n\s*(?=\p{Ll})/gu, '$1').replace(/-\s*\n\s*/g, '- ');
+
+/** Without spaces, for headings an OCR layer split inside words ("Diag onal Moveme nt"). */
+const squash = (norm) => norm.replace(/ /g, '');
+
 const MAX_TERMS = 8;
+// Terms this short ("ac", "hp", "dc") must be whole words; longer ones match the start of a word.
+const SHORT_TERM = 3;
 const SNIPPET_CHARS = 400;
 
 export function createBooks({ dir, log = console }) {
   let loading = null;
   /**
    * @type {{ title: string, file: string, lines: { text: string, page: number }[],
-   *   pages: { lines: string[], norm: string, headings: string }[], offset: number,
+   *   pages: { lines: string[], norm: string, headings: string, squashed: string[], short: Set<string> }[], offset: number, year: number | null, empty: number,
    *   outline: { title: string, page: number, depth: number }[] }[]}
    */
   let books = [];
@@ -85,7 +115,7 @@ export function createBooks({ dir, log = console }) {
     spells = [];
     books.forEach((b, bi) => {
       for (let j = 0; j < b.lines.length - 1; j++) {
-        if (isHeading(b.lines[j].text) && LEVEL_LINE.test(b.lines[j + 1].text)) {
+        if (isHeading(b.lines[j].text) && LEVEL_LINE.test(b.lines[j + 1].text) && castingTimeAfter(b.lines, j)) {
           const name = titleCase(b.lines[j].text);
           spells.push({ name, norm: normName(name), book: bi, line: j });
         }
@@ -101,16 +131,23 @@ export function createBooks({ dir, log = console }) {
         try {
           const { pages: texts, outline } = await readPdf(fs.readFileSync(path.join(dir, file)), { outline: true });
           const lines = texts.flatMap((text, i) => text.split('\n').map((t) => ({ text: t, page: i + 1 })));
-          const pages = texts.map((text) => {
+          // A page's headings: capitalised lines, plus the PDF's bookmarks that point at it.
+          const marks = new Map();
+          for (const o of outline) marks.set(o.page, [...(marks.get(o.page) ?? []), o.title]);
+          const pages = texts.map((text, i) => {
             const pageLines = text.split('\n');
-            return {
-              lines: pageLines,
-              // Words hyphenated across lines are joined again.
-              norm: normText(text.replace(/-\s*\n\s*/g, '')),
-              headings: normText(pageLines.filter(isHeading).join(' ')),
-            };
+            const headings = [...pageLines.filter(isHeading), ...(marks.get(i + 1) ?? [])].map(normText);
+            // Short lines that may be headings in ordinary case ("Heavy Precip itati on"), for exact matches.
+            const short = pageLines.filter((l) => l.trim().length <= 45 && !/[.,;:]\s*$/.test(l)).map((l) => squash(normText(l)));
+            return { lines: pageLines, norm: normText(joinHyphens(text)), headings: headings.join(''), squashed: headings.map(squash), short: new Set(short) };
           });
-          books.push({ title: file.replace(/\.pdf$/i, ''), file, lines, pages, offset: printedOffset(pages) ?? 0, outline });
+          const empty = pages.filter((p) => !p.norm.trim()).length;
+          if (pages.length && empty > pages.length / 2) {
+            log.warn?.(`${file}: ${empty} of ${pages.length} pages have no text. If it's a scan, give it a text layer (e.g. with ocrmypdf) so it can be searched.`);
+          }
+          const offset = printedOffset(pages);
+          if (offset == null) log.info?.(`${file}: couldn't read its printed page numbers; pages are numbered as in the PDF.`);
+          books.push({ title: bookTitle(file), file, year: printedYear(texts), lines, pages, offset: offset ?? 0, outline, empty });
         } catch (err) {
           log.warn?.(`Couldn't read the book ${file}: ${err.message}`);
         }
@@ -166,13 +203,19 @@ export function createBooks({ dir, log = console }) {
      */
     async search(terms, { book = null, limit = 8 } = {}) {
       await load();
-      const shelf = book ? [findBook(book)].filter(Boolean) : books;
+      const found = book ? findBook(book) : null;
+      if (found?.error) return found;
+      const shelf = found ? [found] : books;
       const wanted = [...new Set(terms.map(normText).filter((t) => t.trim().length >= 2))].slice(0, MAX_TERMS);
       if (!wanted.length || !shelf.length) return [];
       const all = shelf.flatMap((b) => b.pages.map((p, i) => ({ b, p, i })));
-      // Match at the start of a word, so "opportunity attack" also finds "opportunity attacks".
-      const needles = wanted.map((t) => t.slice(0, -1));
-      const counts = all.map(({ p }) => needles.map((n) => occurrences(p.norm, n)));
+      // Match at the start of a word, so "opportunity attack" also finds "opportunity attacks";
+      // short terms only as whole words, so "AC" doesn't find "action".
+      const needles = wanted.map((t) => (t.trim().length <= SHORT_TERM ? t : t.slice(0, -1)));
+      const flat = wanted.map((t) => squash(t));
+      const counts = all.map(({ p }) =>
+        needles.map((n, t) => occurrences(p.norm, n) || (flat[t].length >= 5 && (p.short.has(flat[t]) || p.squashed.some((h) => h.includes(flat[t])))) | 0),
+      );
       const idf = needles.map((_, t) => Math.log(1 + all.length / (counts.filter((c) => c[t]).length || 1)));
       const scored = all
         .map((x, k) => {
@@ -181,7 +224,13 @@ export function createBooks({ dir, log = console }) {
           counts[k].forEach((c, t) => {
             if (!c) return;
             matched++;
-            score += idf[t] * (1 + Math.log(c) + (x.p.headings.includes(needles[t]) ? 1 : 0));
+            // A heading that is the term ("HEX") counts most, one that contains it ("HEX AND CURSE") less.
+            const heading = x.p.squashed.includes(flat[t]) || (flat[t].length >= 5 && x.p.short.has(flat[t]))
+              ? 3
+              : x.p.headings.includes(wanted[t]) || (flat[t].length >= 5 && x.p.squashed.some((h) => h.includes(flat[t])))
+                ? 1
+                : 0;
+            score += idf[t] * (1 + Math.log(c) + heading);
           });
           return { ...x, score: score * matched, hit: counts[k].findIndex(Boolean) };
         })
@@ -202,7 +251,7 @@ export function createBooks({ dir, log = console }) {
     async readPages(book, page, count = 1) {
       await load();
       const b = findBook(book);
-      if (!b) return { error: unknownBook(book) };
+      if (b.error) return b;
       const first = page - b.offset;
       if (first < 1 || first > b.pages.length) return { error: `${b.title} has pages ${pageRange(b)}.` };
       return {
@@ -219,7 +268,7 @@ export function createBooks({ dir, log = console }) {
     async contents(book, { fromPage = null, toPage = null } = {}) {
       await load();
       const b = findBook(book);
-      if (!b) return { error: unknownBook(book) };
+      if (b.error) return b;
       const inRange = (page) => (fromPage == null || page >= fromPage) && (toPage == null || page <= toPage);
       if (b.outline.length) {
         const entries = b.outline.map((o) => ({ ...o, page: o.page + b.offset })).filter((o) => inRange(o.page));
@@ -242,24 +291,32 @@ export function createBooks({ dir, log = console }) {
 
     status: () => ({
       dir,
-      books: books.map((b) => ({ title: b.title, pages: b.pages.length, range: pageRange(b) })),
+      books: books.map((b) => ({ title: b.title, year: b.year, pages: b.pages.length, range: pageRange(b), textless: b.empty })),
       spells: spells.length,
     }),
   };
 
-  /** A book by title: exact (ignoring case and punctuation), else the one whose title contains it or the other way round. */
+  /**
+   * A book by title: exact (ignoring case and punctuation), else the one whose
+   * title contains it or the other way round. `{ error }` when there's no such
+   * book, or several match ("Player's Handbook" with a 2014 and a 2024 one).
+   */
   function findBook(name) {
     const want = normName(name);
-    if (!want) return null;
-    return books.find((b) => normName(b.title) === want) ?? books.find((b) => normName(b.title).includes(want) || want.includes(normName(b.title))) ?? null;
-  }
-
-  function unknownBook(name) {
-    return `No book called "${name}". The books are: ${books.map((b) => b.title).join('; ') || 'none'}.`;
+    const all = `The books are: ${books.map((b) => b.title).join('; ') || 'none'}.`;
+    const exact = want && books.find((b) => normName(b.title) === want);
+    if (exact) return exact;
+    const loose = want ? books.filter((b) => normName(b.title).includes(want) || want.includes(normName(b.title))) : [];
+    if (loose.length === 1) return loose[0];
+    return { error: loose.length ? `"${name}" could be ${loose.map((b) => b.title).join(' or ')}. Give the full title.` : `No book called "${name}". ${all}` };
   }
 }
 
-const pageRange = (b) => `${1 + b.offset}-${b.pages.length + b.offset}`;
+/** A spell's heading is followed within a few lines by its casting time (not a class's "Spellcasting" or "Cantrips"). */
+const castingTimeAfter = (lines, j) => lines.slice(j + 1, j + 7).some((l) => /casting\s*t[il1]me/i.test(l.text));
+
+/** "1-318", or "-4 to 388" when front matter comes before printed page 1. */
+const pageRange = (b) => `${1 + b.offset}${1 + b.offset < 0 ? ' to ' : '-'}${b.pages.length + b.offset}`;
 
 function occurrences(haystack, needle) {
   let n = 0;
