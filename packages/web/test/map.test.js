@@ -525,9 +525,67 @@ test('line of sight: a player sees what their token sees, opens the door next to
     // Locked by the DM: it won't open again for him.
     await t.request('PATCH', `${base}/walls`, { body: { lock: door.id } });
     await page.waitFor(() => page.$('#map-walls line.door.locked'), { what: 'the door locked' });
+    assert.ok(page.$('#map-walls .door-badge.locked'), 'he sees a padlock on it');
     drag(page, '#map-view', [[350, 245]]);
     await page.settle();
     assert.match(page.text('#map-status'), /locked/);
+  });
+});
+
+test('doors: drawn as doors; the DM clicks one to open, close, lock and unlock it', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const dana = await addDm(t);
+      const map = await importMap(t, { patch: SHOWN });
+      const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+      await t.request('PATCH', `${base}/walls`, { body: { add: { x1: 350, y1: 210, x2: 350, y2: 280, door: true } } });
+      return { dana, base };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t, { base }) => {
+    await openMapTab(page);
+    const door = async () => (await t.request('GET', base)).json().walls[0];
+    // A closed door: frame posts at both ends, a plank with a door badge in the middle.
+    assert.equal(page.$$('#map-walls .door-post').length, 2);
+    assert.ok(page.$('#map-walls .door-badge:not(.locked)'));
+    assert.ok(page.$('#map-selection').hidden);
+
+    // A click picks it: what it is, and the buttons.
+    drag(page, '#map-view', [[350, 245]]);
+    await page.settle();
+    assert.ok(!page.$('#map-selection').hidden);
+    assert.match(page.text('#map-selection'), /Door.*Closed/);
+    const button = (name) => page.$$('#map-selection button').find((b) => b.textContent === name);
+
+    button('Lock').click();
+    await page.settle();
+    assert.equal((await door()).locked, true);
+    assert.match(page.text('#map-selection'), /Locked: players can't open it/);
+    assert.ok(page.$('#map-walls .door-badge.locked'), 'a padlock shows');
+
+    button('Unlock').click();
+    await page.settle();
+    assert.equal((await door()).locked, false);
+
+    // Open: it swings from its hinge and the badge goes.
+    button('Open').click();
+    await page.settle();
+    assert.equal((await door()).open, true);
+    assert.ok(page.$('#map-walls .door-swing'));
+    assert.ok(!page.$('#map-walls .door-badge'));
+    button('Close').click();
+    await page.settle();
+    assert.equal((await door()).open, false);
+
+    // Locking an open door closes it; ✕ puts the bar away.
+    button('Open').click();
+    await page.settle();
+    button('Lock').click();
+    await page.settle();
+    assert.deepEqual((({ open, locked }) => ({ open, locked }))(await door()), { open: false, locked: true });
+    page.click('#map-selection [aria-label=Close]');
+    assert.ok(page.$('#map-selection').hidden);
   });
 });
 

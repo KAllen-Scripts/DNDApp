@@ -53,6 +53,7 @@ const state = {
   templateDraft: null, // a template about to be placed: { shape, size, width, label, color }
   templatePlace: null, // the template being placed: { pointer, a, b }
   selectedTemplate: null, // template id
+  selectedDoor: null, // the DM's: a door's id (to open, close, lock or unlock it)
   templateDrag: null, // a template being moved: { id, pointer, grab, x, y, moved, sx, sy }
   caught: new Set(), // tokens inside the selected (or placed) template
   combatOpen: false, // the turn order panel is open
@@ -159,6 +160,7 @@ async function show(map) {
   state.selected = null;
   state.selectedPin = null;
   state.selectedTemplate = null;
+  state.selectedDoor = null;
   state.ruler = null;
   state.fitted = false;
   if (map) storage.set(PICK_KEY(), map.id);
@@ -402,10 +404,60 @@ function renderWalls() {
       );
     }
   }
-  for (const w of list) svg.append(line(w, 'wall-halo'));
-  for (const w of list) svg.append(line(w, cls(w)));
+  const doors = list.filter((w) => w.door || !state.canEdit);
+  for (const w of list) if (!doors.includes(w)) svg.append(line(w, 'wall-halo'));
+  for (const w of list) if (!doors.includes(w)) svg.append(line(w, cls(w)));
+  // Doors on top, drawn as doors so nobody mistakes them for walls.
+  for (const w of doors) svg.append(doorShape(map, w, cls(w)));
   const d = state.wallDraw;
   if (d) svg.append(line({ x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y }, `wall-draft${state.wallMode === 'door' || state.wallMode === 'low' ? ` ${state.wallMode}` : ''}`));
+}
+
+/**
+ * A door as a door: frame posts at both sides of the doorway, the door itself
+ * as a thick plank across it (swung open from its hinge when open), and a
+ * badge in the middle (a door, or a padlock when it's locked).
+ */
+function doorShape(map, w, cls) {
+  const g = svgEl('g', { class: `door-shape${w.id === state.selectedDoor ? ' selected' : ''}` });
+  const len = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) || 1;
+  const ux = (w.x2 - w.x1) / len;
+  const uy = (w.y2 - w.y1) / len;
+  const sq = squarePx(map);
+  const r = Math.min(Math.max(8, sq * 0.28), len / 2.2 || 8);
+  const post = Math.min(len / 3, sq * 0.25);
+  const line = (x1, y1, x2, y2, c) => svgEl('line', { x1, y1, x2, y2, class: c });
+  // The frame: short posts across the doorway at each end.
+  for (const [x, y] of [[w.x1, w.y1], [w.x2, w.y2]]) g.append(line(x - uy * post, y + ux * post, x + uy * post, y - ux * post, 'door-post'));
+  if (w.open) {
+    // The doorway stays marked, and the door stands open from its hinge (the first end).
+    const ex = w.x1 - uy * len;
+    const ey = w.y1 + ux * len;
+    g.append(
+      line(w.x1, w.y1, w.x2, w.y2, 'doorway'),
+      svgEl('path', { d: `M ${w.x2} ${w.y2} A ${len} ${len} 0 0 1 ${ex} ${ey}`, class: 'door-swing' }),
+      line(w.x1, w.y1, ex, ey, 'wall-halo'),
+      line(w.x1, w.y1, ex, ey, `${cls} door-leaf`),
+    );
+    return g;
+  }
+  g.append(line(w.x1, w.y1, w.x2, w.y2, 'wall-halo door-halo'), line(w.x1, w.y1, w.x2, w.y2, cls), line(w.x1, w.y1, w.x2, w.y2, 'door-grain'));
+  const badge = svgEl('g', { class: `door-badge${w.locked ? ' locked' : ''}`, transform: `translate(${(w.x1 + w.x2) / 2} ${(w.y1 + w.y2) / 2}) scale(${r / 10})` });
+  badge.append(svgEl('circle', { r: 10, class: 'door-badge-bg' }));
+  if (w.locked) {
+    badge.append(
+      svgEl('path', { d: 'M -3.5 -1 V -3.5 A 3.5 3.5 0 0 1 3.5 -3.5 V -1', class: 'glyph-line' }),
+      svgEl('rect', { x: -5.5, y: -1, width: 11, height: 8, rx: 1.2, class: 'glyph-fill' }),
+      svgEl('circle', { cx: 0, cy: 2.6, r: 1.3, class: 'glyph-hole' }),
+    );
+  } else {
+    badge.append(
+      svgEl('rect', { x: -4, y: -6.5, width: 8, height: 13, rx: 0.8, class: 'glyph-line' }),
+      svgEl('circle', { cx: 1.8, cy: 0.5, r: 1.1, class: 'glyph-dot' }),
+    );
+  }
+  g.append(badge);
+  return g;
 }
 
 /** Difficult terrain: hatched areas (players get the ones they can see). */
@@ -645,7 +697,7 @@ function renderPins() {
 
 function selectPin(id) {
   state.selectedPin = id;
-  if (id) Object.assign(state, { selected: null, selectedTemplate: null });
+  if (id) Object.assign(state, { selected: null, selectedTemplate: null, selectedDoor: null });
   renderTemplates();
   renderTokens();
   renderPins();
@@ -824,7 +876,12 @@ function renderSelection() {
   const token = state.current?.tokens.find((t) => t.id === state.selected);
   const pin = !token && myPins().find((p) => p.id === state.selectedPin);
   const tpl = !token && !pin && state.current?.templates?.find((t) => t.id === state.selectedTemplate);
-  bar.hidden = !token && !pin && !tpl;
+  const door = !token && !pin && !tpl && state.canEdit && state.current?.walls.find((w) => w.door && w.id === state.selectedDoor);
+  bar.hidden = !token && !pin && !tpl && !door;
+  if (door) {
+    bar.dataset.pin = '';
+    return bar.replaceChildren(...doorControls(door));
+  }
   if (tpl) {
     bar.dataset.pin = '';
     return bar.replaceChildren(...templateControls(tpl));
@@ -855,10 +912,35 @@ function renderSelection() {
   );
 }
 
+/** The DM picks a door (a click on it) to open, close, lock or unlock it. */
+function selectDoor(id) {
+  Object.assign(state, { selectedDoor: id, selected: null, selectedPin: null, selectedTemplate: null });
+  renderWalls();
+  renderTemplates();
+  renderTokens();
+  renderPins();
+  renderSelection();
+}
+
+function doorControls(door) {
+  const what = door.locked ? 'Locked' : door.open ? 'Open' : 'Closed';
+  return [
+    h('strong', {}, 'Door'),
+    h('span', { class: 'muted small' }, `${what}${door.locked ? ": players can't open it" : ''}`),
+    h('span', { class: 'spacer' }),
+    h('button', { class: 'ghost', onclick: () => walls({ toggle: door.id }) }, door.open ? 'Close' : 'Open'),
+    h('button', { class: 'ghost', title: door.locked ? 'Let players open it again' : "Players can't open a locked door (you still can)", onclick: () => walls({ lock: door.id }) }, door.locked ? 'Unlock' : 'Lock'),
+    h('button', { class: 'ghost danger', onclick: () => walls({ remove: door.id }).then(() => selectDoor(null)) }, 'Remove'),
+    h('button', { class: 'ghost icon-btn', 'aria-label': 'Close', onclick: () => selectDoor(null) }, '✕'),
+  ];
+}
+
 function select(id) {
   state.selected = id;
   state.selectedPin = null;
   state.selectedTemplate = null;
+  state.selectedDoor = null;
+  if (state.current) renderWalls();
   renderTemplates();
   renderPins();
   renderTokens();
@@ -1078,9 +1160,9 @@ function viewUp(e) {
   if (p && Math.hypot(e.clientX - p.startX, e.clientY - p.startY) < 4 && !state.pointers.size) {
     if (state.pinMode && e.type === 'pointerup') return dropPin(toImage(e.clientX, e.clientY));
     if (state.pinging && e.type === 'pointerup') return ping(toImage(e.clientX, e.clientY));
-    // A click on a door opens or closes it.
+    // A click on a door: the DM picks it (to open, close, lock or unlock it); a player opens or closes it.
     const door = e.type === 'pointerup' ? doorAt(e.clientX, e.clientY) : null;
-    if (door) return toggleDoor(door);
+    if (door) return state.canEdit ? selectDoor(door.id) : toggleDoor(door);
     // A click on a template picks it (to see who it catches).
     const at = toImage(e.clientX, e.clientY);
     const tpl = e.type === 'pointerup' ? (state.current.templates ?? []).findLast((t) => inTemplate(state.current, t, at.x, at.y)) : null;
@@ -1333,7 +1415,7 @@ function renderTemplates() {
 }
 
 function selectTemplate(id) {
-  Object.assign(state, { selectedTemplate: id, selected: null, selectedPin: null });
+  Object.assign(state, { selectedTemplate: id, selected: null, selectedPin: null, selectedDoor: null });
   renderTemplates();
   renderTokens();
   renderPins();

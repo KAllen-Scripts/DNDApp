@@ -1613,7 +1613,10 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     }
     const saved = maps.change(a.cid, map.id, (m) => {
       const d = m.walls.find((w) => w.id === door.id);
-      if (d && !(a.role !== 'dm' && d.locked)) d.open = !d.open;
+      if (d && !(a.role !== 'dm' && d.locked)) {
+        d.open = !d.open;
+        if (d.open) d.locked = false; // an open door isn't locked
+      }
     }, { by: request.user.id, reason: 'door' });
     return maps.view(saved, a);
   });
