@@ -401,7 +401,7 @@ test('fog of war: the DM turns it on, reveals by dragging, undoes, reveals and c
 
 test('walls: the DM draws walls and doors (snapped to wall ends and grid corners), opens a door, erases, and asks the AI for a draft', async () => {
   const llm = createFakeLLM({
-    structured: async (opts) => (opts.purpose === 'map:walls'
+    structured: async (opts) => (opts.purpose.startsWith('map:walls')
       ? { walls: [{ points: [{ x: 500, y: 0 }, { x: 500, y: 1000 }] }], doors: [], notes: 'Rough around the tower.' }
       : mapReading()),
   });
@@ -525,9 +525,134 @@ test('line of sight: a player sees what their token sees, opens the door next to
     // Locked by the DM: it won't open again for him.
     await t.request('PATCH', `${base}/walls`, { body: { lock: door.id } });
     await page.waitFor(() => page.$('#map-walls line.door.locked'), { what: 'the door locked' });
+    assert.ok(page.$('#map-walls .door-badge.locked'), 'he sees a padlock on it');
     drag(page, '#map-view', [[350, 245]]);
     await page.settle();
     assert.match(page.text('#map-status'), /locked/);
+  });
+});
+
+test('doors: drawn as doors; the DM clicks one to open, close, lock and unlock it', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const dana = await addDm(t);
+      const map = await importMap(t, { patch: SHOWN });
+      const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+      await t.request('PATCH', `${base}/walls`, { body: { add: { x1: 350, y1: 210, x2: 350, y2: 280, door: true } } });
+      return { dana, base };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t, { base }) => {
+    await openMapTab(page);
+    const door = async () => (await t.request('GET', base)).json().walls[0];
+    // A closed door: frame posts at both ends, a plank with a door badge in the middle.
+    assert.equal(page.$$('#map-walls .door-post').length, 2);
+    assert.ok(page.$('#map-walls .door-badge:not(.locked)'));
+    assert.ok(page.$('#map-selection').hidden);
+
+    // A click picks it: what it is, and the buttons.
+    drag(page, '#map-view', [[350, 245]]);
+    await page.settle();
+    assert.ok(!page.$('#map-selection').hidden);
+    assert.match(page.text('#map-selection'), /Door.*Closed/);
+    const button = (name) => page.$$('#map-selection button').find((b) => b.textContent === name);
+
+    button('Lock').click();
+    await page.settle();
+    assert.equal((await door()).locked, true);
+    assert.match(page.text('#map-selection'), /Locked: players can't open it/);
+    assert.ok(page.$('#map-walls .door-badge.locked'), 'a padlock shows');
+
+    button('Unlock').click();
+    await page.settle();
+    assert.equal((await door()).locked, false);
+
+    // Open: it swings from its hinge and the badge goes.
+    button('Open').click();
+    await page.settle();
+    assert.equal((await door()).open, true);
+    assert.ok(page.$('#map-walls .door-swing'));
+    assert.ok(!page.$('#map-walls .door-badge'));
+    button('Close').click();
+    await page.settle();
+    assert.equal((await door()).open, false);
+
+    // Locking an open door closes it; ✕ puts the bar away.
+    button('Open').click();
+    await page.settle();
+    button('Lock').click();
+    await page.settle();
+    assert.deepEqual((({ open, locked }) => ({ open, locked }))(await door()), { open: false, locked: true });
+    page.click('#map-selection [aria-label=Close]');
+    assert.ok(page.$('#map-selection').hidden);
+  });
+});
+
+test('curved and round walls, hiding the walls, and walls from a map maker\'s file', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => ({ dana: await addDm(t), map: await importMap(t, { patch: SHOWN }) }),
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t) => {
+    await openMapTab(page);
+    const map = async () => (await mapsOf(t))[0];
+    page.click('#map-fog-open');
+
+    // Curve: drag from end to end, move to bend it, click.
+    page.click('[data-wall-mode=curve]');
+    drag(page, '#map-view', [[100, 100], [150, 100], [200, 100]]);
+    assert.match(page.text('#map-status'), /bend/);
+    page.pointer('#map-view', 'pointermove', { clientX: 150, clientY: 150 });
+    assert.ok(page.$('#map-walls polyline.wall-draft'), 'the bent curve shows while bending');
+    page.pointer('#map-view', 'pointerdown', { clientX: 150, clientY: 150 });
+    page.pointer('#map-view', 'pointerup', { clientX: 150, clientY: 150 });
+    await page.settle();
+    let walls = (await map()).walls;
+    const curve = walls.length;
+    assert.ok(curve >= 12, `a half circle in short pieces (${curve})`);
+    assert.equal(new Set(walls.map((w) => w.group)).size, 1);
+    assert.ok(walls.some((w) => Math.abs(w.y2 - 150) < 1 || Math.abs(w.y1 - 150) < 1), 'through the point it was bent to');
+
+    // Circle: drag from the centre out.
+    page.click('[data-wall-mode=circle]');
+    drag(page, '#map-view', [[400, 300], [420, 300], [440, 300]]);
+    await page.settle();
+    walls = (await map()).walls;
+    assert.equal(walls.length, curve + 36);
+
+    // Erasing one piece of the curve erases all of it.
+    page.click('[data-wall-mode=erase]');
+    drag(page, '#map-view', [[440, 300]]);
+    await page.settle();
+    assert.equal((await map()).walls.length, curve, 'the whole circle went');
+
+    // Walls hidden for a clean map: gone once Fog & walls is closed, back while it's open.
+    page.type('#map-show-walls', false);
+    assert.ok(page.$('#map-walls line.wall'), 'still shown while the panel is open');
+    page.click('#map-fog-open');
+    assert.ok(!page.$('#map-walls line.wall'));
+    page.click('#map-fog-open');
+    assert.ok(page.$('#map-walls line.wall'));
+    page.type('#map-show-walls', true);
+
+    // A Dungeondraft file of this map: exact walls and doors, no AI.
+    const file = {
+      format: 0.3,
+      resolution: { map_origin: { x: 0, y: 0 }, map_size: { x: 20, y: 14 }, pixels_per_grid: 35 },
+      line_of_sight: [[{ x: 1, y: 1 }, { x: 5, y: 1 }, { x: 5, y: 5 }]],
+      portals: [{ position: { x: 1, y: 2 }, bounds: [{ x: 1, y: 1 }, { x: 1, y: 3 }], closed: true }],
+      lights: [],
+    };
+    page.setFiles('#map-walls-file-input', [{ name: 'clearing.dd2vtt', type: '', content: Buffer.from(JSON.stringify(file)) }]);
+    await page.waitFor(() => /From the file/.test(page.text('#map-status')), { what: 'the walls from the file' });
+    assert.match(page.text('#map-status'), /2 walls, 1 doors, 0 lights/);
+    const fromFile = (await map()).walls.filter((w) => w.source === 'file');
+    assert.deepEqual(fromFile.map(({ x1, y1, x2, y2, door }) => ({ x1, y1, x2, y2, door })), [
+      { x1: 35, y1: 35, x2: 35, y2: 105, door: true },
+      { x1: 35, y1: 35, x2: 175, y2: 35, door: false },
+      { x1: 175, y1: 35, x2: 175, y2: 175, door: false },
+    ]);
   });
 });
 

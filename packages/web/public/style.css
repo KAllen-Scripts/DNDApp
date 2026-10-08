@@ -1017,12 +1017,26 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .map-walls .wall-halo { stroke: rgb(0 0 0 / 0.6); stroke-width: 6px; }
 .map-walls .wall { stroke: #4fc3f7; stroke-width: 3px; }
 .map-walls .wall.ai { stroke: #b388ff; }
-.map-walls .door { stroke: #ffb74d; stroke-width: 4px; }
-.map-walls .door.open { stroke-dasharray: 4 6; }
+/* Doors look like doors: frame posts, a thick plank with a dark seam, a badge (door or padlock); open ones swing from the hinge. */
+.map-walls .door { stroke: #c8862e; stroke-width: 8px; stroke-linecap: butt; }
+.map-walls .door-halo { stroke-width: 12px; stroke-linecap: butt; }
+.map-walls .door-grain { stroke: #5a3510; stroke-width: 1.5px; }
 .map-walls .door.locked { stroke: #e0563f; }
+.map-walls .door.open { stroke-width: 5px; }
+.map-walls .door-post { stroke: #f5f0e6; stroke-width: 4px; }
+.map-walls .doorway { stroke: #ffb74d; stroke-width: 2px; stroke-dasharray: 3 5; }
+.map-walls .door-swing { fill: none; stroke: #ffb74d; stroke-width: 1.5px; stroke-dasharray: 2 4; vector-effect: non-scaling-stroke; }
+.map-walls .door-badge-bg { fill: #2b1a0c; stroke: #ffb74d; stroke-width: 1.5; }
+.map-walls .door-badge.locked .door-badge-bg { fill: #e0563f; stroke: #fff; }
+.map-walls .door-badge .glyph-line { fill: none; stroke: #ffd9a0; stroke-width: 1.6; }
+.map-walls .door-badge .glyph-dot { fill: #ffd9a0; }
+.map-walls .door-badge.locked .glyph-line { stroke: #fff; stroke-width: 2; }
+.map-walls .door-badge .glyph-fill { fill: #fff; }
+.map-walls .door-badge .glyph-hole { fill: #e0563f; }
+.map-walls .door-shape.selected .door-halo, .map-walls .door-shape.selected .door-post { stroke: #f2d675; }
 .map-walls .wall.low { stroke: #81c784; stroke-dasharray: 8 5; }
-.map-walls.players .wall-halo, .map-walls.players .door { stroke-width: 5px; }
 .map-walls .wall-draft { stroke: #f2d675; stroke-width: 3px; stroke-dasharray: 6 4; }
+.map-walls polyline { fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .map-walls .wall-draft.door { stroke: #ffb74d; }
 .map-walls .wall-draft.low { stroke: #81c784; }
 .token.hidden-token { opacity: 0.5; border-style: dashed; }

@@ -10,7 +10,7 @@ Read this first when picking the project up on another machine or with another A
 
 ## Current state (2026-10-08)
 
-Rewritten (not appended to) on 2026-10-08 after a housekeeping audit. Everything below is on `main` except the housekeeping PR itself (last item under Git).
+Rewritten (not appended to) on 2026-10-08 after a housekeeping audit. Everything below is on `main` except PR #17 (walls and doors), which is open.
 
 **What's built** (SPEC has the design of each; §6.1 is the list):
 - **Server, end to end with real AI calls:** player notes → transcript upload (with date) → attendance → the **archivist** (an AI with full authority over the knowledge base) → per-player Q&A with privacy. Verified with a realistic two-session privacy scenario through Claude Code. Between sessions the archivist also reads character sheets (in full, then each change with its time), late note changes, handouts, and (with each session) what happened on the maps.
@@ -19,13 +19,14 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit. Everything
 - **Character sheets** (players only): laid out like the 5e sheet, automatic values the player can override (always kept), autosave with version checks, AI upload of existing sheets, spell lookup (SRD, then the books, then the AI), a token picture and a private full picture the AI describes. Can sit beside the map or open in its own window.
 - **Dice:** the server rolls, 3D dice land on its numbers; two rollers, **Deluxe (default)** and Classic; 23 styles plus "Match the page", special effects; rolls shared live with the party, only the DM, or only yourself.
 - **Maps:** the DM imports any map (or a PDF page); the AI reads kind, name, grid and scale, and the server measures the grid; tokens for characters, NPCs and enemies (with pictures), moved live; fog of war, walls, doors and line of sight (drawn or AI-drafted), darkness, lights and darkvision, hit points and conditions, hidden tokens, AI stat blocks, NPCs from the records, private pins, Measure, spell templates, initiative, pings and sketches, waypoints and difficult terrain, other pictures of a map, links between maps.
+- **Walls and doors** (PR #17, open): doors drawn as doors and locked or unlocked with a click; Curve and Circle tools; a Walls tick box hides walls while playing; a thorough AI wall draft (a ruler on the map, a checking pass, close-ups on big maps, arcs and circles, max effort on its own `walls` task, straight walls put on the grid); exact walls, doors and lights from `.dd2vtt`/`.uvtt` files.
 - **The DM:** a **Creatures** tab instead of a character sheet (saved enemies and NPCs placed on maps, several at a time; "Find online" has the AI find one on the web with a picture), an **Archivist** tab (answer the archivist's questions, send corrections), **Handouts** for everyone or chosen players. The DM has no sheet at all: no Sheet tab or window, and the server refuses it.
 - **Look:** 12 themes, 4 page layouts, chat and sheet styles and layouts, plus tab order, the map toolbar's place, which panel goes beside the map, token names and an accent colour. All per browser. The owner hasn't decided which to keep (don't prune yet).
 - **Security:** audited 2026-10-07 (headers, strict CSP: scripts only from the server, body limits, login limits, live streams that end with access). Hosting must go through Cloudflare Tunnel with `HOST=127.0.0.1`.
 
-**Numbers:** schema **v12**, `PIPELINE_VERSION` **10**, **290 tests** passing (`npm test`: server 128, shared 49, web 113). Tests are offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools; the page is tested in jsdom against a real test server (`packages/web/test/page.js`). Headless Chromium is only needed for what jsdom can't show (real layout, WebGL dice, touch). There's no CI: `npm test` is the check.
+**Numbers:** schema **v12**, `PIPELINE_VERSION` **11** (PR #17; 10 on `main`), **298 tests** passing with PR #17 (`npm test`: server 134, shared 49, web 115). Tests are offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools; the page is tested in jsdom against a real test server (`packages/web/test/page.js`). Headless Chromium is only needed for what jsdom can't show (real layout, WebGL dice, touch). There's no CI: `npm test` is the check.
 
-**Git:** `main` has PRs #1–#16 and #18 merged (#16: housekeeping; #18: book lookups checked and fixed). Merges to `main` need the owner's OK.
+**Git:** `main` has PRs #1–#16 and #18 merged (#16: housekeeping; #18: book lookups checked and fixed). PR #17 (walls and doors) is open. Merges to `main` need the owner's OK.
 
 **Installs:**
 - **Owner's PC** (the server): `data/` holds the admin login ("admin") and a player account for Kenny. The database upgrades itself to v12 on the next start. Start with `npm start`, open http://127.0.0.1:4400. `.env` is in the repo root (copy of `.env.example`).
@@ -36,6 +37,8 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit. Everything
 **Real AI not yet tried on:** real maps (reading, walls, lights, terrain, stat blocks), Find online, character picture descriptions, sheets reaching the archivist, map events reaching the archivist, the book tools with all the books. Most page features have only been seen in jsdom or headless Chromium, not on a real phone or GPU.
 
 ## Next steps
+
+0. **Walls and doors (PR #17): review and merge (ask the owner first), then try them for real:** have the real AI draft walls on a gridded dungeon, a map with a round tower or cave, and a big map (over 1800 px, so close-ups are used); see what still needs fixing and how long and how much a draft costs at max effort (2 to 10 calls). Import a `.dd2vtt` from Dungeondraft or a map pack. Check the door badge size at normal zoom. If drafts are still off on clean maps, the next step is snapping walls to the dark lines in the picture (option 4 in `/mnt/project-files/walls-doors/ai-walls-options.md`).
 
 1. **Books folder (owner):** rename `Players Handbook 5th Edition DD.pdf` to `Player's Handbook (2014).pdf` so answers cite a clean title (the DMG's long download name is trimmed automatically). The 2014 DMG is an EPUB, which isn't read. The server warns at start-up about a PDF with no text layer or unreadable page numbers.
 2. **Try things for real** (the owner, with the group; each line is one feature that has only been tested offline):
@@ -569,6 +572,23 @@ Looked at and not used: `@3d-dice/dice-box` (the Babylon.js successor, physics a
 - Merged with the DM's Creatures (PR #15): Creatures is one of the tabs to order and hide, and can go beside the map for the DM (the DM has no Sheet, so "Sheet beside" isn't offered to them). A tab someone doesn't have (the DM's Sheet, a player's Archivist or Creatures) is never the one they land on.
 - `look-boot.js` now cleans every saved value (unknown tabs and tools are dropped; new tabs are added to the end of a saved order) and sends a `dndlook` event on change.
 - **Tests:** 288 after merging main (web 115; new `test/layout.test.js`, and the look and sheet-place tests updated). Checked once in headless Chromium (left toolbar with Ask on the left at 1400 px, bottom toolbar with hidden tools, phone with the side panel stacked, the Look dialog's Map group on a phone); no console errors. Not tried on a real phone.
+### 2026-10-08: A thorough AI wall draft, curved walls, .dd2vtt files, hideable walls
+
+- Owner picked "the cheap four plus .dd2vtt" from the options (`/mnt/project-files/walls-doors/ai-walls-options.md`), then added: the AI struggles with round walls, the DM should be able to hide walls so the map looks clean, and "it is worth being expensive about this part" (maps are set up once).
+- **AI draft** (`maps/read.js` `walls()`): a ruler drawn round the AI's copy (`withRuler`); a check pass with the draft drawn over the map (`withDraft`, purpose `map:walls-check`); maps over 1800 px checked in up to 3 × 3 overlapping close-ups, each keeping what lies in its own part; `curves` (arcs through 3 points) and `circles` in the schema and prompt; `tidyWalls` straightens (4°), joins ends (1% or a third of a square) and puts straight walls' ends on the grid (within 0.3 square); curves keep their shape. New LLM task `walls` (`MODEL_WALLS`, falls back to `MODEL_MAPS`; `EFFORT_WALLS`, default `max`). `PIPELINE_VERSION` 10 → 11 (main took 10 for the book lookups). After the housekeeping split (PR #16) the server side is in `routes/maps.js` and the page side in `map.js`, `map-state.js` and `map-templates.js`.
+- **Curves:** `arcThrough` and `circlePoints` in `shared/src/map.js`; walls carry an optional `group` (pieces of one curve); walls PATCH takes `curve` and `circle`; `remove` takes the whole group. Curve and Circle tools on the page.
+- **Universal VTT** (`maps/uvtt.js`): a `.dd2vtt`/`.uvtt` imported as a map (its picture, exact grid, 5 ft squares, walls, doors, lights; the AI still names and describes it but doesn't replace the grid), or added to a map (`POST .../walls/file`, stretched to the picture). `source: 'file'` on walls and lights (`WALL_SOURCES`).
+- **Hide walls:** a Walls tick box in the DM's map bar (`dndapp.map.showWalls`); unticked, walls, obstacles and lights aren't drawn unless Fog & walls is open.
+- **Tests:** 298 after merging main (new `server/test/walls.test.js`: tidying, close-ups and fallbacks, Universal VTT parsing and import, curves and circles; web: curve, circle, erase, hiding, walls from a file). The ruled picture and the check overlay were looked at once as images. Not tried with the real AI.
+
+### 2026-10-08: Doors look like doors; the DM locks them with a click
+
+- Owner: "DM should be able to lock and unlock doors. Doors should be more obvious as doors." Locking already existed (the Lock tool in Fog & walls, PR #9) but was easy to miss.
+- **Door bar:** outside the drawing tools, a DM click on a door picks it (`state.selectedDoor`) instead of opening it; the bar under the map says Closed / Open / Locked, with Open/Close, Lock/Unlock, Remove and ✕. Uses the existing `PATCH .../walls` (`toggle`, `lock`, `remove`). Players still open a door with a click.
+- **Drawing:** `doorShape()` in `map.js`: light posts across both ends of the doorway, a thick amber plank with a dark seam, and a round badge in the middle (a door glyph, or a red padlock when locked). Open: a dotted doorway, the door swung 90° from its first end, and a dotted swing arc. The picked door's posts turn gold. Same for players (they only get the doors they can see, as before). Picture: `/mnt/project-files/walls-doors/doors-closed-locked-open.png`.
+- **Server:** the DM opening a locked door through `POST .../doors/:wid/toggle` now unlocks it, as the walls PATCH already did.
+- **AI walls:** the owner asked how to improve them; nothing changed in the draft yet. Options and a recommendation are in `/mnt/project-files/walls-doors/ai-walls-options.md`. No prompt change, so `PIPELINE_VERSION` stays.
+- **Tests:** 289 (web: the DM picks a door, locks, unlocks, opens, closes, locking an open door closes it; the player sees the padlock). Looked at once as a static render in headless Chromium.
 
 ### 2026-10-08: Housekeeping: contradictions, duplicates, dead code, file splits, dice cut to two, docs brought up to date
 
