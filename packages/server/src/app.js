@@ -22,11 +22,11 @@ import { SheetConflictError } from './sheets/store.js';
 import { SHEET_FORMAT, computeSheet } from '@dndapp/shared/sheet.js';
 import { parseRoll, rollDice, ROLL_MODES } from '@dndapp/shared/dice.js';
 import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, MAX_WALLS, WALL_KINDS, FOG_MAP, TEMPLATE_SHAPES, MAX_TEMPLATES, MAX_LIGHTS, MAX_TERRAIN, MAX_VARIANTS, MAX_LINKS, nearLink, pathCost, snapToken, wallBetween, doorReach, distanceToWall, dexModifier, stepTurn, canSee, squarePx } from '@dndapp/shared/map.js';
-import { inspectImage } from './maps/read.js';
 import { isPdf, renderPdfPage } from './maps/pdf.js';
 import { createPlayerImages } from './maps/image.js';
 import { newTokenId, isMapId } from './maps/store.js';
-import { PICTURE_KINDS, MAX_PICTURE_BYTES, inspectPicture } from './characters/pictures.js';
+import { PICTURE_KINDS } from './characters/pictures.js';
+import { MAX_PICTURE_BYTES, inspectPicture, inspectMapImage, createImageCache } from './images.js';
 import { canSeeHandout, MAX_HANDOUT_TEXT } from './handouts.js';
 import { CREATURE_KINDS, MAX_CREATURE_NOTES, tokenNames } from './creatures.js';
 
@@ -1272,7 +1272,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       pages = rendered.pages;
       buf = rendered.png;
     }
-    const image = await inspectImage(buf);
+    const image = await inspectMapImage(buf);
     mapAiAllowed(request.user.id);
     let fromFile = filename.replace(/\.[^.]*$/, '').replace(/[_-]+/g, ' ').trim();
     if (pdf && pages > 1) fromFile = `${fromFile || 'Map'}, page ${pdf.page}`;
@@ -1444,7 +1444,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     const buf = Buffer.from(data, 'base64');
     if (!buf.length) throw new BadRequestError('The file is empty.');
     if (isPdf(buf)) throw new BadRequestError('Upload the other picture as a PNG, JPEG or WebP image.');
-    const image = await inspectImage(buf);
+    const image = await inspectMapImage(buf);
     let fitted = sharp(buf).rotate().resize(map.image.width, map.image.height, { fit: 'fill' });
     fitted = image.type === 'image/png' ? fitted.png() : image.type === 'image/webp' ? fitted.webp({ quality: 90 }) : fitted.jpeg({ quality: 90 });
     const fromFile = filename.replace(/\.[^.]*$/, '').replace(/[_-]+/g, ' ').trim().slice(0, 60);
@@ -2013,10 +2013,8 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     return { pins: maps.changePins(cid, map.id, request.user.id, (list) => list.splice(list.findIndex((p) => p.id === request.params.pid), 1)) };
   });
 
-  /** Remove a token (DM). */
-  // NPC and enemy token pictures, cut to a square around what stands out (like players' token pictures).
-  const tokenArtCache = new Map();
-  const TOKEN_ART_PX = 256;
+  // NPC and enemy token pictures and the DM's creatures, cut to a square around what stands out (like players' token pictures).
+  const tokenArt = createImageCache(64);
 
   /**
    * Give an NPC or enemy token a picture (DM): { filename, data (base64),
@@ -2061,11 +2059,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     const token = map.tokens.find((t) => t.id === request.params.tid);
     if (!token?.art || !view.tokens.some((t) => t.id === token.id)) throw new NotFoundError('No token picture');
     const file = archive.tokenImagePath(a.campaign.slug, map.id, token.art.file);
-    if (!tokenArtCache.has(file)) {
-      tokenArtCache.set(file, await sharp(file).rotate().resize({ width: TOKEN_ART_PX, height: TOKEN_ART_PX, fit: 'cover', position: sharp.strategy.attention }).webp({ quality: 88 }).toBuffer());
-      if (tokenArtCache.size > 64) tokenArtCache.delete(tokenArtCache.keys().next().value);
-    }
-    return reply.type('image/webp').header('X-Content-Type-Options', 'nosniff').header('Cache-Control', 'private, max-age=31536000, immutable').send(tokenArtCache.get(file));
+    return reply.type('image/webp').header('X-Content-Type-Options', 'nosniff').header('Cache-Control', 'private, max-age=31536000, immutable').send(await tokenArt.square(file));
   });
 
   app.delete('/campaigns/:cid/maps/:mid/tokens/:tid', async (request) => {
@@ -2176,11 +2170,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     const c = creatures.get(a.cid, request.params.crid);
     if (!c.art) throw new NotFoundError('No picture');
     const file = creatures.picturePath(a.cid, c);
-    if (!tokenArtCache.has(file)) {
-      tokenArtCache.set(file, await sharp(file).rotate().resize({ width: TOKEN_ART_PX, height: TOKEN_ART_PX, fit: 'cover', position: sharp.strategy.attention }).webp({ quality: 88 }).toBuffer());
-      if (tokenArtCache.size > 64) tokenArtCache.delete(tokenArtCache.keys().next().value);
-    }
-    return reply.type('image/webp').header('X-Content-Type-Options', 'nosniff').header('Cache-Control', 'private, max-age=31536000, immutable').send(tokenArtCache.get(file));
+    return reply.type('image/webp').header('X-Content-Type-Options', 'nosniff').header('Cache-Control', 'private, max-age=31536000, immutable').send(await tokenArt.square(file));
   });
 
   /**
