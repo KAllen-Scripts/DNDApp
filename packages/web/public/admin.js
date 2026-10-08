@@ -93,8 +93,6 @@ const HUES = [8, 212, 145, 275, 32, 182, 330, 95];
 const campStyle = (id) => `--hue: ${HUES[(id - 1) % HUES.length]}`;
 const dot = (id) => h('span', { class: 'camp camp-dot', style: campStyle(id), 'aria-hidden': 'true' });
 
-const roleLabel = (m) => `${m.role === 'dm' ? 'DM' : 'player'}${m.character_name ? ` (${m.character_name})` : ''}`;
-
 // Sessions on each campaign card (admin-sessions.js).
 const sessions = createSessions({ run, say, guarded: () => guarded });
 

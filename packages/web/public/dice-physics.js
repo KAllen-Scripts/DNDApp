@@ -2,14 +2,14 @@
  * The throw for the Deluxe dice, worked out in one go before anything is drawn
  * (cannon-es, a few milliseconds): every die's position and turn at each step,
  * when dice hit something (for sounds), and how far to turn each die's numbers
- * so it lands on the server's number (relabel in dice-lite.js). Drawing the
+ * so it lands on the server's number (relabel in dice-shapes.js). Drawing the
  * throw is then only replaying the recording, with no physics while it plays.
  *
  * Units: a die is about 2 across; the table is z = 0 and the viewer looks
  * down from +z, so x and y are across and up the screen.
  */
 import * as CANNON from '/vendor/cannon-es.js';
-import { SHAPES, relabel, quat } from './dice-lite.js';
+import { SHAPES, relabel, quat } from './dice-shapes.js';
 
 export const STEP = 1 / 120; // seconds of throw per recorded step
 const MAX_STEPS = 4.5 / STEP;

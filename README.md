@@ -8,9 +8,9 @@ The design is in [SPEC.md](SPEC.md). Project status, change log and next steps a
 
 ```
 packages/
-  shared/   transcript parser, constants, character sheet rules (also loaded by the web page)
-  server/   Node.js server: API, archive, processing pipeline, Q&A agent; also serves the web page
-  web/      player web page (plain HTML/CSS/JS in public/, no build step)
+  shared/   plain JS both sides use: transcript parser, citation format, character sheet rules, dice, map geometry
+  server/   Node.js server: API (src/routes/), archive, processing pipeline, Q&A agent; also serves the web page
+  web/      the web page (plain HTML/CSS/JS in public/, no build step)
 ```
 
 ## Server setup (host machine)
@@ -28,7 +28,7 @@ Use `--ignore-scripts` (also when adding packages). A plain `npm install` makes 
 
 To use the Anthropic API instead of your subscription, copy `.env.example` to `.env`, set `LLM_PROVIDER=api` and add `ANTHROPIC_API_KEY`. Other settings (models, effort, limits) are in the same file.
 
-When running through Claude Code, the server starts it with everything switched off except its own read-only search tools. That means no file, shell or web tools, no MCP servers or claude.ai connectors, no skills, plugins, hooks or CLAUDE.md files, and no saved sessions. AI usage counts toward your Claude Code limits.
+When running through Claude Code, the server starts it with everything switched off except its own tools. That means no file or shell tools, no MCP servers or claude.ai connectors, no skills, plugins, hooks or CLAUDE.md files, and no saved sessions. Web tools are off too, with one exception: the DM's **Find online** (Creatures tab) lets the AI use WebSearch and WebFetch, and nothing else, to look a creature up. AI usage counts toward your Claude Code limits.
 
 `init` creates the **admin login**. The server listens on `http://127.0.0.1:4400`: open it in a browser and log in with that name and password.
 
@@ -58,7 +58,7 @@ A login lasts 30 days from when it was last used (`LOGIN_DAYS`). After 10 wrong 
 
 ### Character sheets
 
-Each player has a **Sheet** tab, laid out like the official 5e sheet (core stats, then character details, then spells). It's private to them, saved to the server a moment after they stop typing, and archived.
+Each player has a **Sheet** tab (the DM has Creatures instead, and no sheet), laid out like the official 5e sheet (core stats, then character details, then spells). It's private to them, saved to the server a moment after they stop typing, and archived.
 
 - **Automatic values** (modifiers, proficiency bonus, saves, skills, passive Perception, initiative, unarmoured AC, speed, HP, hit dice, spell save DC and attack bonus, spell slots) are worked out from the scores, classes and race using the 2014 Player's Handbook rules. Anything a player types into one of those boxes becomes **their own value**: it's marked, never changed by the rules, and stays until they click ↺.
 - **Upload a sheet**: a PDF (filled-in form, typed or scanned), a photo, a text file, or a sheet downloaded from here. The AI copies it in; numbers on their sheet that differ from the rules are kept as their own values. The uploaded file is archived as it was.
@@ -69,20 +69,16 @@ Each player has a **Sheet** tab, laid out like the official 5e sheet (core stats
 
 The **Dice** button in the player's header opens a dice tray: click dice to build a roll (or type one, like `2d6+3` or `d%`), choose advantage or disadvantage for the next d20, choose **who sees your rolls** (everyone, only the DM, or only you; the DM's "only me" is a secret roll), and see the table's recent rolls, yours and everyone else's you may see. Someone else's roll pops up briefly at the top right. On the Sheet tab, clicking a save, skill, ability name, initiative or spell attack rolls it, and the dice button next to an attack rolls to hit, then offers its damage (doubled dice on a natural 20). Shift-click rolls with advantage, Alt-click with disadvantage.
 
-The **server rolls** (a secure random number). The page then throws 3D dice with real physics and relabels their faces so they land on the server's numbers, so a roll can't be faked from the browser. The 3D dice ([dice-box-threejs](https://github.com/3d-dice/dice-box-threejs), MIT) are served by this server and only loaded the first time someone rolls; by default they take the theme's accent colour, and the tray has 23 other **dice styles** (Dragonfire, Frost, Necrotic, Thylean Bronze, Here Be Dragons, Glitter Party...; textures load only for the style in use). **Effects:** each style's dice leave a trail while they roll (embers, snow, sparks, stars, smoke, bubbles, petals); a natural 20 gets a golden burst and banner, a natural 1 a red flash, smoke and a shake, and damage with every die on its highest face a sparkle, with small chimes when sound is on. Animation, effects and sound can each be switched off in the tray; with reduced motion on, the result just appears. Rolls are kept in the database (not the archive) for the table's roll list.
+The **server rolls** (a secure random number). The page then throws 3D dice with real physics and relabels their faces so they land on the server's numbers, so a roll can't be faked from the browser. The 3D dice (Three.js and cannon-es for Deluxe, [dice-box-threejs](https://github.com/3d-dice/dice-box-threejs), MIT, for Classic) are served by this server and loaded when the dice tray opens; by default they take the theme's accent colour, and the tray has 23 other **dice styles** (Dragonfire, Frost, Necrotic, Thylean Bronze, Here Be Dragons, Glitter Party...; textures load only for the style in use). **Effects:** each style's dice leave a trail while they roll (embers, snow, sparks, stars, smoke, bubbles, petals); a natural 20 gets a golden burst and banner, a natural 1 a red flash, smoke and a shake, and damage with every die on its highest face a sparkle, with small chimes when sound is on. Animation, effects and sound can each be switched off in the tray; with reduced motion on, the result just appears. Rolls are kept in the database (not the archive) for the table's roll list.
 
-**Rollers:** how the dice are shown, lightest last. Set the default for everyone with `DICE_ROLLER` in `.env` (restart the server); anyone can pick another for their own browser under **Roller** in the dice tray.
+**Rollers:** two, set for everyone with `DICE_ROLLER` in `.env` (restart the server); anyone can pick the other for their own browser under **Roller** in the dice tray.
 
 | `DICE_ROLLER` | What you get |
 |---|---|
-| `deluxe` | The fanciest: glossy, metal and see-through dice with reflections, soft shadows, engraved and glowing numbers, sounds, and a pulsing glow on a natural 20, natural 1 or max damage. About 1.7 s. Lowers its own quality on a slow device. |
-| `classic` | The original 3D dice: full physics and shadows. About 3.5 s a roll. |
-| `quick` (default) | The same 3D dice without shadows, tuned to land in about 1.5 s. |
-| `lite` | 3D-looking dice drawn without WebGL or a physics engine. About 1.2 s; smooth on any device. |
-| `flat` | Flat dice that spin in. Under a second. |
-| `none` | Just the result. |
+| `deluxe` (default) | The fanciest: glossy, metal and see-through dice with reflections, soft shadows, engraved and glowing numbers, sounds, and a pulsing glow on a natural 20, natural 1 or max damage. About 1.7 s. Lowers its own quality on a slow device. |
+| `classic` | The original 3D dice ([dice-box-threejs](https://github.com/3d-dice/dice-box-threejs)): full physics and shadows. About 3.5 s a roll. |
 
-Without WebGL, `deluxe`, `classic` and `quick` fall back to `lite`. The dice libraries are sent compressed (about 2.4 MB down to about 0.4 MB) and start loading when the dice tray opens, so the first roll doesn't wait for them.
+If one can't start (no WebGL), the other is tried, then the result just appears. The dice libraries are sent compressed (about 2.4 MB down to about 0.4 MB) and start loading when the dice tray opens, so the first roll doesn't wait for them.
 
 ### Handouts
 
@@ -113,6 +109,16 @@ For running a fight, the DM has:
 - **Hidden** tokens that players don't see at all.
 - **Stat block (AI)**: the AI fills in an enemy's 5e stat block, hit points and size. Only the DM sees it.
 - **From the campaign's records**: put someone the archivist knows about on the map and read their record from there.
+- **Token pictures** for NPCs and enemies (optionally every token with the same name).
+- **Initiative**: start a fight; NPCs roll with their stat block's Dex, players roll their own (or type it); turns and rounds, a ring on whose turn it is.
+- **Darkness and lights**: night or underground, torches and other lights (placed, carried, or suggested by the AI's wall draft), darkvision per token.
+- **Difficult terrain** (costs double), **other pictures** of the same map (night, after a fire) and **links** between maps (stairs, a trapdoor) that take a token through.
+
+Everyone can **Measure** distances, place **spell templates** (sphere, cone, line, cube; from their own spells too) that show who they catch, **ping** a spot or **sketch** a line (gone after a few seconds), and plan a move round corners with waypoints (Space or W while dragging; in a fight it shows movement used against speed).
+
+### The DM's Creatures tab
+
+In place of a character sheet, the DM keeps enemies and friendly NPCs: name, size, colour, hit points, AC, speed, darkvision, a stat block (typed, or filled in by the AI), a picture and private notes. **Place on map** (or **From your creatures** in Add token) puts one or a numbered group on the map; **Save to creatures** keeps a token from a map. **Find online** has the AI search the web (official or homebrew) for a creature and bring back its stat block, a link to where it found it, and a picture if it can download one. The server only downloads from the public internet, never from your PC or home network.
 
 Everyone can drop **pins** with a note on a map; only the person who placed them sees them, not even the DM.
 
@@ -128,7 +134,7 @@ The server is meant to run on your own PC with players reaching it over the inte
 - If Windows asks whether Node.js may accept connections, say no (or private networks only). The tunnel doesn't need it.
 - `TRUST_PROXY` (default `loopback`) lets the server see players' real addresses through a tunnel on this PC, for limiting password guesses. Leave it alone unless the proxy runs on another machine.
 
-What the server does on its own: every page and API response carries security headers (the page only runs its own scripts, can't be put in a frame on another site, and sends no referrer); requests other than uploads are limited to 1 MB, and logins to 16 KB; 30 wrong passwords from one address in 15 minutes stop logins from there (as well as 10 per name); a login can hold at most 20 live connections (map moves, job progress), and those end as soon as the login is logged out, blocked or removed from the campaign; unexpected errors are logged, and people are only told something went wrong (no folder names from your PC); players see that processing failed, not why. The AI runs with no file, shell or web tools (see above), so a transcript, note or picture can't make it touch your PC.
+What the server does on its own: every page and API response carries security headers (the page only runs its own scripts, can't be put in a frame on another site, and sends no referrer); requests other than uploads are limited to 1 MB, and logins to 16 KB; 30 wrong passwords from one address in 15 minutes stop logins from there (as well as 10 per name); a login can hold at most 20 live connections (map moves, job progress), and those end as soon as the login is logged out, blocked or removed from the campaign; unexpected errors are logged, and people are only told something went wrong (no folder names from your PC); players see that processing failed, not why. The AI runs with no file or shell tools (see above), so a transcript, note or picture can't make it touch your PC. The exception to "no web tools" is Find online: Claude Code's WebFetch runs on your PC like the rest of Claude Code, and it hasn't been checked whether it can be pointed at addresses on your home network; what it reads only ends up in a DM-only stat block. The server's own download of the creature's picture is refused for anything but the public internet (`net/fetch-public.js`).
 
 The first time a transcript is processed, the server downloads a small search model (~25 MB) into `data/models`.
 
@@ -136,7 +142,7 @@ The first time a transcript is processed, the server downloads a small search mo
 
 Everything lives in `data/` (git-ignored):
 
-- `data/archive/` is the permanent record: accounts, original transcripts, player notes, character sheets (every change, plus uploaded files), maps (the images or PDFs as imported, every change, and everyone's private pins), speaker map, glossary, DM corrections, and a snapshot of the knowledge base after every archivist run. **Back this folder up.**
+- `data/archive/` is the permanent record: accounts, original transcripts, player notes (every version), character sheets (every change, plus uploaded files), character pictures, maps (the images or PDFs as imported, other pictures of them, token pictures, every change, and everyone's private pins), handouts, the DM's creatures, speaker map, glossary, DM corrections, and a snapshot of the knowledge base after every archivist run. **Back this folder up.**
 - `data/dndapp.sqlite` is the working database. It can be rebuilt from the archive.
 
 ### Rebuilding
@@ -162,7 +168,7 @@ One line per utterance:
 
 ## API
 
-Log in with `POST /login`; send the token it returns as `Authorization: Bearer <token>` on every other request (except `/health` and the web page's files). DM-only and admin-only routes are marked. The admin login also passes DM checks (e.g. for uploading transcripts through the API until the DM screens exist).
+Log in with `POST /login`; send the token it returns as `Authorization: Bearer <token>` on every other request (except `/health` and the web page's files). DM-only and admin-only routes are marked. The admin login also passes DM checks (that's how the admin screen uploads transcripts).
 
 | Method | Path | |
 |---|---|---|
@@ -208,7 +214,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/conversations[/:id]` | Your chats (pinned first, then most recent) |
 | PATCH | `/campaigns/:cid/conversations/:id` | `{ pinned?, title? }`: pin/unpin or rename one of your chats |
 | DELETE | `/campaigns/:cid/conversations/:id` | Delete one of your chats (its questions and answers are erased; it still counts toward the hourly limit) |
-| GET / PUT | `/campaigns/:cid/sheet` | Your character sheet (blank, version 0, if none) / save it `{sheet, version}`. 409 `{error, current}` if it was saved elsewhere since `version`. Campaign members only |
+| GET / PUT | `/campaigns/:cid/sheet` | Your character sheet (blank, version 0, if none) / save it `{sheet, version}`. 409 `{error, current}` if it was saved elsewhere since `version`. Players only: 403 for the DM (who has Creatures), as for all sheet and character picture routes |
 | POST | `/campaigns/:cid/sheet/import` | Upload a sheet `{filename, data (base64), version?}`: PDF, image, text, or a downloaded sheet. Replies with the saved sheet and the AI's `notes` |
 | GET | `/campaigns/:cid/character/pictures` | Your token and full picture `{token, picture}` (each null or `{key, width, height}`) |
 | PUT / DELETE | `/campaigns/:cid/character/token` | Upload your token picture `{filename?, data (base64)}` (shown on your token on maps) / stop using it |

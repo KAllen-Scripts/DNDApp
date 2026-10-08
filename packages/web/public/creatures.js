@@ -5,8 +5,7 @@
  * never see it.
  */
 import { api, fileUrl, h, readBase64, LoggedOut } from './api.js';
-import { marked } from './vendor/marked.js';
-import DOMPurify from './vendor/purify.js';
+import { showStatBlock, statsFound } from './stat-block.js';
 import { TOKEN_SIZES, TOKEN_SIZE_NAMES, TOKEN_COLORS } from './shared/map.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -298,33 +297,13 @@ async function fillStats(c, other) {
     const res = await state.guarded(() => api('POST', `${base()}/${c.id}/stats`, other ? { name: other } : {}));
     if (!res) return;
     upsert(res);
-    status(`Stat block for ${res.name}: ${res.stats.name ?? res.name} (from the AI's memory; check it against the book if it matters).`);
+    status(statsFound(res.name, res.stats.name));
   } catch (err) {
     report(err);
   }
 }
 
-function statsDialog(c) {
-  const dialog = $('#creature-dialog');
-  const st = c.stats;
-  const body = h('div', { class: 'a stat-text' });
-  body.innerHTML = DOMPurify.sanitize(marked.parse(st.text), { FORBID_TAGS: ['img', 'a', 'style', 'form', 'input', 'button'], FORBID_ATTR: ['style'] });
-  const other = h('input', { placeholder: 'Another creature, e.g. Bugbear', maxLength: 100 });
-  dialog.replaceChildren(
-    h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => {
-      e.preventDefault();
-      if (other.value.trim()) fillStats(c, other.value.trim());
-      dialog.close();
-    } },
-      h('h2', {}, `${c.name}: ${st.name || 'stat block'}`),
-      h('p', { class: 'muted small' }, [st.ac != null ? `AC ${st.ac}` : '', st.hp_formula ? `HP ${st.hp_formula}` : '', st.speed, st.challenge ? `CR ${st.challenge}` : ''].filter(Boolean).join(' · ')),
-      body,
-      h('p', { class: 'muted small' }, st.source === 'ai' ? "From the AI's memory of the 5e rules. Only you see this." : st.source === 'web' ? 'Found on the web by the AI; check it. Only you see this.' : 'Only you see this.'),
-      h('div', { class: 'map-dialog-actions' }, other, h('button', { class: 'ghost' }, 'Look up instead'), h('span', { class: 'spacer' }), h('button', { type: 'button', class: 'primary', onclick: () => dialog.close() }, 'Close')),
-    ),
-  );
-  dialog.showModal();
-}
+const statsDialog = (c) => showStatBlock($('#creature-dialog'), { title: c.name, stats: c.stats, onLookup: (name) => fillStats(c, name) });
 
 function choosePicture(c) {
   const input = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', hidden: true });

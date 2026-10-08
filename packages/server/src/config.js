@@ -130,10 +130,10 @@ export const config = {
   },
 
   dice: {
-    // How rolled dice are shown on everyone's page (each player can still pick another in the dice tray):
-    // classic (3D with physics and shadows, slowest), quick (the same 3D dice, tuned to land fast),
-    // lite (3D-looking dice without WebGL), flat (flat dice that spin in), none (just the result).
-    roller: env.DICE_ROLLER || 'quick',
+    // How rolled dice are shown on everyone's page (each player can still pick the other in the dice tray):
+    // deluxe (glossy, metal and see-through dice with reflections and sounds, ~1.7 s) or classic (the
+    // original 3D dice with physics and shadows, ~3.5 s). Without WebGL the result just appears.
+    roller: env.DICE_ROLLER || 'deluxe',
   },
 
   // Applies to the API provider only (Claude Code runs on the subscription).

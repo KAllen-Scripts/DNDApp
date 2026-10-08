@@ -14,18 +14,13 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import sharp from 'sharp';
+import { inspectPicture, createImageCache } from '../images.js';
 import { z } from 'zod';
-import { BadRequestError, NotFoundError } from '../store.js';
+import { NotFoundError } from '../store.js';
 
 export const PICTURE_KINDS = ['token', 'picture'];
-const FORMATS = { png: { ext: 'png', type: 'image/png' }, jpeg: { ext: 'jpg', type: 'image/jpeg' }, webp: { ext: 'webp', type: 'image/webp' }, gif: { ext: 'gif', type: 'image/gif' } };
-export const MAX_PICTURE_BYTES = 10 * 1024 * 1024;
-// A small file can claim a huge size and take gigabytes to open; real photos are well under this.
-export const MAX_PICTURE_PIXELS = 100_000_000;
-const TOKEN_PX = 256; // tokens are drawn small; this is sharp on a zoomed-in map
 const PICTURE_PX = 1600; // the full picture as shown on the sheet
 const AI_PX = 1568;
-const CACHE_SIZE = 32;
 
 const fileShape = z.object({ file: z.string(), type: z.string(), width: z.number(), height: z.number(), uploaded_at: z.string() });
 
@@ -38,28 +33,8 @@ export function normalizePictures(p = {}) {
 /** Changes whenever the image does, so browsers fetch the new one. */
 export const pictureKey = (entry) => (entry ? entry.file.replace(/\.[^.]*$/, '') : null);
 
-/**
- * Check an uploaded picture.
- * @returns {Promise<{ ext, type, width, height }>}
- */
-export async function inspectPicture(buf) {
-  if (!buf.length) throw new BadRequestError('The file is empty.');
-  if (buf.length > MAX_PICTURE_BYTES) throw new BadRequestError('That picture is too big. Use one under 10 MB.');
-  let meta;
-  try {
-    meta = await sharp(buf).metadata();
-  } catch {
-    throw new BadRequestError("That file isn't a picture that can be read. Use a PNG, JPEG, WebP or GIF.");
-  }
-  const format = FORMATS[meta.format];
-  if (!format) throw new BadRequestError('Use a PNG, JPEG, WebP or GIF picture.');
-  if (!(meta.width * meta.height <= MAX_PICTURE_PIXELS)) throw new BadRequestError('That picture has too many pixels. Use a smaller one.');
-  const turned = (meta.orientation ?? 1) >= 5;
-  return { ...format, width: turned ? meta.height : meta.width, height: turned ? meta.width : meta.height };
-}
-
 export function createPictures({ db, archive, store }) {
-  const cache = new Map(); // `${path}:${kind}` -> Buffer
+  const images = createImageCache(32);
 
   const read = (campaignId, userId) => {
     const r = db.prepare('SELECT data FROM character_pictures WHERE campaign_id = ? AND user_id = ?').get(campaignId, userId);
@@ -126,16 +101,7 @@ export function createPictures({ db, archive, store }) {
       const entry = read(campaignId, userId)[kind];
       if (!entry) throw new NotFoundError(kind === 'token' ? 'No token picture' : 'No picture');
       const file = archive.characterImagePath(store.getCampaign(campaignId).slug, userId, entry.file);
-      const key = `${file}:${kind}`;
-      if (!cache.has(key)) {
-        let img = sharp(file).rotate();
-        img = kind === 'token'
-          ? img.resize({ width: TOKEN_PX, height: TOKEN_PX, fit: 'cover', position: sharp.strategy.attention })
-          : img.resize({ width: PICTURE_PX, height: PICTURE_PX, fit: 'inside', withoutEnlargement: true });
-        cache.set(key, await img.webp({ quality: 88 }).toBuffer());
-        if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value);
-      }
-      return { buf: cache.get(key), type: 'image/webp' };
+      return { buf: await (kind === 'token' ? images.square(file) : images.shrunk(file, PICTURE_PX)), type: 'image/webp' };
     },
   };
   return pictures;

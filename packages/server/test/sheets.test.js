@@ -103,6 +103,12 @@ test('character sheet: blank to start, saved and versioned, private, archived as
     const alex = (await t.request('GET', url, { as: t.alex.token })).json();
     assert.equal(alex.version, 0);
     assert.equal(alex.sheet.name, 'Lyra');
+    // The DM has Creatures instead of a sheet (and no character pictures).
+    const dmSheet = await t.request('GET', url);
+    assert.equal(dmSheet.statusCode, 403);
+    assert.match(dmSheet.json().error, /Creatures/);
+    assert.equal((await t.request('PUT', url, { body: { sheet: first.sheet, version: 0 } })).statusCode, 403);
+    assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/character/pictures`)).statusCode, 403);
     t.auth.removeMember(t.campaign.id, t.dm.id);
     assert.equal((await t.request('GET', url)).statusCode, 403);
 

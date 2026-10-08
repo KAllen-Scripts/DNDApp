@@ -2,7 +2,7 @@
  * Stand-in for the 3D dice library (@3d-dice/dice-box-threejs), which needs
  * WebGL. It records what the page asked it to roll (the "forced" notation
  * that makes the dice land on the server's numbers) and which roller made it
- * (QuickDiceBox for the tuned one, FakeDiceBox for the classic).
+ * (FakeDiceBox, the classic roller).
  */
 globalThis.__diceBox ??= { thrown: [], made: [], fail: false };
 
@@ -14,7 +14,6 @@ export default class FakeDiceBox {
     this.sounds = options.sounds;
     this.diceList = [];
     this.container = document.querySelector(selector);
-    this.world = { steps: [], step(dt) { this.steps.push(dt); } };
     (globalThis.__diceBox.made ??= []).push(this.constructor.name);
     globalThis.__diceBox.last = this;
   }
@@ -31,10 +30,6 @@ export default class FakeDiceBox {
 
   async roll(notation) {
     globalThis.__diceBox.thrown.push(notation);
-  }
-
-  spawnDice(vectors, die = false) {
-    if (!die) this.diceList.push({ body: {} });
   }
 
   clearDice() {}
