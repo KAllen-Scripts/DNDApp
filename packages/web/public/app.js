@@ -3,7 +3,7 @@
  * and shows what comes back. Players get Ask and Notes; the admin login gets
  * the admin screen (admin.js) instead. The Sheet tab is in sheet.js.
  */
-import { api, stream, storage, getToken, setToken, LoggedOut } from './api.js';
+import { api, stream, storage, getToken, setToken, LoggedOut, h } from './api.js';
 import { showAdmin } from './admin.js';
 import { loadSheet, initSheetActions, flush as flushSheet } from './sheet.js';
 import { marked } from './vendor/marked.js';
@@ -11,6 +11,8 @@ import DOMPurify from './vendor/purify.js';
 import { initLook } from './look.js';
 import { initDice, setDiceCampaign } from './dice.js';
 import { loadMaps, initMapActions, stopMaps } from './map.js';
+import { loadTable, stopTable, handoutsOpened } from './table.js';
+import { loadArchivist, initArchivistActions } from './dm.js';
 import { SHEET_WINDOW, windowCampaign, sheetBeside, placeSheet, setSheetCampaign, initSheetPlace } from './sheet-place.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -170,19 +172,29 @@ async function enterCampaign(campaign) {
   $('#character').textContent = describe(campaign);
   $('#switch-campaign').hidden = state.me.campaigns.length < 2;
   newConversation();
-  setDiceCampaign({ campaignId: campaign.id, guarded, roller: state.me.dice?.roller });
+  const isDm = campaign.role === 'dm';
+  // The Archivist tab is the DM's; a player who was on it goes back to Ask.
+  $('[data-tab=archivist]').hidden = !isDm;
+  if (!isDm && $('[data-tab=archivist]').getAttribute('aria-selected') === 'true') $('[data-tab=ask]').click();
   setSheetCampaign(campaign.id);
   if (SHEET_WINDOW) {
-    // The popped-out sheet: nothing else to load.
+    // The popped-out sheet: only the sheet, and dice to roll from it.
     document.title = `${campaign.character_name || 'Sheet'} · ${campaign.name}`;
     showTab('sheet');
-    return loadSheet({ campaignId: campaign.id, userId: state.me.user.id, guarded });
+    await Promise.all([
+      setDiceCampaign({ campaignId: campaign.id, guarded, roller: state.me.dice?.roller, isDm, userId: state.me.user.id }),
+      loadSheet({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
+    ]);
+    return;
   }
   await Promise.all([
+    setDiceCampaign({ campaignId: campaign.id, guarded, roller: state.me.dice?.roller, isDm, userId: state.me.user.id }),
     loadConversations(),
     loadNotes(),
     loadSheet({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
     loadMaps({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
+    loadTable({ campaignId: campaign.id, guarded }),
+    isDm ? loadArchivist({ campaignId: campaign.id, guarded }) : null,
   ]);
 }
 
@@ -213,6 +225,7 @@ for (const button of document.querySelectorAll('.logout')) {
   button.addEventListener('click', async () => {
     await flushSheet().catch(() => {});
     stopMaps();
+    stopTable();
     await api('POST', '/logout').catch(() => {});
     showLogin();
   });
@@ -240,6 +253,7 @@ for (const tab of document.querySelectorAll('[data-tab]')) {
   tab.addEventListener('click', () => {
     showTab(tab.dataset.tab);
     if (tab.dataset.tab === 'ask' || tab.dataset.tab === 'notes') $(`#tab-${tab.dataset.tab} textarea`)?.focus();
+    if (tab.dataset.tab === 'handouts') handoutsOpened();
   });
 }
 
@@ -620,22 +634,58 @@ async function loadNotes() {
   }
   box.replaceChildren(
     ...[...byDate].map(([date, list]) => {
-      const section = document.createElement('section');
-      const h = document.createElement('h2');
-      h.textContent = formatDate(date);
-      section.append(h);
-      for (const n of list) {
-        const div = document.createElement('div');
-        div.className = 'note card';
-        const time = document.createElement('time');
-        time.dateTime = n.written_at;
-        time.textContent = new Date(n.written_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-        div.append(time, document.createTextNode(n.text));
-        section.append(div);
-      }
+      const section = h('section', {}, h('h2', {}, formatDate(date)));
+      for (const n of list) section.append(noteCard(n));
       return section;
     }),
   );
+}
+
+/** One of your notes, with Edit and Delete. Editing swaps the text for a box in place. */
+function noteCard(n) {
+  const div = h('div', { class: 'note card', 'data-id': n.id });
+  const time = h('time', { datetime: n.written_at }, new Date(n.written_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }));
+  const show = () => div.replaceChildren(
+    h('div', { class: 'note-head' }, time, n.edited_at ? h('span', { class: 'muted note-edited', title: `Edited ${new Date(n.edited_at).toLocaleString()}` }, '(edited)') : null),
+    h('div', { class: 'note-text' }, n.text),
+    h('span', { class: 'note-actions' },
+      h('button', { type: 'button', class: 'link small', onclick: edit }, 'Edit'),
+      h('button', { type: 'button', class: 'link small danger', onclick: remove }, 'Delete')),
+  );
+  const edit = () => {
+    const box = h('textarea', { rows: 3, maxLength: 10000, 'aria-label': 'Edit your note' });
+    box.value = n.text;
+    const save = async () => {
+      const text = box.value.trim();
+      if (!text || text === n.text) return show();
+      try {
+        const saved = await guarded(() => api('PATCH', `${base()}/notes/${n.id}`, { text }));
+        if (saved) Object.assign(n, saved);
+        show();
+      } catch (err) {
+        alert(`Couldn't save your note: ${err.message}`);
+      }
+    };
+    box.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) save();
+      if (e.key === 'Escape') show();
+    });
+    div.replaceChildren(time, box, h('div', { class: 'composer-row' },
+      h('button', { type: 'button', class: 'ghost', onclick: show }, 'Cancel'),
+      h('button', { type: 'button', class: 'primary', onclick: save }, 'Save')));
+    box.focus();
+  };
+  const remove = async () => {
+    if (!confirm('Delete this note?')) return;
+    try {
+      await guarded(() => api('DELETE', `${base()}/notes/${n.id}`));
+      await loadNotes();
+    } catch (err) {
+      alert(`Couldn't delete your note: ${err.message}`);
+    }
+  };
+  show();
+  return div;
 }
 
 $('#note-form').addEventListener('submit', (e) => {
@@ -668,6 +718,7 @@ initSheetActions();
 initSheetPlace({ onChange: () => showTab(currentTab) });
 showTab(currentTab);
 initMapActions();
+initArchivistActions();
 initDice();
 initLook();
 start().catch((err) => showLogin(err.message));

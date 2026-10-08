@@ -23,12 +23,12 @@ function olderDb(file, version, change) {
   db.close();
 }
 
-test('a new database: folders made, current schema, version 10', () => {
+test('a new database: folders made, current schema, version 11', () => {
   const file = tmp();
   const db = openDb(file);
   try {
     assert.ok(fs.existsSync(file));
-    assert.equal(db.pragma('user_version', { simple: true }), 10);
+    assert.equal(db.pragma('user_version', { simple: true }), 11);
     for (const t of ['campaigns', 'users', 'sessions', 'kb_records', 'character_sheets', 'maps', 'map_pins', 'map_explored', 'character_pictures', 'conversations']) assert.ok(tables(db).includes(t), t);
     assert.equal(db.pragma('foreign_keys', { simple: true }), 1);
   } finally {
@@ -36,11 +36,29 @@ test('a new database: folders made, current schema, version 10', () => {
   }
   // Opening it again changes nothing.
   const again = openDb(file);
-  assert.equal(again.pragma('user_version', { simple: true }), 10);
+  assert.equal(again.pragma('user_version', { simple: true }), 11);
   again.close();
   const mem = openDb(':memory:');
-  assert.equal(mem.pragma('user_version', { simple: true }), 10);
+  assert.equal(mem.pragma('user_version', { simple: true }), 11);
   mem.close();
+});
+
+test('v10 → v11: notes can be edited and deleted; handouts, rolls and archivist marks added', () => {
+  const file = tmp();
+  olderDb(file, 10, (db) => {
+    db.exec('ALTER TABLE player_notes DROP COLUMN edited_at; ALTER TABLE player_notes DROP COLUMN deleted_at; ALTER TABLE sessions DROP COLUMN processed_at; DROP TABLE handouts; DROP TABLE rolls; DROP TABLE archivist_marks');
+    db.prepare("INSERT INTO campaigns (name, slug) VALUES ('Old', 'old')").run();
+    db.prepare("INSERT INTO player_notes (id, campaign_id, user_id, session_date, written_at, text) VALUES ('n1', 1, 1, '2026-10-01', '2026-10-01T20:00:00Z', 'A key')").run();
+  });
+  const db = openDb(file);
+  try {
+    assert.equal(db.pragma('user_version', { simple: true }), 11);
+    assert.ok(columns(db, 'player_notes').includes('edited_at') && columns(db, 'player_notes').includes('deleted_at') && columns(db, 'sessions').includes('processed_at'));
+    assert.deepEqual(db.prepare('SELECT text, edited_at, deleted_at FROM player_notes').get(), { text: 'A key', edited_at: null, deleted_at: null });
+    for (const t of ['handouts', 'rolls', 'archivist_marks']) assert.ok(tables(db).includes(t), t);
+  } finally {
+    db.close();
+  }
 });
 
 test('v4 (the live install) and v5 → v10: conversations can be pinned and deleted; maps, picture and explored tables added', () => {
@@ -53,7 +71,7 @@ test('v4 (the live install) and v5 → v10: conversations can be pinned and dele
   });
   const db = openDb(file);
   try {
-    assert.equal(db.pragma('user_version', { simple: true }), 10);
+    assert.equal(db.pragma('user_version', { simple: true }), 11);
     assert.ok(columns(db, 'conversations').includes('pinned'));
     assert.ok(columns(db, 'conversations').includes('deleted_at'));
     assert.deepEqual(db.prepare('SELECT title, pinned, deleted_at FROM conversations').get(), { title: 'Where is the mill?', pinned: 0, deleted_at: null });

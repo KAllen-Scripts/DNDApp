@@ -86,7 +86,15 @@ export function normalizeToken(t = {}, map) {
     darkvision: num(t.darkvision, { min: 0, max: 10_000, fallback: 0 }),
     // Walking speed in the map's unit when the DM sets it; null to use the sheet or stat block's.
     speed: num(t.speed, { min: 0, max: 10_000, fallback: null }),
+    // A picture the DM gave an NPC or enemy (a player character shows its player's own token picture instead).
+    art: kind !== 'pc' ? normalizeTokenArt(t.art) : null,
   };
+}
+
+/** A token picture's file in the map's archive folder (tokens/<file>): { file, type }, or null. */
+export function normalizeTokenArt(a) {
+  if (!a || typeof a !== 'object' || typeof a.file !== 'string' || !/^[\w.-]{1,80}$/.test(a.file)) return null;
+  return { file: a.file, type: str(a.type, 40) };
 }
 
 /** A light's reach: { bright, dim } (dim is the ring beyond the bright light), or null for no light. */

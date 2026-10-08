@@ -9,7 +9,8 @@
  *     speakers.json                    current speaker map  (+ history/speakers-<ts>.json)
  *     glossary.json                    current glossary     (+ history/glossary-<ts>.json)
  *     corrections.jsonl                DM corrections, append-only
- *     player-notes/<YYYY-MM-DD>.jsonl  private player notes, append-only
+ *     player-notes/<YYYY-MM-DD>.jsonl  private player notes, append-only; an edit or a
+ *                                       delete is a later line with the same id
  *     character-sheets/<user id>.jsonl each save's changes to a player's sheet, append-only
  *     character-sheets/uploads/        sheets players uploaded, as uploaded
  *     maps/<map id>/image.<ext>        a map the DM imported, as uploaded
@@ -18,6 +19,9 @@
  *     maps/<map id>/pins/<user id>.jsonl  someone's private pins on it (the whole list each time)
  *     characters/<user id>/<kind>-<ts>.<ext>  a player's token or full picture of their character, as uploaded
  *     characters/<user id>/pictures.jsonl     which of them are in use (the whole record each time)
+ *     handouts/<id>/<picture file>     a handout's picture, as uploaded
+ *     handouts/<id>/changes.jsonl      the whole handout after each change, append-only
+ *     maps/<map id>/tokens/<file>      a picture the DM gave a token (NPCs, enemies), as uploaded
  *     sessions/0001/
  *       transcript.txt                 byte-for-byte as uploaded, read-only
  *       meta.json                      number, title, played_on, sha256
@@ -150,8 +154,16 @@ export function createArchive(root) {
     appendPlayerNote: (slug, note) =>
       appendLine(path.join(campaignDir(slug), 'player-notes', `${note.session_date}.jsonl`), note),
 
+    /** Every line of one session date's notes file (notes, then any edits and deletes), oldest first. */
+    readPlayerNotes: (slug, date) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) throw new Error(`Bad date: ${date}`);
+      return readLines(path.join(campaignDir(slug), 'player-notes', `${date}.jsonl`));
+    },
+
     appendSheetChanges: (slug, userId, entry) =>
       appendLine(path.join(campaignDir(slug), 'character-sheets', `${Number(userId)}.jsonl`), entry),
+
+    readSheetChanges: (slug, userId) => readLines(path.join(campaignDir(slug), 'character-sheets', `${userDir(userId)}.jsonl`)),
 
     /** Keep an uploaded sheet file exactly as uploaded. @returns {string} its file name */
     saveSheetUpload(slug, userId, filename, buf) {
@@ -188,6 +200,26 @@ export function createArchive(root) {
     characterImagePath: (slug, userId, file) => path.join(campaignDir(slug), 'characters', userDir(userId), path.basename(file)),
 
     appendCharacterPictures: (slug, userId, entry) => appendLine(path.join(campaignDir(slug), 'characters', userDir(userId), 'pictures.jsonl'), entry),
+
+    /** Keep a handout's picture exactly as uploaded (never replaced). */
+    saveHandoutImage(slug, id, file, buf) {
+      const dest = path.join(campaignDir(slug), 'handouts', mapDir(id), path.basename(file));
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, buf, { flag: 'wx' });
+    },
+
+    handoutImagePath: (slug, id, file) => path.join(campaignDir(slug), 'handouts', mapDir(id), path.basename(file)),
+
+    appendHandout: (slug, id, entry) => appendLine(path.join(campaignDir(slug), 'handouts', mapDir(id), 'changes.jsonl'), entry),
+
+    /** Keep a token's picture (the DM's, for an NPC or enemy) exactly as uploaded (never replaced). */
+    saveTokenImage(slug, mapId, file, buf) {
+      const dest = path.join(campaignDir(slug), 'maps', mapDir(mapId), 'tokens', path.basename(file));
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, buf, { flag: 'wx' });
+    },
+
+    tokenImagePath: (slug, mapId, file) => path.join(campaignDir(slug), 'maps', mapDir(mapId), 'tokens', path.basename(file)),
 
     /** Knowledge-base snapshot and journal after an archivist run. */
     saveRunOutput(slug, runLabel, files) {
@@ -243,6 +275,14 @@ export function createArchive(root) {
               .filter((d) => /^\d+$/.test(d))
               .map((d) => ({ user_id: Number(d), entries: readLines(path.join(charactersDir, d, 'pictures.jsonl')) }))
           : [];
+        const handoutsDir = path.join(campaignDir(slug), 'handouts');
+        const handouts = fs.existsSync(handoutsDir)
+          ? fs
+              .readdirSync(handoutsDir)
+              .filter((d) => /^[a-f0-9]{10}$/.test(d))
+              .map((id) => readLines(path.join(handoutsDir, id, 'changes.jsonl')).at(-1))
+              .filter(Boolean)
+          : [];
         yield {
           campaign,
           sessions,
@@ -254,6 +294,7 @@ export function createArchive(root) {
           sheets,
           maps,
           characters,
+          handouts,
         };
       }
     },

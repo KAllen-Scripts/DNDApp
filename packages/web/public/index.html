@@ -115,6 +115,8 @@
         <button role="tab" data-tab="notes" aria-selected="false"><span class="tab-icon" aria-hidden="true">✎</span><span>Notes</span></button>
         <button role="tab" data-tab="sheet" aria-selected="false"><span class="tab-icon" aria-hidden="true">⚔</span><span>Sheet</span></button>
         <button role="tab" data-tab="map" aria-selected="false"><span class="tab-icon" aria-hidden="true">⌖</span><span>Map</span></button>
+        <button role="tab" data-tab="handouts" aria-selected="false"><span class="tab-icon" aria-hidden="true">✉</span><span>Handouts</span></button>
+        <button role="tab" data-tab="archivist" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">☰</span><span>Archivist</span></button>
       </nav>
       <button id="dice-open" class="ghost dice-open" title="Roll dice">Dice</button>
       <button class="ghost look-open" title="Themes and layouts">Look</button>
@@ -164,6 +166,29 @@
         </div>
       </form>
       <div id="notes" class="notes"></div>
+    </section>
+
+    <!-- Handouts (table.js): what the DM gave you; the DM gives them here. -->
+    <section id="tab-handouts" class="panel handouts-panel" hidden>
+      <div id="handout-form-box"></div>
+      <div id="handouts" class="handouts"></div>
+    </section>
+
+    <!-- The DM's questions from the archivist and corrections (dm.js). -->
+    <section id="tab-archivist" class="panel archivist-panel" hidden>
+      <h2>Questions from the archivist</h2>
+      <p class="muted small">The AI that keeps the campaign's records asks here when sources disagree. Your answer becomes a correction.</p>
+      <div id="dm-questions" class="dm-questions"></div>
+      <h2>Correct something</h2>
+      <form id="correction-form" class="composer note-composer">
+        <textarea name="text" rows="3" maxlength="10000" placeholder="e.g. The innkeeper is Brother Hal, not Hall. The party paid the Baron back in session 4." required aria-label="Correction"></textarea>
+        <div class="composer-row">
+          <span id="dm-status" class="muted small" role="status"></span>
+          <button type="submit" class="primary">Send to the archivist</button>
+        </div>
+      </form>
+      <h3>Earlier corrections</h3>
+      <ol id="dm-corrections" class="dm-corrections"></ol>
     </section>
 
     <!-- Character sheet (sheet.js) -->

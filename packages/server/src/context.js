@@ -9,6 +9,8 @@ import { createEmbedder } from './embeddings.js';
 import { createSearch } from './search.js';
 import { createKB } from './kb/store.js';
 import { createArchivist } from './kb/archivist.js';
+import { createUpdates } from './kb/updates.js';
+import { createHandouts } from './handouts.js';
 import { createPipeline } from './pipeline/ingest.js';
 import { createJobs } from './jobs.js';
 import { createQA } from './qa/agent.js';
@@ -32,13 +34,18 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   }
   const search = createSearch({ db, embedder });
   const kb = createKB({ db, search, config });
-  const sheets = createSheets({ db, archive, store });
+  // A changed sheet reaches the archivist once the player stops editing for a while.
+  const sheets = createSheets({ db, archive, store, onSave: (cid) => jobs.scheduleUpdates(cid) });
   const pictures = createPictures({ db, archive, store });
   const maps = createMaps({ db, archive, store, pictures, sheets });
   // What happened on the maps on a session's day goes to the archivist with the transcript.
   const archivist = createArchivist({ db, store, kb, search, llm, config, mapEvents: (cid, date) => maps.eventsOn(cid, date, config.notes.rolloverHour) });
-  const pipeline = createPipeline({ db, store, archive, search, kb, archivist, config });
-  const jobs = createJobs({ db, store, search, pipeline, log });
+  const handouts = createHandouts({ db, archive, store });
+  handouts.events.on('update', ({ campaign_id }) => jobs.scheduleUpdates(campaign_id));
+  // Sheet changes, late note edits and handouts reach the archivist between sessions.
+  const updates = createUpdates({ db, store, archive, handoutsBetween: handouts.forArchivist });
+  const pipeline = createPipeline({ db, store, archive, search, kb, archivist, updates, config });
+  const jobs = createJobs({ db, store, search, pipeline, config, log });
   const books = createBooks({ dir: config.booksDir, log });
   const qa = createQA({ db, store, kb, search, books, llm, config });
   const spells = createSpells({ books, llm });
@@ -54,6 +61,8 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
     await pipeline.reindexNotes(c.id);
   }
   maps.failInterrupted();
+  // Changes made while the server was off (or before its last run finished) still reach the archivist.
+  for (const { id } of db.prepare('SELECT id FROM campaigns').all()) if (updates.pendingSince(id)) jobs.scheduleUpdates(id);
 
-  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, pipeline, jobs, qa, books, spells, sheets, sheetImport, maps, mapReader, statBlocks, pictures, pictureDescriber, restored };
+  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, pipeline, jobs, qa, books, spells, sheets, sheetImport, maps, mapReader, statBlocks, pictures, pictureDescriber, restored };
 }
