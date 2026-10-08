@@ -17,6 +17,7 @@ import {
   fogMask, FOG_MASK_FILL, snapWallPoint, nearestWall,
   LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, TEMPLATE_SHAPES, TEMPLATE_SHAPE_NAMES, TEMPLATE_COLOR, templateShape, tokensInTemplate, inTemplate, snapTemplatePoint, spellArea,
 } from './shared/map.js';
+import { creatureList, creatureSaved } from './creatures.js';
 
 const $ = (sel) => document.querySelector(sel);
 const KIND_LABELS = { battle: 'Battle map', dungeon: 'Dungeon', building: 'Building', town: 'Town', region: 'Region', world: 'World', other: 'Map' };
@@ -846,6 +847,7 @@ function renderSelection() {
       state.canEdit && !token.stats && token.kind !== 'pc' ? h('button', { class: 'ghost', title: 'Fill in its stat block, hit points and size with the AI', onclick: () => fillStats(token) }, 'Stat block (AI)') : null,
       state.canEdit && token.kind !== 'pc' ? h('button', { class: 'ghost', title: 'Give this token a picture (players see it on the map)', onclick: () => chooseTokenPicture(token) }, token.picture ? 'New picture' : 'Picture') : null,
       state.canEdit && token.kind !== 'pc' && token.picture ? h('button', { class: 'ghost', title: 'Go back to initials', onclick: () => removeTokenPicture(token) }, 'No picture') : null,
+      state.canEdit && token.kind !== 'pc' ? h('button', { class: 'ghost', title: 'Keep this one (picture, stat block and all) in your creatures, to put on other maps', onclick: () => saveCreature(token) }, 'Save to creatures') : null,
       state.canEdit ? h('button', { class: 'ghost', onclick: () => tokenDialog(token) }, 'Edit') : null,
       state.canEdit ? h('button', { class: 'ghost danger', onclick: () => removeToken(token) }, 'Remove') : null,
       h('button', { class: 'ghost icon-btn', 'aria-label': 'Close', onclick: () => select(null) }, '✕'),
@@ -1802,6 +1804,14 @@ async function tokenDialog(token = null) {
     if (!token) kind.value = /monster|creature|enem|villain|beast|foe/i.test(r.kind) ? 'enemy' : 'npc';
     sync();
   });
+  // One of the DM's saved creatures instead (the Creatures tab).
+  const saved = token ? [] : creatureList();
+  const fromLibrary = h('select', {}, new Option('Make a new one here', ''), ...saved.map((c) => new Option(`${c.name} (${c.kind === 'npc' ? 'NPC' : 'enemy'})`, c.id)));
+  fromLibrary.addEventListener('change', () => {
+    const c = saved.find((x) => x.id === fromLibrary.value);
+    if (c) placeDialog(c);
+  });
+  const libraryField = saved.length ? field('From your creatures', fromLibrary) : null;
   const lookUp = h('input', { type: 'checkbox', checked: true });
   const lookUpField = h('label', { class: 'map-check' }, lookUp, ' Fill in its stat block, hit points and size with the AI');
   let colorTouched = !!token;
@@ -1854,6 +1864,7 @@ async function tokenDialog(token = null) {
       state.guarded(save).then(() => dialog.close()).catch(report);
     } },
       h('h2', {}, token ? 'Change token' : 'Add a token'),
+      libraryField,
       recordField,
       field('Kind', kind),
       playerField,
@@ -1871,6 +1882,64 @@ async function tokenDialog(token = null) {
   );
   dialog.onclose = null;
   dialog.showModal();
+}
+
+/**
+ * Put one of the DM's creatures on the map on screen (from the Creatures tab
+ * or Add token): how many, and whether hidden. They appear in a row in the
+ * middle of what's on screen, numbered when there are several.
+ */
+export function placeCreature(c) {
+  document.querySelector('[data-tab=map]').click();
+  if (!state.current) return status('Import a map first, then place your creatures on it.', true);
+  placeDialog(c);
+}
+
+function placeDialog(c) {
+  const map = state.current;
+  const dialog = $('#map-dialog');
+  const count = h('input', { name: 'count', type: 'number', min: '1', max: '20', step: '1', value: '1' });
+  const hidden = h('input', { type: 'checkbox' });
+  const place = async () => {
+    const box = $('#map-view').getBoundingClientRect();
+    const middle = toImage(box.left + box.width / 2, box.top + box.height / 2);
+    const n = Math.min(20, Math.max(1, Math.round(Number(count.value)) || 1));
+    const res = await api('POST', `${base()}/${map.id}/creatures/${c.id}`, { count: n, hidden: hidden.checked, ...middle });
+    onMap(res.map);
+    select(res.tokens[0]?.id ?? null);
+    status(n > 1 ? `${res.tokens.map((t) => t.name).join(', ')} are on the map.` : `${res.tokens[0].name} is on the map.`);
+  };
+  dialog.replaceChildren(
+    h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => {
+      e.preventDefault();
+      state.guarded(place).then(() => dialog.close()).catch(report);
+    } },
+      h('h2', {}, `Place ${c.name}`),
+      h('p', { class: 'muted small' }, [c.kind === 'npc' ? 'Friendly NPC' : 'Enemy', TOKEN_SIZE_NAMES[c.size], c.hp_max ? `${c.hp_max} HP` : '', c.stats ? 'with its stat block' : '', c.picture ? 'and picture' : ''].filter(Boolean).join(' · ')),
+      field('How many', count),
+      h('label', { class: 'map-check' }, hidden, ' Hidden from players (an ambush, someone lurking)'),
+      h('p', { class: 'muted small' }, 'They appear in a row in the middle of what you can see, numbered if there are several; drag them into place.'),
+      h('div', { class: 'map-dialog-actions' },
+        h('span', { class: 'spacer' }),
+        h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel'),
+        h('button', { class: 'primary' }, 'Place')),
+    ),
+  );
+  dialog.onclose = null;
+  if (!dialog.open) dialog.showModal();
+  count.select?.();
+}
+
+/** Keep a token from the map in the DM's creatures. */
+async function saveCreature(token) {
+  try {
+    const res = await state.guarded(() => api('POST', `/campaigns/${state.campaignId}/creatures`, { from: { map_id: state.current.id, token_id: token.id } }));
+    if (!res) return;
+    creatureSaved(res);
+    status(`${res.name} is in your creatures now (the Creatures tab).`);
+  } catch (err) {
+    report(err);
+  }
 }
 
 /** What the campaign's records say about the person a token stands for (DM only). */

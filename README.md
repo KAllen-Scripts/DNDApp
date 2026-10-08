@@ -247,6 +247,11 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | PUT / DELETE | `/campaigns/:cid/maps/:mid/tokens/:tid/picture` | Give an NPC or enemy token a picture (DM) `{filename, data (base64), same_name?}` (`same_name`: every token on the map with that name) / back to initials |
 | GET | `/campaigns/:cid/maps/:mid/tokens/:tid/picture` | That picture, 256 px square (for whoever can see the token) |
 | POST | `/campaigns/:cid/maps/:mid/tokens/:tid/stats` | Fill the token's stat block with the AI (DM) `{name?}`; 404 if the AI doesn't know the creature |
+| POST | `/campaigns/:cid/maps/:mid/creatures/:crid` | Put one of the DM's creatures on a map (DM) `{count? (1-20), x?, y?, hidden?, name?}`; a group is numbered and set out in a row. Returns `{map, tokens}` |
+| GET / POST | `/campaigns/:cid/creatures` | The DM's creatures (DM only) `{creatures}` / save one `{name, kind: enemy \| npc, size?, color?, hp_max?, darkvision?, speed?, stats?, record?, notes?, picture?: {filename, data}}`, or `{from: {map_id, token_id}}` to save a token from a map |
+| PATCH / DELETE | `/campaigns/:cid/creatures/:crid` | Change one (DM; placed tokens keep what they had) / remove it (DM; kept in the archive) |
+| GET / PUT / DELETE | `/campaigns/:cid/creatures/:crid/picture` | Its picture, cut to a square (DM) / give it one `{filename, data}` / back to initials |
+| POST | `/campaigns/:cid/creatures/:crid/stats` | Fill its stat block with the AI (DM) `{name?}`; 404 if the AI doesn't know the creature |
 | POST | `/campaigns/:cid/maps/:mid/combat` | The fight on a map `{action: start \| end \| next \| prev \| add \| remove \| roll \| set, ids?, id?, init?}` (entries count `moved` this turn) → `{map, rolls: [{id, name, d20, mod, total}]}`. DM: everything (`start` with `ids` or every token; NPCs and enemies roll at once; `roll` without `id` rolls every NPC not rolled yet). A player: `roll` (once) or `set` for their own token, and `next` on their own turn |
 | POST | `/campaigns/:cid/maps/:mid/templates` | Place an area of effect (anyone who can see the map) `{shape: circle \| cone \| line \| cube, x, y, angle?, size, width?, label?, color?}` (size and width in the map's unit) |
 | PATCH / DELETE | `/campaigns/:cid/maps/:mid/templates/:tid` | Move, turn, resize or relabel a template / remove it (whoever placed it, or the DM) |
