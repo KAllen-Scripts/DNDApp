@@ -13,8 +13,10 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { normalizeMap, normalizePins, canSee, healthOf } from '@dndapp/shared/map.js';
+import { normalizeMap, normalizePins, canSee, healthOf, speedFromText } from '@dndapp/shared/map.js';
+import { computeSheet } from '@dndapp/shared/sheet.js';
 import { createSight } from './sight.js';
+import { mapEvents } from './events.js';
 import { diffJson, applyJson } from '../sheets/store.js';
 import { NotFoundError } from '../store.js';
 
@@ -44,7 +46,7 @@ function doorSeen(map, polygons, w) {
   return canSee(map, polygons, mx + nx, my + ny) || canSee(map, polygons, mx - nx, my - ny);
 }
 
-export function createMaps({ db, archive, store, pictures = null }) {
+export function createMaps({ db, archive, store, pictures = null, sheets = null }) {
   const events = new EventEmitter();
   events.setMaxListeners(0);
   const sight = createSight({ db });
@@ -117,48 +119,130 @@ export function createMaps({ db, archive, store, pictures = null }) {
       return write(campaignId, id, { doc: docOf(current), version: current.version }, after, { by, reason }) ?? current;
     },
 
-    imagePath(campaignId, id) {
+    /** The image shown now (the chosen variant, if any), or with `base` the one imported. */
+    imagePath(campaignId, id, { base = false } = {}) {
       const map = maps.get(campaignId, id);
-      return { path: archive.mapImagePath(store.getCampaign(campaignId).slug, id, map.image.file), type: map.image.type };
+      const v = !base && map.variants.find((x) => x.id === map.variant);
+      return { path: archive.mapImagePath(store.getCampaign(campaignId).slug, id, (v || map.image).file), type: (v || map.image).type };
+    },
+
+    /**
+     * Another picture of the same map (DM). The upload is archived as it came
+     * (`variant-<id>-original.<ext>`) beside the copy fitted to the map's size,
+     * so tokens, walls and fog stay in place on it.
+     * @param {{ name: string, original: Buffer, ext: string, fitted: Buffer, type: string, by: number }} input
+     */
+    addVariant(campaignId, id, { name, original, ext, fitted, type, by }) {
+      const map = maps.get(campaignId, id);
+      const slug = store.getCampaign(campaignId).slug;
+      const vid = newTokenId();
+      const file = `variant-${vid}.${{ 'image/jpeg': 'jpg', 'image/webp': 'webp' }[type] ?? 'png'}`;
+      archive.saveMapImage(slug, map.id, `variant-${vid}-original.${ext}`, original);
+      archive.saveMapImage(slug, map.id, file, fitted);
+      return maps.change(campaignId, id, (m) => {
+        m.variants.push({ id: vid, name, file, type });
+      }, { by, reason: 'variant added' });
+    },
+
+    /** Every archived change line of a map, oldest first. */
+    history(campaignId, id) {
+      return archive.readMapChanges(store.getCampaign(campaignId).slug, id);
+    },
+
+    /** What happened on the maps players saw on a session date, for the archivist (see mapEvents). */
+    eventsOn(campaignId, date, rolloverHour) {
+      return mapEvents(maps.allIds(campaignId).map((id) => ({ id, entries: maps.history(campaignId, id) })), { date, rolloverHour });
+    },
+
+    /** Every map ever made in the campaign, removed ones too. */
+    allIds(campaignId) {
+      return db.prepare('SELECT id FROM maps WHERE campaign_id = ? ORDER BY created_at, id').all(campaignId).map((r) => r.id);
     },
 
     /**
      * What this viewer may see of a map, or null if they may not see it at all.
-     * Players: only shown maps; no AI description or notes; no walls, only
+     * Players: only shown maps; no AI description or notes; no walls or lights, only
      * the doors they can see (`doors`, to open and close them); no
      * hidden tokens, and none they can't see (under the fog, or out of their
      * token's sight) except their own; NPCs' and enemies' hit points only as
      * how hurt they look; no stat blocks or links to the DM's records. Their
      * fog comes as `fog.mask` (what they see, see fogMask), not the DM's
      * rectangles. `image_key` changes when their image does.
+     * Players get only the spell templates they placed or whose origin they
+     * can see, and only the visible tokens' places in the turn order.
+     * Tokens carry `move_speed`: how far they walk in a turn, if known.
      * Player character tokens carry `picture`: the key of their player's token picture, or null.
      */
     view(map, { role, userId }) {
       if (!map || map.removed) return null;
       // A player character's token shows the token picture its player uploaded.
       const picture = (t) => (t.kind === 'pc' && pictures ? pictures.tokenKey(map.campaign_id, t.user_id) : null);
-      const out = { ...map, tokens: map.tokens.map((t) => ({ ...t, picture: picture(t) })) };
+      // How far it walks in a turn: what the DM set, else the player's sheet, else the stat block.
+      const moveSpeed = (t) => {
+        if (t.speed != null) return t.speed;
+        if (t.kind === 'pc' && t.user_id != null && sheets) {
+          const { sheet, version } = sheets.get(map.campaign_id, t.user_id);
+          return version ? Number(computeSheet(sheet).values.speed) || null : null;
+        }
+        return speedFromText(t.stats?.speed) ?? null;
+      };
+      // Where each link leads: the target map's name, or null if it's gone.
+      const target = (to) => {
+        const r = row(map.campaign_id, to);
+        const m = r && fromRow(r);
+        return m && !m.removed ? m : null;
+      };
+      const links = map.links.map((l) => ({ ...l, target: target(l.to) }));
+      const variantKey = map.variant ? `-${map.variant}` : '';
+      const out = {
+        ...map,
+        tokens: map.tokens.map((t) => ({ ...t, picture: picture(t), move_speed: moveSpeed(t) })),
+        links: links.map(({ target: m, ...l }) => ({ ...l, to_name: m?.name ?? null })),
+      };
       delete out.campaign_id;
-      if (role === 'dm') return { ...out, image_key: 'dm', can_edit: true };
+      if (role === 'dm') return { ...out, image_key: `dm${variantKey}`, can_edit: true };
       if (!map.shown) return null;
       const seen = sight.forPlayer(map, userId);
+      const tokens = out.tokens.filter((t) => t.user_id === userId || (!t.hidden && canSee(map, seen.polygons, t.x, t.y)));
+      const visible = new Set(tokens.map((t) => t.id));
       return {
         ...out,
         description: '',
         source: null,
         reading: { status: map.reading.status, error: '', notes: '' },
         walls: [],
+        lights: [],
+        // Difficult terrain where they can see any of it.
+        terrain: map.terrain.filter((a) => a.points.some(([x, y]) => canSee(map, seen.polygons, x, y))),
         doors: map.walls
           .filter((w) => w.door && doorSeen(map, seen.polygons, w))
           .map(({ id, x1, y1, x2, y2, open, locked }) => ({ id, x1, y1, x2, y2, open, locked })),
         wall_draft: { status: '', error: '', notes: '' },
         fog: { ...map.fog, shapes: [], mask: seen.mask },
-        tokens: out.tokens
-          .filter((t) => t.user_id === userId || (!t.hidden && canSee(map, seen.polygons, t.x, t.y)))
+        // Areas of effect: their own, and ones whose point of origin they can see.
+        templates: map.templates.filter((t) => t.user_id === userId || canSee(map, seen.polygons, t.x, t.y)),
+        // The turn order holds only the tokens they can see; on an unseen token's turn, `turn` is null and `turn_unseen` says so.
+        combat: map.combat && {
+          ...map.combat,
+          entries: map.combat.entries.filter((e) => visible.has(e.id)),
+          turn: visible.has(map.combat.turn) ? map.combat.turn : null,
+          turn_unseen: map.combat.turn != null && !visible.has(map.combat.turn),
+        },
+        tokens: tokens
           .map((t) => (t.kind === 'pc' ? { ...t, stats: null, record: null } : { ...t, hp: null, health: healthOf(t.hp), stats: null, record: null })),
-        image_key: seen.key,
+        // Links to maps they're shown, where they can see the link; variants by name only.
+        links: links
+          .filter((l) => l.target?.shown && canSee(map, seen.polygons, l.x, l.y))
+          .map(({ target: m, ...l }) => ({ ...l, to_name: m.name })),
+        variants: map.variants.filter((v) => v.id === map.variant).map(({ id, name }) => ({ id, name })),
+        image_key: `${seen.key}${variantKey}`,
         can_edit: false,
       };
+    },
+
+    /** What a player's tokens see on a map now (see sight.forPlayer). */
+    sightFor(map, userId) {
+      return sight.forPlayer(map, userId);
     },
 
     /** Someone's private pins on a map. Only ever sent to that person. */

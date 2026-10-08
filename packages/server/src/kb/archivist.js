@@ -19,6 +19,7 @@ export const ARCHIVIST_SYSTEM = `You are the archivist for a Dungeons & Dragons 
 ## Your material
 - Session transcripts from automatic speech-to-text of play recorded on Discord. Lines are "[HH:MM:SS] Speaker: text". Speech-to-text garbles names and words; use context, the glossary and existing records to recognise what was meant. Players mix in-character speech, rules talk and table chatter; record the story, not the chatter.
 - Players' private notes from the session, with the player and the time written. They show what that player noticed or cared about, and often have better spellings and numbers than the transcript. They are that player's perspective, not established fact.
+- Map events: what happened that day on the maps the DM showed the players (who appeared, fights starting and ending, who went down or got back up, conditions, doors opened, characters taking stairs or doors to another map), logged by the app with the time. Names and order are exact; use them to confirm and date what the transcript describes. A map's name is the DM's label, not necessarily its name in the world. With fog of war on, not every player saw every part of a map.
 - DM corrections: authoritative. Apply them even if they contradict earlier records.
 - The DM's narration is authoritative for what happened in the world. Player speculation is not fact; record it as speculation only if it matters.
 
@@ -124,7 +125,7 @@ const DEFS = {
   },
 };
 
-export function createArchivist({ db, store, kb, search, llm, config }) {
+export function createArchivist({ db, store, kb, search, llm, config, mapEvents = () => [] }) {
   const A = config.archivist;
 
   function makeTools(cid, run, session) {
@@ -301,6 +302,7 @@ export function createArchivist({ db, store, kb, search, llm, config }) {
       const roster = store.roster(cid);
       const names = new Map(roster.map((m) => [m.user_id, m.name]));
       const inline = estimateTokens(text) <= A.inlineTranscriptTokens;
+      const events = mapEvents(cid, session.played_on);
       const duration = utterances.length ? formatTimestamp(utterances.at(-1).time) : '00:00:00';
 
       const prompt = [
@@ -310,11 +312,12 @@ export function createArchivist({ db, store, kb, search, llm, config }) {
           attendance.assumed ? '\n(Assumed: the speaker map does not link transcript names to accounts, so everyone is treated as present.)' : ''
         }${session.reprocess ? '\nThis session was processed before. Update existing records rather than duplicating them.' : ''}\n</session>`,
         notes.length ? `<player_notes date="${session.played_on}">\n${formatNotes(notes)}\n</player_notes>` : '<player_notes>none</player_notes>',
+        events.length ? `<map_events date="${session.played_on}">\n${events.join('\n')}\n</map_events>` : '',
         inline
           ? `<transcript session="${session.number}">\n${text}\n</transcript>`
           : `<transcript session="${session.number}">\nToo long to include (${utterances.length} lines, 00:00:00-${duration}). Read it in order with read_transcript, in parts of about 20 minutes.\n</transcript>`,
         `Update the knowledge base with everything from session ${session.number}.`,
-      ].join('\n\n');
+      ].filter(Boolean).join('\n\n');
 
       return run(cid, `session ${session.number}`, session.number, prompt, onProgress);
     },

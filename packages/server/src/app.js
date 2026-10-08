@@ -4,6 +4,7 @@
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import sharp from 'sharp';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
@@ -17,9 +18,9 @@ import { SpendingCapError } from './llm/index.js';
 import { RateLimitError } from './qa/agent.js';
 import { preparedTranscript } from './pipeline/prepare.js';
 import { SheetConflictError } from './sheets/store.js';
-import { SHEET_FORMAT } from '@dndapp/shared/sheet.js';
+import { SHEET_FORMAT, computeSheet } from '@dndapp/shared/sheet.js';
 import { parseRoll, rollDice, ROLL_MODES } from '@dndapp/shared/dice.js';
-import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, MAX_WALLS, WALL_KINDS, FOG_MAP, snapToken, wallBetween, doorReach, distanceToWall } from '@dndapp/shared/map.js';
+import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, MAX_WALLS, WALL_KINDS, FOG_MAP, TEMPLATE_SHAPES, MAX_TEMPLATES, MAX_LIGHTS, MAX_TERRAIN, MAX_VARIANTS, MAX_LINKS, nearLink, pathCost, snapToken, wallBetween, doorReach, distanceToWall, dexModifier, stepTurn, canSee } from '@dndapp/shared/map.js';
 import { inspectImage } from './maps/read.js';
 import { isPdf, renderPdfPage } from './maps/pdf.js';
 import { createPlayerImages } from './maps/image.js';
@@ -1021,7 +1022,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     maps.change(cid, map.id, (m) => {
       m.reading = { status: 'pending', error: '', notes: '' };
     }, { by: userId, reason: 'reading' });
-    const buf = fs.readFileSync(maps.imagePath(cid, map.id).path);
+    const buf = fs.readFileSync(maps.imagePath(cid, map.id, { base: true }).path);
     return mapReader
       .read({ buf, width: map.image.width, height: map.image.height, campaignId: cid, userId })
       .then((r) =>
@@ -1051,13 +1052,19 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     maps.change(cid, map.id, (m) => {
       m.wall_draft = { status: 'pending', error: '', notes: '' };
     }, { by: userId, reason: 'drafting walls' });
-    const buf = fs.readFileSync(maps.imagePath(cid, map.id).path);
+    const buf = fs.readFileSync(maps.imagePath(cid, map.id, { base: true }).path);
     return mapReader
       .walls({ buf, width: map.image.width, height: map.image.height, campaignId: cid, userId })
       .then((r) =>
         maps.change(cid, map.id, (m) => {
           const own = m.walls.filter((w) => w.source !== 'ai');
           m.walls = [...own, ...r.walls.slice(0, MAX_WALLS - own.length).map((w) => ({ ...w, id: newTokenId(), open: false, source: 'ai' }))];
+          // Lights the AI saw on the picture (torches, braziers, fires) replace its earlier ones too.
+          const ownLights = m.lights.filter((l) => l.source !== 'ai');
+          m.lights = [...ownLights, ...(r.lights ?? []).slice(0, MAX_LIGHTS - ownLights.length).map((l) => ({ ...l, id: newTokenId(), source: 'ai' }))];
+          // And difficult terrain (water, rubble, undergrowth).
+          const ownTerrain = m.terrain.filter((t) => t.source !== 'ai');
+          m.terrain = [...ownTerrain, ...(r.terrain ?? []).slice(0, MAX_TERRAIN - ownTerrain.length).map((t) => ({ ...t, id: newTokenId(), source: 'ai' }))];
           m.wall_draft = { status: 'done', error: '', notes: r.notes };
         }, { reason: 'walls drafted by the AI' }),
       )
@@ -1147,8 +1154,75 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       if (view) sse.send('map', view);
       else sse.send('gone', { id: map.id });
     };
+    // Pings and quick drawings: to everyone who can see the map; a player gets other players' only where they can see them.
+    const signal = (sig) => {
+      if (sig.campaign_id !== cid) return;
+      const a = current();
+      if (!a) return sse.end();
+      let map;
+      try {
+        map = maps.get(cid, sig.map_id);
+      } catch {
+        return;
+      }
+      const view = maps.view(map, a);
+      if (!view) return;
+      if (a.role !== 'dm' && !sig.from_dm && sig.by !== request.user.id) {
+        const { polygons } = maps.sightFor(map, request.user.id);
+        if (!sig.points.some(([x, y]) => canSee(map, polygons, x, y))) return;
+      }
+      const { campaign_id: _c, from_dm: _d, ...out } = sig;
+      sse.send(sig.kind, out);
+    };
     maps.events.on('update', listener);
-    sse.onClose(() => maps.events.off('update', listener));
+    maps.events.on('signal', signal);
+    sse.onClose(() => {
+      maps.events.off('update', listener);
+      maps.events.off('signal', signal);
+    });
+  });
+
+  // Pings and drawings per person: at most SIGNALS_PER_WINDOW in SIGNAL_WINDOW ms.
+  const SIGNAL_WINDOW = 10_000;
+  const SIGNALS_PER_WINDOW = 20;
+  const signalTimes = new Map();
+  const signalAllowed = (userId) => {
+    const since = Date.now() - SIGNAL_WINDOW;
+    const recent = (signalTimes.get(userId) ?? []).filter((t) => t > since);
+    if (recent.length >= SIGNALS_PER_WINDOW) throw new RateLimitError('Slow down a little with the pings.');
+    recent.push(Date.now());
+    signalTimes.set(userId, recent);
+  };
+
+  /** Send a ping or a drawing to everyone looking at the map (not saved). Its colour: the sender's token, or gold for the DM. */
+  function sendSignal(request, kind, points) {
+    const a = access(request);
+    const { map } = viewableMap(request);
+    signalAllowed(request.user.id);
+    const own = map.tokens.find((t) => t.kind === 'pc' && t.user_id === request.user.id);
+    maps.events.emit('signal', {
+      kind,
+      campaign_id: a.cid,
+      map_id: map.id,
+      by: request.user.id,
+      name: own?.name ?? request.user.name,
+      color: a.role === 'dm' ? '#ffd54a' : own?.color ?? '#4fc3f7',
+      from_dm: a.role === 'dm',
+      points: points.map(([x, y]) => [Math.round(Math.min(map.image.width, Math.max(0, x)) * 10) / 10, Math.round(Math.min(map.image.height, Math.max(0, y)) * 10) / 10]),
+    });
+    return { ok: true };
+  }
+
+  /** Ping a spot on the map: { x, y }. Everyone looking sees it for a moment (players: the DM's, and other players' where they can see). */
+  app.post('/campaigns/:cid/maps/:mid/ping', async (request) => {
+    const { x, y } = z.object({ x: z.number(), y: z.number() }).parse(request.body ?? {});
+    return sendSignal(request, 'ping', [[x, y]]);
+  });
+
+  /** A quick drawing: { points: [[x, y], ...] } (up to 500). It fades after a while on everyone's screen; nothing is saved. */
+  app.post('/campaigns/:cid/maps/:mid/draw', async (request) => {
+    const { points } = z.object({ points: z.array(z.tuple([z.number(), z.number()])).min(2).max(500) }).parse(request.body ?? {});
+    return sendSignal(request, 'draw', points);
   });
 
   app.get('/campaigns/:cid/maps/:mid', async (request) => viewableMap(request).view);
@@ -1164,19 +1238,20 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       // The file never changes, so the browser can keep it.
       return reply.header('Cache-Control', 'private, max-age=31536000, immutable').send(fs.createReadStream(file));
     }
-    return reply.header('Cache-Control', 'private, no-cache').send(await playerImages.get(map, file, { mask: view.fog.mask, key: view.image_key }));
+    return reply.header('Cache-Control', 'private, no-cache').send(await playerImages.get(map, file, { mask: view.fog.mask, key: view.image_key }, type));
   });
 
   const GRID = z.object({ size: z.number().positive(), x: z.number(), y: z.number() }).nullable();
   const SCALE = z.object({ distance: z.number().positive(), unit: z.enum(UNITS), per: z.enum(SCALE_PER) }).nullable();
 
-  /** Change a map (DM): { name?, shown?, grid?, scale? }. grid/scale null removes them. */
+  /** Change a map (DM): { name?, shown?, grid?, scale?, variant? }. grid/scale null removes them; variant: which picture everyone sees (null: the original). */
   app.patch('/campaigns/:cid/maps/:mid', async (request) => {
     const a = access(request, { dm: true });
     const { map } = viewableMap(request);
     const body = z
-      .object({ name: z.string().trim().min(1).max(100).optional(), shown: z.boolean().optional(), grid: GRID.optional(), scale: SCALE.optional() })
+      .object({ name: z.string().trim().min(1).max(100).optional(), shown: z.boolean().optional(), grid: GRID.optional(), scale: SCALE.optional(), variant: z.string().nullable().optional() })
       .parse(request.body ?? {});
+    if (body.variant != null && !map.variants.some((v) => v.id === body.variant)) throw new NotFoundError('No such variant');
     const saved = maps.change(a.cid, map.id, (m) => {
       if (body.name !== undefined) {
         m.name = body.name;
@@ -1185,15 +1260,110 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       if (body.shown !== undefined) m.shown = body.shown;
       if (body.grid !== undefined) m.grid = body.grid;
       if (body.scale !== undefined) m.scale = body.scale;
+      if (body.variant !== undefined) m.variant = body.variant;
     }, { by: request.user.id });
     return maps.view(saved, a);
   });
 
   /**
-   * Fog of war (DM): { enabled?, sight?, map?: dark | shown, memory?, add?: {op: reveal | cover, x, y, w, h}, undo?, reset?: cover | reveal, forget? }.
+   * Another picture of the same map (DM): { filename, data (base64), name? }, e.g. the same room at night.
+   * It's stretched to the map's size so everything on the map stays in place; the upload is archived as it came.
+   */
+  app.post('/campaigns/:cid/maps/:mid/variants', upload, async (request, reply) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const { filename, data, name } = z
+      .object({ filename: z.string().max(200).default('variant'), data: z.string().min(1), name: z.string().trim().max(60).optional() })
+      .parse(request.body);
+    if (map.variants.length >= MAX_VARIANTS) throw new BadRequestError(`A map can have up to ${MAX_VARIANTS} other pictures.`);
+    const buf = Buffer.from(data, 'base64');
+    if (!buf.length) throw new BadRequestError('The file is empty.');
+    if (isPdf(buf)) throw new BadRequestError('Upload the other picture as a PNG, JPEG or WebP image.');
+    const image = await inspectImage(buf);
+    let fitted = sharp(buf).rotate().resize(map.image.width, map.image.height, { fit: 'fill' });
+    fitted = image.type === 'image/png' ? fitted.png() : image.type === 'image/webp' ? fitted.webp({ quality: 90 }) : fitted.jpeg({ quality: 90 });
+    const fromFile = filename.replace(/\.[^.]*$/, '').replace(/[_-]+/g, ' ').trim().slice(0, 60);
+    const saved = maps.addVariant(a.cid, map.id, { name: name || fromFile || 'Variant', original: buf, ext: image.ext, fitted: await fitted.toBuffer(), type: image.type, by: request.user.id });
+    reply.status(201);
+    return { map: maps.view(saved, a), variant: saved.variants.at(-1) };
+  });
+
+  /** Remove one of a map's other pictures (DM). Its files stay in the archive. If it was showing, the original comes back. */
+  app.delete('/campaigns/:cid/maps/:mid/variants/:vid', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    if (!map.variants.some((v) => v.id === request.params.vid)) throw new NotFoundError('No such variant');
+    const saved = maps.change(a.cid, map.id, (m) => {
+      m.variants = m.variants.filter((v) => v.id !== request.params.vid);
+      if (m.variant === request.params.vid) m.variant = null;
+    }, { by: request.user.id, reason: 'variant removed' });
+    return maps.view(saved, a);
+  });
+
+  /** Links to other maps (DM): { add?: { x, y, to, label? }, move?: { id, x, y }, remove?: id }. `to` is the map it leads to. */
+  app.patch('/campaigns/:cid/maps/:mid/links', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const body = z
+      .object({
+        add: z.object({ x: z.number(), y: z.number(), to: z.string(), label: z.string().trim().max(60).optional() }).optional(),
+        move: z.object({ id: z.string(), x: z.number(), y: z.number() }).optional(),
+        remove: z.string().optional(),
+      })
+      .parse(request.body ?? {});
+    if (body.add) {
+      if (body.add.to === map.id) throw new BadRequestError('A link has to lead to another map.');
+      maps.get(a.cid, body.add.to);
+      if (map.links.length >= MAX_LINKS) throw new BadRequestError(`A map can have up to ${MAX_LINKS} links.`);
+    }
+    if (body.move && !map.links.some((l) => l.id === body.move.id)) throw new NotFoundError('No such link');
+    if (body.remove && !map.links.some((l) => l.id === body.remove)) throw new NotFoundError('No such link');
+    const saved = maps.change(a.cid, map.id, (m) => {
+      if (body.add) m.links.push({ id: newTokenId(), x: body.add.x, y: body.add.y, to: body.add.to, label: body.add.label ?? '' });
+      if (body.move) Object.assign(m.links.find((l) => l.id === body.move.id), { x: body.move.x, y: body.move.y });
+      if (body.remove) m.links = m.links.filter((l) => l.id !== body.remove);
+    }, { by: request.user.id, reason: 'links' });
+    return maps.view(saved, a);
+  });
+
+  /**
+   * Take a token through a link to the other map: { token }. Players move their own character, standing
+   * next to a link they can see, to a map the DM has shown; the DM can send any token. It arrives at the
+   * link on the other map that leads back here, or the middle of that map.
+   */
+  app.post('/campaigns/:cid/maps/:mid/links/:lid/use', async (request) => {
+    const a = access(request);
+    const { map, view } = viewableMap(request);
+    const { token: tid } = z.object({ token: z.string() }).parse(request.body ?? {});
+    const link = view.links.find((l) => l.id === request.params.lid);
+    if (!link) throw new NotFoundError('No such link');
+    const token = map.tokens.find((t) => t.id === tid);
+    if (!token) throw new NotFoundError('No such token');
+    const dm = a.role === 'dm';
+    if (!dm && !(token.kind === 'pc' && token.user_id === request.user.id)) throw new AuthError('You can only move your own character.', 403);
+    if (!dm && !nearLink(map, link, token.x, token.y)) throw new BadRequestError(`Move ${token.name} next to it first.`);
+    const target = maps.get(a.cid, link.to);
+    if (!dm && !target.shown) throw new NotFoundError('No such map');
+    if (target.tokens.length >= MAX_TOKENS) throw new BadRequestError(`${target.name} is full.`);
+    const back = target.links.find((l) => l.to === map.id);
+    const { x, y } = snapToken(target, token, back?.x ?? target.image.width / 2, back?.y ?? target.image.height / 2);
+    maps.change(a.cid, map.id, (m) => {
+      if (m.combat?.turn === token.id) Object.assign(m.combat, stepTurn(m.combat, 1));
+      m.tokens = m.tokens.filter((t) => t.id !== token.id);
+    }, { by: request.user.id, reason: `left for ${target.id}` });
+    const id = target.tokens.some((t) => t.id === token.id) ? newTokenId() : token.id;
+    const arrived = maps.change(a.cid, target.id, (m) => {
+      m.tokens.push({ ...token, id, x, y });
+    }, { by: request.user.id, reason: `arrived from ${map.id}` });
+    return { map: maps.view(arrived, a), token: id };
+  });
+
+  /**
+   * Fog of war (DM): { enabled?, sight?, map?: dark | shown, memory?, dark?, add?: {op: reveal | cover, x, y, w, h}, undo?, reset?: cover | reveal, forget? }.
    * map: what players get outside their sight and the reveals (dark, or the map with no tokens). memory: keep a dim view of where they've been.
    * reset: cover hides the whole map again, reveal shows all of it; undo takes back the last rectangle.
    * sight: players also see what their own token can see past the walls. forget: players lose the dim view of places they saw before.
+   * dark: darkness; with sight, players only see lit places and what their darkvision reaches.
    */
   app.patch('/campaigns/:cid/maps/:mid/fog', async (request) => {
     const a = access(request, { dm: true });
@@ -1204,6 +1374,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
         sight: z.boolean().optional(),
         map: z.enum(FOG_MAP).optional(),
         memory: z.boolean().optional(),
+        dark: z.boolean().optional(),
         forget: z.boolean().optional(),
         add: z.object({ op: z.enum(FOG_OPS), x: z.number(), y: z.number(), w: z.number().positive(), h: z.number().positive() }).optional(),
         undo: z.boolean().optional(),
@@ -1216,6 +1387,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       if (body.sight !== undefined) m.fog.sight = body.sight;
       if (body.map !== undefined) m.fog.map = body.map;
       if (body.memory !== undefined) m.fog.memory = body.memory;
+      if (body.dark !== undefined) m.fog.dark = body.dark;
       if (body.reset === 'cover') m.fog.shapes = [];
       if (body.reset === 'reveal') m.fog.shapes = [{ op: 'reveal', x: 0, y: 0, w: m.image.width, h: m.image.height }];
       if (body.undo) m.fog.shapes.pop();
@@ -1286,6 +1458,60 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     return maps.view(saved, a);
   });
 
+  const RADII = { bright: z.number().min(0).max(10_000), dim: z.number().min(0).max(10_000) };
+
+  /**
+   * Light sources (DM): { add?: {x, y, bright, dim}, move?: {id, x, y}, remove?: id, clear?: ai | all }.
+   * Radii are in the map's unit (a torch: 20 bright, 20 dim). Lights matter in darkness (fog.dark).
+   */
+  app.patch('/campaigns/:cid/maps/:mid/lights', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const body = z
+      .object({
+        add: z.object({ x: POINT, y: POINT, ...RADII }).optional(),
+        move: z.object({ id: z.string().max(20), x: POINT, y: POINT }).optional(),
+        remove: z.string().max(20).optional(),
+        clear: z.enum(['ai', 'all']).optional(),
+      })
+      .parse(request.body ?? {});
+    if (body.add && map.lights.length >= MAX_LIGHTS) throw new BadRequestError(`A map can have at most ${MAX_LIGHTS} lights.`);
+    if (body.add && body.add.bright + body.add.dim <= 0) throw new BadRequestError('A light needs some reach.');
+    for (const id of [body.remove, body.move?.id]) {
+      if (id !== undefined && !map.lights.some((l) => l.id === id)) throw new NotFoundError('No such light');
+    }
+    const saved = maps.change(a.cid, map.id, (m) => {
+      if (body.clear === 'all') m.lights = [];
+      if (body.clear === 'ai') m.lights = m.lights.filter((l) => l.source !== 'ai');
+      if (body.remove) m.lights = m.lights.filter((l) => l.id !== body.remove);
+      if (body.move) Object.assign(m.lights.find((l) => l.id === body.move.id), { x: body.move.x, y: body.move.y });
+      if (body.add) m.lights.push({ ...body.add, id: newTokenId(), source: 'dm' });
+    }, { by: request.user.id, reason: 'lights' });
+    return maps.view(saved, a);
+  });
+
+  /** Difficult terrain (DM): { add?: {points: [[x, y], ...]}, remove?: id, clear?: ai | all }. Moving through it costs double. */
+  app.patch('/campaigns/:cid/maps/:mid/terrain', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const body = z
+      .object({
+        add: z.object({ points: z.array(z.tuple([POINT, POINT])).min(3).max(200) }).optional(),
+        remove: z.string().max(20).optional(),
+        clear: z.enum(['ai', 'all']).optional(),
+      })
+      .parse(request.body ?? {});
+    if (body.add && map.terrain.length >= MAX_TERRAIN) throw new BadRequestError(`A map can have at most ${MAX_TERRAIN} areas of difficult terrain.`);
+    if (body.remove && !map.terrain.some((t) => t.id === body.remove)) throw new NotFoundError('No such area');
+    const saved = maps.change(a.cid, map.id, (m) => {
+      if (body.clear === 'all') m.terrain = [];
+      if (body.clear === 'ai') m.terrain = m.terrain.filter((t) => t.source !== 'ai');
+      if (body.remove) m.terrain = m.terrain.filter((t) => t.id !== body.remove);
+      if (body.add) m.terrain.push({ id: newTokenId(), points: body.add.points, source: 'dm' });
+    }, { by: request.user.id, reason: 'terrain' });
+    return maps.view(saved, a);
+  });
+
   /** Draft the walls and doors with the AI (DM), in the background. Replaces the AI's earlier draft; walls the DM drew stay. */
   app.post('/campaigns/:cid/maps/:mid/walls/draft', async (request) => {
     const a = access(request, { dm: true });
@@ -1329,9 +1555,12 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     hidden: z.boolean(),
     record: z.object({ id: z.number().int().positive(), title: z.string().max(200).optional() }).nullable(),
     stats: z.object({ text: z.string().max(8000), ac: z.number().int().nullable().optional(), hp_formula: z.string().max(40).optional(), speed: z.string().max(120).optional(), challenge: z.string().max(40).optional() }).nullable(),
+    light: z.object(RADII).nullable(),
+    darkvision: z.number().min(0).max(10_000),
+    speed: z.number().min(0).max(10_000).nullable(),
   });
   // What a player may change on their own token; everything else is the DM's.
-  const OWNER_FIELDS = new Set(['x', 'y', 'hp', 'conditions']);
+  const OWNER_FIELDS = new Set(['x', 'y', 'hp', 'conditions', 'light', 'darkvision']);
 
   /** A token linked to a record gets that record's current title (the DM only sends the id). */
   const linkRecord = (cid, body) => {
@@ -1377,7 +1606,9 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     // Only tokens this viewer can see (players don't get to find tokens under the fog).
     const token = view.tokens.find((t) => t.id === request.params.tid);
     if (!token) throw new NotFoundError('No such token');
-    const body = TOKEN.partial().parse(request.body ?? {});
+    // A move can go by waypoints: path is where it turns on the way.
+    const { path = [], ...rest } = z.object({ path: z.array(z.tuple([z.number(), z.number()])).max(50).optional() }).passthrough().parse(request.body ?? {});
+    const body = TOKEN.partial().parse(rest);
     const moving = Object.keys(body).every((k) => k === 'x' || k === 'y');
     if (a.role !== 'dm') {
       if (token.user_id !== request.user.id) throw new AuthError('You can only change your own token', 403);
@@ -1386,9 +1617,10 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     checkTokenOwner(a.cid, { ...token, ...body });
     linkRecord(a.cid, body);
     // Players can't walk through walls or closed doors (the DM can put any token anywhere).
-    if (a.role !== 'dm' && (body.x !== undefined || body.y !== undefined)) {
-      const to = snapToken(map, token, body.x ?? token.x, body.y ?? token.y);
-      if (wallBetween(map, token, to)) throw new BadRequestError("There's a wall in the way.");
+    const moves = body.x !== undefined || body.y !== undefined;
+    const route = moves ? [{ x: token.x, y: token.y }, ...path.map(([x, y]) => ({ x, y })), snapToken(map, token, body.x ?? token.x, body.y ?? token.y)] : [];
+    if (a.role !== 'dm' && moves) {
+      for (let i = 1; i < route.length; i++) if (wallBetween(map, route[i - 1], route[i])) throw new BadRequestError("There's a wall in the way.");
     }
     const saved = maps.change(a.cid, map.id, (m) => {
       const t = m.tokens.find((x) => x.id === token.id);
@@ -1396,6 +1628,9 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       Object.assign(t, body);
       if (t.kind !== 'pc') t.user_id = null;
       Object.assign(t, snapToken(m, t, t.x, t.y));
+      // In a fight, count how far it has moved this turn (difficult terrain costs double).
+      const entry = moves && m.combat?.entries.find((e) => e.id === t.id);
+      if (entry) entry.moved = (entry.moved ?? 0) + (pathCost(map, route)?.value ?? 0);
     }, { by: request.user.id, reason: moving ? 'token moved' : 'token changed' });
     return { map: maps.view(saved, a), token: saved.tokens.find((t) => t.id === token.id) };
   });
@@ -1422,6 +1657,159 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       if (found.size && t.size === 1) Object.assign(t, { size: found.size }, snapToken(m, { size: found.size }, t.x, t.y));
     }, { by: request.user.id, reason: 'stat block' });
     return { map: maps.view(saved, a), token: saved.tokens.find((t) => t.id === token.id) };
+  });
+
+  // ---------- initiative (a fight on a map) ----------
+
+  /**
+   * A token's initiative modifier: a player character's from their player's
+   * sheet (their own number if they typed one), anyone else's Dexterity
+   * modifier from their stat block (0 without one).
+   */
+  const initiativeMod = (cid, token) => {
+    if (token.kind === 'pc' && token.user_id != null) {
+      const { sheet, version } = sheets.get(cid, token.user_id);
+      return version ? (Number(computeSheet(sheet).values.initiative) || 0) : 0;
+    }
+    return dexModifier(token.stats?.text) ?? 0;
+  };
+  const d20 = () => crypto.randomInt(1, 21);
+
+  /**
+   * The fight on a map: { action, ids?, id?, init? }.
+   * DM: start (ids: who's in it, default every token; NPCs and enemies roll
+   * straight away), end, next, prev, add (ids), remove (id), roll (id, or
+   * every NPC and enemy not rolled yet), set (id, init: a number rolled at
+   * the table). A player: roll or set their own token's initiative, and
+   * next when it's their own turn (ending it).
+   * Rolls are d20 + the token's initiative modifier, by the server.
+   * Returns { map, rolls: [{ id, name, d20, mod, total }] }.
+   */
+  app.post('/campaigns/:cid/maps/:mid/combat', async (request) => {
+    const a = access(request);
+    const { map, view } = viewableMap(request);
+    const body = z
+      .object({
+        action: z.enum(['start', 'end', 'next', 'prev', 'add', 'remove', 'roll', 'set']),
+        ids: z.array(z.string().max(20)).max(MAX_TOKENS).optional(),
+        id: z.string().max(20).optional(),
+        init: z.number().int().min(-20).max(99).optional(),
+      })
+      .parse(request.body ?? {});
+    const dm = a.role === 'dm';
+    const combat = map.combat;
+    const token = body.id !== undefined ? (dm ? map.tokens : view.tokens).find((t) => t.id === body.id) : null;
+    if (body.id !== undefined && !token) throw new NotFoundError('No such token');
+    if (body.action !== 'start' && !combat) throw new BadRequestError("There's no fight on this map. Start one first.");
+    if (!dm) {
+      const own = token && token.user_id === request.user.id;
+      const ownTurn = body.action === 'next' && combat.turn != null && map.tokens.find((t) => t.id === combat.turn)?.user_id === request.user.id;
+      if (!((body.action === 'roll' || body.action === 'set') && own) && !ownTurn) {
+        throw new AuthError(body.action === 'next' ? "It isn't your turn." : 'Only the DM can do that', 403);
+      }
+    }
+    if ((body.action === 'set' || body.action === 'remove') && !token) throw new BadRequestError('Which token?');
+    if (body.action === 'set' && body.init === undefined) throw new BadRequestError('What did they roll?');
+    if (token && ['roll', 'set', 'remove'].includes(body.action) && !combat.entries.some((e) => e.id === token.id)) {
+      throw new BadRequestError(`${token.name} isn't in the fight.`);
+    }
+    if ((body.action === 'next' || body.action === 'prev') && !stepTurn(combat, 1)) throw new BadRequestError('Roll initiative first.');
+    // Players roll once; the DM can roll again.
+    if (!dm && body.action === 'roll' && combat.entries.find((e) => e.id === token.id)?.init != null) throw new BadRequestError('You already rolled initiative.');
+
+    const rolls = [];
+    const roll = (m, entry) => {
+      const t = m.tokens.find((x) => x.id === entry.id);
+      const mod = initiativeMod(a.cid, t);
+      const die = d20();
+      Object.assign(entry, { init: die + mod, mod });
+      rolls.push({ id: t.id, name: t.name, d20: die, mod, total: die + mod });
+    };
+    const reasons = { start: 'fight started', end: 'fight ended', next: 'next turn', prev: 'previous turn' };
+    const saved = maps.change(a.cid, map.id, (m) => {
+      if (body.action === 'start') {
+        const ids = new Set(body.ids ?? m.tokens.map((t) => t.id));
+        m.combat = { round: 1, turn: null, entries: m.tokens.filter((t) => ids.has(t.id)).map((t) => ({ id: t.id, init: null, mod: null })) };
+        for (const e of m.combat.entries) if (m.tokens.find((t) => t.id === e.id).kind !== 'pc') roll(m, e);
+      } else if (body.action === 'end') {
+        m.combat = null;
+      } else if (body.action === 'next' || body.action === 'prev') {
+        Object.assign(m.combat, stepTurn(m.combat, body.action === 'next' ? 1 : -1));
+        // A new turn: its token hasn't moved yet.
+        if (body.action === 'next') for (const e of m.combat.entries) if (e.id === m.combat.turn) e.moved = 0;
+      } else if (body.action === 'add') {
+        for (const id of body.ids ?? []) {
+          if (m.tokens.some((t) => t.id === id) && !m.combat.entries.some((e) => e.id === id)) m.combat.entries.push({ id, init: null, mod: null });
+        }
+      } else if (body.action === 'remove') {
+        if (m.combat.turn === token.id) Object.assign(m.combat, stepTurn(m.combat, 1));
+        m.combat.entries = m.combat.entries.filter((e) => e.id !== token.id);
+      } else if (body.action === 'roll') {
+        const kindOf = (e) => m.tokens.find((t) => t.id === e.id)?.kind;
+        const which = token ? m.combat.entries.filter((e) => e.id === token.id) : m.combat.entries.filter((e) => e.init == null && kindOf(e) !== 'pc');
+        for (const e of which) roll(m, e);
+      } else if (body.action === 'set') {
+        Object.assign(m.combat.entries.find((e) => e.id === token.id), { init: body.init, mod: initiativeMod(a.cid, token) });
+      }
+    }, { by: request.user.id, reason: reasons[body.action] ?? 'initiative' });
+    return { map: maps.view(saved, a), rolls };
+  });
+
+  // ---------- spell templates (areas of effect anyone can place) ----------
+
+  const TEMPLATE = z.object({
+    shape: z.enum(TEMPLATE_SHAPES),
+    x: z.number(),
+    y: z.number(),
+    angle: z.number().min(-1e6).max(1e6),
+    size: z.number().positive().max(10_000),
+    width: z.number().positive().max(10_000).nullable(),
+    label: z.string().trim().max(80),
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a colour like #e8743b'),
+  });
+
+  /** A template this viewer may change: their own, or any (DM). */
+  const ownTemplate = (request, a) => {
+    const { map, view } = viewableMap(request);
+    const tpl = view.templates.find((t) => t.id === request.params.tid);
+    if (!tpl) throw new NotFoundError('No such template');
+    if (a.role !== 'dm' && tpl.user_id !== request.user.id) throw new AuthError('Only whoever placed it (or the DM) can change that', 403);
+    return { map, tpl };
+  };
+
+  /** Place an area of effect (anyone who can see the map): { shape, x, y, angle?, size, width?, label?, color? }. */
+  app.post('/campaigns/:cid/maps/:mid/templates', async (request, reply) => {
+    const a = access(request);
+    const { map } = viewableMap(request);
+    const body = TEMPLATE.partial().required({ shape: true, x: true, y: true, size: true }).parse(request.body ?? {});
+    if (map.templates.length >= MAX_TEMPLATES) throw new BadRequestError(`A map can have at most ${MAX_TEMPLATES} templates. Remove some first.`);
+    const id = newTokenId();
+    const saved = maps.change(a.cid, map.id, (m) => {
+      m.templates.push({ ...body, id, user_id: request.user.id });
+    }, { by: request.user.id, reason: 'template' });
+    reply.status(201);
+    return { map: maps.view(saved, a), template: saved.templates.find((t) => t.id === id) };
+  });
+
+  /** Move, turn, resize or relabel a template (whoever placed it, or the DM). */
+  app.patch('/campaigns/:cid/maps/:mid/templates/:tid', async (request) => {
+    const a = access(request);
+    const { map, tpl } = ownTemplate(request, a);
+    const body = TEMPLATE.partial().parse(request.body ?? {});
+    const saved = maps.change(a.cid, map.id, (m) => {
+      Object.assign(m.templates.find((t) => t.id === tpl.id) ?? {}, body);
+    }, { by: request.user.id, reason: 'template' });
+    return { map: maps.view(saved, a), template: saved.templates.find((t) => t.id === tpl.id) };
+  });
+
+  /** Remove a template (whoever placed it, or the DM). */
+  app.delete('/campaigns/:cid/maps/:mid/templates/:tid', async (request) => {
+    const a = access(request);
+    const { map, tpl } = ownTemplate(request, a);
+    const saved = maps.change(a.cid, map.id, (m) => {
+      m.templates = m.templates.filter((t) => t.id !== tpl.id);
+    }, { by: request.user.id, reason: 'template removed' });
+    return { map: maps.view(saved, a) };
   });
 
   // Private pins: each person's own marks on a map. Only they ever see them (not even the DM).
@@ -1466,6 +1854,8 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     const { map } = viewableMap(request);
     if (!map.tokens.some((t) => t.id === request.params.tid)) throw new NotFoundError('No such token');
     const saved = maps.change(a.cid, map.id, (m) => {
+      // In a fight, removing whoever's turn it is passes the turn on.
+      if (m.combat?.turn === request.params.tid) Object.assign(m.combat, stepTurn(m.combat, 1));
       m.tokens = m.tokens.filter((t) => t.id !== request.params.tid);
     }, { by: request.user.id, reason: 'token removed' });
     return { map: maps.view(saved, a) };

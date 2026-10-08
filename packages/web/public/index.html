@@ -186,8 +186,14 @@
         <label class="map-check small"><input type="checkbox" id="map-show-grid"> Grid</label>
         <button id="map-fit" class="ghost map-needs-map" title="Fit the whole map on screen">Fit</button>
         <button id="map-pin" class="ghost map-needs-map" aria-pressed="false" title="Drop a pin only you can see: a note to yourself on the map">Pin</button>
+        <button id="map-ruler" class="ghost map-needs-map" aria-pressed="false" title="Drag on the map to measure a distance (only you see it)">Measure</button>
+        <button id="map-ping" class="ghost map-needs-map" aria-pressed="false" title="Click the map to point everyone at a spot (Alt+click works any time)">Ping</button>
+        <button id="map-draw" class="ghost map-needs-map" aria-pressed="false" title="Sketch on the map for everyone to see; it fades after a while">Draw</button>
+        <button id="map-template" class="ghost map-needs-map" aria-pressed="false" title="Place a spell's area (a sphere, cone, line or cube) and see who it catches">Template</button>
+        <button id="map-combat-open" class="ghost map-needs-map" aria-pressed="false" title="The turn order in a fight">Initiative</button>
         <button id="map-add-token" class="ghost dm-only map-needs-map">Add token</button>
         <button id="map-fog-open" class="ghost dm-only map-needs-map" aria-pressed="false">Fog &amp; walls</button>
+        <select id="map-variant" class="dm-only" aria-label="Which picture of the map everyone sees" title="Which picture of the map everyone sees" hidden></select>
         <button id="map-settings" class="ghost dm-only map-needs-map">Map settings</button>
         <button id="map-import" class="ghost dm-only">Import map</button>
         <input id="map-file" type="file" accept="image/png,image/jpeg,image/webp,application/pdf,.pdf" hidden>
@@ -206,13 +212,19 @@
       <div id="map-wall-tools" class="map-bar map-fog-tools dm-only" hidden>
         <label class="map-check small" title="Players also see whatever their own token has a clear line to"><input type="checkbox" id="map-sight-on"> Line of sight</label>
         <label class="map-check small" title="Places a player has seen stay on their map, dimmed"><input type="checkbox" id="map-memory-on"> Remember explored</label>
+        <label class="map-check small" title="Night, or underground: players only see lit places and what their darkvision reaches"><input type="checkbox" id="map-dark-on"> Darkness</label>
         <button class="ghost" data-wall-mode="wall" aria-pressed="false" title="Drag on the map to draw a wall">Wall</button>
         <button class="ghost" data-wall-mode="low" aria-pressed="false" title="Drag to draw an obstacle players can see over but not cross (a building's roof, a cliff edge, a fence)">Obstacle</button>
         <button class="ghost" data-wall-mode="door" aria-pressed="false" title="Drag to draw a door; click a door to open or close it">Door</button>
         <button class="ghost" data-wall-mode="lock" aria-pressed="false" title="Click a door to lock or unlock it (players can't open a locked door)">Lock</button>
-        <button class="ghost" data-wall-mode="erase" aria-pressed="false" title="Click a wall or door to remove it">Erase</button>
+        <button class="ghost" data-wall-mode="light" aria-pressed="false" title="Click the map to put a light there (a torch, a brazier, a campfire)">Light</button>
+        <select id="map-light-kind" aria-label="Which light"></select>
+        <button class="ghost" data-wall-mode="difficult" aria-pressed="false" title="Drag over an area that's hard to move through (moving there costs double)">Difficult terrain</button>
+        <button class="ghost" data-wall-mode="link" aria-pressed="false" title="Click the map to put stairs or a door to another map there">Link</button>
+        <select id="map-link-to" aria-label="Leads to"></select>
+        <button class="ghost" data-wall-mode="erase" aria-pressed="false" title="Click a wall, door, light, difficult terrain or link to remove it">Erase</button>
         <button class="ghost" id="map-walls-draft" title="Let the AI trace the walls and doors from the picture, for you to correct">AI walls</button>
-        <button class="ghost" data-wall-action="clear-ai">Clear AI walls</button>
+        <button class="ghost" data-wall-action="clear-ai" title="Remove the walls, lights and difficult terrain the AI drafted">Clear AI draft</button>
         <button class="ghost" data-wall-action="forget" title="Players lose the dim view of places they saw before">Forget explored</button>
         <span id="map-wall-hint" class="muted small"></span>
       </div>
@@ -220,14 +232,20 @@
         <div id="map-stage" class="map-stage" hidden>
           <img id="map-image" alt="" draggable="false">
           <svg id="map-grid" class="map-grid" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <svg id="map-terrain" class="map-terrain" preserveAspectRatio="none" aria-hidden="true"></svg>
           <svg id="map-fog" class="map-fog" preserveAspectRatio="none" aria-hidden="true"></svg>
           <svg id="map-walls" class="map-walls" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <svg id="map-templates" class="map-templates" preserveAspectRatio="none" aria-hidden="true"></svg>
           <div id="map-tokens" class="map-tokens"></div>
+          <svg id="map-ruler-line" class="map-ruler" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <svg id="map-signals" class="map-signals" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <div id="map-links" class="map-links"></div>
           <div id="map-pins" class="map-pins"></div>
         </div>
         <p id="map-empty" class="map-empty muted" hidden></p>
         <div id="map-measure" class="map-measure" hidden></div>
         <div id="map-selection" class="map-selection" hidden></div>
+        <div id="map-combat" class="map-combat" hidden></div>
       </div>
       <dialog id="map-dialog" class="map-dialog"></dialog>
     </section>

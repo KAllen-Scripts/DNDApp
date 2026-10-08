@@ -174,6 +174,8 @@ export function createArchive(root) {
 
     appendMapChanges: (slug, mapId, entry) => appendLine(path.join(campaignDir(slug), 'maps', mapDir(mapId), 'changes.jsonl'), entry),
 
+    readMapChanges: (slug, mapId) => readLines(path.join(campaignDir(slug), 'maps', mapDir(mapId), 'changes.jsonl')),
+
     appendMapPins: (slug, mapId, userId, entry) => appendLine(path.join(campaignDir(slug), 'maps', mapDir(mapId), 'pins', `${Number(userId)}.jsonl`), entry),
 
     /** Keep a player's picture of their character exactly as uploaded (never replaced). */

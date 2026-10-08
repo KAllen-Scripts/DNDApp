@@ -80,7 +80,95 @@ export function normalizeToken(t = {}, map) {
     // The archivist's record this token stands for (the DM's; players only get the name).
     // The title is kept too: record ids can change when the knowledge base is rebuilt.
     record: normalizeRecordLink(t.record),
+    // A light the token carries (a torch: 20 ft bright, 20 ft more dim), in the map's unit; null for none.
+    light: normalizeLightRadii(t.light),
+    // How far it sees in the dark (darkvision), in the map's unit; 0 for none.
+    darkvision: num(t.darkvision, { min: 0, max: 10_000, fallback: 0 }),
+    // Walking speed in the map's unit when the DM sets it; null to use the sheet or stat block's.
+    speed: num(t.speed, { min: 0, max: 10_000, fallback: null }),
   };
+}
+
+/** A light's reach: { bright, dim } (dim is the ring beyond the bright light), or null for no light. */
+export function normalizeLightRadii(l) {
+  if (!l || typeof l !== 'object') return null;
+  const bright = num(l.bright, { min: 0, max: 10_000, fallback: 0 });
+  const dim = num(l.dim, { min: 0, max: 10_000, fallback: 0 });
+  return bright + dim > 0 ? { bright: round(bright, 2), dim: round(dim, 2) } : null;
+}
+
+/** Lights people carry or the DM places, by the 5e rules (in feet). */
+export const LIGHT_PRESETS = {
+  candle: { name: 'Candle', bright: 5, dim: 5 },
+  torch: { name: 'Torch', bright: 20, dim: 20 },
+  lamp: { name: 'Lamp', bright: 15, dim: 30 },
+  lantern: { name: 'Hooded lantern', bright: 30, dim: 30 },
+  light: { name: 'Light cantrip', bright: 20, dim: 20 },
+  fire: { name: 'Campfire', bright: 20, dim: 20 },
+};
+export const MAX_LIGHTS = 200;
+
+/** Light sources the DM places (or the AI suggests): [{ id, x, y, bright, dim, source }]. */
+export function normalizeLights(list, image = {}) {
+  const { width = 1, height = 1 } = image;
+  const seen = new Set();
+  const out = [];
+  for (const l of Array.isArray(list) ? list : []) {
+    const radii = normalizeLightRadii(l);
+    if (!l || !isTokenId(l.id) || seen.has(l.id) || out.length >= MAX_LIGHTS || !radii) continue;
+    seen.add(l.id);
+    out.push({
+      id: String(l.id),
+      x: round(num(l.x, { min: 0, max: width, fallback: width / 2 }), 2),
+      y: round(num(l.y, { min: 0, max: height, fallback: height / 2 }), 2),
+      ...radii,
+      source: pick(l.source, WALL_SOURCES, 'dm'),
+    });
+  }
+  return out;
+}
+
+export const MAX_VARIANTS = 20;
+
+/** Other pictures of a map: [{ id, name, file, type }]. `file` is the fitted copy in the map's archive folder. */
+export function normalizeVariants(list) {
+  const seen = new Set();
+  const out = [];
+  for (const v of Array.isArray(list) ? list : []) {
+    if (!v || !isTokenId(v.id) || seen.has(v.id) || out.length >= MAX_VARIANTS) continue;
+    const file = `variant-${v.id}.${{ 'image/jpeg': 'jpg', 'image/webp': 'webp' }[v.type] ?? 'png'}`;
+    if (v.file !== file) continue;
+    seen.add(v.id);
+    out.push({ id: String(v.id), name: str(v.name, 60) || 'Variant', file, type: pick(v.type, ['image/png', 'image/jpeg', 'image/webp'], 'image/png') });
+  }
+  return out;
+}
+
+export const MAX_LINKS = 50;
+
+/** Ways to another map (stairs, a door, a trapdoor): [{ id, x, y, to (map id), label }]. */
+export function normalizeLinks(list, image = {}) {
+  const { width = 1, height = 1 } = image;
+  const seen = new Set();
+  const out = [];
+  for (const l of Array.isArray(list) ? list : []) {
+    if (!l || !isTokenId(l.id) || seen.has(l.id) || out.length >= MAX_LINKS || !/^[a-f0-9]{10}$/.test(String(l.to))) continue;
+    seen.add(l.id);
+    out.push({
+      id: String(l.id),
+      x: round(num(l.x, { min: 0, max: width, fallback: width / 2 }), 2),
+      y: round(num(l.y, { min: 0, max: height, fallback: height / 2 }), 2),
+      to: String(l.to),
+      label: str(l.label, 60),
+    });
+  }
+  return out;
+}
+
+/** Is a point close enough to a link to use it? Within a square and a half (or 5% of the map's size without a grid). */
+export function nearLink(map, link, x, y) {
+  const reach = map.grid ? map.grid.size * 1.5 : Math.max(map.image.width, map.image.height) * 0.05;
+  return Math.hypot(link.x - x, link.y - y) <= reach;
 }
 
 export const MAX_PINS = 100;
@@ -195,6 +283,8 @@ export function normalizeMap(input = {}) {
     },
     fog: normalizeFog(m.fog, image),
     walls: normalizeWalls(m.walls, image),
+    lights: normalizeLights(m.lights, image),
+    terrain: normalizeTerrain(m.terrain, image),
     // The AI drafting walls from the picture (the DM's; players never get it).
     wall_draft: {
       status: pick(m.wall_draft?.status, ['', 'pending', 'done', 'failed'], ''),
@@ -203,8 +293,14 @@ export function normalizeMap(input = {}) {
     },
     // Where the image came from, when it was a page of a PDF (kept in the archive too).
     source: m.source?.file === 'source.pdf' ? { file: 'source.pdf', page: Math.max(1, Math.round(num(m.source.page, { min: 1, max: 100_000, fallback: 1 }))) } : null,
+    // Other pictures of the same map (night, after the fire...), fitted to the same size; `variant` is the one shown (null: the original).
+    variants: normalizeVariants(m.variants),
+    variant: null,
+    // Stairs and doors to another map.
+    links: normalizeLinks(m.links, image),
     tokens: [],
   };
+  if (out.variants.some((v) => v.id === m.variant)) out.variant = m.variant;
   // A scale per square means nothing without a grid.
   if (out.scale?.per === 'square' && !out.grid) out.scale = null;
   const seen = new Set();
@@ -214,6 +310,8 @@ export function normalizeMap(input = {}) {
     seen.add(token.id);
     out.tokens.push(token);
   }
+  out.templates = normalizeTemplates(m.templates, image);
+  out.combat = normalizeCombat(m.combat, out.tokens);
   return out;
 }
 
@@ -241,6 +339,8 @@ export function normalizeFog(f, image = {}) {
     // Players keep a dim view of where they've been (with line of sight).
     memory: f?.memory !== false,
     map: pick(f?.map, FOG_MAP, 'dark'),
+    // Darkness (night, or underground): with line of sight, players only see lit places and what their darkvision reaches.
+    dark: f?.dark === true,
     shapes,
   };
 }
@@ -352,7 +452,7 @@ export const wallBetween = (map, a, b) =>
  * of the image. Rays go to every wall end (and just either side of it), so
  * the polygon's corners are exactly where sight is cut off.
  */
-export function sightPolygon(map, origin) {
+export function sightPolygon(map, origin, reach = Infinity) {
   const { width, height } = map.image;
   const ox = Math.min(width - 0.01, Math.max(0.01, origin.x));
   const oy = Math.min(height - 0.01, Math.max(0.01, origin.y));
@@ -365,6 +465,8 @@ export function sightPolygon(map, origin) {
       angles.push(a - 1e-5, a, a + 1e-5);
     }
   }
+  // Limited reach (a light, darkvision): the edge of the circle, every 5°.
+  if (Number.isFinite(reach)) for (let i = 0; i < 72; i++) angles.push((i * Math.PI) / 36 - Math.PI);
   const points = [];
   for (const a of angles) {
     const dx = Math.cos(a);
@@ -381,6 +483,7 @@ export function sightPolygon(map, origin) {
       const u = cross(qx, qy, dx, dy) / denom;
       if (t >= 0 && u >= -1e-9 && u <= 1 + 1e-9 && t < best) best = t;
     }
+    best = Math.min(best, reach);
     if (best < Infinity) points.push({ a, x: ox + dx * best, y: oy + dy * best });
   }
   points.sort((p, q) => p.a - q.a);
@@ -411,20 +514,44 @@ export function pointInPolygon(x, y, poly) {
  */
 export function sightOf(map, userId) {
   if (!map.fog?.enabled || !map.fog.sight || userId == null) return [];
-  return map.tokens.filter((t) => t.kind === 'pc' && t.user_id === userId).map((t) => sightPolygon(map, t))
-    .filter((p) => p.length >= 3);
+  const own = map.tokens.filter((t) => t.kind === 'pc' && t.user_id === userId);
+  if (!map.fog.dark) return own.map((t) => sightPolygon(map, t)).filter((p) => p.length >= 3);
+  // In the dark: what darkvision reaches, and the lit places the token can see (each light's area, cut to the token's sight).
+  const k = pxPerUnit(map);
+  const lit = litAreas(map);
+  const out = [];
+  for (const t of own) {
+    if (t.darkvision > 0) out.push(sightPolygon(map, t, t.darkvision * k));
+    const full = sightPolygon(map, t);
+    for (const area of lit) out.push({ points: area, clip: full });
+  }
+  return out.filter((v) => (v.points ?? v).length >= 3);
 }
+
+/**
+ * Where light falls: one polygon per light (placed, or carried by a
+ * token), out to the end of its dim light and cut off by walls.
+ */
+export function litAreas(map) {
+  const k = pxPerUnit(map);
+  const sources = [...(map.lights ?? []), ...map.tokens.filter((t) => t.light).map((t) => ({ x: t.x, y: t.y, ...t.light }))];
+  return sources.map((l) => sightPolygon(map, l, (l.bright + l.dim) * k)).filter((p) => p.length >= 3);
+}
+
+/** Is a point inside what a player sees: a polygon, or { points, clip } (inside both)? */
+export const inView = (x, y, v) => (Array.isArray(v) ? pointInPolygon(x, y, v) : pointInPolygon(x, y, v.points) && pointInPolygon(x, y, v.clip));
 
 /** Can a player with these sight polygons see the point (x, y) right now? */
 export function canSee(map, polygons, x, y) {
   if (!map.fog?.enabled) return true;
-  if (polygons.some((p) => pointInPolygon(x, y, p))) return true;
+  if (polygons.some((p) => inView(x, y, p))) return true;
   return !isFogged(map, x, y);
 }
 
 /**
  * The fog as one player sees it, as a mask: a list of shapes drawn in
- * order, each { fill, x, y, w, h } or { fill, points }. fill is 'cover'
+ * order, each { fill, x, y, w, h } or { fill, points } (with `clip`: only
+ * where it's also inside that polygon). fill is 'cover'
  * (fog), 'dim' (seen before: shown darkened) or 'clear'. Without sight
  * polygons or explored areas it's the DM's rectangles alone. Empty when
  * the fog is off.
@@ -436,7 +563,7 @@ export function fogMask(map, { polygons = [], explored = [] } = {}) {
     { fill: map.fog.map === 'grey' ? 'dim' : 'cover', x: 0, y: 0, w: width, h: height },
     ...explored.map((r) => ({ fill: 'dim', ...r })),
     ...map.fog.shapes.map((s) => ({ fill: s.op === 'reveal' ? 'clear' : map.fog.map === 'grey' ? 'dim' : 'cover', x: s.x, y: s.y, w: s.w, h: s.h })),
-    ...polygons.map((points) => ({ fill: 'clear', points })),
+    ...polygons.map((v) => (Array.isArray(v) ? { fill: 'clear', points: v } : { fill: 'clear', points: v.points, clip: v.clip })),
   ];
 }
 
@@ -549,4 +676,310 @@ export function formatDistance(d) {
   if (!d) return '';
   const v = d.value >= 100 ? Math.round(d.value) : Math.round(d.value * 10) / 10;
   return `${v.toLocaleString('en')} ${d.unit}`;
+}
+
+// ---------- initiative ----------
+
+/**
+ * A fight on a map: the turn order, whose turn it is and the round, or null
+ * when there's no fight. Each entry is a token on the map with its
+ * initiative (null until rolled) and the modifier it rolled with (ties go to
+ * the higher modifier). Entries are kept in turn order; `turn` is the token
+ * whose turn it is, or null before the first turn.
+ */
+export function normalizeCombat(c, tokens = []) {
+  if (!c || typeof c !== 'object') return null;
+  const ids = new Set(tokens.map((t) => t.id));
+  const seen = new Set();
+  const entries = [];
+  for (const e of Array.isArray(c.entries) ? c.entries : []) {
+    if (!e || !ids.has(e.id) || seen.has(e.id)) continue;
+    seen.add(e.id);
+    entries.push({
+      id: e.id,
+      init: num(e.init, { min: -99, max: 999, fallback: null }),
+      mod: num(e.mod, { min: -99, max: 99, fallback: null }),
+      // How far it has moved on its turn so far (in the map's unit).
+      moved: round(num(e.moved, { min: 0, max: 1_000_000, fallback: 0 }), 2),
+    });
+  }
+  const sorted = sortCombat(entries, tokens);
+  const turn = sorted.some((e) => e.id === c.turn && e.init != null) ? c.turn : null;
+  return { round: Math.round(num(c.round, { min: 1, max: 9999, fallback: 1 })), turn, entries: sorted };
+}
+
+/**
+ * Turn order: highest initiative first; ties go to the higher modifier, then
+ * player characters, then by name. Entries not rolled yet go last.
+ */
+export function sortCombat(entries, tokens = []) {
+  const byId = new Map(tokens.map((t) => [t.id, t]));
+  return [...entries].sort((a, b) => {
+    if ((a.init == null) !== (b.init == null)) return a.init == null ? 1 : -1;
+    if (a.init !== b.init) return b.init - a.init;
+    if ((a.mod ?? 0) !== (b.mod ?? 0)) return (b.mod ?? 0) - (a.mod ?? 0);
+    const ta = byId.get(a.id);
+    const tb = byId.get(b.id);
+    if ((ta?.kind === 'pc') !== (tb?.kind === 'pc')) return ta?.kind === 'pc' ? -1 : 1;
+    return String(ta?.name ?? '').localeCompare(String(tb?.name ?? ''));
+  });
+}
+
+/**
+ * The next (dir 1) or previous (dir -1) turn: { round, turn }. Only entries
+ * with an initiative take turns. Going past the last one starts the next
+ * round; going back past the first returns to the previous round (never
+ * before round 1). Null when nobody has rolled yet.
+ */
+export function stepTurn(combat, dir = 1) {
+  const order = combat.entries.filter((e) => e.init != null).map((e) => e.id);
+  if (!order.length) return null;
+  const i = order.indexOf(combat.turn);
+  if (i < 0) return { round: combat.round, turn: dir > 0 ? order[0] : combat.turn };
+  if (dir > 0) return i + 1 < order.length ? { round: combat.round, turn: order[i + 1] } : { round: combat.round + 1, turn: order[0] };
+  if (i > 0) return { round: combat.round, turn: order[i - 1] };
+  return combat.round > 1 ? { round: combat.round - 1, turn: order.at(-1) } : { round: 1, turn: order[0] };
+}
+
+/**
+ * A creature's Dexterity modifier from its stat block's text, or null if it
+ * isn't there. Reads "DEX 14 (+2)" and the usual Markdown table (a row of
+ * ability names, then a row of scores).
+ */
+export function dexModifier(text) {
+  const s = String(text ?? '').replace(/[−–]/g, '-');
+  const signed = (v) => Number(v.replace(/\s+/g, ''));
+  const fromScore = (n) => Math.floor((Number(n) - 10) / 2);
+  const inline = s.match(/\bDEX(?:TERITY)?\b[*_:\s]{0,6}(\d{1,2})\s*\(\s*([+-]\s*\d{1,2})\s*\)/i);
+  if (inline) return signed(inline[2]);
+  const lines = s.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const cells = lines[i].split('|').map((c) => c.replace(/[*_]/g, '').trim());
+    const col = cells.findIndex((c) => /^dex(terity)?$/i.test(c));
+    if (col < 0) continue;
+    for (const next of lines.slice(i + 1, i + 3)) {
+      const cell = next.split('|').map((c) => c.trim())[col] ?? '';
+      const m = cell.match(/\(\s*([+-]\s*\d{1,2})\s*\)/);
+      if (m) return signed(m[1]);
+      if (/^\d{1,2}$/.test(cell)) return fromScore(cell);
+    }
+  }
+  const bare = s.match(/\bDEX(?:TERITY)?\b[*_:\s]{0,6}(\d{1,2})\b/i);
+  return bare ? fromScore(bare[1]) : null;
+}
+
+// ---------- spell templates ----------
+
+/**
+ * Areas of effect on a map, like a fireball's sphere or a dragon's cone:
+ * { id, shape, x, y, angle, size, width, label, color, user_id }. x/y is
+ * the point of origin in image pixels, angle the direction in degrees
+ * (clockwise from pointing right), size the radius or length and width a
+ * line's width, both in the map's scale unit (feet on most maps).
+ */
+export const TEMPLATE_SHAPES = ['circle', 'cone', 'line', 'cube'];
+export const TEMPLATE_SHAPE_NAMES = { circle: 'Sphere / radius', cone: 'Cone', line: 'Line', cube: 'Cube' };
+export const MAX_TEMPLATES = 50;
+export const TEMPLATE_COLOR = '#e8743b';
+
+export function normalizeTemplates(list, image = {}) {
+  const { width = 1, height = 1 } = image;
+  const seen = new Set();
+  const out = [];
+  for (const t of Array.isArray(list) ? list : []) {
+    if (!t || !isTokenId(t.id) || seen.has(t.id) || out.length >= MAX_TEMPLATES) continue;
+    const size = num(t.size, { min: 0.1, max: 10_000, fallback: null });
+    if (!size) continue;
+    seen.add(t.id);
+    const shape = pick(t.shape, TEMPLATE_SHAPES, 'circle');
+    out.push({
+      id: String(t.id),
+      shape,
+      x: round(num(t.x, { min: 0, max: width, fallback: width / 2 }), 2),
+      y: round(num(t.y, { min: 0, max: height, fallback: height / 2 }), 2),
+      angle: round(((num(t.angle, { min: -1e6, max: 1e6, fallback: 0 }) % 360) + 360) % 360, 2),
+      size: round(size, 2),
+      width: shape === 'line' ? round(num(t.width, { min: 0.1, max: 10_000, fallback: 5 }), 2) : null,
+      label: str(t.label, 80),
+      color: color(t.color, TEMPLATE_COLOR),
+      user_id: Number.isInteger(Number(t.user_id)) && Number(t.user_id) > 0 ? Number(t.user_id) : null,
+    });
+  }
+  return out;
+}
+
+/** Image pixels per unit of the map's scale. Without a scale, a square (or a share of the map) counts as 5 ft. */
+export function pxPerUnit(map) {
+  const per = unitsPerPx(map);
+  return per ? 1 / per : squarePx(map) / 5;
+}
+
+/**
+ * Where a template's point of origin goes when placed at p: on a grid, the
+ * nearest corner of a square (5e areas start at a square's corner).
+ */
+export function snapTemplatePoint(map, p) {
+  if (!map.grid) return { x: round(p.x, 2), y: round(p.y, 2) };
+  const { size: g, x: gx, y: gy } = map.grid;
+  const { width, height } = map.image;
+  const x = Math.min(width, Math.max(0, Math.round((p.x - gx) / g) * g + gx));
+  const y = Math.min(height, Math.max(0, Math.round((p.y - gy) / g) * g + gy));
+  return { x: round(x, 2), y: round(y, 2) };
+}
+
+/**
+ * A template's outline in image pixels: { circle: { cx, cy, r } } or
+ * { points: [[x, y], ...] }. A cone is as wide at its end as it is long
+ * (the 5e cone); a cube's origin is one corner, and it lies on the side the
+ * angle points to.
+ */
+export function templateShape(map, t) {
+  const k = pxPerUnit(map);
+  const len = t.size * k;
+  if (t.shape === 'circle') return { circle: { cx: t.x, cy: t.y, r: len } };
+  const a = (t.angle * Math.PI) / 180;
+  const dx = Math.cos(a);
+  const dy = Math.sin(a);
+  const at = (along, across) => [round(t.x + dx * along - dy * across, 2), round(t.y + dy * along + dx * across, 2)];
+  if (t.shape === 'cone') return { points: [[t.x, t.y], at(len, -len / 2), at(len, len / 2)] };
+  if (t.shape === 'line') {
+    const w = ((t.width ?? 5) * k) / 2;
+    return { points: [at(0, -w), at(len, -w), at(len, w), at(0, w)] };
+  }
+  const sx = dx < -1e-9 ? -1 : 1;
+  const sy = dy < -1e-9 ? -1 : 1;
+  const x2 = t.x + sx * len;
+  const y2 = t.y + sy * len;
+  return { points: [[t.x, t.y], [round(x2, 2), t.y], [round(x2, 2), round(y2, 2)], [t.x, round(y2, 2)]] };
+}
+
+/** Is a point inside a template (its edge counts)? */
+export function inTemplate(map, t, x, y) {
+  const s = templateShape(map, t);
+  if (s.circle) return Math.hypot(x - s.circle.cx, y - s.circle.cy) <= s.circle.r + 0.01;
+  if (pointInPolygon(x, y, s.points)) return true;
+  // Points exactly on an edge.
+  const pts = s.points;
+  return pts.some((p, i) => {
+    const q = pts[(i + 1) % pts.length];
+    return distanceToWall({ x, y }, { x1: p[0], y1: p[1], x2: q[0], y2: q[1] }) <= 0.01;
+  });
+}
+
+/**
+ * The tokens a template catches. On a grid, a token is caught when the
+ * middle of any square it fills is inside the area (the usual way VTTs
+ * read the 5e rule); off a grid, when its centre is.
+ */
+export function tokensInTemplate(map, t, tokens = map.tokens) {
+  return tokens.filter((tok) => {
+    if (!map.grid || tok.size < 1) return inTemplate(map, t, tok.x, tok.y);
+    const g = map.grid.size;
+    const n = tok.size;
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        if (inTemplate(map, t, tok.x - (n * g) / 2 + (i + 0.5) * g, tok.y - (n * g) / 2 + (j + 0.5) * g)) return true;
+      }
+    }
+    return false;
+  });
+}
+
+/**
+ * A spell's area, read from its range and description: { shape, size,
+ * width? } in feet, or null. "Self (15-foot cone)", "20-foot-radius
+ * sphere", "a line 100 feet long and 5 feet wide", "10-foot cube".
+ */
+export function spellArea(spell) {
+  const texts = [spell?.range, spell?.description].map((s) => String(s ?? '').replace(/[‐‑–]/g, '-'));
+  for (const s of texts) {
+    const found = [
+      [/(\d+)[- ](?:foot|feet|ft\.?)[- ]radius/i, (m) => ({ shape: 'circle', size: +m[1] })],
+      [/radius of (\d+) (?:foot|feet)/i, (m) => ({ shape: 'circle', size: +m[1] })],
+      [/(\d+)[- ](?:foot|feet|ft\.?)(?:[- ]long)?[- ]cone/i, (m) => ({ shape: 'cone', size: +m[1] })],
+      [/(\d+)[- ](?:foot|feet|ft\.?)[- ]cube/i, (m) => ({ shape: 'cube', size: +m[1] })],
+      [/\bline\b[^.]{0,40}?(\d+) (?:foot|feet) long and (\d+) (?:foot|feet) wide/i, (m) => ({ shape: 'line', size: +m[1], width: +m[2] })],
+      [/(\d+)[- ](?:foot|feet|ft\.?)[- ]line/i, (m) => ({ shape: 'line', size: +m[1], width: 5 })],
+    ]
+      .map(([re, make]) => {
+        const m = s.match(re);
+        return m && { at: m.index, area: make(m) };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.at - b.at)[0];
+    if (found) return found.area;
+  }
+  return null;
+}
+
+// ---------- movement and difficult terrain ----------
+
+export const MAX_TERRAIN = 300;
+
+/** Difficult terrain: areas where moving costs double: [{ id, points: [[x, y], ...], source }]. */
+export function normalizeTerrain(list, image = {}) {
+  const { width = 1, height = 1 } = image;
+  const seen = new Set();
+  const out = [];
+  for (const a of Array.isArray(list) ? list : []) {
+    if (!a || !isTokenId(a.id) || seen.has(a.id) || out.length >= MAX_TERRAIN) continue;
+    const points = (Array.isArray(a.points) ? a.points : []).slice(0, 200)
+      .map((p) => [round(num(p?.[0], { min: 0, max: width, fallback: 0 }), 1), round(num(p?.[1], { min: 0, max: height, fallback: 0 }), 1)]);
+    if (points.length < 3) continue;
+    seen.add(a.id);
+    out.push({ id: String(a.id), points, source: pick(a.source, WALL_SOURCES, 'dm') });
+  }
+  return out;
+}
+
+/** Is this point in difficult terrain? */
+export const isDifficult = (map, x, y) => (map.terrain ?? []).some((a) => pointInPolygon(x, y, a.points));
+
+/**
+ * What a move along a path costs ({ value, unit, squares?, difficult }), or
+ * null without a scale. points: where it starts, any waypoints, where it
+ * ends. On a grid with a scale per square, each square entered costs one
+ * square (diagonals too, the 5e way), two in difficult terrain; otherwise
+ * it's the length of the path, doubled where it crosses difficult terrain.
+ */
+export function pathCost(map, points) {
+  const per = unitsPerPx(map);
+  if (per == null || points.length < 2) return null;
+  const { unit } = map.scale;
+  let difficult = false;
+  if (map.grid && map.scale.per === 'square') {
+    const g = map.grid.size;
+    let squares = 0;
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1];
+      const b = points[i];
+      const n = Math.max(Math.round(Math.abs(b.x - a.x) / g), Math.round(Math.abs(b.y - a.y) / g));
+      for (let k = 1; k <= n; k++) {
+        const hard = isDifficult(map, a.x + ((b.x - a.x) * k) / n, a.y + ((b.y - a.y) * k) / n);
+        difficult ||= hard;
+        squares += hard ? 2 : 1;
+      }
+    }
+    return { value: squares * map.scale.distance, unit, squares, difficult };
+  }
+  let px = 0;
+  const step = squarePx(map) / 4;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const n = Math.max(1, Math.ceil(len / step));
+    for (let k = 0; k < n; k++) {
+      const hard = isDifficult(map, a.x + ((b.x - a.x) * (k + 0.5)) / n, a.y + ((b.y - a.y) * (k + 0.5)) / n);
+      difficult ||= hard;
+      px += (len / n) * (hard ? 2 : 1);
+    }
+  }
+  return { value: px * per, unit, difficult };
+}
+
+/** A walking speed from a stat block's speed line ("30 ft., fly 60 ft." is 30), or null. */
+export function speedFromText(text) {
+  const m = String(text ?? '').match(/(\d+)\s*(?:ft|feet|foot|m\b)/i);
+  return m ? Number(m[1]) : null;
 }

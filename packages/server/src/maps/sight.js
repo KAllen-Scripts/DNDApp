@@ -11,7 +11,7 @@
  * reveal by hand).
  */
 import crypto from 'node:crypto';
-import { sightOf, fogMask, pointInPolygon } from '@dndapp/shared/map.js';
+import { sightOf, fogMask, inView } from '@dndapp/shared/map.js';
 
 export const EXPLORE_CELLS = 128;
 const MEMO_SIZE = 64;
@@ -22,12 +22,12 @@ export function exploreGrid(image) {
   return { cell, cols: Math.ceil(image.width / cell), rows: Math.ceil(image.height / cell) };
 }
 
-/** Mark every cell whose centre is inside one of the polygons. Returns whether anything new was marked. */
+/** Mark every cell whose centre is inside one of the polygons (or { points, clip }, see sightOf). Returns whether anything new was marked. */
 export function markExplored(bits, { cell, cols, rows }, polygons) {
   let changed = false;
   for (const poly of polygons) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const [x, y] of poly) {
+    for (const [x, y] of poly.points ?? poly) {
       x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
     }
     const c0 = Math.max(0, Math.floor(x0 / cell));
@@ -38,7 +38,7 @@ export function markExplored(bits, { cell, cols, rows }, polygons) {
       for (let c = c0; c <= c1; c++) {
         const i = r * cols + c;
         if (bits[i >> 3] & (1 << (i & 7))) continue;
-        if (pointInPolygon((c + 0.5) * cell, (r + 0.5) * cell, poly)) {
+        if (inView((c + 0.5) * cell, (r + 0.5) * cell, poly)) {
           bits[i >> 3] |= 1 << (i & 7);
           changed = true;
         }
