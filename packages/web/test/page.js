@@ -340,8 +340,8 @@ function installGlobals(window, page, base) {
     page.controllers.add(controller);
     if (init.signal) init.signal.addEventListener('abort', () => controller.abort(init.signal.reason), { once: true });
     page.requests.push({ method: init.method ?? 'GET', path: url.pathname + url.search, body: init.body ? safeJson(init.body) : undefined });
-    // Live streams (…/events) stay open for as long as the page is, so they don't count as waiting.
-    const live = url.pathname.endsWith('/events');
+    // Live streams (…/events, …/live) stay open for as long as the page is, so they don't count as waiting.
+    const live = url.pathname.endsWith('/events') || url.pathname.endsWith('/live');
     if (!live) page.inflight += 1;
     try {
       const res = await nodeFetch(url, { ...init, signal: controller.signal });

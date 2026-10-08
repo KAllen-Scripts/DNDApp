@@ -62,7 +62,8 @@ export function replaySheet(entries) {
   return { sheet: normalizeSheet(doc), version, saved_at };
 }
 
-export function createSheets({ db, archive, store }) {
+/** onSave(campaignId, userId) runs after each save that changed something (the archivist reads sheet changes). */
+export function createSheets({ db, archive, store, onSave = () => {} }) {
   const row = (cid, uid) => db.prepare('SELECT data, version, updated_at FROM character_sheets WHERE campaign_id = ? AND user_id = ?').get(cid, uid);
 
   const sheets = {
@@ -99,6 +100,7 @@ export function createSheets({ db, archive, store }) {
         `INSERT INTO character_sheets (campaign_id, user_id, data, version, updated_at) VALUES (?, ?, ?, ?, ?)
          ON CONFLICT (campaign_id, user_id) DO UPDATE SET data = excluded.data, version = excluded.version, updated_at = excluded.updated_at`,
       ).run(campaignId, userId, JSON.stringify(sheet), version, saved_at);
+      onSave(campaignId, userId);
       return { sheet, version, updated_at: saved_at };
     },
   };

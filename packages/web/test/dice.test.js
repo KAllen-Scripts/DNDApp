@@ -50,7 +50,7 @@ test('dice: a roll shows the server\'s total and every die, and goes in the hist
     page.type('#dice-notation', ' 2d6+3 ');
     page.submit('#dice-panel form');
     await page.settle();
-    assert.deepEqual(page.requests.at(-1).body, { notation: '2d6+3', mode: 'normal' });
+    assert.deepEqual(page.requests.at(-1).body, { notation: '2d6+3', mode: 'normal', label: '', visibility: 'party' });
     assert.ok(page.visible('#dice-result'));
     assert.equal(page.text('#dice-result .dr-total'), '13');
     assert.equal(page.text('#dice-result .dr-label'), '2d6+3');

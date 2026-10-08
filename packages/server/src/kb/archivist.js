@@ -20,6 +20,9 @@ export const ARCHIVIST_SYSTEM = `You are the archivist for a Dungeons & Dragons 
 - Session transcripts from automatic speech-to-text of play recorded on Discord. Lines are "[HH:MM:SS] Speaker: text". Speech-to-text garbles names and words; use context, the glossary and existing records to recognise what was meant. Players mix in-character speech, rules talk and table chatter; record the story, not the chatter.
 - Players' private notes from the session, with the player and the time written. They show what that player noticed or cared about, and often have better spellings and numbers than the transcript. They are that player's perspective, not established fact.
 - Map events: what happened that day on the maps the DM showed the players (who appeared, fights starting and ending, who went down or got back up, conditions, doors opened, characters taking stairs or doors to another map), logged by the app with the time. Names and order are exact; use them to confirm and date what the transcript describes. A map's name is the DM's label, not necessarily its name in the world. With fog of war on, not every player saw every part of a map.
+- Character sheets: each player's own sheet for their character (class, level, abilities, hit points, equipment, spells, backstory and so on), the whole sheet the first time you see it and then each change with when it happened. Players keep them up to date, so they are good evidence for levels gained, items and money picked up or spent, and spells learned; use the time of a change to place it in the story. A sheet is what the player wrote, not established fact about the world: a backstory is the player's account until play confirms it.
+- Late note changes: notes written, edited or deleted after their session was processed. An edit replaces what the note said; a deleted note no longer counts as a source.
+- Handouts: pictures and text the DM gave players, with who received them and when. They are what the DM showed those players; treat their text as the DM's.
 - DM corrections: authoritative. Apply them even if they contradict earlier records.
 - The DM's narration is authoritative for what happened in the world. Player speculation is not fact; record it as speculation only if it matters.
 
@@ -30,12 +33,14 @@ export const ARCHIVIST_SYSTEM = `You are the archivist for a Dungeons & Dragons 
 - Keep records focused. Split anything that grows large.
 - Maintain the guide (update_guide): a concise description of your conventions (kinds, what data fields mean, statuses, naming, where to look for what). It's shown to you at the start of every run and to the question-answering AI. Keep it accurate whenever you change conventions.
 - Pinned records are shown in full with every question. Use them for what nearly every question needs, such as a short story so far, the party and its current situation, and open obligations. Keep them short. There is a size budget.
-- Cite sources on facts: [S12 01:23:45] for a transcript moment, [S12] for a session generally, [note S12 <player>] for a player's note.
+- Cite sources on facts: [S12 01:23:45] for a transcript moment, [S12] for a session generally, [note S12 <player>] for a player's note, [sheet <player> 2026-10-08] for a character sheet as of a date, [handout <title>] for a handout.
 
 ## Who knows what (privacy)
 Every record has known_by: "everyone" (visibility "everyone"), or a restricted list of user ids (visibility "restricted"). The question-answering AI only shows a player records they're allowed to see. Decide it like this:
 - Something that happened openly in a session is known by the players who attended it (you're told who). If every member attended, use everyone.
 - Something only in one player's private note is known only to that player, unless the transcript shows it was shared.
+- Character sheets are private to their player. Something only on a sheet (a backstory secret, a hidden item, exact hit points) is known only to that player, unless the transcript, notes or map events show others know it. The character's name, race and class are usually plain to the party once they've played together.
+- A handout is known by the players who received it (everyone if it went to everyone).
 - Things the DM tells one player privately, or that only one character perceives (a whisper, a secret roll, "only Lyra sees…"), are known only to that player.
 - Players who missed a session don't know what happened in it unless the transcript or notes show they were told later. When they're told, widen known_by.
 - When one record mixes common and private knowledge, split it into a common record and a restricted one.
@@ -320,6 +325,23 @@ export function createArchivist({ db, store, kb, search, llm, config, mapEvents 
       ].filter(Boolean).join('\n\n');
 
       return run(cid, `session ${session.number}`, session.number, prompt, onProgress);
+    },
+
+    /**
+     * Read what changed between sessions: character sheets (new ones in full,
+     * then each change with its time), late note changes and handouts. See kb/updates.js.
+     * @param {{ since: string, until: string, sheets: string[], notes: string[], handouts: string[] }} updates
+     */
+    async runUpdates(cid, updates, onProgress) {
+      const prompt = [
+        rosterBlock(cid),
+        stateBlock(cid),
+        updates.sheets.length ? `<character_sheets>\n${updates.sheets.join('\n\n')}\n</character_sheets>` : '',
+        updates.notes.length ? `<note_changes>\n${updates.notes.join('\n')}\n</note_changes>` : '',
+        updates.handouts?.length ? `<handouts>\n${updates.handouts.join('\n\n')}\n</handouts>` : '',
+        'Update the knowledge base with these changes made between sessions. Times are when each change was saved or each handout given. Keep each character\'s record current (level, hit points, equipment, money, spells) with its history, and keep anything learned only from a sheet or a note known only to its player.',
+      ].filter(Boolean).join('\n\n');
+      return run(cid, 'updates', null, prompt, onProgress);
     },
 
     /** Apply one DM correction. */

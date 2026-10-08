@@ -163,9 +163,11 @@ Also accepted: `[MM:SS]`, fractional seconds, no brackets, `0:01:30 - Name: text
 
 **Glossary**: correct spellings and their speech-to-text misspellings, fixed before anything else sees the text.
 
-**Player notes**: free text, private to the author. Each note has a `session_date`: today by default, and notes written before 06:00 count towards the previous day. A note links to the session uploaded with the same date. Notes are append-only (no editing yet).
+**Player notes**: free text, private to the author. Each note has a `session_date`: today by default, and notes written before 06:00 count towards the previous day. A note links to the session uploaded with the same date. The author can edit or delete a note; the archive keeps every version (an edit or delete is a later line with the same id), and changes made after the session was processed reach the archivist between sessions (§5.2).
 
-**DM corrections**: plain words ("the innkeeper is Brother Hal, not Hall"). Answering one of the archivist's questions creates a correction.
+**DM corrections**: plain words ("the innkeeper is Brother Hal, not Hall"). Answering one of the archivist's questions creates a correction. The DM writes both on the Archivist tab.
+
+**Character sheets** and **handouts** also reach the archivist, between sessions (§5.2).
 
 ### 4.2 Tables
 
@@ -173,20 +175,23 @@ Also accepted: `[MM:SS]`, fractional seconds, no brackets, `0:01:30 - Name: text
 |---|---|---|
 | `campaigns`, `users`, `memberships` | source | Campaigns (unique name), accounts (unique name, scrypt password hash, `must_change_password`), role + character per campaign. |
 | `speakers`, `glossary` | source | As above. |
-| `sessions` | source | Number, date played, checksum, processing status. |
-| `player_notes` | source | Private notes with author and session date. |
+| `sessions` | source | Number, date played, checksum, processing status, when it was last processed (`processed_at`, schema v11). |
+| `player_notes` | source | Private notes with author and session date; `edited_at`, `deleted_at` (schema v11). |
 | `character_sheets` | source | One sheet per player per campaign (JSON), with a version that goes up on each save. Schema v5. |
 | `maps` | source | Maps the DM imported (JSON: image, source page, grid, scale, fog, tokens, shown), with a version. Schema v7. |
 | `map_pins` | source | Each person's private pins on a map (JSON list), only ever sent to them. Schema v8. |
 | `character_pictures` | source | Which token picture and full picture each player is using per campaign (JSON; the files are in the archive). Schema v9. |
+| `handouts` | source | Handouts the DM gave (JSON: title, text, picture, `to`: "everyone" or user ids, removed). Schema v11. |
 | `corrections` | source | DM corrections with `after_session` (where to replay them in a rebuild). |
 | `attendance` | derived | Who was at each session. |
 | `kb_records` | derived | The archivist's knowledge base (§5.1). |
 | `kb_journal` | derived | Every knowledge-base change, with the run and reason. |
 | `dm_questions` | derived | Questions the archivist left for the DM. |
+| `archivist_marks` | derived | How far the archivist has read sheet changes, late note changes and handouts (`updates_until`). Schema v11. |
 | `docs` (+ `docs_fts`) | derived | Search index: transcript chunks, knowledge-base records, player notes, each with `visible_to`. |
 | `logins` | operational | Logged-in browsers (hashed tokens, last used). Not archived. |
 | `jobs`, `llm_usage`, `conversations`, `qa_log` | operational | Queue, AI usage/timing, Q&A history. |
+| `rolls` | operational | Dice rolls with who rolled, label, result and who may see them (`party`, `dm`, `self`). Not archived. Schema v11. |
 
 ### 4.3 Archive, restore and rebuild
 
@@ -197,13 +202,16 @@ data/archive/
     campaign.json, members.json
     speakers.json, glossary.json      (+ history/)
     corrections.jsonl                 append-only
-    player-notes/<YYYY-MM-DD>.jsonl   append-only
+    player-notes/<YYYY-MM-DD>.jsonl   append-only; an edit or delete is a later line with the same id
     character-sheets/<user id>.jsonl  append-only: each save's changes (first line = whole sheet)
     character-sheets/uploads/         uploaded sheet files, as uploaded
     maps/<id>/image.<ext>             a map the DM imported, as uploaded
     maps/<id>/changes.jsonl           append-only: each change to that map (first line = whole map)
     maps/<id>/source.pdf              the PDF, when the map is a page of one
     maps/<id>/pins/<user id>.jsonl    append-only: someone's private pins on that map (the whole list each time)
+    maps/<id>/tokens/<file>           a picture the DM gave an NPC or enemy token, as uploaded
+    handouts/<id>/<picture>           a handout's picture, as uploaded
+    handouts/<id>/changes.jsonl       append-only: the whole handout after each change
     sessions/0001/transcript.txt      read-only, sha256 in meta.json
     outputs/v<PIPELINE_VERSION>/<timestamp>-<run>/report.json, journal.json, knowledge_base.json, questions.json
     deleted.json                      only if the admin deleted the campaign (restore skips it; nothing else is touched)
@@ -211,9 +219,9 @@ data/archive/
 
 - **Deleting a campaign** removes it and everything derived or mirrored from it from the database (foreign-key cascades), but never touches the archive: the folder gets `deleted.json` and restore skips it. New campaigns never reuse an existing archive folder's slug. Undo by hand: remove the marker, restart, rebuild.
 - A transcript can never be replaced (different bytes for an existing session number → 409).
-- **Restore:** on start-up, accounts, campaigns, members, sessions, speakers, glossary, corrections, notes, character sheets and maps (both replayed from their change lines), and private map pins missing from the database are restored from the archive, and notes are re-indexed. Then run a rebuild to regenerate the knowledge base.
-- **Rebuild:** `npm run rebuild -- --campaign <id> --yes` (or `POST /rebuild`) wipes all derived data, re-indexes notes, then replays every session in order, each correction right after the session it was made against. The archivist is non-deterministic, so a rebuild gives an equivalent knowledge base, not an identical one.
-- Bump `PIPELINE_VERSION` (now 7) when prompts, tools or the memory design change.
+- **Restore:** on start-up, accounts, campaigns, members, sessions, speakers, glossary, corrections, notes (with their edits and deletes), character sheets and maps (both replayed from their change lines), handouts, and private map pins missing from the database are restored from the archive, and notes are re-indexed. Then run a rebuild to regenerate the knowledge base.
+- **Rebuild:** `npm run rebuild -- --campaign <id> --yes` (or `POST /rebuild`) wipes all derived data, re-indexes notes, then replays every session in order, each correction right after the session it was made against. Sheet changes and handouts are read in time order between the sessions (those from before a session's day, before it; the rest at the end). The archivist is non-deterministic, so a rebuild gives an equivalent knowledge base, not an identical one.
+- Bump `PIPELINE_VERSION` (now 8) when prompts, tools or the memory design change.
 
 ## 5. Knowledge base and Q&A (core design)
 
@@ -236,6 +244,12 @@ Per session (job `ingest`):
 5. Snapshot the run (report, journal, full knowledge base, questions) to the archive.
 
 Per DM correction (job `correct`): the archivist gets the correction and its state, and applies it.
+
+Between sessions (job `updates`, `kb/updates.js`; owner's request, 2026-10-08: "the AI should get the sheet when it's made, and any changes as well as when that change happened"): the archivist gets
+- **character sheets**: a new sheet in full (what the player entered, plus the numbers worked out from it), then each change since it last read that sheet, with the time it was saved (`[2026-10-08 14:03] classes[Fighter].level: 3 → 4`). Saves of the same field within 10 minutes count as one change; a field changed and changed back is no change. Read from the archive, which keeps every save with its time, so a rebuild sees the same changes.
+- **late note changes**: notes written, edited or deleted after their session was processed (an edit says what it said before; a delete says to drop what only that note supported). Notes for sessions not processed yet wait for the session.
+- **handouts** given, changed or taken back, with who got them.
+The job runs once nothing has changed for `ARCHIVIST_UPDATES_DELAY_MINUTES` (default 10), so filling in a sheet is one run, not one per keystroke; anything left from before a restart is picked up on start-up. With nothing new, no AI call is made. A mark (`archivist_marks`) says how far it has read. The archivist is told sheets are private to their player (anything only on a sheet stays known by that player, unless play shows others know it) and handouts are known by the players who got them.
 
 **Archivist tools** (full write access): `search_kb`, `list_records`, `get_records`, `create_record`, `update_record`, `delete_record`, `update_guide`, `ask_dm`, `search_transcript`, `read_transcript`, `read_player_notes`. Every write needs a reason and is journalled.
 
@@ -266,13 +280,15 @@ Who-knows-what is decided by the archivist and enforced by the server:
 | Knowledge-base record | Its `known_by` (NULL = every member). DMs see all. |
 | Transcript (search, read, evidence, `/transcript` endpoint) | Attendees of that session. DMs see all. |
 | Player note (search, list) | **Only its author**, not even the DM. |
-| Character sheet | **Only its player.** Not the DM (deferred with the DM role), not Q&A, not the archivist. The admin login has none. |
+| Character sheet | **Only its player** on the page and through the API. Not the DM (deferred with the DM role), not Q&A directly. The archivist reads it (§5.2) and keeps what's only on a sheet `known_by` that player, so Q&A can answer the player from it; but DMs see every record, so the DM can learn sheet details through Q&A (same as notes, below). The admin login has none. |
+| Dice roll | Party rolls: everyone in the campaign. "Only the DM": the DM and whoever rolled (the DM's own is a secret roll). "Only me": whoever rolled. |
+| Handout | The DM, and the players it was given to (`to`: everyone, or chosen players). Its picture is served only to them. Players aren't told who else got it. |
 | Map | The DM: everything except players' private pins. Players: only maps the DM has shown, without the AI's description and reading notes, stat blocks, record links, hidden tokens, or anything under the fog (the image itself is blacked out there on the server); NPCs' and enemies' hit points only as how hurt they look; they can change only their own token. Private pins: only their owner. Not the archivist or Q&A (yet). |
 | Archivist | Sees everything, including all notes; decides `known_by`. |
 
 The archivist's rules: openly happened → attendees (everyone if all attended); only in a player's note → that player; whispered/secret perception → that player; absent players don't know unless told later (then widen); mixed records get split; when in doubt, restrict.
 
-**Deferred:** the archivist currently includes the DM in `known_by` for records built from a player's private note, so the DM can learn note contents through Q&A or the debug view. The DM role is being designed later (owner's instruction: leave it for now). More privacy work is planned.
+**Deferred:** the archivist currently includes the DM in `known_by` for records built from a player's private note, so the DM can learn note contents through Q&A or the debug view. The same now goes for what's only on a character sheet (DMs see every record). The DM role is being designed later (owner's instruction: leave it for now). More privacy work is planned.
 
 ### 5.6 Performance
 
@@ -305,18 +321,23 @@ The archivist's rules: openly happened → attendees (everyone if all attended);
 - [x] Maps: fog of war, hit points and conditions, hidden tokens, AI stat blocks, NPCs from the records, PDF page import, private pins (§6.6).
 - [x] Maps: walls, doors and line of sight; a Measure tool, spell templates and an initiative tracker (§6.6).
 - [x] Maps: darkness, lights and darkvision; pings and sketches; waypoints, speed per turn and difficult terrain; other pictures of a map; links between maps; map events for the archivist (§6.6).
+- [x] Edit and delete your own notes (as new archived versions).
+- [x] The DM's Archivist tab: the archivist's questions (answer or dismiss) and corrections in plain words.
+- [x] Dice rolls shared live: with the party, only the DM (a secret roll when the DM makes it), or only yourself (§6.5).
+- [x] Handouts: the DM gives pictures and text to everyone or chosen players, live (§6.7).
+- [x] Pictures for NPC and enemy tokens (§6.6).
+- [x] The archivist reads character sheets (in full, then each change with its time), late note changes and handouts between sessions (§5.2).
 
 ### 6.2 Next
 
 - [ ] Real transcript from the recorder.
-- [ ] DM features on the web page (glossary, corrections, archivist questions, speaker-map editing).
+- [ ] More DM features on the web page (glossary, speaker-map editing). Corrections and the archivist's questions are on the Archivist tab.
 - [ ] Try the web page with the players on a real session.
 - [ ] Cloudflare Tunnel set up on the host.
 
 ### 6.3 Later
 
 - Fuller privacy model (DM access to note-derived knowledge; sharing notes; per-character knowledge beyond attendance).
-- Edit or delete your own notes (as new archived versions).
 - Explicit "session in progress" marker instead of date matching.
 - Character sheets: let Q&A read the asker's own sheet ("what's my AC?"); decide whether the DM can see sheets (part of the DM role); more automation (armour and shields for AC, feats such as Tough or Observant, racial ability bonuses, background skills, weapon attack bonuses); restore an earlier sheet version from the page (the archive has every version).
 
@@ -350,7 +371,7 @@ Owner's requirement (2026-10-07): an animated dice roller like D&D Beyond's, as 
   If WebGL isn't available, the 3D rollers fall back to `lite` and the tray says so. The dice libraries (dice-box, Three.js, cannon-es) are sent compressed (brotli or gzip, made once per file, with an ETag so a repeat visit gets a 304): ~2.4 MB becomes ~0.4 MB. The chosen roller starts loading when the tray opens or the roller is changed.
 - **Dice styles and effects** (owner's request, 2026-10-07: "more dice themes, special effects, fancy stuff"): 24 styles in the tray (`STYLES` in `dice.js`: "Match the page" plus colour/texture sets, most adapted from the library's own; textures served from `/vendor/dice/textures/` and fetched only for the style in use). All use the library's plain or matte materials: its metal and glass need a reflection map the library switches off, so they render nearly black. `dice-fx.js` draws on a canvas over the page: each style's trail behind every moving die (positions projected from the 3D scene each frame), a natural 20 (golden flash, rings, stars and confetti at the die, a banner, a shine on the result), a natural 1 (red flash closing in, smoke, a banner, the page shakes) and maxed damage (2+ dice, no d20, all on their highest face). Chimes are synthesised with Web Audio. "Try it" and picking a style throw a preview (rolled in the page, shown only, never recorded). Effects can be switched off; they're always off with reduced motion.
 - **Page** (`web/public/dice.js`): the tray (dice buttons and a notation box, Normal / Advantage / Disadvantage for the next d20, dice style, roller, animated / effects / sound switches kept per browser, this session's rolls), the result card (total, every die with dropped ones struck through, natural 20 / natural 1, and a damage roll offered after an attack: doubled dice on a natural 20). On the sheet, clicking a save, skill, ability name, initiative or spell attack rolls a d20 plus that value; each attack has a roll button; death saves have one. Shift-click: advantage; Alt-click: disadvantage.
-- **Later (owner's call):** sharing rolls with the party or the DM live, DM-only rolls, and whether rolls go into the archive for the archivist. These need a live channel per campaign and decisions that are part of the DM role.
+- **Sharing** (owner's request, 2026-10-08): every roll goes into the campaign's roll log (`rolls` table, `label` saying what it was) and out live on the campaign's live stream (`GET /campaigns/:cid/live`) to whoever may see it. "Who sees my rolls" in the tray, kept per browser: Everyone (default), Only the DM, or Only me; for the DM, Everyone or Only me (secret). The tray's "Table rolls" list has the last 50 rolls you may see (yours and others', with the character's name, and a lock on private ones); someone else's roll also shows a short note at the top right. The server enforces who sees what. Rolls aren't archived and the archivist doesn't get them (owner's call if wanted).
 
 ### 6.6 Maps
 
@@ -359,7 +380,7 @@ Owner's requirements (2026-10-07): no premade maps. The DM imports their own map
 - **Import** (DM, Map tab): a PNG, JPEG or WebP image (up to the upload limit). The image is archived exactly as uploaded (`maps/<id>/image.<ext>`); the page shows that file. The map starts hidden from players.
 - **A page of a PDF** (adventures and map packs often come as PDFs): the DM picks the page number. The server draws that page with pdf.js on a native canvas (`@napi-rs/canvas`), 3000 px on the long side (at most 6× the page's size), on white, and uses the PNG as the map's image. The PDF is archived next to it (`maps/<id>/source.pdf`) and the map records which page (`source`).
 - **Reading (AI, in the background after import, or "Read again"):** the server makes a smaller JPEG copy (2000 px on the long side) and asks the AI (`maps` task) what kind of map it is, a name, a short description of the terrain for the DM, whether it has a grid (and roughly how many squares across and down), and its scale (from a scale bar or labels, e.g. "1 square = 5 ft" or "the map is 30 miles across"). Where the AI sees a grid, the server measures it exactly from the full image's pixels (`detectGrid`: edge strength per column and row, the repeat distance near the AI's estimate, then the offset), because the AI's counts are only approximate. A grid with no scale gets 5 ft per square. The DM can correct the grid (square size and offset, shown on the map while editing) and the scale. The map is usable while it's being read; a read interrupted by a restart is marked failed and can be run again.
-- **Tokens:** the DM adds them with a kind (player character, NPC, enemy), a name, a size (Tiny to Gargantuan: ½, 1, 2, 3, 4 squares) and a colour. A player character token is tied to a player in the campaign (named after their character); that player can move it. It shows the token picture that player uploaded (§6.4), or initials until they do. On a grid, tokens snap to squares; on a map without one they're placed freely, sized relative to the map. While dragging, the page shows the distance moved (5e counting on a grid: every square, diagonals included, is one square; straight-line distance otherwise).
+- **Tokens:** the DM adds them with a kind (player character, NPC, enemy), a name, a size (Tiny to Gargantuan: ½, 1, 2, 3, 4 squares) and a colour. A player character token is tied to a player in the campaign (named after their character); that player can move it. It shows the token picture that player uploaded (§6.4), or initials until they do. The DM can give an NPC or enemy token a picture (owner's request, 2026-10-08): "Picture" on the selected token; if other tokens on the map have the same name (a pack of goblins), the DM is asked whether they all get it. The upload is archived as it came (`maps/<id>/tokens/<file>`); the token keeps `art: { file, type }`, which never leaves the server (the page gets `picture`, its key) and is served cut to a square around what stands out, only to people who can see that token. "No picture" goes back to initials. On a grid, tokens snap to squares; on a map without one they're placed freely, sized relative to the map. While dragging, the page shows the distance moved (5e counting on a grid: every square, diagonals included, is one square; straight-line distance otherwise).
 - **Fog of war** (DM, "Fog & walls"): when it's on, players see only the parts the DM has revealed (turning it on starts the DM in Reveal mode, since everything begins covered). The DM drags rectangles to reveal or cover again (snapped to squares on a grid), can undo, reveal all or cover all. Fog is a list of shapes applied in order (`fog.shapes`, up to 1000). It's enforced on the server: players get a copy of the image with the covered parts blacked out (`maps/image.js`, cached by a hash of the fog), so nothing under the fog reaches their browser, and tokens under the fog are left out for them (except their own). The DM sees the fog as a shade over the map.
 - **Walls and line of sight** (DM, same panel): walls are straight lines in image pixels (`walls`: `{ id, x1, y1, x2, y2, door, open, source }`, up to 2000); a door is a wall that can be open, and locked (players can't open it). An **obstacle** (`kind: 'low'`) blocks movement but not sight: a building drawn as its roof, a cliff edge, a fence. The DM drags to draw a wall or door (ends snap to other walls' ends, then grid corners, so walls join without gaps), clicks to erase, and in Lock mode clicks a door to lock it. Anyone clicks a door to open or close it; a player only a door they can see (players get `doors`: the doors they can see, never walls), not locked, within a square and a half of their token (`POST .../doors/:wid/toggle`). **AI walls** (task `maps`, purpose `map:walls`, in the background, `wall_draft` status) traces walls, obstacles and doors from a 2000 px copy, as polylines in thousandths of the image; ends that nearly meet (1% of the long side) are joined. The draft replaces the AI's earlier one; walls the DM drew stay; AI walls show in another colour and can be cleared. With **Line of sight** (`fog.sight`) on as well as the fog, each player also sees what their own player-character tokens have a clear line to: a visibility polygon from the token's centre, cut by walls and closed doors (`sightPolygon` in `shared/src/map.js`). **Unseen parts** (`fog.map`): what players get outside their sight and the DM's reveals: `dark` (blacked out), `grey` (greyed out: dimmed) or `shown` (the map as it is); tokens there are hidden in all three. With **Remember explored** (`fog.memory`, on by default, only meaningful when dark), places a player has seen stay on their map dimmed: a grid of 128 cells along the long side per player per map (`map_explored` table, schema v10, database only: not archived, so a rebuild forgets it; the DM can "Forget explored"). A player sees a token only if it's in their sight or in a part the DM revealed (dim, explored areas don't show tokens). The DM's rectangles still apply outside sight. Everything is worked out on the server (`maps/sight.js`): the player gets `fog.mask` (cover, dim and clear shapes in order) and an image blacked out to match, never the walls or the DM's rectangles. Players can't move their token through a wall, obstacle or closed door (a straight line from where it was); the DM can put any token anywhere. Each player sees only from their own tokens, not their party's.
 - **Hit points and conditions:** a token can have hit points (current and max) and any of the 5e conditions plus concentrating. The DM sets them; a player can set their own token's. In the selection bar, typing `-7`, `+5` or `12` changes current hit points. Players see the numbers only for player characters; for NPCs and enemies they get how hurt it looks (unhurt, hurt, bloodied at half or less, down), drawn as a bar.
@@ -381,6 +402,15 @@ Owner's requirements (2026-10-07): no premade maps. The DM imports their own map
 - **Stored like sheets:** each map is one JSON document (`maps` table, schema v7) with a version. Every change appends only what changed to `maps/<id>/changes.jsonl` in the archive (the first line is the whole map), so restore replays it. Removing a map only marks it removed; nothing in the archive is deleted.
 - Shared geometry (snapping, distances, sizes) is in `shared/src/map.js`, served to the page at `/shared/map.js`.
 - **Later** (from the research on other VTTs, 2026-10-07: `/mnt/project-files/map-research/vtt-feature-gaps.md` in the project): ambient sound and weather (left out by the owner, 2026-10-08). Also party-shared sight, and light ranges that dim (bright vs dim light are drawn for the DM but players see both the same). 3D renders of maps were looked into and parked by the owner (2026-10-07).
+
+### 6.7 Handouts
+
+Owner's request (2026-10-08): the DM gives players a picture and/or text (a letter, a wanted poster, a riddle, a map scrap), to everyone or to chosen players.
+
+- **Page** (Handouts tab, `web/public/table.js`): the DM gets a form (title, text, picture, Everyone or ticked players) and, on each handout, who got it, "Change who gets it" and "Take back". Players see the handouts given to them, newest first; a new one arrives live (on the campaign's live stream) and puts a count on the tab until it's opened. A picture is shown smaller; a click shows it full width.
+- **Server** (`src/handouts.js`): `to` is "everyone" (everyone in the campaign, including people who join later) or user ids, all checked to be in the campaign. Players never see handouts not given to them, their pictures, or who else got one. Taking one back hides it from everyone (players' pages drop it live); the archive keeps it.
+- **Archive:** the picture as uploaded and `handouts/<id>/changes.jsonl` (the whole handout after each change); restore takes the last line.
+- **Archivist:** new, changed and taken-back handouts go to the archivist between sessions (§5.2) with who got them; it can't see pictures (only that there is one).
 
 ## 7. Security & cost controls
 
@@ -404,7 +434,8 @@ Owner's requirements (2026-10-07): no premade maps. The DM imports their own map
 ## 9. Open questions
 
 - Should the DM see players' character sheets, and should Q&A use them? (Currently only the player can.)
-- Should dice rolls be shared with the party or the DM live, can the DM roll in secret, and should rolls be archived for the archivist? (Currently private and not stored.)
+- Should dice rolls go into the archive for the archivist? (They're shared live and logged in the database, but not archived.)
+- Should the archivist see handout pictures (described by the AI when given)? Now it only knows there is one.
 - **DM role (deferred by the owner):** what the DM can see and do, including whether the DM sees knowledge derived from players' private notes (currently yes).
 - What exact format does the recorder produce? Are speakers labelled reliably per Discord user?
 - Note-to-session matching is by date (with a 6am rollover). Is an explicit "session started" button needed?

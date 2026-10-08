@@ -67,9 +67,9 @@ Each player has a **Sheet** tab, laid out like the official 5e sheet (core stats
 
 ### Dice
 
-The **Dice** button in the player's header opens a dice tray: click dice to build a roll (or type one, like `2d6+3` or `d%`), choose advantage or disadvantage for the next d20, and see this session's rolls. On the Sheet tab, clicking a save, skill, ability name, initiative or spell attack rolls it, and the dice button next to an attack rolls to hit, then offers its damage (doubled dice on a natural 20). Shift-click rolls with advantage, Alt-click with disadvantage.
+The **Dice** button in the player's header opens a dice tray: click dice to build a roll (or type one, like `2d6+3` or `d%`), choose advantage or disadvantage for the next d20, choose **who sees your rolls** (everyone, only the DM, or only you; the DM's "only me" is a secret roll), and see the table's recent rolls, yours and everyone else's you may see. Someone else's roll pops up briefly at the top right. On the Sheet tab, clicking a save, skill, ability name, initiative or spell attack rolls it, and the dice button next to an attack rolls to hit, then offers its damage (doubled dice on a natural 20). Shift-click rolls with advantage, Alt-click with disadvantage.
 
-The **server rolls** (a secure random number). The page then throws 3D dice with real physics and relabels their faces so they land on the server's numbers, so a roll can't be faked from the browser. The 3D dice ([dice-box-threejs](https://github.com/3d-dice/dice-box-threejs), MIT) are served by this server and only loaded the first time someone rolls; by default they take the theme's accent colour, and the tray has 23 other **dice styles** (Dragonfire, Frost, Necrotic, Thylean Bronze, Here Be Dragons, Glitter Party...; textures load only for the style in use). **Effects:** each style's dice leave a trail while they roll (embers, snow, sparks, stars, smoke, bubbles, petals); a natural 20 gets a golden burst and banner, a natural 1 a red flash, smoke and a shake, and damage with every die on its highest face a sparkle, with small chimes when sound is on. Animation, effects and sound can each be switched off in the tray; with reduced motion on, the result just appears. Rolls aren't saved or shown to anyone else yet.
+The **server rolls** (a secure random number). The page then throws 3D dice with real physics and relabels their faces so they land on the server's numbers, so a roll can't be faked from the browser. The 3D dice ([dice-box-threejs](https://github.com/3d-dice/dice-box-threejs), MIT) are served by this server and only loaded the first time someone rolls; by default they take the theme's accent colour, and the tray has 23 other **dice styles** (Dragonfire, Frost, Necrotic, Thylean Bronze, Here Be Dragons, Glitter Party...; textures load only for the style in use). **Effects:** each style's dice leave a trail while they roll (embers, snow, sparks, stars, smoke, bubbles, petals); a natural 20 gets a golden burst and banner, a natural 1 a red flash, smoke and a shake, and damage with every die on its highest face a sparkle, with small chimes when sound is on. Animation, effects and sound can each be switched off in the tray; with reduced motion on, the result just appears. Rolls are kept in the database (not the archive) for the table's roll list.
 
 **Rollers:** how the dice are shown, lightest last. Set the default for everyone with `DICE_ROLLER` in `.env` (restart the server); anyone can pick another for their own browser under **Roller** in the dice tray.
 
@@ -83,6 +83,22 @@ The **server rolls** (a secure random number). The page then throws 3D dice with
 | `none` | Just the result. |
 
 Without WebGL, `deluxe`, `classic` and `quick` fall back to `lite`. The dice libraries are sent compressed (about 2.4 MB down to about 0.4 MB) and start loading when the dice tray opens, so the first roll doesn't wait for them.
+
+### Handouts
+
+The **Handouts** tab: the DM gives players a picture and/or text (a letter, a wanted poster, a riddle), to everyone or to chosen players, and can change who gets it or take it back. Players see only the ones given to them; a new one arrives straight away and puts a count on the tab. Handouts are archived, and the archivist gets them (with who got them) between sessions.
+
+### The DM's Archivist tab
+
+Only the DM has it. It lists the archivist's questions (when sources disagree, e.g. two spellings of an NPC), each with an answer box and Dismiss; an answer becomes a correction. Below, the DM can send any correction in plain words and see earlier ones. The archivist applies them in the background.
+
+### Notes
+
+The **Notes** tab: private notes, grouped by session date. Each can be edited or deleted; the archive keeps every version. Changes to notes for a session that was already processed reach the archivist later, like sheet changes.
+
+### What the archivist reads between sessions
+
+Besides transcripts and notes, the archivist gets each player's character sheet (in full the first time, then every change with the time it was saved), notes written, edited or deleted after their session was processed, and handouts. This runs once things have been quiet for `ARCHIVIST_UPDATES_DELAY_MINUTES` (default 10), so filling in a sheet is one AI run, not one per keystroke. What's only on a sheet stays known only by that player in the knowledge base, though the DM sees every record (as with notes).
 
 ### Maps
 
@@ -179,6 +195,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | POST | `/campaigns/:cid/sessions/:n/process` | Retry / reprocess a session (DM) |
 | POST | `/campaigns/:cid/notes` | Take a private note `{text, session_date?}` (default: today; before 6am counts as the previous day) |
 | GET | `/campaigns/:cid/notes?date=` | Your own notes only (nobody else can list them, including the DM) |
+| PATCH / DELETE | `/campaigns/:cid/notes/:id` | Edit one of your own notes `{text}` / delete it. The archive keeps every version |
 | POST / GET | `/campaigns/:cid/corrections` | Correct the archivist in plain words (DM) `{text}` |
 | GET | `/campaigns/:cid/questions?status=open` | Questions the archivist left about conflicts (DM) |
 | POST | `/campaigns/:cid/questions/:id/answer` | Answer one (DM) `{answer}`. Becomes a correction |
@@ -202,7 +219,12 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/sheet/download` | Your sheet as a file (`{format: "dndapp-sheet", sheet}`) that can be uploaded again |
 | GET | `/campaigns/:cid/spells?q=` | Spell name suggestions (SRD and your books) |
 | GET | `/campaigns/:cid/spells/lookup?name=` | A spell's details: SRD, else your books (tidied by the AI), else the AI's memory. 404 if not found; 429 past `SHEET_AI_PER_HOUR` AI calls |
-| POST | `/campaigns/:cid/roll` | Roll dice: `{notation: "1d20+5", mode?: normal \| advantage \| disadvantage}` → `{notation, mode, terms, total, natural}`. d2–d20 and d100, up to 50 dice. Not saved |
+| POST | `/campaigns/:cid/roll` | Roll dice: `{notation: "1d20+5", mode?: normal \| advantage \| disadvantage, label?, visibility?: party \| dm \| self}` → `{notation, mode, terms, total, natural, roll}`. d2–d20 and d100, up to 50 dice. Logged and sent live to whoever may see it (`party`: everyone, the default; `dm`: the DM and you, a secret roll for the DM; `self`: only you) |
+| GET | `/campaigns/:cid/rolls` | The last 50 rolls you may see `{rolls: [{id, user_id, name, from_dm, visibility, label, result, rolled_at}]}` |
+| GET | `/campaigns/:cid/live` | Live news for the campaign (SSE): `roll` (a roll you may see), `handout` (one given to you, or changed), `handout-gone` `{id}` |
+| GET / POST | `/campaigns/:cid/handouts` | Handouts given to you (DM: all) `{can_edit, handouts}` / give one (DM) `{title, text?, to: "everyone" \| [user ids], picture?: {filename, data (base64)}}` (text or a picture) |
+| PATCH / DELETE | `/campaigns/:cid/handouts/:hid` | Change one (DM) `{title?, text?, to?}` / take it back (DM; kept in the archive) |
+| GET | `/campaigns/:cid/handouts/:hid/image` | A handout's picture (only for those it was given to, and the DM) |
 | GET / POST | `/campaigns/:cid/maps` | Maps you can see `{can_edit, maps}` (players: only shown maps, without the AI's description) / import one (DM) `{filename, data (base64), name?, page?}` (an image, or a PDF and the page to use, default 1); the AI reads it in the background. 429 past `MAP_AI_PER_HOUR` AI calls |
 | GET | `/campaigns/:cid/maps/events` | Live changes (SSE): `map` (the map as you may see it), `gone` `{id}`, and pings and sketches `ping` / `draw` `{map_id, by, name, color, points}` |
 | GET / PATCH / DELETE | `/campaigns/:cid/maps/:mid` | One map / change it (DM) `{name?, shown?, grid?: {size, x, y} \| null, scale?: {distance, unit, per: square \| width} \| null, variant?: id \| null}` / remove it (DM; kept in the archive) |
@@ -222,6 +244,8 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | POST | `/campaigns/:cid/maps/:mid/read` | Read the map with the AI again (DM) |
 | POST | `/campaigns/:cid/maps/:mid/tokens` | Add a token (DM) `{kind: pc \| npc \| enemy, name?, user_id?, size?, color?, x?, y?, hp?: {current, max}, conditions?, hidden?, record?: {id}}` |
 | PATCH / DELETE | `/campaigns/:cid/maps/:mid/tokens/:tid` | Change a token: the player it belongs to may set `{x, y, path?, hp, conditions, light, darkvision}` (`path`: waypoints on the way, walls checked on every leg; in a fight the cost counts toward the turn's movement), the DM anything (also `speed`) / remove it (DM). Snapped to the grid by the server |
+| PUT / DELETE | `/campaigns/:cid/maps/:mid/tokens/:tid/picture` | Give an NPC or enemy token a picture (DM) `{filename, data (base64), same_name?}` (`same_name`: every token on the map with that name) / back to initials |
+| GET | `/campaigns/:cid/maps/:mid/tokens/:tid/picture` | That picture, 256 px square (for whoever can see the token) |
 | POST | `/campaigns/:cid/maps/:mid/tokens/:tid/stats` | Fill the token's stat block with the AI (DM) `{name?}`; 404 if the AI doesn't know the creature |
 | POST | `/campaigns/:cid/maps/:mid/combat` | The fight on a map `{action: start \| end \| next \| prev \| add \| remove \| roll \| set, ids?, id?, init?}` (entries count `moved` this turn) → `{map, rolls: [{id, name, d20, mod, total}]}`. DM: everything (`start` with `ids` or every token; NPCs and enemies roll at once; `roll` without `id` rolls every NPC not rolled yet). A player: `roll` (once) or `set` for their own token, and `next` on their own turn |
 | POST | `/campaigns/:cid/maps/:mid/templates` | Place an area of effect (anyone who can see the map) `{shape: circle \| cone \| line \| cube, x, y, angle?, size, width?, label?, color?}` (size and width in the map's unit) |

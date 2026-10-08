@@ -4,12 +4,14 @@
  *   -> archivist updates the knowledge base -> snapshot to the archive
  *
  * And for DM corrections: archivist applies the correction -> snapshot.
+ * And between sessions: archivist reads sheet changes, late note edits and
+ * handouts (kb/updates.js) -> snapshot.
  */
 import { formatTimestamp } from '@dndapp/shared';
 import { PIPELINE_VERSION } from '../config.js';
 import { chunkUtterances, chunkTitle, preparedTranscript } from './prepare.js';
 
-export function createPipeline({ db, store, archive, search, kb, archivist, config }) {
+export function createPipeline({ db, store, archive, search, kb, archivist, updates, config }) {
   const P = config.pipeline;
 
   /**
@@ -90,13 +92,33 @@ export function createPipeline({ db, store, archive, search, kb, archivist, conf
         );
 
         snapshot(cid, `session ${sessionNum}`, report);
-        db.prepare("UPDATE sessions SET status = 'ready', pipeline_version = ? WHERE id = ?").run(PIPELINE_VERSION, session.id);
+        db.prepare("UPDATE sessions SET status = 'ready', pipeline_version = ?, processed_at = ? WHERE id = ?").run(PIPELINE_VERSION, new Date().toISOString(), session.id);
         onProgress(1, 'Done');
         return { report, attendance, duration: formatTimestamp(raw.at(-1).time) };
       } catch (err) {
         db.prepare("UPDATE sessions SET status = 'failed', error = ? WHERE id = ?").run(String(err.message ?? err), session.id);
         throw err;
       }
+    },
+
+    /**
+     * Give the archivist what changed up to `until` (default now). Nothing to
+     * read: no AI call. Either way, the mark moves to `until`.
+     */
+    async applyUpdates(cid, until, onProgress = () => {}) {
+      const u = updates.collect(cid, until);
+      if (u.until <= u.since) return { report: null };
+      if (!u.sheets.length && !u.notes.length && !u.handouts.length) {
+        updates.setMark(cid, u.until);
+        return { report: null };
+      }
+      onProgress(0.05, 'Archivist is reading sheet changes, notes and handouts');
+      const report = await archivist.runUpdates(cid, u, (calls, tool) =>
+        onProgress(Math.min(0.05 + calls / config.archivist.maxToolCalls, 0.95), `Archivist: ${tool.replace(/_/g, ' ')} (${calls})`),
+      );
+      updates.setMark(cid, u.until);
+      snapshot(cid, 'updates', report);
+      return { report };
     },
 
     async applyCorrection(cid, correction, onProgress = () => {}) {

@@ -5,12 +5,13 @@
  *
  *   ingest   {session}       process one session's transcript
  *   correct  {correction}    archivist applies one DM correction
+ *   updates  {}              archivist reads sheet changes, late note edits and handouts (kb/updates.js)
  *   rebuild  {}              wipe derived data, replay every session and correction
  */
 import { EventEmitter } from 'node:events';
 import { json, wipeDerived } from './db/index.js';
 
-export function createJobs({ db, store, search, pipeline, log = console }) {
+export function createJobs({ db, store, search, pipeline, config, log = console }) {
   const events = new EventEmitter();
   events.setMaxListeners(0);
   let running = false;
@@ -38,6 +39,9 @@ export function createJobs({ db, store, search, pipeline, log = console }) {
     return get(id);
   }
 
+  // Between sessions, the archivist reads sheet changes and the like once things go quiet (see scheduleUpdates).
+  const updateTimers = new Map();
+
   const correctionById = (cid, id) => store.getCorrections(cid).find((c) => c.id === id);
 
   async function runJob(job) {
@@ -46,6 +50,8 @@ export function createJobs({ db, store, search, pipeline, log = console }) {
 
     if (job.type === 'ingest') {
       await pipeline.processSession(cid, job.params.session, progress);
+    } else if (job.type === 'updates') {
+      await pipeline.applyUpdates(cid, undefined, progress);
     } else if (job.type === 'correct') {
       const correction = correctionById(cid, job.params.correction);
       if (!correction) throw new Error(`Correction ${job.params.correction} not found`);
@@ -61,7 +67,13 @@ export function createJobs({ db, store, search, pipeline, log = console }) {
       const steps = sessions.length + corrections.length || 1;
       let done = 0;
       const stepProgress = (label) => (p, message) => update(job.id, { progress: (done + p) / steps, message: `${label}: ${message}` });
+      // Sheet changes and handouts are read in time order between the sessions.
+      const sessionStart = (n) => {
+        const { played_on } = store.getSession(cid, n);
+        return new Date(`${played_on}T${String(config?.notes?.rolloverHour ?? 6).padStart(2, '0')}:00:00`).toISOString();
+      };
       for (const n of sessions) {
+        await pipeline.applyUpdates(cid, sessionStart(n), stepProgress('Sheets and handouts'));
         await pipeline.processSession(cid, n, stepProgress(`Session ${n}`));
         done++;
         for (const c of corrections.filter((c) => c.after_session > prev && c.after_session <= n)) {
@@ -74,6 +86,7 @@ export function createJobs({ db, store, search, pipeline, log = console }) {
         await pipeline.applyCorrection(cid, c, stepProgress(`Correction ${c.id}`));
         done++;
       }
+      await pipeline.applyUpdates(cid, undefined, stepProgress('Sheets and handouts'));
     } else {
       throw new Error(`Unknown job type ${job.type}`);
     }
@@ -102,7 +115,7 @@ export function createJobs({ db, store, search, pipeline, log = console }) {
     }
   }
 
-  return {
+  const jobs = {
     events,
     get,
     list: (campaignId, limit = 20) =>
@@ -118,6 +131,31 @@ export function createJobs({ db, store, search, pipeline, log = console }) {
 
     enqueueCorrection: (campaignId, correctionId) => enqueue(campaignId, 'correct', { correction: correctionId }),
 
+    /** Have the archivist read sheet changes, note edits and handouts now. */
+    enqueueUpdates(campaignId) {
+      clearTimeout(updateTimers.get(campaignId));
+      updateTimers.delete(campaignId);
+      const waiting = db.prepare("SELECT id FROM jobs WHERE campaign_id = ? AND type = 'updates' AND status = 'queued'").get(campaignId);
+      return waiting ? get(waiting.id) : enqueue(campaignId, 'updates', {});
+    },
+
+    /**
+     * Something the archivist should read changed (a sheet, a late note, a
+     * handout). It's read once nothing more has changed for a while, so a
+     * player filling in a sheet becomes one run, not one per keystroke.
+     */
+    scheduleUpdates(campaignId) {
+      if (stopped) return;
+      clearTimeout(updateTimers.get(campaignId));
+      const ms = (config?.archivist?.updatesDelayMinutes ?? 10) * 60_000;
+      const t = setTimeout(() => {
+        updateTimers.delete(campaignId);
+        if (!stopped) jobs.enqueueUpdates(campaignId);
+      }, ms);
+      t.unref?.();
+      updateTimers.set(campaignId, t);
+    },
+
     /** Wipes all derived data and replays every session and correction. */
     enqueueRebuild: (campaignId) => enqueue(campaignId, 'rebuild', {}),
 
@@ -130,6 +168,8 @@ export function createJobs({ db, store, search, pipeline, log = console }) {
     /** Stop picking up new jobs (the current one finishes). */
     stop() {
       stopped = true;
+      for (const t of updateTimers.values()) clearTimeout(t);
+      updateTimers.clear();
     },
 
     /** Resolves when the queue is empty (used by the CLI and tests). */
@@ -138,4 +178,5 @@ export function createJobs({ db, store, search, pipeline, log = console }) {
       while (running) await new Promise((r) => setTimeout(r, 50));
     },
   };
+  return jobs;
 }

@@ -8,7 +8,7 @@
  * while dragging use the same rules the server applies (./shared/map.js);
  * the server decides where a token really ends up.
  */
-import { api, listen, fileUrl, h, storage, LoggedOut } from './api.js';
+import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from './api.js';
 import { marked } from './vendor/marked.js';
 import DOMPurify from './vendor/purify.js';
 import {
@@ -493,16 +493,20 @@ const initials = (name) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?';
 
 /**
- * The URL of a player character's token picture, or null until it's loaded
- * (the tokens are drawn again then). Each picture is fetched once.
+ * The URL of a token's picture (a player character's own, or the one the DM
+ * gave an NPC or enemy), or null until it's loaded (the tokens are drawn
+ * again then). Each picture is fetched once.
  */
 function tokenPicture(t) {
-  if (!t.picture || t.user_id == null) return null;
-  const key = `${t.user_id}:${t.picture}`;
+  if (!t.picture || (t.kind === 'pc' && t.user_id == null)) return null;
+  const key = t.kind === 'pc' ? `${t.user_id}:${t.picture}` : `art:${t.picture}`;
   if (state.tokenPictures.has(key)) return state.tokenPictures.get(key);
   state.tokenPictures.set(key, null);
   const cid = state.campaignId;
-  fileUrl(`/campaigns/${cid}/members/${t.user_id}/token?v=${encodeURIComponent(t.picture)}`)
+  const url = t.kind === 'pc'
+    ? `/campaigns/${cid}/members/${t.user_id}/token?v=${encodeURIComponent(t.picture)}`
+    : `/campaigns/${cid}/maps/${state.current.id}/tokens/${t.id}/picture?v=${encodeURIComponent(t.picture)}`;
+  fileUrl(url)
     .then((url) => {
       if (state.campaignId !== cid) return URL.revokeObjectURL(url);
       state.tokenPictures.set(key, url);
@@ -840,6 +844,8 @@ function renderSelection() {
       state.canEdit && token.record ? h('button', { class: 'ghost', title: `What the campaign's records say about ${token.record.title}`, onclick: () => recordDialog(token) }, 'Record') : null,
       state.canEdit && token.stats ? h('button', { class: 'ghost', onclick: () => statsDialog(token) }, 'Stat block') : null,
       state.canEdit && !token.stats && token.kind !== 'pc' ? h('button', { class: 'ghost', title: 'Fill in its stat block, hit points and size with the AI', onclick: () => fillStats(token) }, 'Stat block (AI)') : null,
+      state.canEdit && token.kind !== 'pc' ? h('button', { class: 'ghost', title: 'Give this token a picture (players see it on the map)', onclick: () => chooseTokenPicture(token) }, token.picture ? 'New picture' : 'Picture') : null,
+      state.canEdit && token.kind !== 'pc' && token.picture ? h('button', { class: 'ghost', title: 'Go back to initials', onclick: () => removeTokenPicture(token) }, 'No picture') : null,
       state.canEdit ? h('button', { class: 'ghost', onclick: () => tokenDialog(token) }, 'Edit') : null,
       state.canEdit ? h('button', { class: 'ghost danger', onclick: () => removeToken(token) }, 'Remove') : null,
       h('button', { class: 'ghost icon-btn', 'aria-label': 'Close', onclick: () => select(null) }, '✕'),
@@ -1894,6 +1900,40 @@ async function recordDialog(token) {
 }
 
 /** Ask the AI for a creature's stat block (DM). Hit points and size come with it unless already set. */
+/** The DM picks a picture for an NPC or enemy token; tokens with the same name can share it. */
+function chooseTokenPicture(token) {
+  const input = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', hidden: true });
+  input.addEventListener('change', async () => {
+    const file = input.files[0];
+    input.remove();
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) return status('That picture is too big (10 MB at most).', true);
+    const twins = state.current.tokens.filter((t) => t.id !== token.id && t.kind !== 'pc' && t.name.toLowerCase() === token.name.toLowerCase()).length;
+    const same_name = twins > 0 && confirm(`Use this picture for all ${twins + 1} tokens named "${token.name}" on this map?`);
+    try {
+      status('Uploading…');
+      const data = await readBase64(file);
+      const res = await state.guarded(() => api('PUT', `${base()}/${state.current.id}/tokens/${token.id}/picture`, { filename: file.name, data, same_name }));
+      if (!res) return;
+      onMap(res.map);
+      status(`${token.name} has a picture now.`);
+    } catch (err) {
+      report(err);
+    }
+  });
+  document.body.append(input);
+  input.click();
+}
+
+async function removeTokenPicture(token) {
+  try {
+    const res = await state.guarded(() => api('DELETE', `${base()}/${state.current.id}/tokens/${token.id}/picture`));
+    if (res) onMap(res.map);
+  } catch (err) {
+    report(err);
+  }
+}
+
 async function fillStats(token, name) {
   status(`Looking up ${name ?? token.name}…`);
   try {

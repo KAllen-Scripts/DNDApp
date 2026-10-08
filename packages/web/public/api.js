@@ -86,6 +86,16 @@ export async function fileUrl(path) {
   return URL.createObjectURL(await res.blob());
 }
 
+/** A chosen file's contents as base64 (for JSON uploads). */
+export function readBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 /** Build an element: h('button', { class: 'ghost', onclick }, 'Text', child, ...) */
 export function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
