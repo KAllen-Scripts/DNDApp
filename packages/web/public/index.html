@@ -114,6 +114,7 @@
         <button role="tab" data-tab="ask" aria-selected="true"><span class="tab-icon" aria-hidden="true">✦</span><span>Ask</span></button>
         <button role="tab" data-tab="notes" aria-selected="false"><span class="tab-icon" aria-hidden="true">✎</span><span>Notes</span></button>
         <button role="tab" data-tab="sheet" aria-selected="false"><span class="tab-icon" aria-hidden="true">⚔</span><span>Sheet</span></button>
+        <button role="tab" data-tab="creatures" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">☠</span><span>Creatures</span></button>
         <button role="tab" data-tab="map" aria-selected="false"><span class="tab-icon" aria-hidden="true">⌖</span><span>Map</span></button>
         <button role="tab" data-tab="handouts" aria-selected="false"><span class="tab-icon" aria-hidden="true">✉</span><span>Handouts</span></button>
         <button role="tab" data-tab="archivist" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">☰</span><span>Archivist</span></button>
@@ -203,6 +204,18 @@
         <button id="sheet-beside-close" class="ghost" title="Hide the sheet (the Sheet button on the map brings it back)">Hide</button>
       </div>
       <div id="sheet" class="sheet"></div>
+    </section>
+
+    <!-- The DM's creatures (creatures.js): enemies and NPCs saved once, placed on any map. -->
+    <section id="tab-creatures" class="panel creatures-panel" hidden>
+      <div class="creatures-bar">
+        <button id="creature-new" class="primary">New creature</button>
+        <button id="creature-find" class="ghost" title="Have the AI find a creature on the web, official or not, with a picture">Find online</button>
+        <input id="creatures-filter" type="search" placeholder="Find…" aria-label="Find a creature">
+        <span id="creatures-status" class="muted small" role="status"></span>
+      </div>
+      <div id="creatures" class="creatures"></div>
+      <dialog id="creature-dialog" class="map-dialog"></dialog>
     </section>
 
     <!-- Maps (map.js): the DM imports and sets them up; players move their own token. -->

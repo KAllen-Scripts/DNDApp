@@ -22,6 +22,8 @@
  *     handouts/<id>/<picture file>     a handout's picture, as uploaded
  *     handouts/<id>/changes.jsonl      the whole handout after each change, append-only
  *     maps/<map id>/tokens/<file>      a picture the DM gave a token (NPCs, enemies), as uploaded
+ *     creatures/<id>/<picture file>    a picture for one of the DM's saved creatures, as uploaded
+ *     creatures/<id>/changes.jsonl     the whole creature after each change, append-only
  *     sessions/0001/
  *       transcript.txt                 byte-for-byte as uploaded, read-only
  *       meta.json                      number, title, played_on, sha256
@@ -221,6 +223,17 @@ export function createArchive(root) {
 
     tokenImagePath: (slug, mapId, file) => path.join(campaignDir(slug), 'maps', mapDir(mapId), 'tokens', path.basename(file)),
 
+    /** Keep a picture for one of the DM's creatures exactly as uploaded (never replaced). */
+    saveCreatureImage(slug, id, file, buf) {
+      const dest = path.join(campaignDir(slug), 'creatures', mapDir(id), path.basename(file));
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, buf, { flag: 'wx' });
+    },
+
+    creatureImagePath: (slug, id, file) => path.join(campaignDir(slug), 'creatures', mapDir(id), path.basename(file)),
+
+    appendCreature: (slug, id, entry) => appendLine(path.join(campaignDir(slug), 'creatures', mapDir(id), 'changes.jsonl'), entry),
+
     /** Knowledge-base snapshot and journal after an archivist run. */
     saveRunOutput(slug, runLabel, files) {
       const dir = path.join(campaignDir(slug), 'outputs', `v${PIPELINE_VERSION}`, `${stamp()}-${runLabel.replace(/\W+/g, '-')}`);
@@ -283,6 +296,14 @@ export function createArchive(root) {
               .map((id) => readLines(path.join(handoutsDir, id, 'changes.jsonl')).at(-1))
               .filter(Boolean)
           : [];
+        const creaturesDir = path.join(campaignDir(slug), 'creatures');
+        const creatures = fs.existsSync(creaturesDir)
+          ? fs
+              .readdirSync(creaturesDir)
+              .filter((d) => /^[a-f0-9]{10}$/.test(d))
+              .map((id) => readLines(path.join(creaturesDir, id, 'changes.jsonl')).at(-1))
+              .filter(Boolean)
+          : [];
         yield {
           campaign,
           sessions,
@@ -295,6 +316,7 @@ export function createArchive(root) {
           maps,
           characters,
           handouts,
+          creatures,
         };
       }
     },

@@ -11,6 +11,8 @@ import { createKB } from './kb/store.js';
 import { createArchivist } from './kb/archivist.js';
 import { createUpdates } from './kb/updates.js';
 import { createHandouts } from './handouts.js';
+import { createCreatures } from './creatures.js';
+import { createCreatureFinder } from './creatures-find.js';
 import { createPipeline } from './pipeline/ingest.js';
 import { createJobs } from './jobs.js';
 import { createQA } from './qa/agent.js';
@@ -23,7 +25,7 @@ import { createMapReader } from './maps/read.js';
 import { createStatBlocks } from './maps/stats.js';
 import { createPictures, createPictureDescriber } from './characters/pictures.js';
 
-export async function createContext({ config = defaultConfig, paths = defaultPaths, llm, embedder, log } = {}) {
+export async function createContext({ config = defaultConfig, paths = defaultPaths, llm, embedder, log, fetchImage } = {}) {
   const db = openDb(paths.db);
   const archive = createArchive(paths.archive);
   const store = createStore({ db, archive, config });
@@ -41,6 +43,7 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   // What happened on the maps on a session's day goes to the archivist with the transcript.
   const archivist = createArchivist({ db, store, kb, search, llm, config, mapEvents: (cid, date) => maps.eventsOn(cid, date, config.notes.rolloverHour) });
   const handouts = createHandouts({ db, archive, store });
+  const creatures = createCreatures({ db, archive, store });
   handouts.events.on('update', ({ campaign_id }) => jobs.scheduleUpdates(campaign_id));
   // Sheet changes, late note edits and handouts reach the archivist between sessions.
   const updates = createUpdates({ db, store, archive, handoutsBetween: handouts.forArchivist });
@@ -53,6 +56,7 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const pictureDescriber = createPictureDescriber({ llm });
   const mapReader = createMapReader({ llm });
   const statBlocks = createStatBlocks({ llm });
+  const creatureFinder = createCreatureFinder({ llm, ...(fetchImage && { fetchImage }) });
 
   // If the database was lost or replaced, bring back accounts and campaigns from the archive.
   const restored = store.restoreFromArchive();
@@ -61,8 +65,9 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
     await pipeline.reindexNotes(c.id);
   }
   maps.failInterrupted();
+  creatures.failInterrupted();
   // Changes made while the server was off (or before its last run finished) still reach the archivist.
   for (const { id } of db.prepare('SELECT id FROM campaigns').all()) if (updates.pendingSince(id)) jobs.scheduleUpdates(id);
 
-  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, pipeline, jobs, qa, books, spells, sheets, sheetImport, maps, mapReader, statBlocks, pictures, pictureDescriber, restored };
+  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, creatures, pipeline, jobs, qa, books, spells, sheets, sheetImport, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, restored };
 }

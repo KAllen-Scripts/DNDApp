@@ -253,6 +253,31 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
 .archivist-panel h2 { margin: 0.5rem 0 0; font-size: 1.05rem; }
 .archivist-panel h3 { margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--muted); }
 
+/* ---------- the DM's creatures ---------- */
+.creatures-panel { overflow-y: auto; }
+.creatures-bar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+.creatures-bar input[type="search"] { flex: 1 1 10rem; max-width: 18rem; }
+.creatures { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); align-content: start; }
+.creature { display: flex; gap: 0.75rem; padding: 0.7rem 0.8rem; align-items: flex-start; }
+.creature-face {
+  flex: none; width: 3.2rem; height: 3.2rem; border-radius: 50%; overflow: hidden; display: grid; place-items: center;
+  background: var(--token, var(--surface-2)); color: #fff; font-weight: 700; border: 2px solid var(--border);
+}
+.creature-face img { width: 100%; height: 100%; object-fit: cover; }
+.creature-body { display: grid; gap: 0.3rem; min-width: 0; flex: 1; }
+.creature-body p { margin: 0; }
+.creature-head { display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
+.creature-head h3 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+.creature-kind.enemy { color: var(--error); }
+.creature-notes { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 4.5em; overflow: hidden; }
+.creature-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.2rem; }
+.creature-actions button { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
+.creature.searching .creature-face { color: var(--muted); }
+.creature.pending .creature-face { animation: creature-wait 1.4s ease-in-out infinite; }
+@keyframes creature-wait { 50% { opacity: 0.4; } }
+@media (prefers-reduced-motion: reduce) { .creature.pending .creature-face { animation: none; } }
+.creature-source a { color: inherit; }
+
 @media (max-width: 560px) {
   .topbar { gap: 0.5rem; }
   .who { flex-basis: 100%; }
