@@ -555,28 +555,39 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 .sheet-bar #sheet-status { flex: 1; min-width: 12rem; }
 .sheet-bar button { padding: 0.35rem 0.8rem; font-size: 0.9rem; }
 
-/* ---------- the sheet beside the map, or in its own window (sheet-place.js) ---------- */
+/* ---------- a panel beside the map, or the sheet in its own window (sheet-place.js) ---------- */
 
-#app-view.sheet-beside {
+#app-view.beside {
   display: grid; max-width: none;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, var(--sheet-width, 540px));
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, var(--side-width, 540px));
   grid-template-rows: auto minmax(0, 1fr);
 }
-#app-view.sheet-beside > .topbar { grid-column: 1 / -1; }
-#app-view.sheet-beside > #tab-map { grid-column: 1; grid-row: 2; padding-right: 8px; }
-#app-view.sheet-beside > #sheet-splitter { grid-column: 2; grid-row: 2; }
-#app-view.sheet-beside > #tab-sheet { grid-column: 3; grid-row: 2; padding-left: 8px; }
+#app-view.beside > .topbar { grid-column: 1 / -1; }
+#app-view.beside > #tab-map { grid-column: 1; grid-row: 2; padding-right: 8px; }
+#app-view.beside > #sheet-splitter { grid-column: 2; grid-row: 2; }
+#app-view.beside > .beside-panel { grid-column: 3; grid-row: 2; padding-left: 8px; overflow-y: auto; }
+/* On the left instead (Look). */
+:root[data-beside-side="left"] #app-view.beside { grid-template-columns: minmax(0, var(--side-width, 540px)) auto minmax(0, 1fr); }
+:root[data-beside-side="left"] #app-view.beside > #tab-map { grid-column: 3; padding-right: 16px; padding-left: 8px; }
+:root[data-beside-side="left"] #app-view.beside > .beside-panel { grid-column: 1; padding-left: 16px; padding-right: 8px; }
 .sheet-splitter {
   width: 10px; margin-block: 0.75rem 16px; border-radius: 5px; cursor: col-resize; touch-action: none;
   background: linear-gradient(var(--border), var(--border)) center / 2px 3rem no-repeat;
 }
 .sheet-splitter:hover, .sheet-splitter:focus-visible, .sheet-splitter.dragging { background-color: var(--surface-2); outline: none; }
-/* Too narrow to sit side by side: the sheet goes under the map, each with half the height. */
+/* Too narrow to sit side by side: the panel goes under the map (over it, if it was on the left), each with half the height. */
 @media (max-width: 760px) {
-  #app-view.sheet-beside { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr); }
-  #app-view.sheet-beside > #tab-map { grid-column: 1; grid-row: 2; padding-right: 16px; }
-  #app-view.sheet-beside > #tab-sheet { grid-column: 1; grid-row: 3; padding-left: 16px; border-top: 1px solid var(--border); }
-  #app-view.sheet-beside > #sheet-splitter { display: none; }
+  #app-view.beside,
+  :root[data-beside-side="left"] #app-view.beside { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr); }
+  #app-view.beside > #tab-map,
+  :root[data-beside-side="left"] #app-view.beside > #tab-map { grid-column: 1; grid-row: 2; padding-inline: 16px; }
+  #app-view.beside > .beside-panel,
+  :root[data-beside-side="left"] #app-view.beside > .beside-panel { grid-column: 1; grid-row: 3; padding-inline: 16px; border-top: 1px solid var(--border); }
+  :root[data-beside-side="left"] #app-view.beside > #tab-map { grid-row: 3; }
+  :root[data-beside-side="left"] #app-view.beside > .beside-panel { grid-row: 2; border-top: none; border-bottom: 1px solid var(--border); }
+  #app-view.beside > #sheet-splitter { display: none; }
+  /* Half the height: the map shrinks rather than pushing its toolbar out of sight. */
+  #app-view.beside .map-view { min-height: 6rem; }
 }
 /* The popped-out window: just the sheet. */
 .sheet-window #app-view { max-width: none; }
@@ -904,7 +915,24 @@ details.spell > summary::-webkit-details-marker { display: none; }
 /* ---------- maps (map.js) ---------- */
 
 .map-panel { min-height: 0; }
+.map-bars { display: flex; flex-direction: column; gap: 0.75rem; }
 .map-bar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+/* Tools and tabs someone hid under Look. */
+.user-hidden { display: none !important; }
+/* The toolbars below the map (Look), the main one nearest the bottom edge, where a thumb reaches. */
+:root[data-map-bar="bottom"] .map-bars { order: 1; flex-direction: column-reverse; }
+/* Down the left side of the map. On a phone there isn't room, so they go below it. */
+@media (min-width: 561px) {
+  :root[data-map-bar="left"] .map-panel { flex-direction: row; }
+  :root[data-map-bar="left"] .map-bars { flex: none; width: 11.5rem; overflow-y: auto; }
+  :root[data-map-bar="left"] .map-bar { flex-direction: column; align-items: stretch; flex-wrap: nowrap; }
+  :root[data-map-bar="left"] .map-bar > * { max-width: none; }
+  :root[data-map-bar="left"] .map-bar #map-status { flex: none; min-width: 0; }
+  :root[data-map-bar="left"] .map-bar + .map-bar { padding-top: 0.75rem; border-top: 1px solid var(--border); }
+}
+@media (max-width: 560px) {
+  :root[data-map-bar="left"] .map-bars { order: 1; flex-direction: column-reverse; }
+}
 .map-bar #map-status { flex: 1; min-width: 10rem; }
 .map-bar button, .map-bar select { padding: 0.35rem 0.8rem; font-size: 0.9rem; }
 .map-bar select { max-width: 14rem; }
@@ -946,6 +974,9 @@ details.spell > summary::-webkit-details-marker { display: none; }
   background: rgb(0 0 0 / 0.65); color: #fff; pointer-events: none;
 }
 @media (prefers-reduced-motion: reduce) { .token { transition: none; } }
+/* Token names (Look): always, only when pointed at or picked, or never. */
+:root[data-token-labels="never"] .token-name { display: none; }
+:root[data-token-labels="hover"] .token:not(:hover, :focus-visible, .selected, .dragging) .token-name { display: none; }
 
 .map-measure {
   position: absolute; z-index: 3; pointer-events: none; padding: 0.15rem 0.5rem; border-radius: 6px;

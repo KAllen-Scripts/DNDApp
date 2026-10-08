@@ -201,7 +201,6 @@
         <button id="sheet-download" class="ghost">Download</button>
         <button id="sheet-print" class="ghost">Print</button>
         <button id="sheet-popout" class="ghost" title="Open your character sheet in its own window (to keep it open beside the map, or on another screen)">Pop out</button>
-        <button id="sheet-beside-close" class="ghost" title="Hide the sheet (the Sheet button on the map brings it back)">Hide</button>
       </div>
       <div id="sheet" class="sheet"></div>
     </section>
@@ -220,19 +219,29 @@
 
     <!-- Maps (map.js): the DM imports and sets them up; players move their own token. -->
     <section id="tab-map" class="panel map-panel" hidden>
+      <!-- The toolbars: above the map, below it or down its left side (Look). -->
+      <div class="map-bars">
       <div class="map-bar">
         <select id="map-pick" aria-label="Which map" hidden></select>
         <span id="map-status" class="muted small" role="status"></span>
-        <label class="map-check small"><input type="checkbox" id="map-show-grid"> Grid</label>
-        <button id="map-fit" class="ghost map-needs-map" title="Fit the whole map on screen">Fit</button>
-        <button id="map-pin" class="ghost map-needs-map" aria-pressed="false" title="Drop a pin only you can see: a note to yourself on the map">Pin</button>
-        <button id="map-ruler" class="ghost map-needs-map" aria-pressed="false" title="Drag on the map to measure a distance (only you see it)">Measure</button>
-        <button id="map-ping" class="ghost map-needs-map" aria-pressed="false" title="Click the map to point everyone at a spot (Alt+click works any time)">Ping</button>
-        <button id="map-draw" class="ghost map-needs-map" aria-pressed="false" title="Sketch on the map for everyone to see; it fades after a while">Draw</button>
-        <button id="map-template" class="ghost map-needs-map" aria-pressed="false" title="Place a spell's area (a sphere, cone, line or cube) and see who it catches">Template</button>
-        <button id="map-combat-open" class="ghost map-needs-map" aria-pressed="false" title="The turn order in a fight">Initiative</button>
-        <button id="map-sheet-beside" class="ghost" aria-pressed="false" title="Show your character sheet beside the map">Sheet</button>
-        <button id="map-sheet-window" class="ghost" title="Open your character sheet in its own window (to put beside this one, or on another screen)">Sheet window</button>
+        <label class="map-check small" data-tool="grid"><input type="checkbox" id="map-show-grid"> Grid</label>
+        <button id="map-fit" data-tool="fit" class="ghost map-needs-map" title="Fit the whole map on screen">Fit</button>
+        <button id="map-pin" data-tool="pin" class="ghost map-needs-map" aria-pressed="false" title="Drop a pin only you can see: a note to yourself on the map">Pin</button>
+        <button id="map-ruler" data-tool="measure" class="ghost map-needs-map" aria-pressed="false" title="Drag on the map to measure a distance (only you see it)">Measure</button>
+        <button id="map-ping" data-tool="ping" class="ghost map-needs-map" aria-pressed="false" title="Click the map to point everyone at a spot (Alt+click works any time)">Ping</button>
+        <button id="map-draw" data-tool="draw" class="ghost map-needs-map" aria-pressed="false" title="Sketch on the map for everyone to see; it fades after a while">Draw</button>
+        <button id="map-template" data-tool="template" class="ghost map-needs-map" aria-pressed="false" title="Place a spell's area (a sphere, cone, line or cube) and see who it catches">Template</button>
+        <button id="map-combat-open" data-tool="initiative" class="ghost map-needs-map" aria-pressed="false" title="The turn order in a fight">Initiative</button>
+        <select id="map-beside" aria-label="Beside the map" title="Show your sheet, chats, notes or handouts beside the map">
+          <option value="">Nothing beside</option>
+          <option value="sheet">Sheet beside</option>
+          <option value="creatures">Creatures beside</option>
+          <option value="ask">Ask beside</option>
+          <option value="notes">Notes beside</option>
+          <option value="handouts">Handouts beside</option>
+          <option value="archivist">Archivist beside</option>
+        </select>
+        <button id="map-sheet-window" data-tool="sheet-window" class="ghost" title="Open your character sheet in its own window (to put beside this one, or on another screen)">Sheet window</button>
         <button id="map-add-token" class="ghost dm-only map-needs-map">Add token</button>
         <button id="map-fog-open" class="ghost dm-only map-needs-map" aria-pressed="false">Fog &amp; walls</button>
         <select id="map-variant" class="dm-only" aria-label="Which picture of the map everyone sees" title="Which picture of the map everyone sees" hidden></select>
@@ -270,6 +279,7 @@
         <button class="ghost" data-wall-action="forget" title="Players lose the dim view of places they saw before">Forget explored</button>
         <span id="map-wall-hint" class="muted small"></span>
       </div>
+      </div>
       <div id="map-view" class="map-view">
         <div id="map-stage" class="map-stage" hidden>
           <img id="map-image" alt="" draggable="false">
@@ -292,8 +302,8 @@
       <dialog id="map-dialog" class="map-dialog"></dialog>
     </section>
 
-    <!-- With the sheet beside the map: drag to make the sheet wider or narrower (sheet-place.js). -->
-    <div id="sheet-splitter" class="sheet-splitter" role="separator" aria-orientation="vertical" aria-label="Sheet width" aria-controls="tab-sheet" tabindex="0" hidden></div>
+    <!-- With a panel beside the map: drag to make it wider or narrower (sheet-place.js). -->
+    <div id="sheet-splitter" class="sheet-splitter" role="separator" aria-orientation="vertical" aria-label="Side panel width" aria-controls="tab-sheet" tabindex="0" hidden></div>
   </div>
 
   <!-- Themes and layouts (look.js). Saved in this browser. -->
