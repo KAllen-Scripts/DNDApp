@@ -12,34 +12,31 @@ const asSam = (extra = {}) => ({ page: (t) => ({ as: t.sam, ...extra, storage: {
 const byLabel = (page, label) => page.el(`#sheet [aria-label="${label}"]`);
 const saved = (page) => page.waitFor(() => page.text('#sheet-status') === 'Saved', { what: 'the sheet to save' });
 
-test('sheet beside the map: the Sheet button shows it next to the map, remembered in this browser, and Hide takes it away', async () => {
+test('sheet beside the map: picking Sheet beside shows it next to the map, remembered in this browser, and Nothing beside takes it away', async () => {
   await withPage(asSam(), async (page) => {
-    // Not on the Sheet tab: no Hide button there.
     page.click('[data-tab=sheet]');
-    assert.ok(!page.visible('#sheet-beside-close'));
     assert.ok(page.visible('#sheet-popout'));
 
     page.click('[data-tab=map]');
     assert.ok(!page.visible('#tab-sheet'));
-    assert.equal(page.$('#map-sheet-beside').getAttribute('aria-pressed'), 'false');
+    assert.equal(page.$('#map-beside').value, '');
 
-    page.click('#map-sheet-beside');
+    page.type('#map-beside', 'sheet');
     assert.ok(page.visible('#tab-map'));
     assert.ok(page.visible('#tab-sheet'), 'the sheet is beside the map');
     assert.ok(page.visible('#sheet-splitter'));
-    assert.ok(page.visible('#sheet-beside-close'));
-    assert.ok(page.$('#app-view').classList.contains('sheet-beside'));
-    assert.equal(page.$('#map-sheet-beside').getAttribute('aria-pressed'), 'true');
+    assert.ok(page.$('#app-view').classList.contains('beside'));
+    assert.ok(page.$('#tab-sheet').classList.contains('beside-panel'));
+    assert.equal(page.$('#map-beside').value, 'sheet');
     assert.equal(page.$('[data-tab=map]').getAttribute('aria-selected'), 'true');
-    assert.equal(page.window.localStorage.getItem('dndapp.sheetBeside'), '1');
+    assert.equal(page.window.localStorage.getItem('dndapp.beside'), 'sheet');
 
     // Only with the map: other tabs look as before.
     page.click('[data-tab=ask]');
     assert.ok(!page.visible('#tab-sheet') && !page.visible('#tab-map') && !page.visible('#sheet-splitter'));
-    assert.ok(!page.$('#app-view').classList.contains('sheet-beside'));
+    assert.ok(!page.$('#app-view').classList.contains('beside'));
     page.click('[data-tab=sheet]');
     assert.ok(page.visible('#tab-sheet') && !page.visible('#tab-map'));
-    assert.ok(!page.visible('#sheet-beside-close'));
     page.click('[data-tab=map]');
     assert.ok(page.visible('#tab-sheet'), 'still beside the map when coming back');
 
@@ -47,14 +44,18 @@ test('sheet beside the map: the Sheet button shows it next to the map, remembere
     page.type(byLabel(page, 'Character name'), 'Thorin');
     await saved(page);
 
-    page.click('#sheet-beside-close');
+    page.type('#map-beside', '');
     assert.ok(!page.visible('#tab-sheet'));
     assert.ok(page.visible('#tab-map'));
-    assert.equal(page.$('#map-sheet-beside').getAttribute('aria-pressed'), 'false');
-    assert.equal(page.window.localStorage.getItem('dndapp.sheetBeside'), null);
+    assert.equal(page.window.localStorage.getItem('dndapp.beside'), null);
   });
 
-  // Saved in this browser: the next visit opens the map with the sheet beside it.
+  // Saved in this browser: the next visit opens the map with the sheet beside it (also from before other panels could go there).
+  await withPage(asSam({ storage: { 'dndapp.beside': 'sheet' } }), async (page) => {
+    page.click('[data-tab=map]');
+    assert.ok(page.visible('#tab-sheet'));
+    assert.ok(page.visible('#tab-map'));
+  });
   await withPage(asSam({ storage: { 'dndapp.sheetBeside': '1' } }), async (page) => {
     page.click('[data-tab=map]');
     assert.ok(page.visible('#tab-sheet'));
@@ -66,7 +67,7 @@ test('sheet beside the map: the handle between them makes the sheet wider or nar
   await withPage(asSam({ storage: { 'dndapp.sheetBeside': '1' } }), async (page) => {
     page.window.innerWidth = 1400;
     page.click('[data-tab=map]');
-    const width = () => page.$('#app-view').style.getPropertyValue('--sheet-width');
+    const width = () => page.$('#app-view').style.getPropertyValue('--side-width');
     assert.equal(width(), '540px');
 
     // Dragging left widens the sheet (it's on the right).
@@ -95,7 +96,7 @@ test('sheet window: Sheet window opens the sheet on its own; a blocked pop-up sa
     page.click('#map-sheet-window');
     assert.deepEqual(page.opened, [{ url: `/?view=sheet&campaign=${t.campaign.id}`, name: `dndapp-sheet-${t.campaign.id}`, features: 'popup,width=760,height=900' }]);
     assert.ok(!page.visible('#tab-sheet'), 'one place for the sheet is enough');
-    assert.equal(page.window.localStorage.getItem('dndapp.sheetBeside'), null);
+    assert.equal(page.window.localStorage.getItem('dndapp.beside'), null);
 
     // From the Sheet tab too.
     page.click('[data-tab=sheet]');
@@ -122,7 +123,6 @@ test('sheet window: the page at ?view=sheet shows only the sheet, for the campai
     for (const tab of ['ask', 'notes', 'map']) assert.ok(!page.visible(`#tab-${tab}`), tab);
     assert.ok(page.document.documentElement.classList.contains('sheet-window'));
     assert.ok(!page.visible('#sheet-popout'));
-    assert.ok(!page.visible('#sheet-beside-close'));
     assert.equal(page.text('#campaign-name'), 'Other Campaign');
     assert.equal(page.document.title, 'Brom · Other Campaign');
     // Only the sheet is loaded: no chats, notes or maps (and no live map stream).

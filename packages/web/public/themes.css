@@ -276,6 +276,14 @@
     width: 17rem; flex: none; margin-right: 1rem; border: 1px solid var(--border); border-radius: var(--radius);
   }
   :root:is([data-layout="sidebar"], [data-layout="wide"]) :is(.chats-toggle, .chats-close, .chats-scrim) { display: none; }
+  /* Ask beside the map has no room for it: the chat list is a drawer there. */
+  :root:is([data-layout="sidebar"], [data-layout="wide"]) .beside-panel .chats {
+    position: absolute; transform: translateX(-105%); visibility: hidden; width: min(20rem, 86%); margin-right: 0;
+    border-width: 0 1px 0 0; border-radius: 0; box-shadow: 4px 0 24px rgb(0 0 0 / 0.18);
+  }
+  :root:is([data-layout="sidebar"], [data-layout="wide"]) .beside-panel.chats-open .chats { transform: none; visibility: visible; }
+  :root:is([data-layout="sidebar"], [data-layout="wide"]) .beside-panel :is(.chats-toggle, .chats-scrim) { display: block; }
+  :root:is([data-layout="sidebar"], [data-layout="wide"]) .beside-panel .chats-close { display: inline-grid; }
   /* Full width: keep lines readable in the middle of the space. */
   :root[data-layout="wide"] .thread, :root[data-layout="wide"] #ask-form { padding-inline: max(0px, calc((100% - 56rem) / 2)); }
   :root[data-layout="wide"] .topbar { padding-inline: 24px; }
@@ -575,6 +583,19 @@
 .look-card[aria-checked="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
 .look-card[aria-checked="true"] .look-name::after { content: " ✓"; color: var(--accent); }
 .look-name { font-weight: 600; font-size: 0.95rem; }
+/* The dialog's groups (Page, Ask, Sheet, Map). */
+.look-groups { position: sticky; top: -0.4rem; z-index: 1; display: flex; gap: 0.3rem; flex-wrap: wrap; padding: 1rem 0 0.5rem; margin-top: -0.4rem; background: var(--surface); border-bottom: 1px solid var(--border); }
+.look-groups button { padding: 0.35rem 0.9rem; }
+.look-groups button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.look-row { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+.look-row input[type="color"] { width: 3rem; height: 2.2rem; padding: 0.15rem; cursor: pointer; }
+.look-check { display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; }
+.look-check input { width: auto; margin: 0; accent-color: var(--accent); }
+.look-tabs { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.3rem; max-width: 30rem; }
+.look-tab-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0.7rem; padding: 0.3rem 0.6rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
+.look-tab-row.off > .look-check:first-child { color: var(--muted); }
+.look-moves { display: inline-flex; gap: 0.15rem; }
+.look-tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 0.4rem 1rem; margin-top: 0.6rem; }
 .look-blurb { font-size: 0.8rem; color: var(--muted); line-height: 1.35; }
 
 .theme-preview {
@@ -636,6 +657,20 @@
 .sheet-single .d1, .sheet-single .d2, .sheet-single .d3 { display: block; left: 30%; width: 40%; height: 13px; }
 .sheet-single .d1 { top: 18px; } .sheet-single .d2 { top: 35px; } .sheet-single .d3 { top: 52px; }
 
+.mapbar-top .d0 { display: block; top: 6px; left: 5%; width: 90%; height: 8px; background: var(--accent); }
+.mapbar-top .d1 { display: block; top: 18px; bottom: 6px; left: 5%; width: 90%; opacity: 0.45; }
+.mapbar-bottom .d0 { display: block; bottom: 6px; left: 5%; width: 90%; height: 8px; background: var(--accent); }
+.mapbar-bottom .d1 { display: block; top: 6px; bottom: 18px; left: 5%; width: 90%; opacity: 0.45; }
+.mapbar-left .d0 { display: block; top: 6px; bottom: 6px; left: 5%; width: 18%; background: var(--accent); }
+.mapbar-left .d1 { display: block; top: 6px; bottom: 6px; left: 27%; width: 68%; opacity: 0.45; }
+.side-right .d0 { display: block; top: 6px; bottom: 6px; left: 5%; width: 56%; opacity: 0.45; }
+.side-right .d1 { display: block; top: 6px; bottom: 6px; left: 65%; width: 30%; background: var(--accent); }
+.side-left .d0 { display: block; top: 6px; bottom: 6px; left: 39%; width: 56%; opacity: 0.45; }
+.side-left .d1 { display: block; top: 6px; bottom: 6px; left: 5%; width: 30%; background: var(--accent); }
+:is(.labels-always, .labels-hover, .labels-never) .d0 { display: block; top: 12px; left: calc(50% - 15px); width: 30px; height: 30px; border-radius: 50%; background: var(--accent); }
+:is(.labels-always, .labels-hover) .d1 { display: block; top: 48px; left: calc(50% - 26px); width: 52px; height: 9px; }
+.labels-hover .d1 { opacity: 0.35; }
+
 .density-preview { display: grid; place-items: center; height: 72px; border-radius: 8px; background: var(--surface-2); font-family: var(--font-head); color: var(--head-color); font-weight: 600; }
 .dp-compact { font-size: 1.1rem; } .dp-cozy { font-size: 1.55rem; } .dp-roomy { font-size: 2.1rem; }
 
@@ -683,6 +718,8 @@
   #tab-sheet :is(.sh-box, .sh-line, .ability, .stat, .slot) { transform: none !important; box-shadow: none !important; }
   #tab-sheet .sh-box::before, #tab-sheet .sh-box::after { display: none !important; }
   .look-dialog { display: none; }
+  /* A chosen accent colour is set on the page itself; printing still wins. */
+  :root[data-accent] { --accent: #000 !important; --accent-text: #fff !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {

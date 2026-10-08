@@ -27,7 +27,8 @@ Read this first when picking the project up on another machine or with another A
 - **Lights, pings, planned movement, map variants, linked maps and map events for the archivist** (new, 2026-10-08, same branch and PR as initiative): everything else on the ranked VTT list except ambient sound. See SPEC §6.6 and the change log.
 - **Archivist tab, shared rolls, editable notes, NPC token pictures, handouts, and sheets for the archivist** (new, 2026-10-08, branch `claude/project-thread-j47qg5`, PR): the DM answers the archivist's questions and sends corrections on the page; rolls go live to the party, only the DM, or only you; notes can be edited and deleted; the DM gives NPC and enemy tokens pictures and gives players handouts; the archivist reads new sheets, each sheet change with its time, late note changes and handouts between sessions. Schema v11, `PIPELINE_VERSION` 8. See the change log.
 - **The sheet while on the map** (new, 2026-10-08, branch `claude/sheet-beside-map-685eno`, PR): a Sheet button on the map bar puts the player's sheet beside the map (resizable; under it on a phone), and Sheet window / Pop out opens it in its own window. Two windows with the sheet keep each other up to date. See SPEC §6.4 "On the map".
-- **Tests:** 266 passing (`npm test`: server 112, shared 49, web 105). They're offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools. The web page is tested without a browser (jsdom against a real test server, `packages/web/test/page.js`), so page changes are checked with `npm test`; headless Chromium is only needed for things jsdom can't show (real layout, WebGL dice, touch). On branch `claude/unit-tests-da0yyf`, draft PR #3 into `main`.
+- **More layout options** (new, 2026-10-08, branch `claude/project-thread-b060od`, PR): any panel (Sheet, Ask, Notes, Handouts, the DM's Archivist) beside the map, on either side; the map toolbar above, below or down the left; hide map tools you don't use; reorder and hide tabs and pick the start tab; token names always, on hover or never; your own accent colour. All under Look, per browser. See SPEC §3.3.
+- **Tests:** 272 passing (`npm test`: server 112, shared 49, web 111). They're offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools. The web page is tested without a browser (jsdom against a real test server, `packages/web/test/page.js`), so page changes are checked with `npm test`; headless Chromium is only needed for things jsdom can't show (real layout, WebGL dice, touch). On branch `claude/unit-tests-da0yyf`, draft PR #3 into `main`.
 - **Electron dropped; it's a web page now** (owner's call: overkill when there's a server and address anyway). A basic player page (`packages/web/public`, no build step) is served by the server at `/`: log in, ask questions (streamed, clickable citations, past conversations), take notes. No DM/host screens yet.
 - **Logins: name + password**, set by the admin, who can also require a new password at next login (Active Directory style, enforced by the server). Anyone can change their own password. Schema v4.
 - **Multiple campaigns supported throughout.** Players in several campaigns pick one after logging in; the admin chooses each account's campaigns (plural) when adding it and can change them later.
@@ -42,6 +43,7 @@ Read this first when picking the project up on another machine or with another A
 
 ## Next steps
 
+0. **More layout options: review and merge the PR (ask the owner first), then try them** on a laptop and a phone: Ask or Notes beside the map, the toolbar below the map on a phone, and a few hidden tools and tabs. See which ones players actually use.
 0. **Sheet beside the map: review and merge the PR (ask the owner first), then try it** with a real sheet next to a real map: is the default width (540 px) right, and is the stacked layout usable on a phone? Try Sheet window on a second screen.
 
 - **Tests:** when you change the web page, add or update a test in `packages/web/test/` (see README "Tests"). Not covered by page tests: the dice special effects' visuals (`dice-fx.js` ~73%) and some admin-sessions polling paths.
@@ -542,6 +544,19 @@ Looked at and not used: `@3d-dice/dice-box` (the Babylon.js successor, physics a
 - **Its own window:** Sheet window (map bar) or Pop out (sheet bar) opens the page at `/?view=sheet&campaign=<id>`, which shows only that campaign's sheet (no tabs; chats, notes and maps aren't loaded). A blocked pop-up is explained. Opening it turns off the sheet beside the map.
 - **Two windows:** after each save the page tells its other windows (BroadcastChannel `dndapp.sheet`); one with nothing waiting to save loads the newer sheet. With changes waiting, the existing conflict question still decides.
 - No server, schema or pipeline change. **Tests:** 266 after merging main (web 105; `sheet-place.test.js`, and `page.js` now stands in for `window.open` and BroadcastChannel and takes a `path`). Layout checked once in headless Chromium (side by side at 1400 px, stacked at 600 px); not tried on a real phone.
+
+### 2026-10-08: More layout options and personal touches
+
+- Owner: "more layout options, more customizability". Six additions, all per browser and set under **Look**, which now has groups (Page, Ask, Sheet, Map) so it stays short on a phone. No server, schema or pipeline change.
+- **Any panel beside the map:** the map bar's Sheet button became a "Beside the map" menu: nothing, Sheet, Ask, Notes, Handouts, or (DM only) Archivist. Saved as `dndapp.beside`; the old `dndapp.sheetBeside` still counts as "Sheet". The Hide button on the sheet bar went (the menu does it). Ask beside the map always uses the chat drawer, even in the sidebar layouts. Handouts beside the map count as seen.
+- **Which side:** Look → Map → Beside the map: right (default) or left; the handle widens it towards the map either way. On a phone it goes under the map (above it when "left"), and the map shrinks rather than pushing its toolbar out of sight.
+- **Map toolbar:** above the map (default), below it (main bar nearest the bottom edge, for thumbs), or down the left side (below the map on a phone). The three map bars are now wrapped in `.map-bars`.
+- **Map tools:** untick the ones you never use (Grid, Fit, Pin, Measure, Ping, Draw, Template, Initiative, Sheet window; each has `data-tool`). The DM's own tools always show for the DM.
+- **Tabs:** reorder, hide (never all, nor all but the DM's Archivist), and pick the start tab. Hiding the tab you're on moves you to the first tab shown.
+- **Token names:** always, when pointed at or picked, or never.
+- **Accent colour:** your own, over any theme, with black or white text worked out to read on it. Printing still goes black and white.
+- `look-boot.js` now cleans every saved value (unknown tabs and tools are dropped; new tabs are added to the end of a saved order) and sends a `dndlook` event on change.
+- **Tests:** 272 (web 111; new `test/layout.test.js`, and the look and sheet-place tests updated). Checked once in headless Chromium (left toolbar with Ask on the left at 1400 px, bottom toolbar with hidden tools, phone with the side panel stacked, the Look dialog's Map group on a phone); no console errors. Not tried on a real phone.
 
 ## Verified vs. not verified
 

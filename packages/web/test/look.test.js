@@ -50,11 +50,19 @@ test('look: the dialog opens from the login screen; a click chooses, applies and
     const dialog = page.$('#look-dialog');
     page.click('#login-form .look-open');
     assert.ok(dialog.open);
-    // One choice per section, each showing what's current.
-    const sections = page.$$('#look-body .look-section h3').map((h) => h.textContent);
-    assert.deepEqual(sections, ['Theme', 'Layout', 'Text size', 'Chat style', 'Character sheet style', 'Character sheet layout']);
+    // In groups, one shown at a time; one choice per section, each showing what's current.
+    const shown = () => page.$$('#look-body .look-section h3').filter((h) => page.visible(h)).map((h) => h.textContent);
+    assert.deepEqual(shown(), ['Theme', 'Accent colour', 'Layout', 'Text size', 'Tabs']);
+    page.click('[data-group-tab=ask]');
+    assert.deepEqual(shown(), ['Chat style']);
+    page.click('[data-group-tab=sheet]');
+    assert.deepEqual(shown(), ['Character sheet style', 'Character sheet layout']);
+    page.key('[data-group-tab=sheet]', 'ArrowRight');
+    assert.deepEqual(shown(), ['Toolbar', 'Beside the map', 'Token names', 'Map tools']);
+    assert.equal(page.$('[data-group-tab=map]').getAttribute('aria-selected'), 'true');
+    page.click('[data-group-tab=page]');
     assert.equal(page.$$('#look-body .look-card[data-key=theme]').length, 12);
-    assert.equal(page.$$('#look-body .look-card[aria-checked=true]').length, 6);
+    assert.equal(page.$$('#look-body .look-card[aria-checked=true]').length, 9);
     assert.equal(page.$('.look-card[data-key=theme][aria-checked=true]').dataset.value, 'tavern');
     // Theme previews carry their own colours (dark themes say so).
     assert.equal(page.$('.look-card[data-value=infernal] .theme-preview').dataset.scheme, 'dark');
@@ -67,7 +75,11 @@ test('look: the dialog opens from the login screen; a click chooses, applies and
     assert.equal(page.$('#tab-ask').dataset.chat, 'letters');
     page.click(card(page, 'sheetLayout', 'single'));
     assert.equal(page.$('#tab-sheet').dataset.sheetLayout, 'single');
-    assert.deepEqual(saved(page), { theme: 'frost', layout: 'classic', density: 'cozy', chat: 'letters', sheetStyle: 'match', sheetLayout: 'single' });
+    assert.deepEqual(saved(page), {
+      theme: 'frost', layout: 'classic', density: 'cozy', chat: 'letters', sheetStyle: 'match', sheetLayout: 'single',
+      mapBar: 'top', besideSide: 'right', tokenLabels: 'always', startTab: 'ask',
+      accent: '', tabOrder: ['ask', 'notes', 'sheet', 'map', 'handouts', 'archivist'], hiddenTabs: [], hiddenTools: [],
+    });
 
     page.click('.look-reset');
     assert.equal(root(page).dataset.theme, 'tavern');
