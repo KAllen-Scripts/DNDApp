@@ -105,7 +105,7 @@ const nulls = () => ({
  * question consumes the next entry of `qaScript` (steps: { tool, input } or { answer }).
  * structured() calls (sheet uploads, spell lookups) go to `structured({ purpose, prompt, attachments, schema })`.
  */
-export function createFakeLLM({ qaScript = [], archivist = defaultArchivist, structured } = {}) {
+export function createFakeLLM({ qaScript = [], archivist = defaultArchivist, structured, research } = {}) {
   const calls = [];
   return {
     calls,
@@ -116,6 +116,11 @@ export function createFakeLLM({ qaScript = [], archivist = defaultArchivist, str
     },
     async text() {
       throw new Error('fake llm: text() is not used any more');
+    },
+    async research(opts) {
+      calls.push({ purpose: opts.purpose, system: opts.system, prompt: opts.prompt });
+      if (!research) throw new Error(`fake llm: no research() handler for ${opts.purpose}`);
+      return research(opts);
     },
     async agent({ purpose, system, prompt, tools, onText, onTool, onTurn }) {
       const toolResults = [];
@@ -182,7 +187,7 @@ export const PASSWORD = 'correct horse';
  * A campaign with a DM (Kenny) and two players: Sam (Thorin) and Alex (Lyra),
  * with the speaker map linking transcript names to their accounts.
  */
-export async function setup({ llm = createFakeLLM(), config = {} } = {}) {
+export async function setup({ llm = createFakeLLM(), config = {}, fetchImage } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dndapp-test-'));
   const paths = {
     archive: path.join(dir, 'archive'),
@@ -191,7 +196,7 @@ export async function setup({ llm = createFakeLLM(), config = {} } = {}) {
   };
   // No books unless a test provides some (the real ones would make tests slow and machine-specific).
   const cfg = { ...baseConfig, booksDir: path.join(dir, 'books'), ...config, qa: { ...baseConfig.qa, ...config.qa } };
-  const ctx = await createContext({ config: cfg, paths, llm, embedder: fakeEmbedder, log: { error() {} } });
+  const ctx = await createContext({ config: cfg, paths, llm, embedder: fakeEmbedder, log: { error() {} }, fetchImage });
   const app = buildApp({ ...ctx, logger: false });
 
   // Accounts are created as the admin would, then logged in like the web page does.

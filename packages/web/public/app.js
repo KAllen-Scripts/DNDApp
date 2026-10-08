@@ -1,7 +1,8 @@
 /**
  * The web page. Display only: it sends what people type to the DNDApp server
  * and shows what comes back. Players get Ask and Notes; the admin login gets
- * the admin screen (admin.js) instead. The Sheet tab is in sheet.js.
+ * the admin screen (admin.js) instead. The Sheet tab is in sheet.js; the DM
+ * gets Creatures (creatures.js) in its place.
  */
 import { api, stream, storage, getToken, setToken, LoggedOut, h } from './api.js';
 import { showAdmin } from './admin.js';
@@ -10,9 +11,10 @@ import { marked } from './vendor/marked.js';
 import DOMPurify from './vendor/purify.js';
 import { initLook } from './look.js';
 import { initDice, setDiceCampaign } from './dice.js';
-import { loadMaps, initMapActions, stopMaps } from './map.js';
+import { loadMaps, initMapActions, stopMaps, placeCreature } from './map.js';
 import { loadTable, stopTable, handoutsOpened } from './table.js';
 import { loadArchivist, initArchivistActions } from './dm.js';
+import { loadCreatures, initCreatureActions } from './creatures.js';
 import { SHEET_WINDOW, windowCampaign, besidePanel, placeBeside, setSheetCampaign, initSheetPlace } from './sheet-place.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -175,7 +177,14 @@ async function enterCampaign(campaign) {
   const isDm = campaign.role === 'dm';
   // The Archivist tab is the DM's; a player who was on it goes back to the first tab.
   $('[data-tab=archivist]').hidden = !isDm;
-  showTab(!isDm && currentTab === 'archivist' ? firstTab() : currentTab);
+  // The DM gets Creatures (enemies and NPCs to put on maps) instead of a character sheet.
+  dmMode = isDm && !SHEET_WINDOW;
+  $('[data-tab=sheet]').hidden = dmMode;
+  $('[data-tab=creatures]').hidden = !isDm;
+  // A tab this person doesn't have (now) goes to Creatures for the DM's sheet, else the first tab.
+  const here = $(`[data-tab="${currentTab}"]`);
+  if (dmMode && currentTab === 'sheet') showTab('creatures');
+  else showTab(here.hidden || here.classList.contains('user-hidden') ? firstTab() : currentTab);
   setSheetCampaign(campaign.id);
   if (SHEET_WINDOW) {
     // The popped-out sheet: only the sheet, and dice to roll from it.
@@ -195,6 +204,7 @@ async function enterCampaign(campaign) {
     loadMaps({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
     loadTable({ campaignId: campaign.id, guarded }),
     isDm ? loadArchivist({ campaignId: campaign.id, guarded }) : null,
+    isDm ? loadCreatures({ campaignId: campaign.id, guarded }) : null,
   ]);
 }
 
@@ -235,11 +245,12 @@ for (const button of document.querySelectorAll('.logout')) {
 
 // The tab to open on: chosen under Look (look-boot.js), Ask unless changed.
 let currentTab = window.dndLook.get().startTab;
+let dmMode = false; // the DM's page: Creatures instead of a sheet
 
 /** Show a tab. On the map, another panel can be beside it too (sheet-place.js). */
 function showTab(name) {
   currentTab = name;
-  const beside = name === 'map' ? besidePanel() : null;
+  const beside = name === 'map' ? besidePanel() : null; // never a tab this person doesn't have (sheet-place.js)
   for (const t of document.querySelectorAll('[data-tab]')) {
     const on = t.dataset.tab === name;
     t.setAttribute('aria-selected', String(on));
@@ -248,7 +259,7 @@ function showTab(name) {
   placeBeside(beside);
   if (beside === 'handouts') handoutsOpened();
   // The sheet and maps need more room than Ask and Notes.
-  $('#app-view').classList.toggle('wide', name === 'sheet' || name === 'map');
+  $('#app-view').classList.toggle('wide', name === 'sheet' || name === 'map' || name === 'creatures');
 }
 
 /** The first tab along the bar that's shown (tabs can be reordered and hidden under Look). */
@@ -730,6 +741,7 @@ initSheetPlace({ onChange: () => showTab(currentTab) });
 showTab(currentTab);
 initMapActions();
 initArchivistActions();
+initCreatureActions({ place: placeCreature });
 initDice();
 initLook();
 start().catch((err) => showLogin(err.message));

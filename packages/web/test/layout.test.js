@@ -24,7 +24,7 @@ test('beside the map: Ask, Notes or Handouts can go there too; the Archivist onl
   await withPage(asSam(), async (page) => {
     page.click('[data-tab=map]');
     const options = () => [...page.$('#map-beside').options].filter((o) => !o.hidden).map((o) => o.value);
-    assert.deepEqual(options(), ['', 'sheet', 'ask', 'notes', 'handouts'], 'no Archivist for a player');
+    assert.deepEqual(options(), ['', 'sheet', 'ask', 'notes', 'handouts'], 'no Creatures or Archivist for a player');
 
     page.type('#map-beside', 'ask');
     assert.ok(page.visible('#tab-map') && page.visible('#tab-ask'));
@@ -135,17 +135,17 @@ test('map tools: untick the ones you never use and they leave the toolbar, in th
 
 test('tabs: reorder them, hide some (never all), and pick the one the page opens on', async () => {
   await withPage(asSam(), async (page) => {
-    assert.deepEqual(tabOrder(page), ['ask', 'notes', 'sheet', 'map', 'handouts', 'archivist']);
+    assert.deepEqual(tabOrder(page), ['ask', 'notes', 'sheet', 'creatures', 'map', 'handouts', 'archivist']);
     openLook(page);
     assert.ok(page.$('[data-tab-move=ask][data-by="-1"]').disabled, 'the first can\'t go earlier');
 
     // Move the map to the front.
-    for (let i = 0; i < 3; i++) page.click('[data-tab-move=map][data-by="-1"]');
-    assert.deepEqual(tabOrder(page), ['map', 'ask', 'notes', 'sheet', 'handouts', 'archivist']);
+    for (let i = 0; i < 4; i++) page.click('[data-tab-move=map][data-by="-1"]');
+    assert.deepEqual(tabOrder(page), ['map', 'ask', 'notes', 'sheet', 'creatures', 'handouts', 'archivist']);
     assert.deepEqual(saved(page).tabOrder, tabOrder(page));
     assert.deepEqual(page.$$('#look-tabs [data-tab-show]').map((b) => b.dataset.tabShow), tabOrder(page), 'the list follows');
     page.click('[data-tab-move=ask][data-by="1"]');
-    assert.deepEqual(tabOrder(page), ['map', 'notes', 'ask', 'sheet', 'handouts', 'archivist']);
+    assert.deepEqual(tabOrder(page), ['map', 'notes', 'ask', 'sheet', 'creatures', 'handouts', 'archivist']);
 
     // Hiding the tab you're on moves you to the first one shown.
     assert.equal(page.$('[data-tab=ask]').getAttribute('aria-selected'), 'true');
@@ -161,16 +161,16 @@ test('tabs: reorder them, hide some (never all), and pick the one the page opens
     page.type('[data-tab-start=notes]', true);
     assert.equal(saved(page).startTab, 'notes');
 
-    // Never all of them, and never all but the DM's Archivist.
-    for (const tab of ['archivist', 'map', 'notes', 'sheet', 'handouts']) page.type(`[data-tab-show=${tab}]`, false);
-    assert.deepEqual(saved(page).hiddenTabs.sort(), ['archivist', 'ask', 'map', 'notes', 'sheet']);
+    // Never all of them, and never all but the tabs only some people have.
+    for (const tab of ['archivist', 'creatures', 'map', 'notes', 'handouts']) page.type(`[data-tab-show=${tab}]`, false);
+    assert.deepEqual(saved(page).hiddenTabs.sort(), ['archivist', 'ask', 'creatures', 'map', 'notes']);
     assert.ok(page.$('[data-tab-show=handouts]').checked, 'the last one stays');
-    assert.equal(page.$('[data-tab=handouts]').getAttribute('aria-selected'), 'true');
+    assert.equal(page.$('[data-tab=sheet]').getAttribute('aria-selected'), 'true');
   });
 
   // Next visit: opens on the chosen tab, in the chosen order.
   await withPage(asSam(lookOf({ tabOrder: ['map', 'sheet'], startTab: 'map', hiddenTabs: ['notes'] })), async (page) => {
-    assert.deepEqual(tabOrder(page), ['map', 'sheet', 'ask', 'notes', 'handouts', 'archivist'], 'tabs missing from the saved order go at the end');
+    assert.deepEqual(tabOrder(page), ['map', 'sheet', 'ask', 'notes', 'creatures', 'handouts', 'archivist'], 'tabs missing from the saved order go at the end');
     assert.equal(page.$('[data-tab=map]').getAttribute('aria-selected'), 'true');
     assert.ok(page.visible('#tab-map') && !page.visible('#tab-ask'));
     assert.ok(page.$('[data-tab=notes]').classList.contains('user-hidden'));

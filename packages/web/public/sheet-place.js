@@ -1,6 +1,6 @@
 /**
- * Another panel while on the map, without switching tabs: the sheet, Ask,
- * Notes, Handouts or (for the DM) the Archivist beside the map on the same
+ * Another panel while on the map, without switching tabs: the sheet (or the
+ * DM's Creatures), Ask, Notes, Handouts or the DM's Archivist beside the map on the same
  * page (drag the handle between them to resize; which side is chosen under
  * Look), or the sheet popped out into a window of its own. The choice and
  * the width are saved in this browser.
@@ -18,7 +18,7 @@ const WIDTH_KEY = 'dndapp.sheetWidth';
 const MIN_WIDTH = 320; // px
 const MIN_MAP = 320; // the map keeps at least this much
 const DEFAULT_WIDTH = 540;
-const PANELS = ['sheet', 'ask', 'notes', 'handouts', 'archivist'];
+const PANELS = ['sheet', 'creatures', 'ask', 'notes', 'handouts', 'archivist'];
 
 const params = new URLSearchParams(location.search);
 /** Is this page the popped-out sheet window? */
@@ -29,7 +29,7 @@ export const windowCampaign = () => params.get('campaign');
 let campaignId = null;
 let relayout = () => {};
 
-// Can this panel go beside the map? (The Archivist tab is only there for the DM.)
+// Can this panel go beside the map? (Only tabs this person has: the Sheet is the players', Creatures and Archivist the DM's.)
 const available = (name) => PANELS.includes(name) && !$(`[data-tab="${name}"]`)?.hidden;
 
 /** Which panel goes beside the map (when the map tab is open), or null. */

@@ -6,7 +6,8 @@
  * available; no user/project settings, hooks, CLAUDE.md files, skills,
  * plugins, MCP servers or claude.ai connectors are loaded; and nothing is
  * saved to Claude Code's session history. The only tools are the read-only
- * search tools passed in by the Q&A agent.
+ * search tools passed in by the Q&A agent, and web search and fetch for
+ * research() (the DM looking a creature up online).
  */
 import { query, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { LLMError, LIMIT_REACHED, toOutputSchema, userContent } from './common.js';
@@ -124,6 +125,13 @@ export function createClaudeCodeProvider({ config, usage, queryFn = query }) {
 
     async text({ task, purpose, system, prompt, campaignId }) {
       return (await run({ task, purpose, system, prompt, campaignId })).result.trim();
+    },
+
+    /** Look something up on the web (search and fetch pages only). Returns the answer as text. */
+    async research({ task, purpose, system, prompt, campaignId, userId, maxSearches = 8 }) {
+      const web = ['WebSearch', 'WebFetch'];
+      const result = await run({ task, purpose, system, prompt, campaignId, userId, options: { tools: web, allowedTools: web, maxTurns: maxSearches * 2 + 4 } });
+      return result.result.trim();
     },
 
     async agent({ task, purpose, system, prompt, tools, limits, campaignId, userId, onText, onTool, onTurn }) {
