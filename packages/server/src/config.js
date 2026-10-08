@@ -18,7 +18,7 @@ const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
  * Bump this whenever chunking, prompts, schemas or the memory design change.
  * Every generated output is tagged with it so we know which approach made it.
  */
-export const PIPELINE_VERSION = 10;
+export const PIPELINE_VERSION = 11;
 
 const DEFAULT_MODEL = env.MODEL || 'claude-opus-5-5';
 
@@ -132,10 +132,10 @@ export const config = {
   },
 
   dice: {
-    // How rolled dice are shown on everyone's page (each player can still pick another in the dice tray):
-    // classic (3D with physics and shadows, slowest), quick (the same 3D dice, tuned to land fast),
-    // lite (3D-looking dice without WebGL), flat (flat dice that spin in), none (just the result).
-    roller: env.DICE_ROLLER || 'quick',
+    // How rolled dice are shown on everyone's page (each player can still pick the other in the dice tray):
+    // deluxe (glossy, metal and see-through dice with reflections and sounds, ~1.7 s) or classic (the
+    // original 3D dice with physics and shadows, ~3.5 s). Without WebGL the result just appears.
+    roller: env.DICE_ROLLER || 'deluxe',
   },
 
   // Applies to the API provider only (Claude Code runs on the subscription).

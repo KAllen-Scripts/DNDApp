@@ -82,6 +82,9 @@ test('a new sheet and its changes reach the archivist with their times, once the
     assert.ok(second.includes(`[${localTime(saved.json().updated_at)}] classes[Fighter].level: 3 → 4`), second);
     assert.doesNotMatch(second, /backstory: "" →/);
 
+    // A sheet the DM saved before the DM had Creatures isn't a player's: nothing for the archivist.
+    t.sheets.save(t.campaign.id, t.dm.id, sheetFor({ name: 'Old DM sheet' }), { baseVersion: 0 });
+    assert.equal(t.updates.pendingSince(t.campaign.id), false);
     // Nothing new: no AI call.
     t.jobs.enqueueUpdates(t.campaign.id);
     await t.jobs.idle();

@@ -10,29 +10,9 @@
 import sharp from 'sharp';
 import { z } from 'zod';
 import { MAP_KINDS, UNITS, MAX_WALLS, MAX_LIGHTS, normalizeGrid, normalizeScale, arcThrough, circlePoints } from '@dndapp/shared/map.js';
-import { BadRequestError } from '../store.js';
 
-const FORMATS = { png: { ext: 'png', type: 'image/png' }, jpeg: { ext: 'jpg', type: 'image/jpeg' }, webp: { ext: 'webp', type: 'image/webp' } };
 const AI_LONG_SIDE = 2000;
 const DETECT_LONG_SIDE = 3000; // big enough to measure, small enough to take ~1s
-
-/**
- * Check an uploaded image and find its size as the browser will show it
- * (photos turned by their EXIF orientation are measured turned).
- * @returns {Promise<{ ext, type, width, height }>}
- */
-export async function inspectImage(buf) {
-  let meta;
-  try {
-    meta = await sharp(buf).metadata();
-  } catch {
-    throw new BadRequestError("That file isn't an image that can be read. Import a PNG, JPEG, WebP or PDF.");
-  }
-  const format = FORMATS[meta.format];
-  if (!format) throw new BadRequestError('Import the map as a PNG, JPEG or WebP image, or a PDF.');
-  const turned = (meta.orientation ?? 1) >= 5;
-  return { ...format, width: turned ? meta.height : meta.width, height: turned ? meta.width : meta.height };
-}
 
 /** Find the repeat distance and offset of the strongest lines in an edge profile. */
 function findPeriod(profile, { min, max }) {

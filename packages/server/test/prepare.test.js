@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseTranscript } from '@dndapp/shared';
-import { applySpeakerMap, makeGlossaryFixer, chunkUtterances, groupIntoSections } from '../src/pipeline/prepare.js';
+import { applySpeakerMap, makeGlossaryFixer, chunkUtterances } from '../src/pipeline/prepare.js';
 import { ftsQuery } from '../src/search.js';
 import { SAMPLE } from './helpers.js';
 
@@ -32,9 +32,6 @@ test('chunking covers every utterance, respects size and overlaps', () => {
   for (const c of chunks) assert.ok(c.tokens <= 40 || c.text.split('\n').length === 1);
   // Last line of one chunk is repeated as the first line of the next.
   assert.equal(chunks[0].text.split('\n').at(-1), chunks[1].text.split('\n')[0]);
-  // Sections de-duplicate the overlap.
-  const [section] = groupIntoSections(chunks, 1e9);
-  assert.equal(section.text.split('\n').length, utterances.length);
 });
 
 test('ftsQuery produces a safe OR query', () => {

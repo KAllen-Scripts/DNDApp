@@ -7,13 +7,14 @@
 import { api, stream, storage, getToken, setToken, LoggedOut, h } from './api.js';
 import { showAdmin } from './admin.js';
 import { loadSheet, initSheetActions, flush as flushSheet } from './sheet.js';
-import { marked } from './vendor/marked.js';
-import DOMPurify from './vendor/purify.js';
+import { markdownFragment } from './markdown.js';
+import { CITATION_RE } from './shared/citations.js';
 import { initLook } from './look.js';
 import { initDice, setDiceCampaign } from './dice.js';
-import { loadMaps, initMapActions, stopMaps, placeCreature } from './map.js';
+import { loadMaps, initMapActions, stopMaps } from './map.js';
+import { placeCreature } from './map-dm.js';
 import { loadTable, stopTable, handoutsOpened } from './table.js';
-import { loadArchivist, initArchivistActions } from './dm.js';
+import { loadArchivist, initArchivistActions } from './archivist.js';
 import { loadCreatures, initCreatureActions } from './creatures.js';
 import { SHEET_WINDOW, windowCampaign, besidePanel, placeBeside, setSheetCampaign, initSheetPlace } from './sheet-place.js';
 
@@ -178,14 +179,21 @@ async function enterCampaign(campaign) {
   // The Archivist tab is the DM's; a player who was on it goes back to the first tab.
   $('[data-tab=archivist]').hidden = !isDm;
   // The DM gets Creatures (enemies and NPCs to put on maps) instead of a character sheet.
-  dmMode = isDm && !SHEET_WINDOW;
-  $('[data-tab=sheet]').hidden = dmMode;
+  $('[data-tab=sheet]').hidden = isDm;
   $('[data-tab=creatures]').hidden = !isDm;
+  $('#map-sheet-window').hidden = isDm;
   // A tab this person doesn't have (now) goes to Creatures for the DM's sheet, else the first tab.
   const here = $(`[data-tab="${currentTab}"]`);
-  if (dmMode && currentTab === 'sheet') showTab('creatures');
+  if (isDm && currentTab === 'sheet') showTab('creatures');
   else showTab(here.hidden || here.classList.contains('user-hidden') ? firstTab() : currentTab);
   setSheetCampaign(campaign.id);
+  if (SHEET_WINDOW && isDm) {
+    // A sheet window left open from before someone became the DM: there's no sheet to show.
+    $('#tab-sheet').hidden = false;
+    $('#sheet').replaceChildren(h('p', { class: 'muted' }, 'The DM has Creatures instead of a character sheet. Close this window.'));
+    $('.sheet-bar').hidden = true;
+    return;
+  }
   if (SHEET_WINDOW) {
     // The popped-out sheet: only the sheet, and dice to roll from it.
     document.title = `${campaign.character_name || 'Sheet'} · ${campaign.name}`;
@@ -200,7 +208,7 @@ async function enterCampaign(campaign) {
     setDiceCampaign({ campaignId: campaign.id, guarded, roller: state.me.dice?.roller, isDm, userId: state.me.user.id }),
     loadConversations(),
     loadNotes(),
-    loadSheet({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
+    isDm ? null : loadSheet({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
     loadMaps({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
     loadTable({ campaignId: campaign.id, guarded }),
     isDm ? loadArchivist({ campaignId: campaign.id, guarded }) : null,
@@ -245,7 +253,6 @@ for (const button of document.querySelectorAll('.logout')) {
 
 // The tab to open on: chosen under Look (look-boot.js), Ask unless changed.
 let currentTab = window.dndLook.get().startTab;
-let dmMode = false; // the DM's page: Creatures instead of a sheet
 
 /** Show a tab. On the map, another panel can be beside it too (sheet-place.js). */
 function showTab(name) {
@@ -281,26 +288,9 @@ for (const tab of document.querySelectorAll('[data-tab]')) {
 
 // ---------- answers: text, citations, evidence ----------
 
-// Same format as CITATION_RE in packages/shared: [S12], [S12 01:23:45], [S12 01:23:45-01:24:10]
-const CITATION_RE = /\[S(\d+)(?:\s+(\d{1,2}:\d{2}:\d{2})(?:\s*[-–]\s*(\d{1,2}:\d{2}:\d{2}))?)?\]/g;
 const citationKey = (num, from, to) => `S${num}${from ? ` ${from}${to ? `-${to}` : ''}` : ''}`;
 
 const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-
-// What an answer may contain: markdown, plus HTML for formatting (tables, stat blocks). Nothing that runs,
-// loads, links out or restyles the page; the text can quote transcripts, so it's never trusted.
-const ANSWER_HTML = {
-  ALLOWED_TAGS: [
-    'p', 'br', 'hr', 'strong', 'b', 'em', 'i', 'u', 's', 'del', 'small', 'sub', 'sup', 'code', 'pre', 'blockquote',
-    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'dl', 'dt', 'dd',
-    'table', 'caption', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'colgroup', 'col',
-    'div', 'span', 'section', 'details', 'summary',
-  ],
-  ALLOWED_ATTR: ['class', 'colspan', 'rowspan', 'scope', 'align', 'start', 'open'],
-};
-
-// Markdown that's still streaming can end mid-table or mid-tag; marked and the sanitiser cope with both.
-marked.use({ gfm: true, breaks: true });
 
 /** Citations in text -> buttons that jump to the evidence (plain labels when there's no evidence for them). */
 function linkCitations(root, sources) {
@@ -325,7 +315,7 @@ function linkCitations(root, sources) {
 
 /** Answer text (markdown and/or HTML) -> sanitised HTML, with citations as buttons. */
 function renderAnswer(text, evidence = []) {
-  const root = DOMPurify.sanitize(marked.parse(text.trim()), { ...ANSWER_HTML, RETURN_DOM_FRAGMENT: true });
+  const root = markdownFragment(text);
   // Wide tables scroll inside the answer rather than stretching the page.
   for (const table of root.querySelectorAll('table')) {
     const wrap = document.createElement('div');

@@ -4,7 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { setup, createFakeLLM, makePdf } from './helpers.js';
-import { createBooks } from '../src/sheets/books.js';
+import { createBooks, bookTitle } from '../src/sheets/books.js';
+import { joinItems } from '../src/sheets/pdf.js';
+import { createQA, groupEdition } from '../src/qa/agent.js';
 
 /** A cover, then four numbered pages (printed page = PDF page - 1). */
 const HANDBOOK = [
@@ -123,5 +125,98 @@ test('Q&A can search, read and browse the books; without books it has no book to
     assert.doesNotMatch(call.system, /<books/);
   } finally {
     await bare.cleanup();
+  }
+});
+
+test('books: PDF text pieces are joined by position, so OCR layers read as words', () => {
+  const at = (str, x, { y = 700, w = str.length * 5, eol = false } = {}) => ({ str, transform: [10, 0, 0, 10, x, y], width: w, height: 10, hasEOL: eol });
+  const items = [
+    at('H', 36, { w: 13 }), at('eavy', 49), at(' ', 69, { w: 12 }), at('rain', 81, { eol: true }),
+    at('doesn', 36, { y: 686 }), at('’', 61, { y: 686, w: 2 }), at('t', 63, { y: 686, w: 3 }), at('stop', 80, { y: 686 }),
+  ];
+  assert.equal(joinItems(items), 'Heavy rain\ndoesn’t stop');
+});
+
+test('books: titles, printed years, footer page numbers, short terms, headings, ambiguous names', async () => {
+  assert.equal(bookTitle('Dungeon Masters Guide (2024) -- Christopher Perkins -- 2024 -- Wizards of the Coast -- Anna’s Archive.pdf'), 'Dungeon Masters Guide (2024)');
+  assert.equal(bookTitle('Players_Handbook.pdf'), 'Players Handbook');
+
+  const footer = (n, lines) => [...lines, `CHAPTER 2 | RUNNING THE GAME ${n}`];
+  const guide = [
+    ['DUNGEON MASTER’S GUIDE', 'First Printing: November 2024'],
+    footer(1, ['Weather', 'Heavy Precip itati on', 'Everything within an area of heavy rain is Lightly Obscured.']),
+    footer(2, ['Grids', 'Use a hex grid. Each hex is 5 feet; a hex here, a hex there. Hexes everywhere.']),
+    footer(3, ['HEX', 'You place a curse on a creature. Its action is hindered.']),
+    footer(4, ['Armor', 'Your AC is 10 plus your Dexterity modifier.']),
+  ];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dndapp-books-'));
+  fs.writeFileSync(path.join(dir, 'Dungeon Masters Guide (2024) -- Some Authors -- Anna’s Archive.pdf'), makePdf(guide));
+  fs.writeFileSync(path.join(dir, 'Players Handbook (2014).pdf'), makePdf(HANDBOOK));
+  fs.writeFileSync(path.join(dir, 'Players Handbook (2024).pdf'), makePdf(HANDBOOK));
+  const books = createBooks({ dir, log: {} });
+  try {
+    await books.load();
+    const dmg = books.status().books.find((b) => b.title === 'Dungeon Masters Guide (2024)');
+    assert.equal(dmg.year, 2024);
+    // Numbers in running footers ("... THE GAME 45") give the printed page numbers.
+    assert.equal(dmg.range, '0-4');
+
+    // A heading the OCR split inside words is still found, and "precipitation" matches it.
+    assert.equal((await books.search(['heavy precipitation'], { book: 'dungeon' }))[0]?.page, 1);
+    // A heading that is the term beats a page that only says it often.
+    assert.deepEqual((await books.search(['hex'], { book: 'dungeon' })).map((h) => h.page), [3, 2]);
+    // Short terms are whole words: "AC" doesn't find "action".
+    assert.deepEqual((await books.search(['AC'], { book: 'dungeon' })).map((h) => h.page), [4]);
+
+    // "Players Handbook" could be either edition: say so instead of picking one, or of finding nothing.
+    assert.match((await books.search(['grappled'], { book: 'Players Handbook' })).error, /could be Players Handbook \(2014\) or Players Handbook \(2024\)/);
+    assert.match((await books.readPages('players handbook', 2)).error, /Give the full title/);
+    assert.match((await books.search(['grappled'], { book: 'Monster Manual' })).error, /No book called "Monster Manual"\. The books are:/);
+    assert.equal((await books.search(['grappled'], { book: 'Players Handbook (2024)' }))[0].book, 'Players Handbook (2024)');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('books: spells in the 2024 layout are found; class sections that look like spells are not', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dndapp-books-'));
+  fs.writeFileSync(
+    path.join(dir, 'Players Handbook (2024).pdf'),
+    makePdf([
+      ['ARCANE TRICKSTER SPELLCASTING', '3rd-level feature, chosen from the wizard list.', 'You learn three cantrips.', 'Spell slots.', 'The table shows them.', 'You regain them.', 'Spells known.', 'Spellcasting ability.'],
+      ['FIREBALL', 'Level 3 Evocation (Sorcerer, Wizard)', 'Casting Time: Action', 'A bright streak flashes.'],
+    ]),
+  );
+  const books = createBooks({ dir, log: {} });
+  try {
+    assert.deepEqual((await books.spellNames()).map((s) => s.name), ['Fireball']);
+    assert.match((await books.findSpell('fireball')).text, /Level 3 Evocation[\s\S]*bright streak/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("Q&A: the books' editions and a long contents trimmed to its chapters", async () => {
+  assert.match(groupEdition([{ title: 'Players Handbook 5th Edition DD', year: 2014 }]), /the 2014 one, so answer with the 2014 rules/);
+  assert.match(groupEdition([{ title: "Player's Handbook (2014)" }, { title: "Player's Handbook (2024)" }]), /both editions/);
+  assert.match(groupEdition([{ title: 'Monster Manual' }]), /unknown/);
+
+  const sections = Array.from({ length: 400 }, (_, i) => ({ title: `A rather long section heading number ${i}`, page: 2 }));
+  const llm = createFakeLLM({
+    qaScript: [[{ tool: 'book_contents', input: { book: 'Monster Manual', from_page: null, to_page: null } }, { answer: 'Chapter 1.' }]],
+  });
+  const t = await setup({ llm });
+  try {
+    fs.mkdirSync(t.config.booksDir, { recursive: true });
+    const pdf = makePdf([...BESTIARY, ['First Printing: February 2025']], { bookmarks: [{ title: 'Beasts', page: 2 }] });
+    fs.writeFileSync(path.join(t.config.booksDir, 'Monster Manual.pdf'), pdf);
+    const books = createBooks({ dir: t.config.booksDir, log: {} });
+    const many = { ...books, contents: async () => ({ book: 'Monster Manual', from: 'bookmarks', entries: [{ title: 'Chapter 1', page: 1, depth: 0 }, ...sections.map((s) => ({ ...s, depth: 1 }))] }) };
+    await createQA({ ...t, books: many }).ask({ campaignId: t.campaign.id, userId: t.sam.id, question: 'What is in the Monster Manual?' });
+    const call = llm.calls.find((c) => c.purpose === 'qa');
+    assert.match(call.system, /- Monster Manual \(first printed 2025, pages 1-4\)/);
+    assert.match(call.toolResults[0].result, /p\. 1: Chapter 1\n\(Deeper headings hidden to fit/);
+  } finally {
+    await t.cleanup();
   }
 });

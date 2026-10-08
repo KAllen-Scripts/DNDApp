@@ -114,9 +114,6 @@ export function createFakeLLM({ qaScript = [], archivist = defaultArchivist, str
       if (!structured) throw new Error(`fake llm: no structured() handler for ${opts.purpose}`);
       return opts.schema.parse(await structured(opts));
     },
-    async text() {
-      throw new Error('fake llm: text() is not used any more');
-    },
     async research(opts) {
       calls.push({ purpose: opts.purpose, system: opts.system, prompt: opts.prompt });
       if (!research) throw new Error(`fake llm: no research() handler for ${opts.purpose}`);

@@ -11,14 +11,12 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import sharp from 'sharp';
 import { NotFoundError } from './store.js';
-import { inspectPicture } from './characters/pictures.js';
+import { inspectPicture, createImageCache } from './images.js';
 import { localTime } from './kb/updates.js';
 
 export const MAX_HANDOUT_TEXT = 20_000;
 const SHOW_PX = 2000;
-const CACHE_SIZE = 16;
 
 export const isHandoutId = (id) => /^[a-f0-9]{10}$/.test(String(id));
 
@@ -47,7 +45,7 @@ export const canSeeHandout = (h, { role, userId }) => !h.removed && (role === 'd
 export function createHandouts({ db, archive, store }) {
   const events = new EventEmitter();
   events.setMaxListeners(0);
-  const cache = new Map();
+  const images = createImageCache(16);
 
   const rows = (cid) => db.prepare('SELECT data FROM handouts WHERE campaign_id = ? ORDER BY created_at, id').all(cid).map((r) => normalizeHandout(JSON.parse(r.data)));
 
@@ -120,11 +118,7 @@ export function createHandouts({ db, archive, store }) {
     async image(cid, h) {
       if (!h.image) throw new NotFoundError('This handout has no picture');
       const file = archive.handoutImagePath(store.getCampaign(cid).slug, h.id, h.image.file);
-      if (!cache.has(file)) {
-        cache.set(file, await sharp(file).rotate().resize({ width: SHOW_PX, height: SHOW_PX, fit: 'inside', withoutEnlargement: true }).webp({ quality: 88 }).toBuffer());
-        if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value);
-      }
-      return { buf: cache.get(file), type: 'image/webp' };
+      return { buf: await images.shrunk(file, SHOW_PX), type: 'image/webp' };
     },
 
     /** Handouts given, changed or taken back in a time window, as text for the archivist. */

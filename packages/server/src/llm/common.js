@@ -3,7 +3,7 @@
  *
  * Every provider exposes the same three calls:
  *   structured({ task, purpose, system, prompt, schema, attachments?, campaignId, userId }) -> parsed object
- *   text({ task, purpose, system, prompt, campaignId })                -> string
+ *   research({ task, purpose, system, prompt, campaignId, userId }) -> string (web search and fetch only)
  *   agent({ task, purpose, system, prompt, tools, limits, ... })        -> { answer, costUsd, toolCalls }
  *
  * Agent tools are { name, description, schema (zod object), run(input) -> string }.

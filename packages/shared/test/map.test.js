@@ -94,6 +94,7 @@ test('record links, stat blocks and hit points are cleaned or dropped', () => {
   assert.equal(normalizeStats({ name: 'Ogre', text: '   ' }), null, 'no text, no stat block');
   assert.equal(normalizeStats('Ogre'), null);
   assert.equal(normalizeStats({ text: 'x', source: 'hacker' }).source, 'manual');
+  assert.equal(normalizeStats({ text: 'x', source: 'web' }).source, 'web', 'found online is kept (tokens placed from a found creature too)');
   assert.equal(normalizeStats({ text: 'x', ac: 'high' }).ac, null);
 
   assert.deepEqual(normalizeHp({ current: 4.6, max: '7' }), { current: 5, max: 7 });

@@ -54,29 +54,6 @@ export function chunkUtterances(utterances, { targetTokens, overlap }) {
   return chunks;
 }
 
-/** Group consecutive chunks into sections of at most `maxTokens` (for map -> reduce). */
-export function groupIntoSections(chunks, maxTokens) {
-  const sections = [];
-  let current = [];
-  let tokens = 0;
-  for (const c of chunks) {
-    if (current.length && tokens + c.tokens > maxTokens) {
-      sections.push(current);
-      current = [];
-      tokens = 0;
-    }
-    current.push(c);
-    tokens += c.tokens;
-  }
-  if (current.length) sections.push(current);
-  return sections.map((cs) => ({
-    start_sec: cs[0].start_sec,
-    end_sec: cs.at(-1).end_sec,
-    // Drop the overlap lines duplicated between chunks.
-    text: [...new Set(cs.flatMap((c) => c.text.split('\n')))].join('\n'),
-  }));
-}
-
 /**
  * A session's transcript with speaker names and glossary fixes applied.
  * @returns {import('@dndapp/shared').Utterance[]}

@@ -21,8 +21,6 @@ export const CONDITIONS = [
   'blinded', 'charmed', 'deafened', 'exhaustion', 'frightened', 'grappled', 'incapacitated', 'invisible',
   'paralyzed', 'petrified', 'poisoned', 'prone', 'restrained', 'stunned', 'unconscious', 'concentrating',
 ];
-/** What players see of an NPC's or enemy's hit points: how hurt it looks, not the numbers. */
-export const HEALTH = ['unhurt', 'hurt', 'bloodied', 'down'];
 /** What a scale's distance covers: one grid square, or the whole width of the image. */
 export const SCALE_PER = ['square', 'width'];
 export const MAX_TOKENS = 300;
@@ -212,7 +210,7 @@ export function normalizeRecordLink(r) {
 /** Record kinds that sound like someone you could put on a map (the archivist names kinds freely). */
 export const PERSON_KIND = /npc|person|people|character|creature|monster|villain|ally|allies|enem|faction member|figure|beast|foe/i;
 
-/** A creature's stat block (the DM's; players never get it). */
+/** A creature's stat block (the DM's; players never get it). source: ai (the AI's memory), web (found online) or manual. */
 export function normalizeStats(st) {
   if (!st || typeof st !== 'object') return null;
   const text = longStr(st.text, 8000);
@@ -224,7 +222,7 @@ export function normalizeStats(st) {
     speed: str(st.speed, 120),
     challenge: str(st.challenge, 40),
     text,
-    source: pick(st.source, ['ai', 'manual'], 'manual'),
+    source: pick(st.source, ['ai', 'web', 'manual'], 'manual'),
   };
 }
 

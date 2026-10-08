@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import zlib from 'node:zlib';
 import { setup, createFakeLLM, terrain, SAMPLE, PASSWORD } from './helpers.js';
 import { publicMessage, exposureWarnings, SECURITY_HEADERS } from '../src/app.js';
-import { inspectPicture } from '../src/characters/pictures.js';
+import { inspectPicture, inspectMapImage } from '../src/images.js';
 import { LLMError } from '../src/llm/index.js';
 
 const login = (t, name, password, ip = '127.0.0.1', headers = {}) =>
@@ -240,6 +240,9 @@ test('pictures: a small file claiming an enormous size is refused before it is o
   await assert.rejects(inspectPicture(claimedPng(15_000, 9_000)), /too many pixels/);
   const ok = await inspectPicture(claimedPng(4000, 3000));
   assert.equal(ok.width, 4000);
+  // Maps may be bigger, but not without limit either; and they can't be GIFs.
+  assert.equal((await inspectMapImage(claimedPng(15_000, 9_000))).width, 15_000);
+  await assert.rejects(inspectMapImage(claimedPng(16_000, 16_000)), /too many pixels/);
 });
 
 test('start-up warns when the server is reachable without https', () => {
