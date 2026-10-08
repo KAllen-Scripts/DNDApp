@@ -7,7 +7,8 @@
     ".": "./src/index.js",
     "./sheet.js": "./src/sheet.js",
     "./dice.js": "./src/dice.js",
-    "./map.js": "./src/map.js"
+    "./map.js": "./src/map.js",
+    "./citations.js": "./src/citations.js"
   },
   "scripts": {
     "test": "node --test \"test/*.test.js\""

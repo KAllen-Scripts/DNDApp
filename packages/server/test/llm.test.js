@@ -71,7 +71,7 @@ test('api: monthly spending cap blocks further calls', async () => {
   const { db, usage } = usageFor({ ...config, monthlySpendCapUsd: 1 });
   usage.record({ provider: 'api', model: 'x', purpose: 'p', costUsd: 2 });
   const api = createApiProvider({ config: { ...config, monthlySpendCapUsd: 1 }, usage, client: createFakeAnthropic([]) });
-  await assert.rejects(api.text({ task: 'qa', purpose: 'p', system: 's', prompt: 'q' }), SpendingCapError);
+  await assert.rejects(api.structured({ task: 'qa', purpose: 'p', system: 's', prompt: 'q', schema: z.object({ a: z.string() }) }), SpendingCapError);
   // Claude Code usage does not count toward the cap.
   db.prepare('DELETE FROM llm_usage').run();
   usage.record({ provider: 'claude-code', model: 'x', purpose: 'p', costUsd: 5 });
@@ -167,7 +167,7 @@ test('claude-code: failures are reported as errors', async () => {
   const { usage } = usageFor();
   const queryFn = fakeQuery([result({ subtype: 'error_during_execution', is_error: true, errors: ['not logged in'] })]);
   const cc = createClaudeCodeProvider({ config, usage, queryFn });
-  await assert.rejects(cc.text({ task: 'qa', purpose: 'p', system: 's', prompt: 'q' }), /not logged in/);
+  await assert.rejects(cc.research({ task: 'qa', purpose: 'p', system: 's', prompt: 'q' }), /not logged in/);
 });
 
 test('claude-code: tool wrapper counts calls and stops at the limit', async () => {

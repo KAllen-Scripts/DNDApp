@@ -123,10 +123,6 @@ export function createClaudeCodeProvider({ config, usage, queryFn = query }) {
       return schema.parse(result.structured_output);
     },
 
-    async text({ task, purpose, system, prompt, campaignId }) {
-      return (await run({ task, purpose, system, prompt, campaignId })).result.trim();
-    },
-
     /** Look something up on the web (search and fetch pages only). Returns the answer as text. */
     async research({ task, purpose, system, prompt, campaignId, userId, maxSearches = 8 }) {
       const web = ['WebSearch', 'WebFetch'];

@@ -14,6 +14,8 @@ import { applyJson } from '../sheets/store.js';
 const EPOCH = '1970-01-01T00:00:00.000Z';
 // Saves of the same field this close together read as one change (autosave fires while typing).
 const MERGE_MS = 10 * 60_000;
+// The DM has Creatures, not a sheet; one saved before that (or by someone who became the DM) isn't a player's.
+const PLAYERS_ONLY = "user_id NOT IN (SELECT user_id FROM memberships WHERE campaign_id = ? AND role = 'dm')";
 const clip = (s, n) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
 /** "2026-10-08 14:03" in the server's time zone, like the notes. */
@@ -137,7 +139,7 @@ export function createUpdates({ db, store, archive, handoutsBetween = () => [] }
   function sheetBlocks(cid, since, until) {
     const c = store.getCampaign(cid);
     const roster = new Map(store.roster(cid).map((m) => [m.user_id, m]));
-    const users = db.prepare('SELECT user_id FROM character_sheets WHERE campaign_id = ? AND updated_at > ? ORDER BY user_id').all(cid, since).map((r) => r.user_id);
+    const users = db.prepare(`SELECT user_id FROM character_sheets WHERE campaign_id = ? AND updated_at > ? AND ${PLAYERS_ONLY} ORDER BY user_id`).all(cid, since, cid).map((r) => r.user_id);
     const blocks = [];
     for (const uid of users) {
       const { before, after, changes } = sheetChanges(archive.readSheetChanges(c.slug, uid), { since, until });
@@ -188,7 +190,7 @@ export function createUpdates({ db, store, archive, handoutsBetween = () => [] }
     /** Whether anything is waiting for the archivist (cheap enough to call on start-up). */
     pendingSince(cid) {
       const since = mark(cid);
-      return !!db.prepare('SELECT 1 FROM character_sheets WHERE campaign_id = ? AND updated_at > ?').get(cid, since) ||
+      return !!db.prepare(`SELECT 1 FROM character_sheets WHERE campaign_id = ? AND updated_at > ? AND ${PLAYERS_ONLY}`).get(cid, since, cid) ||
         !!db.prepare('SELECT 1 FROM player_notes WHERE campaign_id = ? AND COALESCE(deleted_at, edited_at, written_at) > ?').get(cid, since) ||
         !!db.prepare('SELECT 1 FROM handouts WHERE campaign_id = ? AND updated_at > ?').get(cid, since);
     },

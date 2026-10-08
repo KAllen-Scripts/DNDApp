@@ -103,14 +103,6 @@ export function createApiProvider({ config, usage, client = new Anthropic() }) {
       return schema.parse(data);
     },
 
-    async text({ task, purpose, system, prompt, campaignId }) {
-      const { message } = await call(
-        { system, max_tokens: 16000, messages: [{ role: 'user', content: prompt }] },
-        { task, purpose, campaignId },
-      );
-      return textOf(message).trim();
-    },
-
     /**
      * Look something up on the web with Anthropic's web search and fetch
      * (they run on Anthropic's side). Returns the answer as text. The

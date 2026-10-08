@@ -15,7 +15,7 @@
 import crypto from 'node:crypto';
 import { TOKEN_SIZES, TOKEN_COLORS } from '@dndapp/shared/map.js';
 import { NotFoundError, BadRequestError } from './store.js';
-import { inspectPicture } from './characters/pictures.js';
+import { inspectPicture } from './images.js';
 
 export const CREATURE_KINDS = ['enemy', 'npc'];
 export const MAX_CREATURES = 500;
