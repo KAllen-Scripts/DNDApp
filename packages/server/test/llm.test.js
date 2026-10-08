@@ -167,7 +167,7 @@ test('claude-code: failures are reported as errors', async () => {
   const { usage } = usageFor();
   const queryFn = fakeQuery([result({ subtype: 'error_during_execution', is_error: true, errors: ['not logged in'] })]);
   const cc = createClaudeCodeProvider({ config, usage, queryFn });
-  await assert.rejects(cc.text({ task: 'qa', purpose: 'p', system: 's', prompt: 'q' }), /not logged in/);
+  await assert.rejects(cc.research({ task: 'qa', purpose: 'p', system: 's', prompt: 'q' }), /not logged in/);
 });
 
 test('claude-code: tool wrapper counts calls and stops at the limit', async () => {
