@@ -124,7 +124,7 @@ export function createMaps({ db, archive, store, pictures = null }) {
 
     /**
      * What this viewer may see of a map, or null if they may not see it at all.
-     * Players: only shown maps; no AI description or notes; no walls, only
+     * Players: only shown maps; no AI description or notes; no walls or lights, only
      * the doors they can see (`doors`, to open and close them); no
      * hidden tokens, and none they can't see (under the fog, or out of their
      * token's sight) except their own; NPCs' and enemies' hit points only as
@@ -152,6 +152,7 @@ export function createMaps({ db, archive, store, pictures = null }) {
         source: null,
         reading: { status: map.reading.status, error: '', notes: '' },
         walls: [],
+        lights: [],
         doors: map.walls
           .filter((w) => w.door && doorSeen(map, seen.polygons, w))
           .map(({ id, x1, y1, x2, y2, open, locked }) => ({ id, x1, y1, x2, y2, open, locked })),

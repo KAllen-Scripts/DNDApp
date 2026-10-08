@@ -975,3 +975,8 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .map-combat footer { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
 .map-combat footer select { width: auto; max-width: 100%; padding: 0.2rem 0.3rem; font-size: 0.85rem; }
 .map-combat p { margin: 0; }
+.map-walls .light-dim { fill: rgb(255 213 74 / 0.08); stroke: #ffd54a; stroke-width: 1.5px; stroke-dasharray: 5 5; vector-effect: non-scaling-stroke; }
+.map-walls .light-bright { fill: rgb(255 213 74 / 0.14); stroke: none; }
+.map-walls .light-dot { fill: #ffd54a; stroke: #000; stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+.map-walls .light-dim.ai { stroke: #b388ff; }
+.map-fog-tools select { width: auto; padding: 0.3rem 0.4rem; font-size: 0.85rem; }

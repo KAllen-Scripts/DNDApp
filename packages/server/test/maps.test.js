@@ -574,6 +574,7 @@ test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and
         walls: [{ points: [{ x: 500, y: 0 }, { x: 500, y: 498 }, { x: 1000, y: 498 }] }],
         doors: [{ from: { x: 502, y: 500 }, to: { x: 502, y: 700 } }],
         obstacles: [{ points: [{ x: 100, y: 100 }, { x: 200, y: 100 }] }],
+        lights: [{ x: 100, y: 900, kind: 'brazier' }],
         notes: draft === 1 ? 'The tower walls are a guess.' : '',
       };
     }),
@@ -600,6 +601,9 @@ test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and
       { x1: 350.5, y1: 244.3, x2: 351.4, y2: 343, door: true, kind: 'wall' },
     ]);
     assert.equal(done.walls.filter((w) => w.source === 'dm').length, 1);
+    // Lights it saw, as the light they give.
+    assert.deepEqual(done.lights.map(({ x, y, bright, dim, source }) => ({ x, y, bright, dim, source })), [{ x: 70, y: 441, bright: 20, dim: 20, source: 'ai' }]);
+    assert.deepEqual((await t.request('GET', base, { as: t.sam.token })).json().lights, [], 'players never get the lights');
     const call = t.llm.calls.find((c) => c.purpose === 'map:walls');
     assert.equal(call.attachments.length, 1);
     assert.match(call.prompt, /700 × 490/);
@@ -612,6 +616,7 @@ test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and
       return m.wall_draft.status === 'done' && draft === 2 && m;
     });
     assert.equal(again.walls.length, 5, 'the old draft was replaced, not added to');
+    assert.equal(again.lights.length, 1);
     await t.request('PATCH', `${base}/walls`, { body: { clear: 'ai' } });
     assert.deepEqual(t.maps.get(t.campaign.id, map.id).walls.map((w) => w.source), ['dm']);
   } finally {

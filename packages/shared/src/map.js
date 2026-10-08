@@ -80,7 +80,52 @@ export function normalizeToken(t = {}, map) {
     // The archivist's record this token stands for (the DM's; players only get the name).
     // The title is kept too: record ids can change when the knowledge base is rebuilt.
     record: normalizeRecordLink(t.record),
+    // A light the token carries (a torch: 20 ft bright, 20 ft more dim), in the map's unit; null for none.
+    light: normalizeLightRadii(t.light),
+    // How far it sees in the dark (darkvision), in the map's unit; 0 for none.
+    darkvision: num(t.darkvision, { min: 0, max: 10_000, fallback: 0 }),
+    // Walking speed in the map's unit when the DM sets it; null to use the sheet or stat block's.
+    speed: num(t.speed, { min: 0, max: 10_000, fallback: null }),
   };
+}
+
+/** A light's reach: { bright, dim } (dim is the ring beyond the bright light), or null for no light. */
+export function normalizeLightRadii(l) {
+  if (!l || typeof l !== 'object') return null;
+  const bright = num(l.bright, { min: 0, max: 10_000, fallback: 0 });
+  const dim = num(l.dim, { min: 0, max: 10_000, fallback: 0 });
+  return bright + dim > 0 ? { bright: round(bright, 2), dim: round(dim, 2) } : null;
+}
+
+/** Lights people carry or the DM places, by the 5e rules (in feet). */
+export const LIGHT_PRESETS = {
+  candle: { name: 'Candle', bright: 5, dim: 5 },
+  torch: { name: 'Torch', bright: 20, dim: 20 },
+  lamp: { name: 'Lamp', bright: 15, dim: 30 },
+  lantern: { name: 'Hooded lantern', bright: 30, dim: 30 },
+  light: { name: 'Light cantrip', bright: 20, dim: 20 },
+  fire: { name: 'Campfire', bright: 20, dim: 20 },
+};
+export const MAX_LIGHTS = 200;
+
+/** Light sources the DM places (or the AI suggests): [{ id, x, y, bright, dim, source }]. */
+export function normalizeLights(list, image = {}) {
+  const { width = 1, height = 1 } = image;
+  const seen = new Set();
+  const out = [];
+  for (const l of Array.isArray(list) ? list : []) {
+    const radii = normalizeLightRadii(l);
+    if (!l || !isTokenId(l.id) || seen.has(l.id) || out.length >= MAX_LIGHTS || !radii) continue;
+    seen.add(l.id);
+    out.push({
+      id: String(l.id),
+      x: round(num(l.x, { min: 0, max: width, fallback: width / 2 }), 2),
+      y: round(num(l.y, { min: 0, max: height, fallback: height / 2 }), 2),
+      ...radii,
+      source: pick(l.source, WALL_SOURCES, 'dm'),
+    });
+  }
+  return out;
 }
 
 export const MAX_PINS = 100;
@@ -195,6 +240,7 @@ export function normalizeMap(input = {}) {
     },
     fog: normalizeFog(m.fog, image),
     walls: normalizeWalls(m.walls, image),
+    lights: normalizeLights(m.lights, image),
     // The AI drafting walls from the picture (the DM's; players never get it).
     wall_draft: {
       status: pick(m.wall_draft?.status, ['', 'pending', 'done', 'failed'], ''),
@@ -243,6 +289,8 @@ export function normalizeFog(f, image = {}) {
     // Players keep a dim view of where they've been (with line of sight).
     memory: f?.memory !== false,
     map: pick(f?.map, FOG_MAP, 'dark'),
+    // Darkness (night, or underground): with line of sight, players only see lit places and what their darkvision reaches.
+    dark: f?.dark === true,
     shapes,
   };
 }
@@ -354,7 +402,7 @@ export const wallBetween = (map, a, b) =>
  * of the image. Rays go to every wall end (and just either side of it), so
  * the polygon's corners are exactly where sight is cut off.
  */
-export function sightPolygon(map, origin) {
+export function sightPolygon(map, origin, reach = Infinity) {
   const { width, height } = map.image;
   const ox = Math.min(width - 0.01, Math.max(0.01, origin.x));
   const oy = Math.min(height - 0.01, Math.max(0.01, origin.y));
@@ -367,6 +415,8 @@ export function sightPolygon(map, origin) {
       angles.push(a - 1e-5, a, a + 1e-5);
     }
   }
+  // Limited reach (a light, darkvision): the edge of the circle, every 5°.
+  if (Number.isFinite(reach)) for (let i = 0; i < 72; i++) angles.push((i * Math.PI) / 36 - Math.PI);
   const points = [];
   for (const a of angles) {
     const dx = Math.cos(a);
@@ -383,6 +433,7 @@ export function sightPolygon(map, origin) {
       const u = cross(qx, qy, dx, dy) / denom;
       if (t >= 0 && u >= -1e-9 && u <= 1 + 1e-9 && t < best) best = t;
     }
+    best = Math.min(best, reach);
     if (best < Infinity) points.push({ a, x: ox + dx * best, y: oy + dy * best });
   }
   points.sort((p, q) => p.a - q.a);
@@ -413,20 +464,44 @@ export function pointInPolygon(x, y, poly) {
  */
 export function sightOf(map, userId) {
   if (!map.fog?.enabled || !map.fog.sight || userId == null) return [];
-  return map.tokens.filter((t) => t.kind === 'pc' && t.user_id === userId).map((t) => sightPolygon(map, t))
-    .filter((p) => p.length >= 3);
+  const own = map.tokens.filter((t) => t.kind === 'pc' && t.user_id === userId);
+  if (!map.fog.dark) return own.map((t) => sightPolygon(map, t)).filter((p) => p.length >= 3);
+  // In the dark: what darkvision reaches, and the lit places the token can see (each light's area, cut to the token's sight).
+  const k = pxPerUnit(map);
+  const lit = litAreas(map);
+  const out = [];
+  for (const t of own) {
+    if (t.darkvision > 0) out.push(sightPolygon(map, t, t.darkvision * k));
+    const full = sightPolygon(map, t);
+    for (const area of lit) out.push({ points: area, clip: full });
+  }
+  return out.filter((v) => (v.points ?? v).length >= 3);
 }
+
+/**
+ * Where light falls: one polygon per light (placed, or carried by a
+ * token), out to the end of its dim light and cut off by walls.
+ */
+export function litAreas(map) {
+  const k = pxPerUnit(map);
+  const sources = [...(map.lights ?? []), ...map.tokens.filter((t) => t.light).map((t) => ({ x: t.x, y: t.y, ...t.light }))];
+  return sources.map((l) => sightPolygon(map, l, (l.bright + l.dim) * k)).filter((p) => p.length >= 3);
+}
+
+/** Is a point inside what a player sees: a polygon, or { points, clip } (inside both)? */
+export const inView = (x, y, v) => (Array.isArray(v) ? pointInPolygon(x, y, v) : pointInPolygon(x, y, v.points) && pointInPolygon(x, y, v.clip));
 
 /** Can a player with these sight polygons see the point (x, y) right now? */
 export function canSee(map, polygons, x, y) {
   if (!map.fog?.enabled) return true;
-  if (polygons.some((p) => pointInPolygon(x, y, p))) return true;
+  if (polygons.some((p) => inView(x, y, p))) return true;
   return !isFogged(map, x, y);
 }
 
 /**
  * The fog as one player sees it, as a mask: a list of shapes drawn in
- * order, each { fill, x, y, w, h } or { fill, points }. fill is 'cover'
+ * order, each { fill, x, y, w, h } or { fill, points } (with `clip`: only
+ * where it's also inside that polygon). fill is 'cover'
  * (fog), 'dim' (seen before: shown darkened) or 'clear'. Without sight
  * polygons or explored areas it's the DM's rectangles alone. Empty when
  * the fog is off.
@@ -438,7 +513,7 @@ export function fogMask(map, { polygons = [], explored = [] } = {}) {
     { fill: map.fog.map === 'grey' ? 'dim' : 'cover', x: 0, y: 0, w: width, h: height },
     ...explored.map((r) => ({ fill: 'dim', ...r })),
     ...map.fog.shapes.map((s) => ({ fill: s.op === 'reveal' ? 'clear' : map.fog.map === 'grey' ? 'dim' : 'cover', x: s.x, y: s.y, w: s.w, h: s.h })),
-    ...polygons.map((points) => ({ fill: 'clear', points })),
+    ...polygons.map((v) => (Array.isArray(v) ? { fill: 'clear', points: v } : { fill: 'clear', points: v.points, clip: v.clip })),
   ];
 }
 

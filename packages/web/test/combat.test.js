@@ -39,11 +39,11 @@ test('initiative: the DM starts a fight from the panel; the player rolls, takes 
       const map = await importMap(t, { patch: SHOWN });
       const thorin = await addToken(t, map, { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 52.5, y: 52.5 });
       const goblin = await addToken(t, map, { kind: 'enemy', name: 'Goblin', x: 122.5, y: 52.5, stats: { text: 'DEX 14 (+2)' } });
-      await addToken(t, map, { kind: 'enemy', name: 'Lurker', x: 192.5, y: 52.5, hidden: true });
-      return { map, thorin, goblin, dana: await addDm(t) };
+      const lurker = await addToken(t, map, { kind: 'enemy', name: 'Lurker', x: 192.5, y: 52.5, hidden: true });
+      return { map, thorin, goblin, lurker, dana: await addDm(t) };
     },
     page: (t) => ({ as: t.sam }),
-  }, async (page, t, { map, thorin, goblin }) => {
+  }, async (page, t, { map, thorin, goblin, lurker }) => {
     await openMapTab(page);
     const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
     // No fight: the panel is closed; opening it says so.
@@ -71,6 +71,9 @@ test('initiative: the DM starts a fight from the panel; the player rolls, takes 
     assert.deepEqual(order(page), ['Thorin', 'Goblin']);
 
     // The DM starts the turns: Thorin's token is marked and Sam can end his turn.
+    // Fix the others' rolls so the order is known: Thorin 25, Goblin 20, the lurker 1.
+    await t.request('POST', `${base}/combat`, { body: { action: 'set', id: goblin.id, init: 20 } });
+    await t.request('POST', `${base}/combat`, { body: { action: 'set', id: lurker.id, init: 1 } });
     await t.request('POST', `${base}/combat`, { body: { action: 'next' } });
     await page.waitFor(() => tokenEl(page, 'Thorin').classList.contains('turn'), { what: "Thorin's turn" });
     assert.match(page.text('#map-combat'), /Thorin's turn/);

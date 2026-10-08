@@ -19,7 +19,7 @@ import { preparedTranscript } from './pipeline/prepare.js';
 import { SheetConflictError } from './sheets/store.js';
 import { SHEET_FORMAT, computeSheet } from '@dndapp/shared/sheet.js';
 import { parseRoll, rollDice, ROLL_MODES } from '@dndapp/shared/dice.js';
-import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, MAX_WALLS, WALL_KINDS, FOG_MAP, TEMPLATE_SHAPES, MAX_TEMPLATES, snapToken, wallBetween, doorReach, distanceToWall, dexModifier, stepTurn } from '@dndapp/shared/map.js';
+import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, MAX_WALLS, WALL_KINDS, FOG_MAP, TEMPLATE_SHAPES, MAX_TEMPLATES, MAX_LIGHTS, snapToken, wallBetween, doorReach, distanceToWall, dexModifier, stepTurn } from '@dndapp/shared/map.js';
 import { inspectImage } from './maps/read.js';
 import { isPdf, renderPdfPage } from './maps/pdf.js';
 import { createPlayerImages } from './maps/image.js';
@@ -1058,6 +1058,9 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
         maps.change(cid, map.id, (m) => {
           const own = m.walls.filter((w) => w.source !== 'ai');
           m.walls = [...own, ...r.walls.slice(0, MAX_WALLS - own.length).map((w) => ({ ...w, id: newTokenId(), open: false, source: 'ai' }))];
+          // Lights the AI saw on the picture (torches, braziers, fires) replace its earlier ones too.
+          const ownLights = m.lights.filter((l) => l.source !== 'ai');
+          m.lights = [...ownLights, ...(r.lights ?? []).slice(0, MAX_LIGHTS - ownLights.length).map((l) => ({ ...l, id: newTokenId(), source: 'ai' }))];
           m.wall_draft = { status: 'done', error: '', notes: r.notes };
         }, { reason: 'walls drafted by the AI' }),
       )
@@ -1190,10 +1193,11 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   });
 
   /**
-   * Fog of war (DM): { enabled?, sight?, map?: dark | shown, memory?, add?: {op: reveal | cover, x, y, w, h}, undo?, reset?: cover | reveal, forget? }.
+   * Fog of war (DM): { enabled?, sight?, map?: dark | shown, memory?, dark?, add?: {op: reveal | cover, x, y, w, h}, undo?, reset?: cover | reveal, forget? }.
    * map: what players get outside their sight and the reveals (dark, or the map with no tokens). memory: keep a dim view of where they've been.
    * reset: cover hides the whole map again, reveal shows all of it; undo takes back the last rectangle.
    * sight: players also see what their own token can see past the walls. forget: players lose the dim view of places they saw before.
+   * dark: darkness; with sight, players only see lit places and what their darkvision reaches.
    */
   app.patch('/campaigns/:cid/maps/:mid/fog', async (request) => {
     const a = access(request, { dm: true });
@@ -1204,6 +1208,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
         sight: z.boolean().optional(),
         map: z.enum(FOG_MAP).optional(),
         memory: z.boolean().optional(),
+        dark: z.boolean().optional(),
         forget: z.boolean().optional(),
         add: z.object({ op: z.enum(FOG_OPS), x: z.number(), y: z.number(), w: z.number().positive(), h: z.number().positive() }).optional(),
         undo: z.boolean().optional(),
@@ -1216,6 +1221,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       if (body.sight !== undefined) m.fog.sight = body.sight;
       if (body.map !== undefined) m.fog.map = body.map;
       if (body.memory !== undefined) m.fog.memory = body.memory;
+      if (body.dark !== undefined) m.fog.dark = body.dark;
       if (body.reset === 'cover') m.fog.shapes = [];
       if (body.reset === 'reveal') m.fog.shapes = [{ op: 'reveal', x: 0, y: 0, w: m.image.width, h: m.image.height }];
       if (body.undo) m.fog.shapes.pop();
@@ -1286,6 +1292,38 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     return maps.view(saved, a);
   });
 
+  const RADII = { bright: z.number().min(0).max(10_000), dim: z.number().min(0).max(10_000) };
+
+  /**
+   * Light sources (DM): { add?: {x, y, bright, dim}, move?: {id, x, y}, remove?: id, clear?: ai | all }.
+   * Radii are in the map's unit (a torch: 20 bright, 20 dim). Lights matter in darkness (fog.dark).
+   */
+  app.patch('/campaigns/:cid/maps/:mid/lights', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const body = z
+      .object({
+        add: z.object({ x: POINT, y: POINT, ...RADII }).optional(),
+        move: z.object({ id: z.string().max(20), x: POINT, y: POINT }).optional(),
+        remove: z.string().max(20).optional(),
+        clear: z.enum(['ai', 'all']).optional(),
+      })
+      .parse(request.body ?? {});
+    if (body.add && map.lights.length >= MAX_LIGHTS) throw new BadRequestError(`A map can have at most ${MAX_LIGHTS} lights.`);
+    if (body.add && body.add.bright + body.add.dim <= 0) throw new BadRequestError('A light needs some reach.');
+    for (const id of [body.remove, body.move?.id]) {
+      if (id !== undefined && !map.lights.some((l) => l.id === id)) throw new NotFoundError('No such light');
+    }
+    const saved = maps.change(a.cid, map.id, (m) => {
+      if (body.clear === 'all') m.lights = [];
+      if (body.clear === 'ai') m.lights = m.lights.filter((l) => l.source !== 'ai');
+      if (body.remove) m.lights = m.lights.filter((l) => l.id !== body.remove);
+      if (body.move) Object.assign(m.lights.find((l) => l.id === body.move.id), { x: body.move.x, y: body.move.y });
+      if (body.add) m.lights.push({ ...body.add, id: newTokenId(), source: 'dm' });
+    }, { by: request.user.id, reason: 'lights' });
+    return maps.view(saved, a);
+  });
+
   /** Draft the walls and doors with the AI (DM), in the background. Replaces the AI's earlier draft; walls the DM drew stay. */
   app.post('/campaigns/:cid/maps/:mid/walls/draft', async (request) => {
     const a = access(request, { dm: true });
@@ -1329,9 +1367,11 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     hidden: z.boolean(),
     record: z.object({ id: z.number().int().positive(), title: z.string().max(200).optional() }).nullable(),
     stats: z.object({ text: z.string().max(8000), ac: z.number().int().nullable().optional(), hp_formula: z.string().max(40).optional(), speed: z.string().max(120).optional(), challenge: z.string().max(40).optional() }).nullable(),
+    light: z.object(RADII).nullable(),
+    darkvision: z.number().min(0).max(10_000),
   });
   // What a player may change on their own token; everything else is the DM's.
-  const OWNER_FIELDS = new Set(['x', 'y', 'hp', 'conditions']);
+  const OWNER_FIELDS = new Set(['x', 'y', 'hp', 'conditions', 'light', 'darkvision']);
 
   /** A token linked to a record gets that record's current title (the DM only sends the id). */
   const linkRecord = (cid, body) => {

@@ -15,7 +15,7 @@ import {
   TOKEN_KINDS, TOKEN_KIND_NAMES, TOKEN_SIZES, TOKEN_SIZE_NAMES, TOKEN_COLORS, UNITS,
   CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf,
   fogMask, FOG_MASK_FILL, snapWallPoint, nearestWall,
-  TEMPLATE_SHAPES, TEMPLATE_SHAPE_NAMES, TEMPLATE_COLOR, templateShape, tokensInTemplate, inTemplate, snapTemplatePoint, spellArea,
+  LIGHT_PRESETS, pxPerUnit, squarePx, TEMPLATE_SHAPES, TEMPLATE_SHAPE_NAMES, TEMPLATE_COLOR, templateShape, tokensInTemplate, inTemplate, snapTemplatePoint, spellArea,
 } from './shared/map.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -38,7 +38,7 @@ const state = {
   draftGrid: undefined, // grid being edited in the settings dialog (shown live)
   fogMode: null, // DM drawing fog: 'reveal' | 'cover'
   fogDraw: null, // the rectangle being drawn: { pointer, a, b }
-  wallMode: null, // DM working on walls: 'wall' | 'low' | 'door' | 'lock' | 'erase'
+  wallMode: null, // DM working on walls: 'wall' | 'low' | 'door' | 'lock' | 'light' | 'erase'
   wallDraw: null, // the wall being drawn: { pointer, a, b, sx, sy }
   live: null, // AbortController for the live stream
   pins: new Map(), // map id -> this person's private pins on it
@@ -292,13 +292,21 @@ function renderFog() {
   const shapes = state.canEdit ? fogMask(map) : (map.fog?.mask ?? []);
   if (shapes.length) {
     const mask = svgEl('mask', { id: 'map-fog-mask', maskUnits: 'userSpaceOnUse', x: 0, y: 0, width, height });
-    for (const r of shapes) {
-      const fill = FOG_MASK_FILL[r.fill];
-      mask.append(r.points
-        ? svgEl('polygon', { points: r.points.map((p) => p.join(',')).join(' '), fill })
-        : svgEl('rect', { x: r.x, y: r.y, width: r.w, height: r.h, fill }));
-    }
     const defs = svgEl('defs', {});
+    const pts = (list) => list.map((p) => p.join(',')).join(' ');
+    shapes.forEach((r, i) => {
+      const fill = FOG_MASK_FILL[r.fill];
+      if (!r.points) return mask.append(svgEl('rect', { x: r.x, y: r.y, width: r.w, height: r.h, fill }));
+      const poly = svgEl('polygon', { points: pts(r.points), fill });
+      // A lit place, cut to what the token can see.
+      if (r.clip) {
+        const clip = svgEl('clipPath', { id: `map-fog-clip-${i}`, clipPathUnits: 'userSpaceOnUse' });
+        clip.append(svgEl('polygon', { points: pts(r.clip) }));
+        defs.append(clip);
+        poly.setAttribute('clip-path', `url(#map-fog-clip-${i})`);
+      }
+      mask.append(poly);
+    });
     defs.append(mask);
     svg.append(defs, svgEl('rect', { width, height, class: 'fog', mask: 'url(#map-fog-mask)' }));
   }
@@ -327,6 +335,9 @@ function renderFogTools() {
   const sight = $('#map-sight-on');
   sight.checked = !!map.fog?.sight;
   sight.disabled = !map.fog?.enabled;
+  const dark = $('#map-dark-on');
+  dark.checked = !!map.fog?.dark;
+  dark.disabled = !map.fog?.enabled || !map.fog.sight;
   const memory = $('#map-memory-on');
   memory.checked = map.fog.memory;
   memory.disabled = !map.fog.enabled || !map.fog.sight || map.fog.map !== 'dark';
@@ -340,7 +351,7 @@ function renderFogTools() {
   $('#map-wall-hint').textContent = !map.fog?.enabled
     ? 'Turn on Fog of war first. Then, with Line of sight, players see what their own token can see past the walls.'
     : map.fog.sight
-      ? `${count(map.walls.length - doors - low, 'wall')}, ${count(low, 'obstacle')}, ${count(doors, 'door')}. Players see what their own token can see, and open doors next to them.`
+      ? `${count(map.walls.length - doors - low, 'wall')}, ${count(low, 'obstacle')}, ${count(doors, 'door')}, ${count(map.lights?.length ?? 0, 'light')}. Players see what their own token can see${map.fog.dark ? ' where there is light or their darkvision reaches' : ''}, and open doors next to them.`
       : 'Players only see what you reveal. Tick Line of sight to let their tokens see past the walls.';
 }
 
@@ -359,6 +370,17 @@ function renderWalls() {
   const cls = (w) => (w.door || !state.canEdit
     ? `door${w.open ? ' open' : ''}${w.locked ? ' locked' : ''}`
     : `wall${w.kind === 'low' ? ' low' : ''}${w.source === 'ai' ? ' ai' : ''}`);
+  // Lights (the DM's): the dim reach, the bright reach and the source.
+  if (state.canEdit) {
+    const k = pxPerUnit(map);
+    for (const l of map.lights ?? []) {
+      svg.append(
+        svgEl('circle', { cx: l.x, cy: l.y, r: (l.bright + l.dim) * k, class: `light-dim${l.source === 'ai' ? ' ai' : ''}` }),
+        svgEl('circle', { cx: l.x, cy: l.y, r: l.bright * k, class: 'light-bright' }),
+        svgEl('circle', { cx: l.x, cy: l.y, r: Math.max(3, squarePx(map) / 8), class: 'light-dot' }),
+      );
+    }
+  }
   for (const w of list) svg.append(line(w, 'wall-halo'));
   for (const w of list) svg.append(line(w, cls(w)));
   const d = state.wallDraw;
@@ -380,6 +402,15 @@ function doorAt(clientX, clientY) {
   const map = state.current;
   const doors = state.canEdit ? map.walls.filter((w) => w.door) : (map.doors ?? []);
   return nearestWall({ walls: doors }, toImage(clientX, clientY), SNAP_PX / state.view.k);
+}
+
+async function lights(body) {
+  try {
+    const saved = await state.guarded(() => api('PATCH', `${base()}/${state.current.id}/lights`, body));
+    if (saved) onMap(saved);
+  } catch (err) {
+    report(err);
+  }
 }
 
 async function walls(body) {
@@ -622,6 +653,21 @@ async function patchToken(token, body) {
   }
 }
 
+/** The light a token carries: none, or one of the usual ones. */
+function lightSelect(token) {
+  const key = token.light ? Object.keys(LIGHT_PRESETS).find((k) => LIGHT_PRESETS[k].bright === token.light.bright && LIGHT_PRESETS[k].dim === token.light.dim) ?? 'other' : '';
+  const sel = h('select', { 'aria-label': 'Light carried', title: 'A light this token carries (it matters in darkness)' },
+    new Option('No light', ''),
+    ...Object.entries(LIGHT_PRESETS).filter(([k]) => k !== 'fire').map(([k, p]) => new Option(p.name, k)),
+    key === 'other' ? new Option(`${token.light.bright}/${token.light.dim} ft`, 'other') : null);
+  sel.value = key;
+  sel.addEventListener('change', () => {
+    const p = LIGHT_PRESETS[sel.value];
+    if (sel.value !== 'other') patchToken(token, { light: p ? { bright: p.bright, dim: p.dim } : null });
+  });
+  return sel;
+}
+
 /** Hit points and conditions: the DM for any token, a player for their own. */
 function tokenControls(token) {
   const editable = state.canEdit || (token.user_id != null && token.user_id === state.userId);
@@ -642,6 +688,7 @@ function tokenControls(token) {
       patchToken(token, { hp: next });
     });
     parts.push(h('span', { class: 'hp-text' }, hpText(token) || 'No HP'), change);
+    parts.push(lightSelect(token));
     const add = h('select', { 'aria-label': 'Add a condition' }, new Option('+ Condition', ''), ...CONDITIONS.filter((c) => !token.conditions.includes(c)).map((c) => new Option(c, c)));
     add.addEventListener('change', () => add.value && patchToken(token, { conditions: [...token.conditions, add.value] }));
     parts.push(add);
@@ -745,14 +792,21 @@ function wallUp(e) {
   const map = state.current;
   const click = Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 4;
   if (click) {
-    const near = nearestWall(map, toImage(e.clientX, e.clientY), SNAP_PX / state.view.k);
+    const at = toImage(e.clientX, e.clientY);
+    if (state.wallMode === 'light') {
+      const { bright, dim } = LIGHT_PRESETS[$('#map-light-kind').value] ?? LIGHT_PRESETS.torch;
+      return lights({ add: { x: at.x, y: at.y, bright, dim } });
+    }
+    const light = state.wallMode === 'erase' && (map.lights ?? []).find((l) => Math.hypot(l.x - at.x, l.y - at.y) <= SNAP_PX / state.view.k);
+    if (light) return lights({ remove: light.id });
+    const near = nearestWall(map, at, SNAP_PX / state.view.k);
     const door = doorAt(e.clientX, e.clientY);
     if (state.wallMode === 'erase' && near) walls({ remove: near.id });
     else if (state.wallMode === 'door' && door) walls({ toggle: door.id });
     else if (state.wallMode === 'lock' && door) walls({ lock: door.id });
     return;
   }
-  if (state.wallMode === 'erase' || state.wallMode === 'lock') return;
+  if (state.wallMode === 'erase' || state.wallMode === 'lock' || state.wallMode === 'light') return;
   if (Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y) < 1) return;
   walls({ add: { x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y, door: state.wallMode === 'door', kind: state.wallMode === 'low' ? 'low' : 'wall' } });
 }
@@ -1430,6 +1484,7 @@ async function tokenDialog(token = null) {
   const color = h('input', { type: 'color', value: token?.color ?? TOKEN_COLORS[kind.value] });
   const hpMax = h('input', { type: 'number', min: '1', step: '1', value: token?.hp?.max ?? '', placeholder: 'unknown' });
   const hidden = h('input', { type: 'checkbox', checked: !!token?.hidden });
+  const darkvision = h('input', { type: 'number', min: '0', step: '5', value: token?.darkvision || '', placeholder: 'none' });
   // Someone from the campaign's records (what the archivist has written down about them).
   const { records } = (await state.guarded(() => api('GET', `${base()}/records`))) ?? { records: [] };
   const recordOption = (r) => new Option(`${r.title}${r.person ? '' : ` (${r.kind})`}`, r.id);
@@ -1474,6 +1529,7 @@ async function tokenDialog(token = null) {
       size: Number(size.value),
       color: color.value,
       hidden: hidden.checked,
+      darkvision: Math.max(0, Number(darkvision.value) || 0),
     };
     if (record.value !== String(token?.record?.id ?? '')) body.record = record.value ? { id: Number(record.value) } : null;
     const max = Number(hpMax.value) > 0 ? Math.round(Number(hpMax.value)) : null;
@@ -1503,7 +1559,7 @@ async function tokenDialog(token = null) {
       field('Kind', kind),
       playerField,
       field('Name', name),
-      h('div', { class: 'map-row' }, field('Size', size), field('Colour', color), field('Max HP', hpMax)),
+      h('div', { class: 'map-row' }, field('Size', size), field('Colour', color), field('Max HP', hpMax), field(`Darkvision (${map.scale?.unit ?? 'ft'})`, darkvision)),
       h('label', { class: 'map-check' }, hidden, ' Hidden from players (an ambush, someone lurking)'),
       lookUpField,
       token ? null : h('p', { class: 'muted small' }, 'It appears in the middle of what you can see; drag it into place.'),
@@ -1656,6 +1712,9 @@ export function initMapActions() {
   }
   $('#map-sight-on').addEventListener('change', (e) => fog({ sight: e.target.checked }));
   $('#map-memory-on').addEventListener('change', (e) => fog({ memory: e.target.checked }));
+  $('#map-dark-on').addEventListener('change', (e) => fog({ dark: e.target.checked }));
+  $('#map-light-kind').replaceChildren(...Object.entries(LIGHT_PRESETS).map(([k, p]) => new Option(`${p.name} (${p.bright}/${p.dim} ft)`, k)));
+  $('#map-light-kind').value = 'torch';
   $('#map-fog-map').addEventListener('change', (e) => fog({ map: e.target.value }));
   for (const b of document.querySelectorAll('[data-wall-mode]')) {
     b.addEventListener('click', () => setTool({ wallMode: state.wallMode === b.dataset.wallMode ? null : b.dataset.wallMode }));

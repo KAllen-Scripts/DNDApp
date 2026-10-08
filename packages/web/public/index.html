@@ -209,11 +209,14 @@
       <div id="map-wall-tools" class="map-bar map-fog-tools dm-only" hidden>
         <label class="map-check small" title="Players also see whatever their own token has a clear line to"><input type="checkbox" id="map-sight-on"> Line of sight</label>
         <label class="map-check small" title="Places a player has seen stay on their map, dimmed"><input type="checkbox" id="map-memory-on"> Remember explored</label>
+        <label class="map-check small" title="Night, or underground: players only see lit places and what their darkvision reaches"><input type="checkbox" id="map-dark-on"> Darkness</label>
         <button class="ghost" data-wall-mode="wall" aria-pressed="false" title="Drag on the map to draw a wall">Wall</button>
         <button class="ghost" data-wall-mode="low" aria-pressed="false" title="Drag to draw an obstacle players can see over but not cross (a building's roof, a cliff edge, a fence)">Obstacle</button>
         <button class="ghost" data-wall-mode="door" aria-pressed="false" title="Drag to draw a door; click a door to open or close it">Door</button>
         <button class="ghost" data-wall-mode="lock" aria-pressed="false" title="Click a door to lock or unlock it (players can't open a locked door)">Lock</button>
-        <button class="ghost" data-wall-mode="erase" aria-pressed="false" title="Click a wall or door to remove it">Erase</button>
+        <button class="ghost" data-wall-mode="light" aria-pressed="false" title="Click the map to put a light there (a torch, a brazier, a campfire)">Light</button>
+        <select id="map-light-kind" aria-label="Which light"></select>
+        <button class="ghost" data-wall-mode="erase" aria-pressed="false" title="Click a wall, door or light to remove it">Erase</button>
         <button class="ghost" id="map-walls-draft" title="Let the AI trace the walls and doors from the picture, for you to correct">AI walls</button>
         <button class="ghost" data-wall-action="clear-ai">Clear AI walls</button>
         <button class="ghost" data-wall-action="forget" title="Players lose the dim view of places they saw before">Forget explored</button>

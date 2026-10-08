@@ -6,6 +6,7 @@ import {
   PERSON_KIND, MAX_PINS, PIN_COLOR, TOKEN_COLORS,
   normalizeWalls, segmentsCross, wallBetween, sightPolygon, pointInPolygon, sightOf, canSee, fogMask, nearestWall, snapWallPoint,
   distanceToWall, doorReach,
+  litAreas, inView, normalizeLights, normalizeLightRadii,
   normalizeCombat, stepTurn, dexModifier, normalizeTemplates, templateShape, tokensInTemplate, inTemplate, snapTemplatePoint, spellArea,
 } from '../src/map.js';
 
@@ -20,7 +21,7 @@ test('normalizeMap keeps known fields only and drops a per-square scale without 
   assert.equal(m.evil, undefined);
   assert.equal(m.scale, null);
   assert.equal(m.shown, false);
-  assert.deepEqual(m.tokens, [{ id: 'abc123', kind: 'pc', name: 'Player character', user_id: 4, color: '#2f6fb3', size: 1, x: 100, y: 0, hp: null, conditions: [], hidden: false, stats: null, record: null }]);
+  assert.deepEqual(m.tokens, [{ id: 'abc123', kind: 'pc', name: 'Player character', user_id: 4, color: '#2f6fb3', size: 1, x: 100, y: 0, hp: null, conditions: [], hidden: false, stats: null, record: null, light: null, darkvision: 0, speed: null }]);
 });
 
 test('snapToken: Medium in the middle of a square, Large on a corner, always on the map', () => {
@@ -363,4 +364,46 @@ test('spellArea reads a spell\'s area from its range or description', () => {
   assert.deepEqual(spellArea({ range: 'Self', description: 'A line of strong wind 60 feet long and 10 feet wide blasts from you' }), { shape: 'line', size: 60, width: 10 });
   assert.deepEqual(spellArea({ range: '90 feet', description: 'a 20-foot cube of fog' }), { shape: 'cube', size: 20 });
   assert.equal(spellArea({ range: '120 feet', description: 'three glowing darts' }), null);
+});
+
+// ---------- light and darkness ----------
+
+test('sightPolygon with a reach stops at that distance (a light, darkvision)', () => {
+  const map = normalizeMap({ image: { width: 700, height: 490 } });
+  const poly = sightPolygon(map, { x: 350, y: 245 }, 100);
+  assert.ok(poly.length >= 72);
+  for (const [x, y] of poly) assert.ok(Math.hypot(x - 350, y - 245) <= 100.1);
+  assert.ok(pointInPolygon(440, 245, poly));
+  assert.ok(!pointInPolygon(460, 245, poly));
+});
+
+test('sightOf in darkness: darkvision, and lit places cut to what the token sees', () => {
+  const map = normalizeMap({
+    image: { width: 700, height: 490 }, grid: { size: 35, x: 0, y: 0 }, scale: { distance: 5, unit: 'ft', per: 'square' },
+    fog: { enabled: true, sight: true, dark: true },
+    tokens: [{ id: 'aaaaaa', kind: 'pc', user_id: 1, x: 52.5, y: 52.5, darkvision: 30 }],
+    lights: [{ id: 'llllll', x: 600, y: 400, bright: 10, dim: 10 }],
+  });
+  const views = sightOf(map, 1);
+  assert.equal(views.length, 2);
+  assert.ok(Array.isArray(views[0]), 'darkvision: a plain polygon');
+  assert.ok(views[1].clip, 'the light: its area, clipped to the token\'s sight');
+  assert.ok(canSee(map, views, 200, 52.5), '30 ft of darkvision');
+  assert.ok(!canSee(map, views, 300, 52.5));
+  assert.ok(canSee(map, views, 620, 420), 'lit');
+  assert.ok(inView(620, 420, views[1]));
+  // A wall in between: the light is still there, but not seen.
+  const walled = normalizeMap({ ...map, walls: [{ id: 'wwwwww', x1: 500, y1: 0, x2: 500, y2: 490 }] });
+  assert.ok(!canSee(walled, sightOf(walled, 1), 620, 420));
+  // A token's own light counts; daylight ignores all of it.
+  assert.equal(litAreas(normalizeMap({ ...map, lights: [], tokens: [{ ...map.tokens[0], light: { bright: 20, dim: 20 } }] })).length, 1);
+  assert.equal(sightOf(normalizeMap({ ...map, fog: { enabled: true, sight: true } }), 1).length, 1);
+});
+
+test('lights and token light radii are normalised', () => {
+  assert.equal(normalizeLightRadii({ bright: 0, dim: 0 }), null);
+  assert.deepEqual(normalizeLightRadii({ bright: '20', dim: 20 }), { bright: 20, dim: 20 });
+  assert.deepEqual(normalizeLights([{ id: 'llllll', x: 900, y: 5, bright: 5, dim: 5, source: 'ai' }, { id: 'mmmmmm', bright: 0 }], { width: 700, height: 490 }),
+    [{ id: 'llllll', x: 700, y: 5, bright: 5, dim: 5, source: 'ai' }]);
+  assert.equal(normalizeMap({}).fog.dark, false);
 });

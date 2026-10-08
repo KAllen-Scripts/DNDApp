@@ -13,12 +13,18 @@ const CACHE_SIZE = 32;
 /** The fog as an SVG the size of the image: dark where covered, half dark where only seen before. `mask` is from fogMask. */
 export function fogSvg(image, mask) {
   const { width, height } = image;
+  const pts = (list) => list.map((p) => p.join(',')).join(' ');
+  // A shape with a clip (a lit place, cut to what the token can see) is only drawn inside the clip.
+  const clips = [];
   const shapes = mask
-    .map((s) => (s.points
-      ? `<polygon points="${s.points.map((p) => p.join(',')).join(' ')}" fill="${FOG_MASK_FILL[s.fill]}"/>`
-      : `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" fill="${FOG_MASK_FILL[s.fill]}"/>`))
+    .map((s) => {
+      const clip = s.clip ? ` clip-path="url(#c${clips.push(`<clipPath id="c${clips.length}" clipPathUnits="userSpaceOnUse"><polygon points="${pts(s.clip)}"/></clipPath>`) - 1})"` : '';
+      return s.points
+        ? `<polygon points="${pts(s.points)}" fill="${FOG_MASK_FILL[s.fill]}"${clip}/>`
+        : `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" fill="${FOG_MASK_FILL[s.fill]}"/>`;
+    })
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><defs><mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}">${shapes}</mask></defs><rect width="${width}" height="${height}" fill="${FOG_COLOUR}" mask="url(#m)"/></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><defs>${clips.join('')}<mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}">${shapes}</mask></defs><rect width="${width}" height="${height}" fill="${FOG_COLOUR}" mask="url(#m)"/></svg>`;
 }
 
 export function createPlayerImages() {
