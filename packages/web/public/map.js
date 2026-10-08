@@ -8,75 +8,16 @@
  * while dragging use the same rules the server applies (./shared/map.js);
  * the server decides where a token really ends up.
  */
-import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from './api.js';
-import { markdownBox } from './markdown.js';
-import { showStatBlock, statsFound } from './stat-block.js';
-import {
-  TOKEN_KINDS, TOKEN_KIND_NAMES, TOKEN_SIZES, TOKEN_SIZE_NAMES, TOKEN_COLORS, UNITS,
-  CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf,
-  fogMask, FOG_MASK_FILL, snapWallPoint, nearestWall,
-  LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, TEMPLATE_SHAPES, TEMPLATE_SHAPE_NAMES, TEMPLATE_COLOR, templateShape, tokensInTemplate, inTemplate, snapTemplatePoint, spellArea,
-} from './shared/map.js';
-import { creatureList, creatureSaved } from './creatures.js';
+import { api, listen, fileUrl, h, storage, LoggedOut } from './api.js';
+import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, FOG_MASK_FILL, snapWallPoint, nearestWall, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, inTemplate, snapTemplatePoint } from './shared/map.js';
+import { PICK_KEY, SHOW_GRID_KEY, base, report, state, status } from './map-state.js';
+import { canChangeTemplate, placeTemplate, renderTemplates, selectTemplate, templateControls, templateDialog, templateMove, templateUp } from './map-templates.js';
+import { chooseTokenPicture, fillStats, forgetPlayers, importMap, recordDialog, removeToken, removeTokenPicture, saveCreature, settingsDialog, statsDialog, tokenDialog } from './map-dm.js';
+import { renderCombat } from './map-combat.js';
 
 const $ = (sel) => document.querySelector(sel);
 const KIND_LABELS = { battle: 'Battle map', dungeon: 'Dungeon', building: 'Building', town: 'Town', region: 'Region', world: 'World', other: 'Map' };
 const MAX_ZOOM = 8;
-
-const state = {
-  campaignId: null,
-  userId: null,
-  guarded: (fn) => fn(),
-  canEdit: false,
-  maps: [],
-  current: null, // the map on screen
-  images: new Map(), // map id -> { key, url } of its image (players' changes with the fog)
-  view: { x: 0, y: 0, k: 1 }, // screen = image * k + (x, y)
-  fitted: false,
-  selected: null, // token id
-  drag: null, // a token being moved: { id, start, pointer, x, y, moved }
-  pointers: new Map(), // pointers down on the background (panning, pinching)
-  draftGrid: undefined, // grid being edited in the settings dialog (shown live)
-  fogMode: null, // DM drawing fog: 'reveal' | 'cover'
-  fogDraw: null, // the rectangle being drawn: { pointer, a, b }
-  wallMode: null, // DM working on walls: 'wall' | 'low' | 'door' | 'lock' | 'light' | 'difficult' | 'link' | 'erase'
-  terrainDraw: null, // difficult terrain being drawn: { pointer, a, b }
-  wallDraw: null, // the wall being drawn: { pointer, a, b, sx, sy }
-  live: null, // AbortController for the live stream
-  pins: new Map(), // map id -> this person's private pins on it
-  pinMode: false, // the next click on the map drops a pin
-  selectedPin: null, // pin id
-  pinDrag: null, // a pin being moved: { id, pointer, x, y, moved, sx, sy }
-  tokenPictures: new Map(), // `${user id}:${picture key}` -> URL of a player's token picture, or null while loading
-  measuring: false, // the Measure tool: dragging on the map measures
-  ruler: null, // the line being (or last) measured: { pointer, a, b, done }
-  templateDraft: null, // a template about to be placed: { shape, size, width, label, color }
-  templatePlace: null, // the template being placed: { pointer, a, b }
-  selectedTemplate: null, // template id
-  templateDrag: null, // a template being moved: { id, pointer, grab, x, y, moved, sx, sy }
-  caught: new Set(), // tokens inside the selected (or placed) template
-  combatOpen: false, // the turn order panel is open
-  combatActive: new Map(), // map id -> whether it had a fight when last drawn (the panel opens when one starts)
-  pinging: false, // the Ping tool: a click on the map pings it
-  drawing: false, // the Draw tool: dragging sketches on the map
-  stroke: null, // the sketch being drawn: { pointer, points }
-  signals: [], // pings and sketches on screen: { id, kind, map_id, points, color, name, until }
-};
-
-const base = () => `/campaigns/${state.campaignId}/maps`;
-const PICK_KEY = () => `dndapp.map.${state.campaignId}`;
-const SHOW_GRID_KEY = 'dndapp.map.showGrid';
-
-function status(text, error = false) {
-  const el = $('#map-status');
-  el.textContent = text;
-  el.classList.toggle('error', error);
-}
-
-const report = (err) => {
-  if (err instanceof LoggedOut) throw err;
-  status(err.message, true);
-};
 
 // ---------- loading, and staying up to date ----------
 
@@ -133,7 +74,7 @@ function startLive() {
   })();
 }
 
-function onMap(map) {
+export function onMap(map) {
   const i = state.maps.findIndex((m) => m.id === map.id);
   if (i >= 0 && state.maps[i].version > map.version) return; // an older update arriving late
   if (i >= 0) state.maps[i] = map;
@@ -147,14 +88,14 @@ function onMap(map) {
   }
 }
 
-function onGone(id) {
+export function onGone(id) {
   state.maps = state.maps.filter((m) => m.id !== id);
   renderPicker();
   if (state.current?.id === id) show(state.maps.at(-1) ?? null);
 }
 
 /** Put a map on screen (or the empty message). */
-async function show(map) {
+export async function show(map) {
   state.current = map;
   state.selected = null;
   state.selectedPin = null;
@@ -209,7 +150,7 @@ function renderPicker() {
   select.hidden = !state.maps.length;
 }
 
-function render() {
+export function render() {
   const map = state.current;
   const empty = $('#map-empty');
   renderVariantPicker();
@@ -265,7 +206,7 @@ function scaleText(map) {
   return s.per === 'square' ? `1 square = ${s.distance} ${s.unit}` : `${s.distance} ${s.unit} across`;
 }
 
-function renderGrid() {
+export function renderGrid() {
   const map = state.current;
   const grid = state.draftGrid !== undefined ? state.draftGrid : map.grid;
   const svg = $('#map-grid');
@@ -284,7 +225,7 @@ function renderGrid() {
 }
 
 const SVG = 'http://www.w3.org/2000/svg';
-const svgEl = (tag, attrs) => {
+export const svgEl = (tag, attrs) => {
   const el = document.createElementNS(SVG, tag);
   for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
   return el;
@@ -472,7 +413,7 @@ async function walls(body) {
 }
 
 /** Set the DM's tool: a fog mode, a wall mode, or none (they're exclusive, and exclusive with placing a pin). */
-function setTool({ fogMode = null, wallMode = null }) {
+export function setTool({ fogMode = null, wallMode = null }) {
   state.fogMode = fogMode;
   state.wallMode = wallMode;
   if (fogMode || wallMode) Object.assign(state, { pinMode: false, measuring: false, templateDraft: null, ruler: null, pinging: false, drawing: false });
@@ -519,7 +460,7 @@ function tokenPicture(t) {
 
 const canMove = (token) => state.canEdit || (token.user_id != null && token.user_id === state.userId);
 
-function renderTokens() {
+export function renderTokens() {
   const map = state.current;
   const layer = $('#map-tokens');
   layer.replaceChildren(
@@ -617,7 +558,7 @@ async function links(body) {
 
 const myPins = () => (state.current && state.pins.get(state.current.id)) || [];
 
-function renderPins() {
+export function renderPins() {
   const layer = $('#map-pins');
   layer.replaceChildren(
     ...myPins().map((p) => {
@@ -681,7 +622,7 @@ async function dropPin(at) {
   }
 }
 
-function renderPinTool() {
+export function renderPinTool() {
   $('#map-pin').setAttribute('aria-pressed', String(state.pinMode));
   $('#map-view').classList.toggle('pin-placing', state.pinMode || state.pinging || state.drawing);
 }
@@ -819,7 +760,7 @@ function tokenControls(token) {
   return parts;
 }
 
-function renderSelection() {
+export function renderSelection() {
   const bar = $('#map-selection');
   const token = state.current?.tokens.find((t) => t.id === state.selected);
   const pin = !token && myPins().find((p) => p.id === state.selectedPin);
@@ -855,7 +796,7 @@ function renderSelection() {
   );
 }
 
-function select(id) {
+export function select(id) {
   state.selected = id;
   state.selectedPin = null;
   state.selectedTemplate = null;
@@ -935,7 +876,7 @@ function wallUp(e) {
 }
 
 /** Screen coordinates → the map image's pixels. */
-function toImage(clientX, clientY) {
+export function toImage(clientX, clientY) {
   const box = $('#map-view').getBoundingClientRect();
   return { x: (clientX - box.left - state.view.x) / state.view.k, y: (clientY - box.top - state.view.y) / state.view.k };
 }
@@ -1255,7 +1196,7 @@ function placeMeasure(at) {
 }
 
 /** The measuring line (only on this screen): the Measure tool's, or a token's path while it's dragged. */
-function renderRuler() {
+export function renderRuler() {
   const map = state.current;
   const svg = $('#map-ruler-line');
   if (!map) return;
@@ -1281,751 +1222,13 @@ function renderRuler() {
   placeMeasure(state.ruler.b);
 }
 
-function renderMeasureTools() {
+export function renderMeasureTools() {
   $('#map-ruler').setAttribute('aria-pressed', String(state.measuring));
   $('#map-ping').setAttribute('aria-pressed', String(state.pinging));
   $('#map-draw').setAttribute('aria-pressed', String(state.drawing));
   $('#map-view').classList.toggle('pin-placing', state.pinMode || state.pinging || state.drawing);
   $('#map-template').setAttribute('aria-pressed', String(!!state.templateDraft));
   $('#map-view').classList.toggle('measuring', state.measuring || !!state.templateDraft);
-}
-
-// ---------- spell templates (areas of effect) ----------
-
-const canChangeTemplate = (t) => state.canEdit || (t.user_id != null && t.user_id === state.userId);
-
-/** The direction from a to b in degrees, in steps of 15. */
-function aim(a, b) {
-  if (Math.hypot(b.x - a.x, b.y - a.y) < 1) return 0;
-  const deg = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
-  return ((Math.round(deg / 15) * 15) % 360 + 360) % 360;
-}
-
-/** The template being placed, as it would be saved. */
-function draftTemplate(place) {
-  return { ...state.templateDraft, id: 'placing', x: place.a.x, y: place.a.y, angle: aim(place.a, place.b) };
-}
-
-/** Templates on the map (everyone's the viewer gets), and which tokens the selected or placed one catches. */
-function renderTemplates() {
-  const map = state.current;
-  const svg = $('#map-templates');
-  state.caught = new Set();
-  if (!map) return;
-  svg.setAttribute('viewBox', `0 0 ${map.image.width} ${map.image.height}`);
-  svg.replaceChildren();
-  const drag = state.templateDrag?.moved ? state.templateDrag : null;
-  const list = (map.templates ?? []).map((t) => (drag?.id === t.id ? { ...t, x: drag.x, y: drag.y } : t));
-  let focus = list.find((t) => t.id === state.selectedTemplate);
-  if (state.templatePlace && state.templateDraft) {
-    focus = draftTemplate(state.templatePlace);
-    list.push(focus);
-  }
-  for (const t of list) {
-    const shape = templateShape(map, t);
-    const cls = `template${t === focus ? (t.id === 'placing' ? ' placing' : ' selected') : ''}`;
-    const style = `--tpl:${t.color}`;
-    svg.append(shape.circle
-      ? svgEl('circle', { cx: shape.circle.cx, cy: shape.circle.cy, r: shape.circle.r, class: cls, style, 'data-template': t.id })
-      : svgEl('polygon', { points: shape.points.map((p) => p.join(',')).join(' '), class: cls, style, 'data-template': t.id }));
-  }
-  if (focus) state.caught = new Set(tokensInTemplate(map, focus).map((t) => t.id));
-}
-
-function selectTemplate(id) {
-  Object.assign(state, { selectedTemplate: id, selected: null, selectedPin: null });
-  renderTemplates();
-  renderTokens();
-  renderPins();
-  renderSelection();
-}
-
-/** Place, change or remove a template; the answer is the whole map. */
-async function templateRequest(method, path, body) {
-  try {
-    const res = await state.guarded(() => api(method, `${base()}/${state.current.id}/templates${path}`, body));
-    if (res) onMap(res.map);
-    return res;
-  } catch (err) {
-    report(err);
-    return null;
-  }
-}
-
-async function placeTemplate(e) {
-  const place = state.templatePlace;
-  state.templatePlace = null;
-  if (e.type !== 'pointerup') {
-    renderTemplates();
-    return renderTokens();
-  }
-  const { shape, x, y, angle, size, width, label, color } = draftTemplate(place);
-  state.templateDraft = null;
-  renderMeasureTools();
-  const res = await templateRequest('POST', '', { shape, x, y, angle, size, width, label, color });
-  if (res) selectTemplate(res.template.id);
-  else render();
-}
-
-function templateMove(e) {
-  const drag = state.templateDrag;
-  if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
-  drag.moved = true;
-  const at = toImage(e.clientX, e.clientY);
-  Object.assign(drag, snapTemplatePoint(state.current, { x: at.x - drag.grab.x, y: at.y - drag.grab.y }));
-  renderTemplates();
-  renderTokens();
-}
-
-function templateUp(e) {
-  const drag = state.templateDrag;
-  state.templateDrag = null;
-  if (!drag.moved) return;
-  const tpl = state.current.templates.find((t) => t.id === drag.id);
-  if (tpl && e.type === 'pointerup') {
-    Object.assign(tpl, { x: drag.x, y: drag.y });
-    templateRequest('PATCH', `/${tpl.id}`, { x: drag.x, y: drag.y });
-  }
-  renderTemplates();
-  renderTokens();
-  renderSelection();
-}
-
-/** What a template is: "20 ft radius", "15 ft cone", "100 × 5 ft line". */
-function templateText(map, t) {
-  const unit = map.scale?.unit ?? 'ft';
-  if (t.shape === 'circle') return `${t.size} ${unit} radius`;
-  if (t.shape === 'line') return `${t.size} × ${t.width} ${unit} line`;
-  return `${t.size} ${unit} ${t.shape}`;
-}
-
-function templateControls(tpl) {
-  const map = state.current;
-  const caught = tokensInTemplate(map, tpl);
-  const mine = canChangeTemplate(tpl);
-  return [
-    h('span', { class: 'swatch', style: `background:${tpl.color}` }),
-    h('strong', {}, tpl.label || TEMPLATE_SHAPE_NAMES[tpl.shape]),
-    h('span', { class: 'muted small' }, templateText(map, tpl)),
-    h('span', { class: 'small template-caught' }, caught.length ? `Catches ${caught.map((t) => t.name).join(', ')}` : 'Catches nobody you can see'),
-    h('span', { class: 'spacer' }),
-    mine ? h('span', { class: 'muted small' }, 'Drag to move.') : null,
-    mine && tpl.shape !== 'circle' ? h('button', { class: 'ghost', title: 'Turn it 45°', onclick: () => templateRequest('PATCH', `/${tpl.id}`, { angle: (tpl.angle + 45) % 360 }) }, 'Turn') : null,
-    mine ? h('button', { class: 'ghost danger', onclick: () => {
-      selectTemplate(null);
-      templateRequest('DELETE', `/${tpl.id}`);
-    } }, 'Remove') : null,
-    h('button', { class: 'ghost icon-btn', 'aria-label': 'Close', onclick: () => selectTemplate(null) }, '✕'),
-  ].filter(Boolean);
-}
-
-/** How many of the map's units one foot is (spells are in feet). */
-const FOOT = { ft: 1, m: 0.3, mi: 1 / 5280, km: 0.0003 };
-
-/** Choose a template (or one of your spells with an area), then click and drag on the map to place and aim it. */
-async function templateDialog() {
-  const map = state.current;
-  if (!map) return;
-  const unit = map.scale?.unit ?? 'ft';
-  // Your spells that have an area, from your character sheet.
-  let spells = [];
-  try {
-    const res = await api('GET', `/campaigns/${state.campaignId}/sheet`);
-    spells = (res.sheet.spells ?? []).map((sp) => ({ name: sp.name, area: spellArea(sp) })).filter((sp) => sp.area);
-  } catch (err) {
-    if (err instanceof LoggedOut) throw err;
-  }
-  const dialog = $('#map-dialog');
-  const spell = h('select', {}, new Option('None (choose a shape)', ''), ...spells.map((sp, i) => new Option(`${sp.name} (${sp.area.size} ft ${sp.area.shape === 'circle' ? 'radius' : sp.area.shape})`, i)));
-  const shape = h('select', {}, ...TEMPLATE_SHAPES.map((sh) => new Option(TEMPLATE_SHAPE_NAMES[sh], sh)));
-  const size = h('input', { type: 'number', min: '0.5', step: 'any', value: '20', required: true });
-  const width = h('input', { type: 'number', min: '0.5', step: 'any', value: String(5 * FOOT[unit]) });
-  const label = h('input', { maxLength: 80, placeholder: 'Fireball' });
-  const color = h('input', { type: 'color', value: TEMPLATE_COLOR });
-  const sizeField = field(`Size (${unit})`, size);
-  const widthField = field(`Width (${unit})`, width);
-  const sync = () => {
-    widthField.hidden = shape.value !== 'line';
-    sizeField.firstChild.textContent = `${shape.value === 'circle' ? 'Radius' : 'Length'} (${unit})`;
-  };
-  shape.addEventListener('change', sync);
-  spell.addEventListener('change', () => {
-    const sp = spells[Number(spell.value)];
-    if (!sp || spell.value === '') return;
-    shape.value = sp.area.shape;
-    size.value = String(Math.round(sp.area.size * FOOT[unit] * 100) / 100);
-    if (sp.area.width) width.value = String(Math.round(sp.area.width * FOOT[unit] * 100) / 100);
-    label.value = sp.name.slice(0, 80);
-    sync();
-  });
-  sync();
-  dialog.replaceChildren(
-    h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => {
-      e.preventDefault();
-      const n = Number(size.value);
-      if (!(n > 0)) return;
-      setTool({});
-      state.templateDraft = { shape: shape.value, size: n, width: shape.value === 'line' ? Number(width.value) || 5 * FOOT[unit] : null, label: label.value.trim(), color: color.value };
-      Object.assign(state, { measuring: false, ruler: null, pinMode: false, pinging: false, drawing: false });
-      renderPinTool();
-      renderMeasureTools();
-      renderRuler();
-      status(state.templateDraft.shape === 'circle' ? 'Click where it centres. Everyone can see it.' : 'Press where it starts and drag to aim it. Everyone can see it.');
-      dialog.close();
-    } },
-      h('h2', {}, 'Place a template'),
-      spells.length ? field('One of your spells', spell) : null,
-      h('div', { class: 'map-row' }, field('Shape', shape), sizeField, widthField),
-      h('div', { class: 'map-row' }, field('Label', label), field('Colour', color)),
-      map.scale ? null : h('p', { class: 'muted small' }, "This map has no scale yet, so a square counts as 5 ft."),
-      h('p', { class: 'muted small' }, 'On a grid it starts on a square\'s corner; tokens with any square\'s middle inside are caught.'),
-      h('div', { class: 'map-dialog-actions' },
-        h('span', { class: 'spacer' }),
-        h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel'),
-        h('button', { class: 'primary' }, 'Place it'),
-      ),
-    ),
-  );
-  dialog.onclose = null;
-  dialog.showModal();
-}
-
-// ---------- initiative (the turn order in a fight) ----------
-
-async function combat(body) {
-  try {
-    const res = await state.guarded(() => api('POST', `${base()}/${state.current.id}/combat`, body));
-    if (!res) return;
-    onMap(res.map);
-    const sign = (n) => `${n < 0 ? '−' : '+'} ${Math.abs(n)}`;
-    if (res.rolls.length === 1) {
-      const [r] = res.rolls;
-      status(`${r.name} rolled ${r.total} for initiative (d20 ${r.d20} ${sign(r.mod)}).`);
-    } else if (res.rolls.length) {
-      status(`Initiative: ${res.rolls.map((r) => `${r.name} ${r.total}`).join(', ')}.`);
-    }
-  } catch (err) {
-    report(err);
-  }
-}
-
-/** The turn order panel: open when there's a fight (or when someone opens it). */
-function renderCombat() {
-  const panel = $('#map-combat');
-  const map = state.current;
-  if (map) {
-    const active = !!map.combat;
-    const was = state.combatActive.get(map.id);
-    if (active && !was) state.combatOpen = true; // a fight started (or this is the first look at one)
-    if (!active && was && !state.canEdit) state.combatOpen = false;
-    state.combatActive.set(map.id, active);
-  }
-  $('#map-combat-open').setAttribute('aria-pressed', String(!!map && state.combatOpen));
-  panel.hidden = !map || !state.combatOpen;
-  if (panel.hidden) return panel.replaceChildren();
-  // Don't rebuild the list while someone is typing a roll into it.
-  if (panel.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;
-  const c = map.combat;
-  const close = h('button', { class: 'ghost icon-btn', 'aria-label': 'Close the turn order', onclick: () => {
-    state.combatOpen = false;
-    renderCombat();
-  } }, '✕');
-  if (!c) {
-    return panel.replaceChildren(
-      h('header', {}, h('strong', {}, 'Initiative'), close),
-      h('p', { class: 'muted small' }, state.canEdit
-        ? 'No fight on this map. Start one: everyone on the map joins, and NPCs and enemies roll straight away (with their Dexterity from the stat block). Players roll their own.'
-        : 'No fight on this map.'),
-      h('footer', {}, state.canEdit ? h('button', { class: 'primary', onclick: () => combat({ action: 'start' }) }, 'Start a fight') : null),
-    );
-  }
-  const byId = new Map(map.tokens.map((t) => [t.id, t]));
-  const turnToken = byId.get(c.turn);
-  const mine = (t) => state.canEdit || (t.user_id != null && t.user_id === state.userId);
-  const rows = c.entries.map((e) => {
-    const t = byId.get(e.id);
-    if (!t) return null;
-    let init;
-    if (mine(t)) {
-      init = h('input', { type: 'number', step: '1', value: e.init ?? '', placeholder: '–', 'aria-label': `Initiative for ${t.name}`, title: 'Type what you rolled at the table' });
-      init.addEventListener('change', () => init.value !== '' && combat({ action: 'set', id: t.id, init: Math.round(Number(init.value)) }));
-      init.addEventListener('keydown', (ev) => ev.key === 'Enter' && init.blur());
-    } else {
-      init = h('span', { class: 'init' }, e.init ?? '–');
-    }
-    return h('li', { class: `${c.turn === e.id ? 'current' : ''}${t.hidden ? ' hidden-token' : ''}`, 'data-id': t.id },
-      h('span', { class: 'swatch', style: `background:${t.color}` }),
-      h('button', { class: 'who', title: `Show ${t.name} on the map`, onclick: () => select(t.id) }, t.name),
-      init,
-      mine(t) && (e.init == null || state.canEdit) ? h('button', { class: 'ghost', 'aria-label': `Roll initiative for ${t.name}`, title: 'Roll a d20 plus their initiative', onclick: () => combat({ action: 'roll', id: t.id }) }, e.init == null ? 'Roll' : '↻') : null,
-      state.canEdit ? h('button', { class: 'ghost icon-btn', 'aria-label': `Take ${t.name} out of the fight`, onclick: () => combat({ action: 'remove', id: t.id }) }, '✕') : null);
-  });
-  const whose = turnToken ? `${turnToken.name}'s turn` : c.turn_unseen ? "someone you can't see" : 'not started yet';
-  const footer = [];
-  if (state.canEdit) {
-    const rolled = c.entries.some((e) => e.init != null);
-    footer.push(h('button', { class: 'ghost', disabled: !c.turn, onclick: () => combat({ action: 'prev' }) }, 'Back'));
-    footer.push(h('button', { class: 'primary', disabled: !rolled, onclick: () => combat({ action: 'next' }) }, c.turn ? 'Next turn' : 'First turn'));
-    if (c.entries.some((e) => e.init == null && byId.get(e.id)?.kind !== 'pc')) footer.push(h('button', { class: 'ghost', onclick: () => combat({ action: 'roll' }) }, 'Roll for NPCs'));
-    const out = map.tokens.filter((t) => !c.entries.some((e) => e.id === t.id));
-    if (out.length) {
-      const add = h('select', { 'aria-label': 'Add to the fight' }, new Option('+ Add', ''), ...out.map((t) => new Option(t.name, t.id)));
-      add.addEventListener('change', () => add.value && combat({ action: 'add', ids: [add.value] }));
-      footer.push(add);
-    }
-    footer.push(h('button', { class: 'ghost danger', onclick: () => confirm('End the fight? The turn order is cleared.') && combat({ action: 'end' }) }, 'End fight'));
-  } else if (turnToken && turnToken.user_id === state.userId) {
-    footer.push(h('button', { class: 'primary', onclick: () => combat({ action: 'next' }) }, 'End my turn'));
-  }
-  panel.replaceChildren(
-    h('header', {}, h('strong', {}, `Round ${c.round}`), h('span', { class: 'muted small' }, whose), close),
-    h('ol', { 'aria-label': 'Turn order' }, ...rows.filter(Boolean)),
-    h('footer', {}, ...footer),
-  );
-}
-
-// ---------- the DM's tools ----------
-
-async function importMap(file) {
-  if (file.size > 35 * 1024 * 1024) return status('That file is too big (35 MB at most).', true);
-  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
-  const page = isPdf ? await askPage(file.name) : null;
-  if (isPdf && !page) return;
-  status(isPdf ? `Uploading page ${page}…` : 'Uploading…');
-  const data = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(',')[1]);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-  const map = await api('POST', base(), { filename: file.name, data, ...(page && { page }) });
-  onMap(map);
-  await show(map);
-}
-
-/** Which page of a PDF has the map (1-based), or null if the DM cancels. */
-function askPage(filename) {
-  const dialog = $('#map-dialog');
-  const page = h('input', { type: 'number', min: '1', step: '1', value: '1', required: true });
-  return new Promise((resolve) => {
-    let chosen = null;
-    dialog.replaceChildren(
-      h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => {
-        e.preventDefault();
-        chosen = Math.max(1, Math.round(Number(page.value) || 1));
-        dialog.close();
-      } },
-        h('h2', {}, 'Which page is the map on?'),
-        h('p', { class: 'muted small' }, `${filename}: the page is turned into the map's picture. The PDF is kept with it.`),
-        field('Page', page),
-        h('div', { class: 'map-dialog-actions' },
-          h('span', { class: 'spacer' }),
-          h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel'),
-          h('button', { class: 'primary' }, 'Import'),
-        ),
-      ),
-    );
-    dialog.onclose = () => resolve(chosen);
-    dialog.showModal();
-    page.select();
-  });
-}
-
-const field = (label, input) => h('label', { class: 'map-field' }, h('span', {}, label), input);
-
-/** Map settings: name, shown to players, grid (drawn on the map while editing), scale, the AI's reading. */
-function settingsDialog() {
-  const map = state.current;
-  if (!map) return;
-  const dialog = $('#map-dialog');
-  const name = h('input', { value: map.name, maxLength: 100, required: true });
-  const shown = h('input', { type: 'checkbox', checked: map.shown });
-  const hasGrid = h('input', { type: 'checkbox', checked: !!map.grid });
-  const size = h('input', { type: 'number', min: '4', step: '0.1', value: map.grid?.size ?? Math.round(map.image.width / 20) });
-  const gx = h('input', { type: 'number', step: '0.5', value: map.grid?.x ?? 0 });
-  const gy = h('input', { type: 'number', step: '0.5', value: map.grid?.y ?? 0 });
-  const distance = h('input', { type: 'number', min: '0', step: 'any', value: map.scale?.distance ?? '', placeholder: 'none' });
-  const unit = h('select', {}, ...UNITS.map((u) => new Option(u, u)));
-  unit.value = map.scale?.unit ?? 'ft';
-  const per = h('select', {}, new Option('per square', 'square'), new Option('across the whole map', 'width'));
-  per.value = map.scale?.per ?? (map.grid ? 'square' : 'width');
-  const gridFields = h('div', { class: 'map-row' }, field('Square size (px)', size), field('Offset across', gx), field('Offset down', gy));
-
-  const draft = () => (hasGrid.checked && Number(size.value) >= 4 ? { size: Number(size.value), x: Number(gx.value) || 0, y: Number(gy.value) || 0 } : null);
-  const preview = () => {
-    gridFields.hidden = !hasGrid.checked;
-    state.draftGrid = draft();
-    renderGrid();
-  };
-  for (const el of [hasGrid, size, gx, gy]) el.addEventListener('input', preview);
-
-  // Other pictures of the same map (night, after the fire): added and removed here at once; which one shows is in the map bar.
-  const variants = h('div', { class: 'map-variants' });
-  const renderVariants = () => {
-    const m = state.maps.find((x) => x.id === map.id) ?? map;
-    variants.replaceChildren(
-      ...m.variants.map((v) => h('div', { class: 'map-row' },
-        h('span', {}, `${v.name}${m.variant === v.id ? ' (showing)' : ''}`),
-        h('button', { type: 'button', class: 'ghost danger', 'aria-label': `Remove ${v.name}`, onclick: async () => {
-          if (!confirm(`Remove the picture "${v.name}"? (It stays in the archive.)`)) return;
-          try {
-            const saved = await state.guarded(() => api('DELETE', `${base()}/${map.id}/variants/${v.id}`));
-            if (saved) onMap(saved);
-            renderVariants();
-          } catch (err) {
-            report(err);
-          }
-        } }, 'Remove'),
-      )),
-    );
-  };
-  const addVariant = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', 'aria-label': 'Another picture of this map' });
-  addVariant.addEventListener('change', async () => {
-    const file = addVariant.files[0];
-    addVariant.value = '';
-    if (!file) return;
-    try {
-      status('Uploading…');
-      const data = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result).split(',')[1]);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(file);
-      });
-      const res = await state.guarded(() => api('POST', `${base()}/${map.id}/variants`, { filename: file.name, data }));
-      if (res) onMap(res.map);
-      renderVariants();
-    } catch (err) {
-      report(err);
-    }
-  });
-  renderVariants();
-
-  const reading = map.reading;
-  const aiText = [map.description, reading.notes].filter(Boolean).join('\n\n');
-  const save = async () => {
-    const grid = draft();
-    const d = Number(distance.value);
-    const scale = d > 0 && (per.value === 'width' || grid) ? { distance: d, unit: unit.value, per: per.value } : null;
-    const saved = await api('PATCH', `${base()}/${map.id}`, { name: name.value.trim() || map.name, shown: shown.checked, grid, scale });
-    onMap(saved);
-  };
-  dialog.replaceChildren(
-    h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => {
-      e.preventDefault();
-      state.guarded(save).then(() => dialog.close()).catch(report);
-    } },
-      h('h2', {}, 'Map settings'),
-      field('Name', name),
-      h('label', { class: 'map-check' }, shown, ' Players can see this map'),
-      h('h3', {}, 'Grid'),
-      h('label', { class: 'map-check' }, hasGrid, ' This map has a grid (tokens snap to it)'),
-      gridFields,
-      h('p', { class: 'muted small' }, 'The grid is drawn over the map while this is open, so you can line it up.'),
-      h('h3', {}, 'Scale'),
-      h('div', { class: 'map-row' }, field('Distance', distance), field('Unit', unit), field('Measured', per)),
-      h('h3', {}, 'Other pictures'),
-      h('p', { class: 'muted small' }, 'The same map at night, after a fire, with a secret door showing… Each is stretched to fit this map, so everything stays in place. Pick which one everyone sees in the map bar.'),
-      variants,
-      field('Add a picture', addVariant),
-      h('h3', {}, 'What the AI saw'),
-      h('p', { class: 'muted small map-ai' }, reading.status === 'pending' ? 'Reading…' : reading.status === 'failed' ? reading.error : aiText || 'Nothing to add.'),
-      h('p', { class: 'muted small' }, 'Only you see this.'),
-      h('div', { class: 'map-dialog-actions' },
-        h('button', { type: 'button', class: 'ghost danger', onclick: () => removeMap(map).then(() => dialog.close()) }, 'Remove map'),
-        h('button', { type: 'button', class: 'ghost', disabled: reading.status === 'pending', onclick: () => readAgain(map).then(() => dialog.close()) }, 'Read again with the AI'),
-        h('span', { class: 'spacer' }),
-        h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel'),
-        h('button', { class: 'primary' }, 'Save'),
-      ),
-    ),
-  );
-  dialog.onclose = () => {
-    state.draftGrid = undefined;
-    if (state.current) renderGrid();
-  };
-  preview();
-  dialog.showModal();
-}
-
-async function readAgain(map) {
-  if (!confirm('Read this map again with the AI? Its grid, scale and description will be replaced.')) return;
-  try {
-    onMap(await state.guarded(() => api('POST', `${base()}/${map.id}/read`)));
-  } catch (err) {
-    report(err);
-  }
-}
-
-async function removeMap(map) {
-  if (!confirm(`Remove "${map.name}"? Nobody will see it any more. (It stays in the archive.)`)) return;
-  try {
-    await state.guarded(() => api('DELETE', `${base()}/${map.id}`));
-    onGone(map.id);
-  } catch (err) {
-    report(err);
-  }
-}
-
-let players = null;
-
-/** Add a token, or change one (DM). New tokens go in the middle of what's on screen. */
-async function tokenDialog(token = null) {
-  const map = state.current;
-  if (!map) return;
-  players ??= (await state.guarded(() => api('GET', `/campaigns/${state.campaignId}/members`))).filter((m) => m.role === 'player' && !m.revoked_at);
-  const dialog = $('#map-dialog');
-  const kind = h('select', {}, ...TOKEN_KINDS.map((k) => new Option(TOKEN_KIND_NAMES[k], k)));
-  kind.value = token?.kind ?? 'enemy';
-  const player = h('select', {}, new Option('Nobody (the DM moves it)', ''), ...players.map((p) => new Option(`${p.character_name || p.name} (${p.name})`, p.id)));
-  player.value = token?.user_id ?? '';
-  const name = h('input', { value: token?.name ?? '', maxLength: 80, placeholder: 'Goblin 1' });
-  const size = h('select', {}, ...TOKEN_SIZES.map((s) => new Option(`${TOKEN_SIZE_NAMES[s]} (${s === 0.5 ? '½' : s} square${s > 1 ? 's' : ''})`, s)));
-  size.value = String(token?.size ?? 1);
-  const color = h('input', { type: 'color', value: token?.color ?? TOKEN_COLORS[kind.value] });
-  const hpMax = h('input', { type: 'number', min: '1', step: '1', value: token?.hp?.max ?? '', placeholder: 'unknown' });
-  const hidden = h('input', { type: 'checkbox', checked: !!token?.hidden });
-  const darkvision = h('input', { type: 'number', min: '0', step: '5', value: token?.darkvision || '', placeholder: 'none' });
-  // Someone from the campaign's records (what the archivist has written down about them).
-  const { records } = (await state.guarded(() => api('GET', `${base()}/records`))) ?? { records: [] };
-  const recordOption = (r) => new Option(`${r.title}${r.person ? '' : ` (${r.kind})`}`, r.id);
-  const record = h('select', {}, new Option('Nobody in particular', ''),
-    h('optgroup', { label: 'People and creatures' }, ...records.filter((r) => r.person).map(recordOption)),
-    h('optgroup', { label: 'Everything else' }, ...records.filter((r) => !r.person).map(recordOption)));
-  if (token?.record && !records.some((r) => r.id === token.record.id)) record.append(new Option(token.record.title, token.record.id));
-  record.value = token?.record?.id ?? '';
-  const recordField = field("From the campaign's records", record);
-  recordField.hidden = !records.length && !token?.record;
-  record.addEventListener('change', () => {
-    const r = records.find((x) => String(x.id) === record.value);
-    if (!r) return;
-    if (!token || !name.value.trim()) name.value = r.title.slice(0, 80);
-    // Someone from the records is an NPC, unless the archivist files them as a monster or a foe.
-    if (!token) kind.value = /monster|creature|enem|villain|beast|foe/i.test(r.kind) ? 'enemy' : 'npc';
-    sync();
-  });
-  // One of the DM's saved creatures instead (the Creatures tab).
-  const saved = token ? [] : creatureList().filter((c) => !c.finding);
-  const fromLibrary = h('select', {}, new Option('Make a new one here', ''), ...saved.map((c) => new Option(`${c.name} (${c.kind === 'npc' ? 'NPC' : 'enemy'})`, c.id)));
-  fromLibrary.addEventListener('change', () => {
-    const c = saved.find((x) => x.id === fromLibrary.value);
-    if (c) placeDialog(c);
-  });
-  const libraryField = saved.length ? field('From your creatures', fromLibrary) : null;
-  const lookUp = h('input', { type: 'checkbox', checked: true });
-  const lookUpField = h('label', { class: 'map-check' }, lookUp, ' Fill in its stat block, hit points and size with the AI');
-  let colorTouched = !!token;
-  color.addEventListener('input', () => (colorTouched = true));
-  const playerField = field('Player', player);
-  const sync = () => {
-    playerField.hidden = kind.value !== 'pc';
-    lookUpField.hidden = !!token || kind.value !== 'enemy';
-    if (!colorTouched) color.value = TOKEN_COLORS[kind.value];
-  };
-  kind.addEventListener('change', sync);
-  // A player's token is named after their character unless something else is typed.
-  player.addEventListener('change', () => {
-    const p = players.find((x) => String(x.id) === player.value);
-    if (p && !name.value.trim()) name.value = p.character_name || p.name;
-  });
-  sync();
-
-  const save = async () => {
-    const body = {
-      kind: kind.value,
-      name: name.value.trim(),
-      user_id: kind.value === 'pc' && player.value ? Number(player.value) : null,
-      size: Number(size.value),
-      color: color.value,
-      hidden: hidden.checked,
-      darkvision: Math.max(0, Number(darkvision.value) || 0),
-    };
-    if (record.value !== String(token?.record?.id ?? '')) body.record = record.value ? { id: Number(record.value) } : null;
-    const max = Number(hpMax.value) > 0 ? Math.round(Number(hpMax.value)) : null;
-    if (max !== (token?.hp?.max ?? null)) {
-      // A new maximum: keep the damage taken so far, or start at full.
-      const taken = token?.hp?.max && token.hp.current != null ? token.hp.max - token.hp.current : 0;
-      body.hp = max ? { current: max - taken, max } : null;
-    }
-    if (token) {
-      onMap((await api('PATCH', `${base()}/${map.id}/tokens/${token.id}`, body)).map);
-    } else {
-      const box = $('#map-view').getBoundingClientRect();
-      const middle = toImage(box.left + box.width / 2, box.top + box.height / 2);
-      const res = await api('POST', `${base()}/${map.id}/tokens`, { ...body, ...middle });
-      onMap(res.map);
-      select(res.token.id);
-      if (kind.value === 'enemy' && lookUp.checked && body.name) fillStats(res.token);
-    }
-  };
-  dialog.replaceChildren(
-    h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => {
-      e.preventDefault();
-      state.guarded(save).then(() => dialog.close()).catch(report);
-    } },
-      h('h2', {}, token ? 'Change token' : 'Add a token'),
-      libraryField,
-      recordField,
-      field('Kind', kind),
-      playerField,
-      field('Name', name),
-      h('div', { class: 'map-row' }, field('Size', size), field('Colour', color), field('Max HP', hpMax), field(`Darkvision (${map.scale?.unit ?? 'ft'})`, darkvision)),
-      h('label', { class: 'map-check' }, hidden, ' Hidden from players (an ambush, someone lurking)'),
-      lookUpField,
-      token ? null : h('p', { class: 'muted small' }, 'It appears in the middle of what you can see; drag it into place.'),
-      h('div', { class: 'map-dialog-actions' },
-        h('span', { class: 'spacer' }),
-        h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel'),
-        h('button', { class: 'primary' }, token ? 'Save' : 'Add'),
-      ),
-    ),
-  );
-  dialog.onclose = null;
-  dialog.showModal();
-}
-
-/**
- * Put one of the DM's creatures on the map on screen (from the Creatures tab
- * or Add token): how many, and whether hidden. They appear in a row in the
- * middle of what's on screen, numbered when there are several.
- */
-export function placeCreature(c) {
-  document.querySelector('[data-tab=map]').click();
-  if (!state.current) return status('Import a map first, then place your creatures on it.', true);
-  placeDialog(c);
-}
-
-function placeDialog(c) {
-  const map = state.current;
-  const dialog = $('#map-dialog');
-  const count = h('input', { name: 'count', type: 'number', min: '1', max: '20', step: '1', value: '1' });
-  const hidden = h('input', { type: 'checkbox' });
-  const place = async () => {
-    const box = $('#map-view').getBoundingClientRect();
-    const middle = toImage(box.left + box.width / 2, box.top + box.height / 2);
-    const n = Math.min(20, Math.max(1, Math.round(Number(count.value)) || 1));
-    const res = await api('POST', `${base()}/${map.id}/creatures/${c.id}`, { count: n, hidden: hidden.checked, ...middle });
-    onMap(res.map);
-    select(res.tokens[0]?.id ?? null);
-    status(n > 1 ? `${res.tokens.map((t) => t.name).join(', ')} are on the map.` : `${res.tokens[0].name} is on the map.`);
-  };
-  dialog.replaceChildren(
-    h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => {
-      e.preventDefault();
-      state.guarded(place).then(() => dialog.close()).catch(report);
-    } },
-      h('h2', {}, `Place ${c.name}`),
-      h('p', { class: 'muted small' }, [c.kind === 'npc' ? 'Friendly NPC' : 'Enemy', TOKEN_SIZE_NAMES[c.size], c.hp_max ? `${c.hp_max} HP` : '', c.stats ? 'with its stat block' : '', c.picture ? 'and picture' : ''].filter(Boolean).join(' · ')),
-      field('How many', count),
-      h('label', { class: 'map-check' }, hidden, ' Hidden from players (an ambush, someone lurking)'),
-      h('p', { class: 'muted small' }, 'They appear in a row in the middle of what you can see, numbered if there are several; drag them into place.'),
-      h('div', { class: 'map-dialog-actions' },
-        h('span', { class: 'spacer' }),
-        h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel'),
-        h('button', { class: 'primary' }, 'Place')),
-    ),
-  );
-  dialog.onclose = null;
-  if (!dialog.open) dialog.showModal();
-  count.select?.();
-}
-
-/** Keep a token from the map in the DM's creatures. */
-async function saveCreature(token) {
-  try {
-    const res = await state.guarded(() => api('POST', `/campaigns/${state.campaignId}/creatures`, { from: { map_id: state.current.id, token_id: token.id } }));
-    if (!res) return;
-    creatureSaved(res);
-    status(`${res.name} is in your creatures now (the Creatures tab).`);
-  } catch (err) {
-    report(err);
-  }
-}
-
-/** What the campaign's records say about the person a token stands for (DM only). */
-async function recordDialog(token) {
-  try {
-    const r = await state.guarded(() => api('GET', `${base()}/records/${token.record.id}?title=${encodeURIComponent(token.record.title)}`));
-    if (!r) return;
-    const dialog = $('#map-dialog');
-    const body = markdownBox(r.body || '_Nothing written down yet._', { class: 'a stat-text' });
-    const data = Object.keys(r.data ?? {}).length ? h('pre', { class: 'small' }, JSON.stringify(r.data, null, 2)) : null;
-    dialog.replaceChildren(
-      h('form', { method: 'dialog', class: 'map-dialog-inner' },
-        h('h2', {}, r.title),
-        h('p', { class: 'muted small' }, [r.kind, r.status, ...(r.tags ?? [])].filter(Boolean).join(' · ')),
-        body,
-        data,
-        h('p', { class: 'muted small' }, 'From the archivist, as the campaign has it now. Only you see this.'),
-        h('div', { class: 'map-dialog-actions' }, h('span', { class: 'spacer' }), h('button', { class: 'primary' }, 'Close')),
-      ),
-    );
-    dialog.onclose = null;
-    dialog.showModal();
-  } catch (err) {
-    report(err);
-  }
-}
-
-/** Ask the AI for a creature's stat block (DM). Hit points and size come with it unless already set. */
-/** The DM picks a picture for an NPC or enemy token; tokens with the same name can share it. */
-function chooseTokenPicture(token) {
-  const input = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', hidden: true });
-  input.addEventListener('change', async () => {
-    const file = input.files[0];
-    input.remove();
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) return status('That picture is too big (10 MB at most).', true);
-    const twins = state.current.tokens.filter((t) => t.id !== token.id && t.kind !== 'pc' && t.name.toLowerCase() === token.name.toLowerCase()).length;
-    const same_name = twins > 0 && confirm(`Use this picture for all ${twins + 1} tokens named "${token.name}" on this map?`);
-    try {
-      status('Uploading…');
-      const data = await readBase64(file);
-      const res = await state.guarded(() => api('PUT', `${base()}/${state.current.id}/tokens/${token.id}/picture`, { filename: file.name, data, same_name }));
-      if (!res) return;
-      onMap(res.map);
-      status(`${token.name} has a picture now.`);
-    } catch (err) {
-      report(err);
-    }
-  });
-  document.body.append(input);
-  input.click();
-}
-
-async function removeTokenPicture(token) {
-  try {
-    const res = await state.guarded(() => api('DELETE', `${base()}/${state.current.id}/tokens/${token.id}/picture`));
-    if (res) onMap(res.map);
-  } catch (err) {
-    report(err);
-  }
-}
-
-async function fillStats(token, name) {
-  status(`Looking up ${name ?? token.name}…`);
-  try {
-    const res = await state.guarded(() => api('POST', `${base()}/${state.current.id}/tokens/${token.id}/stats`, name ? { name } : {}));
-    if (!res) return;
-    onMap(res.map);
-    status(statsFound(res.token.name, res.token.stats.name));
-  } catch (err) {
-    report(err);
-  }
-}
-
-/** A token's stat block (DM only), with a way to look up a different creature. */
-const statsDialog = (token) => showStatBlock($('#map-dialog'), { title: token.name, stats: token.stats, onLookup: (name) => fillStats(token, name) });
-
-async function removeToken(token) {
-  if (!confirm(`Remove ${token.name} from the map?`)) return;
-  try {
-    const res = await state.guarded(() => api('DELETE', `${base()}/${state.current.id}/tokens/${token.id}`));
-    if (res) onMap(res.map);
-    select(null);
-  } catch (err) {
-    report(err);
-  }
 }
 
 // ---------- wiring ----------
@@ -2038,7 +1241,7 @@ export function stopMaps() {
   state.pinMode = false;
   Object.assign(state, { measuring: false, ruler: null, templateDraft: null, templatePlace: null, combatOpen: false, pinging: false, drawing: false, stroke: null, signals: [] });
   state.combatActive.clear();
-  players = null;
+  forgetPlayers();
 }
 
 export function initMapActions() {
