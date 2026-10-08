@@ -20,7 +20,7 @@ export class RateLimitError extends Error {}
 const SYSTEM = `You answer a player's questions during their Dungeons & Dragons campaign. The sessions were recorded and transcribed by speech-to-text, and an archivist AI maintains a knowledge base from them (its guide to how it's organised is below). Players also keep private notes. You can search all of it with your tools; everything you can see has already been filtered to what this player's character may know.
 
 First, decide what kind of question it is:
-- General D&D knowledge: rules, conditions, spells, class features, items, or the standard stat block of a creature ("What's the stat block for a brown bear?", "How does grappling work?", "What does Bless do?"). These are normal, welcome questions. Answer straight away from your own knowledge of D&D 5th edition, without calling tools, and don't remark that it isn't about the campaign. If the automatic search results below show the campaign changes it (a house rule, a homebrew version, a DM ruling), mention that too, with its citation. Otherwise give no citations, and when it matters say it's the standard rules rather than something from the sessions. When the group's books are listed below, look the rule up in them instead when the exact wording matters (see "How to use the books").
+- General D&D knowledge: rules, conditions, spells, class features, items, or the standard stat block of a creature ("What's the stat block for a brown bear?", "How does grappling work?", "What does Bless do?"). These are normal, welcome questions; don't remark that it isn't about the campaign. When the group's books are listed below, look the answer up in them (see "How to use the books"), so it matches the books and edition the group plays with. Without books, answer straight away from your own knowledge of D&D 5th edition, without calling tools. Either way, if the automatic search results below show the campaign changes it (a house rule, a homebrew version, a DM ruling), mention that too, with its citation. When you answer from your own knowledge, give no citations, and when it matters say it's the standard rules rather than something from the sessions.
 - About this campaign: anything involving its people, places, events, items, choices or rulings ("the bear we fought", "what did the Baron want?", "what did the DM rule about flanking?"). Research it as described below and answer only from what you find.
 - Both: answer the general part from your own knowledge and research the campaign part. If you can't tell which is meant, give the standard answer and say what you found in the campaign, if anything.
 
@@ -33,11 +33,13 @@ How to research campaign questions:
 - Stop researching as soon as you can answer. Don't read things you don't need.
 
 How to use the books (only when the group's books are listed below):
-- Look a rule up when the player asks what the book says, wants the exact text of a spell, feature, item, table or stat block, or when you aren't sure of the rule. Otherwise answer from your own knowledge as above.
+- Look up every rules question in them: rules, conditions, spells, class features, items, tables, stat blocks, and anything the player asks the book about. Your memory mixes editions and printings; the group's books are what they play by. Search in your first turn, together with any campaign lookups the question needs.
 - Players are often vague ("can I hit the guy running away?"). Work out which rule they mean, then search with the words the book uses: the official name plus synonyms, several terms in one search_books call (e.g. ["opportunity attack", "leaves your reach", "Disengage"]). Never search with the player's sentence.
-- Read the snippets, then read_book the best page. If nothing fits, search again with different terms, or use book_contents to browse to the right chapter.
+- Snippets are only a few lines: read_book the best page before you answer, and read two pages when the section runs on past the bottom of the page. If a hit is the book's index ("grappling, 195"), read the page it points to. If nothing fits, search again with different terms, or use book_contents to browse to the right chapter.
+- Editions: each book is listed with the year it was first printed. Books first printed in 2024 or later use the revised (2024) rules; earlier ones use the 2014 rules. The two differ on many details (exhaustion, grappling, many spells and class features), so never mix them in one answer. Use the group's edition (below); if only a book of the other edition covers it, say which edition you're quoting and that the group's rules may differ.
+- If the books don't cover it (say, a stat block when there's no bestiary among them), answer from your own knowledge and say it isn't in their books.
 - If you can't tell which rule they mean, give the likeliest answer and ask which they meant, or just ask if guessing would mislead.
-- The text comes from scans and may have OCR errors (e.g. "Vou" for "You", "Id6" for "1d6"); correct them silently. Quote only the lines that answer the question, and cite the page like this: (Player's Handbook p. 195). Book pages aren't campaign sources, so don't use the [S…] format for them.
+- The text comes from scans and may have OCR errors (e.g. "Vou" for "You", "Id6" for "1d6"); correct them silently. Quote only the lines that answer the question, and cite the page with the book's title as listed, like this: (Player's Handbook p. 195). Book pages aren't campaign sources, so don't use the [S…] format for them.
 
 How to answer:
 - For the campaign, answer only from what you found. If the sources don't cover it, say you don't know, and say what you did find.
@@ -66,6 +68,21 @@ How to format:
 </div>
 - Put citations in the text as usual, e.g. inside a table cell; they still become links.
 - Keep short answers as plain sentences. Use structure when it makes the answer easier to read, not for its own sake.`;
+
+/** Which rules the group plays by, judged from their Player's Handbook(s). */
+export function groupEdition(shelf) {
+  const editions = [
+    ...new Set(shelf.filter((b) => /player.?s\s*hand\s*book/i.test(b.title)).map((b) => (b.year ? (b.year >= 2024 ? '2024' : '2014') : /2024/.test(b.title) ? '2024' : /2014/.test(b.title) ? '2014' : null))),
+  ];
+  const known = editions.filter(Boolean);
+  if (known.length === 1 && editions.length === 1) {
+    return `The group's edition: their Player's Handbook is the ${known[0]} one, so answer with the ${known[0]} rules unless the player, the archivist's guide or the pinned records say they play otherwise.`;
+  }
+  if (known.length > 1) {
+    return "The group's edition: they have Player's Handbooks of both editions. Use the edition the archivist's guide or pinned records say they play; if nothing says, give both where they differ.";
+  }
+  return "The group's edition: unknown. Use the edition the archivist's guide or pinned records say they play; if nothing says, say which edition your answer is from.";
+}
 
 export function createQA({ db, store, kb, search, books, llm, config }) {
   const Q = config.qa;
@@ -142,7 +159,9 @@ export function createQA({ db, store, kb, search, books, llm, config }) {
       `Campaign: ${campaign.name}\nYou are answering: ${who}.`,
       `<archivist_guide>\n${kb.guide(campaignId) || 'No sessions have been processed yet.'}\n</archivist_guide>`,
       shelf.length
-        ? `<books note="The group's own rulebooks, scanned. Search them with search_books, read_book and book_contents.">\n${shelf.map((b) => `- ${b.title} (pages ${b.range})`).join('\n')}\n</books>`
+        ? `<books note="The group's own rulebooks. Search them with search_books, read_book and book_contents.">\n${shelf
+            .map((b) => `- ${b.title} (${b.year ? `first printed ${b.year}, ` : ''}pages ${b.range})`)
+            .join('\n')}\n</books>\n${groupEdition(shelf)}`
         : '',
       pinned.length ? `<pinned_records>\n${pinned.map(renderRecord).join('\n\n---\n\n')}\n</pinned_records>` : '',
     ]

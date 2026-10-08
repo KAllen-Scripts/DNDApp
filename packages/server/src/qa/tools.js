@@ -84,7 +84,7 @@ const BOOK_DEFS = {
  */
 export function createTools({ db, store, kb, search, books, config, campaignId, viewer }) {
   const maxChars = config.qa.maxToolResultTokens * 4;
-  const clip = (s) => (s.length > maxChars ? `${s.slice(0, maxChars)}\n…(truncated)` : s);
+  const clip = (s, max = maxChars) => (s.length > max ? `${s.slice(0, max)}\n…(truncated)` : s);
   const ownNotesOnly = { userId: viewer.userId, seesAll: false };
   const transcriptCache = new Map();
 
@@ -148,20 +148,30 @@ export function createTools({ db, store, kb, search, books, config, campaignId, 
     },
     search_my_notes: async ({ query }) =>
       clip(formatNotes(await search.search(campaignId, query, { kinds: ['note'], viewer: ownNotesOnly, limit: 6 })) || 'No matching notes.'),
-    search_books: async ({ terms, book }) =>
-      clip(
-        (await books.search(terms, { book })).map((h) => `--- (${h.book} p. ${h.page})\n${h.snippet}`).join('\n\n') ||
+    search_books: async ({ terms, book }) => {
+      const hits = await books.search(terms, { book });
+      if (hits.error) return hits.error;
+      return clip(
+        hits.map((h) => `--- (${h.book} p. ${h.page})\n${h.snippet}`).join('\n\n') ||
           'No pages match. Try other terms (synonyms, the official name), or book_contents.',
-      ),
+      );
+    },
     read_book: async ({ book, page, count }) => {
       const r = await books.readPages(book, page, count ?? 1);
-      return r.error ?? clip(r.pages.map((p) => `--- (${r.book} p. ${p.page})\n${p.text || '(no text on this page)'}`).join('\n\n'));
+      // Two full pages, even when that's more than other tools may return: a rule cut off mid-page is worse.
+      return r.error ?? clip(r.pages.map((p) => `--- (${r.book} p. ${p.page})\n${p.text || '(no text on this page)'}`).join('\n\n'), maxChars * 2);
     },
     book_contents: async ({ book, from_page, to_page }) => {
       const r = await books.contents(book, { fromPage: from_page, toPage: to_page });
       if (r.error) return r.error;
-      const lines = r.entries.map((e) => `${'  '.repeat(e.depth)}p. ${e.page}: ${e.title}`);
-      return clip(`${r.book} (${r.from === 'bookmarks' ? "the PDF's bookmarks" : 'headings found on the pages'}):\n${lines.join('\n') || 'Nothing found in that range.'}`);
+      const head = `${r.book} (${r.from === 'bookmarks' ? "the PDF's bookmarks" : 'headings found on the pages'}):`;
+      if (!r.entries.length) return `${head}\nNothing found in that range.`;
+      // A long contents loses its deepest levels rather than its last chapters.
+      const render = (depth) => r.entries.filter((e) => e.depth <= depth).map((e) => `${'  '.repeat(e.depth)}p. ${e.page}: ${e.title}`).join('\n');
+      let depth = Math.max(...r.entries.map((e) => e.depth));
+      while (depth > 0 && render(depth).length > maxChars) depth--;
+      const hidden = r.entries.some((e) => e.depth > depth) ? '\n(Deeper headings hidden to fit. Ask for a page range to see them.)' : '';
+      return clip(`${head}\n${render(depth)}${hidden}`);
     },
   };
 
