@@ -13,6 +13,7 @@ import { initDice, setDiceCampaign } from './dice.js';
 import { loadMaps, initMapActions, stopMaps } from './map.js';
 import { loadTable, stopTable, handoutsOpened } from './table.js';
 import { loadArchivist, initArchivistActions } from './dm.js';
+import { SHEET_WINDOW, windowCampaign, sheetBeside, placeSheet, setSheetCampaign, initSheetPlace } from './sheet-place.js';
 
 const $ = (sel) => document.querySelector(sel);
 const CAMPAIGN_KEY = 'dndapp.campaign'; // last campaign chosen in this browser (pre-selected next time)
@@ -79,7 +80,8 @@ async function start() {
       return showAdmin({ me: state.me.user, guarded });
     }
     const campaigns = state.me.campaigns;
-    const current = campaigns.find((c) => String(c.id) === tabCampaign.get());
+    // A popped-out sheet window is for the campaign it was opened from.
+    const current = campaigns.find((c) => String(c.id) === ((SHEET_WINDOW && windowCampaign()) || tabCampaign.get()));
     if (current) return enterCampaign(current);
     if (campaigns.length === 1) return enterCampaign(campaigns[0]);
     showCampaignPicker();
@@ -174,6 +176,17 @@ async function enterCampaign(campaign) {
   // The Archivist tab is the DM's; a player who was on it goes back to Ask.
   $('[data-tab=archivist]').hidden = !isDm;
   if (!isDm && $('[data-tab=archivist]').getAttribute('aria-selected') === 'true') $('[data-tab=ask]').click();
+  setSheetCampaign(campaign.id);
+  if (SHEET_WINDOW) {
+    // The popped-out sheet: only the sheet, and dice to roll from it.
+    document.title = `${campaign.character_name || 'Sheet'} · ${campaign.name}`;
+    showTab('sheet');
+    await Promise.all([
+      setDiceCampaign({ campaignId: campaign.id, guarded, roller: state.me.dice?.roller, isDm, userId: state.me.user.id }),
+      loadSheet({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
+    ]);
+    return;
+  }
   await Promise.all([
     setDiceCampaign({ campaignId: campaign.id, guarded, roller: state.me.dice?.roller, isDm, userId: state.me.user.id }),
     loadConversations(),
@@ -220,15 +233,25 @@ for (const button of document.querySelectorAll('.logout')) {
 
 // ---------- tabs ----------
 
+let currentTab = 'ask';
+
+/** Show a tab. On the map, the sheet can be beside it too (sheet-place.js). */
+function showTab(name) {
+  currentTab = name;
+  const beside = name === 'map' && sheetBeside();
+  for (const t of document.querySelectorAll('[data-tab]')) {
+    const on = t.dataset.tab === name;
+    t.setAttribute('aria-selected', String(on));
+    $(`#tab-${t.dataset.tab}`).hidden = !(on || (beside && t.dataset.tab === 'sheet'));
+  }
+  placeSheet(beside);
+  // The sheet and maps need more room than Ask and Notes.
+  $('#app-view').classList.toggle('wide', name === 'sheet' || name === 'map');
+}
+
 for (const tab of document.querySelectorAll('[data-tab]')) {
   tab.addEventListener('click', () => {
-    for (const t of document.querySelectorAll('[data-tab]')) {
-      const on = t === tab;
-      t.setAttribute('aria-selected', String(on));
-      $(`#tab-${t.dataset.tab}`).hidden = !on;
-    }
-    // The sheet and maps need more room than Ask and Notes.
-    $('#app-view').classList.toggle('wide', tab.dataset.tab === 'sheet' || tab.dataset.tab === 'map');
+    showTab(tab.dataset.tab);
     if (tab.dataset.tab === 'ask' || tab.dataset.tab === 'notes') $(`#tab-${tab.dataset.tab} textarea`)?.focus();
     if (tab.dataset.tab === 'handouts') handoutsOpened();
   });
@@ -692,6 +715,8 @@ $('#note-form textarea').addEventListener('keydown', (e) => {
 });
 
 initSheetActions();
+initSheetPlace({ onChange: () => showTab(currentTab) });
+showTab(currentTab);
 initMapActions();
 initArchivistActions();
 initDice();

@@ -199,6 +199,8 @@
         <input id="sheet-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.json,.txt,application/pdf,image/*" hidden>
         <button id="sheet-download" class="ghost">Download</button>
         <button id="sheet-print" class="ghost">Print</button>
+        <button id="sheet-popout" class="ghost" title="Open your character sheet in its own window (to keep it open beside the map, or on another screen)">Pop out</button>
+        <button id="sheet-beside-close" class="ghost" title="Hide the sheet (the Sheet button on the map brings it back)">Hide</button>
       </div>
       <div id="sheet" class="sheet"></div>
     </section>
@@ -216,6 +218,8 @@
         <button id="map-draw" class="ghost map-needs-map" aria-pressed="false" title="Sketch on the map for everyone to see; it fades after a while">Draw</button>
         <button id="map-template" class="ghost map-needs-map" aria-pressed="false" title="Place a spell's area (a sphere, cone, line or cube) and see who it catches">Template</button>
         <button id="map-combat-open" class="ghost map-needs-map" aria-pressed="false" title="The turn order in a fight">Initiative</button>
+        <button id="map-sheet-beside" class="ghost" aria-pressed="false" title="Show your character sheet beside the map">Sheet</button>
+        <button id="map-sheet-window" class="ghost" title="Open your character sheet in its own window (to put beside this one, or on another screen)">Sheet window</button>
         <button id="map-add-token" class="ghost dm-only map-needs-map">Add token</button>
         <button id="map-fog-open" class="ghost dm-only map-needs-map" aria-pressed="false">Fog &amp; walls</button>
         <select id="map-variant" class="dm-only" aria-label="Which picture of the map everyone sees" title="Which picture of the map everyone sees" hidden></select>
@@ -274,6 +278,9 @@
       </div>
       <dialog id="map-dialog" class="map-dialog"></dialog>
     </section>
+
+    <!-- With the sheet beside the map: drag to make the sheet wider or narrower (sheet-place.js). -->
+    <div id="sheet-splitter" class="sheet-splitter" role="separator" aria-orientation="vertical" aria-label="Sheet width" aria-controls="tab-sheet" tabindex="0" hidden></div>
   </div>
 
   <!-- Themes and layouts (look.js). Saved in this browser. -->

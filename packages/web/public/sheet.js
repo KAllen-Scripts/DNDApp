@@ -60,6 +60,21 @@ export async function loadSheet({ campaignId, userId, guarded }) {
   useSheet(sheet, version);
 }
 
+// The same sheet can be open in two windows (the map page and a popped-out sheet): each tells the others
+// when it saves, and one with nothing waiting to save shows the newer version straight away.
+const channel = (() => {
+  try { return window.BroadcastChannel ? new window.BroadcastChannel('dndapp.sheet') : null; } catch { return null; }
+})();
+const announce = () => channel?.postMessage({ campaignId: String(state.campaignId), userId: String(state.userId), version: state.version });
+channel?.addEventListener('message', async (e) => {
+  const { campaignId, userId, version } = e.data ?? {};
+  const newer = () => campaignId === String(state.campaignId) && userId === String(state.userId) && version > state.version;
+  // With changes waiting here, saving them meets the newer version and asks which to keep.
+  if (!newer() || state.dirty || state.saving) return;
+  const res = await state.guarded(() => api('GET', `${base()}/sheet`)).catch(() => null);
+  if (res && newer() && !state.dirty && !state.saving) useSheet(res.sheet, res.version);
+});
+
 function useSheet(sheet, version) {
   state.sheet = normalizeSheet(sheet);
   state.version = version;
@@ -92,6 +107,7 @@ async function save() {
     const res = await state.guarded(() => api('PUT', `${base()}/sheet`, { sheet: state.sheet, version: state.version }));
     if (!res) return; // logged out: the login screen is showing
     state.version = res.version;
+    announce();
     status(state.dirty ? 'Saving soon…' : 'Saved');
   } catch (err) {
     if (err.status === 409 && err.data?.current) {
@@ -629,7 +645,10 @@ const replaceAppearance = () =>
 
 /** The server described the picture and saved the sheet: show that sheet, or the description it didn't use. */
 function described(res) {
-  if (res.sheet) useSheet(res.sheet.sheet, res.sheet.version);
+  if (res.sheet) {
+    useSheet(res.sheet.sheet, res.sheet.version);
+    announce();
+  }
   state.unusedDescription = !res.applied && res.description?.appearance ? res.description.appearance : '';
   if (state.unusedDescription) render();
   const notes = res.description?.notes;
@@ -1037,6 +1056,7 @@ export function initSheetActions() {
       const res = await state.guarded(() => api('POST', `${base()}/sheet/import`, { filename: file.name, data, version: state.version }));
       if (!res) return;
       useSheet(res.sheet, res.version);
+      announce();
       const own = Object.keys(res.sheet.overrides).length;
       status(`Loaded ${file.name}. Check it over${own ? `: ${own} value${own === 1 ? '' : 's'} from your sheet differ from the automatic ones and are marked ↺` : ''}.`);
       if (res.notes) alert(`Notes from reading your sheet:\n\n${res.notes}`);
