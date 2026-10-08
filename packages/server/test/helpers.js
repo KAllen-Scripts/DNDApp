@@ -110,7 +110,7 @@ export function createFakeLLM({ qaScript = [], archivist = defaultArchivist, str
   return {
     calls,
     async structured(opts) {
-      calls.push({ purpose: opts.purpose, system: opts.system, prompt: opts.prompt, attachments: opts.attachments ?? [] });
+      calls.push({ task: opts.task, purpose: opts.purpose, system: opts.system, prompt: opts.prompt, attachments: opts.attachments ?? [] });
       if (!structured) throw new Error(`fake llm: no structured() handler for ${opts.purpose}`);
       return opts.schema.parse(await structured(opts));
     },

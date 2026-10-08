@@ -30,7 +30,7 @@ export const MAX_FOG_SHAPES = 1000;
 export const FOG_OPS = ['reveal', 'cover'];
 export const MAX_WALLS = 2000;
 /** Where a wall came from: drawn by the DM, or drafted by the AI from the picture. */
-export const WALL_SOURCES = ['dm', 'ai'];
+export const WALL_SOURCES = ['dm', 'ai', 'file']; // drawn by the DM, drafted by the AI, or from a map maker's file (.dd2vtt)
 /**
  * What a wall stops: 'wall' blocks sight and movement; 'low' (an obstacle:
  * a building seen from above, a cliff, a fence) only blocks movement, so
@@ -427,9 +427,47 @@ export function normalizeWalls(list, image = {}) {
       open,
       locked: door && !open && w.locked === true,
       source: pick(w.source, WALL_SOURCES, 'dm'),
+      // The pieces of one curved wall share a group, so they're erased together.
+      ...(typeof w.group === 'string' && isTokenId(w.group) ? { group: w.group } : {}),
     });
   }
   return out;
+}
+
+/**
+ * The points along an arc that starts at `a`, passes through `m` and ends at
+ * `b` (a curved wall), a piece every 10° or so (2 to 48 pieces). Points in a
+ * line give just [a, b].
+ */
+export function arcThrough(a, m, b) {
+  const d = 2 * (a.x * (m.y - b.y) + m.x * (b.y - a.y) + b.x * (a.y - m.y));
+  const span = Math.hypot(b.x - a.x, b.y - a.y) + Math.hypot(m.x - a.x, m.y - a.y);
+  if (Math.abs(d) < 1e-6 * Math.max(1, span * span)) return [a, b];
+  const sq = (p) => p.x * p.x + p.y * p.y;
+  const c = {
+    x: (sq(a) * (m.y - b.y) + sq(m) * (b.y - a.y) + sq(b) * (a.y - m.y)) / d,
+    y: (sq(a) * (b.x - m.x) + sq(m) * (a.x - b.x) + sq(b) * (m.x - a.x)) / d,
+  };
+  const r = Math.hypot(a.x - c.x, a.y - c.y);
+  const ang = (p) => Math.atan2(p.y - c.y, p.x - c.x);
+  const TAU = 2 * Math.PI;
+  const ccw = (from, to) => (((to - from) % TAU) + TAU) % TAU; // turning one way, 0..2π
+  const sa = ang(a);
+  // Go the way round that passes through m.
+  let sweep = ccw(sa, ang(b));
+  if (ccw(sa, ang(m)) > sweep) sweep -= TAU;
+  const n = Math.min(48, Math.max(2, Math.ceil(Math.abs(sweep) / (Math.PI / 18))));
+  const pts = [a];
+  for (let i = 1; i < n; i++) pts.push({ x: c.x + r * Math.cos(sa + (sweep * i) / n), y: c.y + r * Math.sin(sa + (sweep * i) / n) });
+  pts.push(b);
+  return pts;
+}
+
+/** The points round a circle (a round tower, a well), 36 pieces, closed (the first point again at the end). */
+export function circlePoints(c, r) {
+  const pts = [];
+  for (let i = 0; i <= 36; i++) pts.push({ x: c.x + r * Math.cos((i * Math.PI) / 18), y: c.y + r * Math.sin((i * Math.PI) / 18) });
+  return pts;
 }
 
 /** The walls that block movement right now (everything but open doors). */

@@ -14,7 +14,7 @@ import DOMPurify from './vendor/purify.js';
 import {
   TOKEN_KINDS, TOKEN_KIND_NAMES, TOKEN_SIZES, TOKEN_SIZE_NAMES, TOKEN_COLORS, UNITS,
   CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf,
-  fogMask, FOG_MASK_FILL, snapWallPoint, nearestWall,
+  fogMask, FOG_MASK_FILL, snapWallPoint, nearestWall, arcThrough, circlePoints,
   LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, TEMPLATE_SHAPES, TEMPLATE_SHAPE_NAMES, TEMPLATE_COLOR, templateShape, tokensInTemplate, inTemplate, snapTemplatePoint, spellArea,
 } from './shared/map.js';
 import { creatureList, creatureSaved } from './creatures.js';
@@ -42,6 +42,7 @@ const state = {
   wallMode: null, // DM working on walls: 'wall' | 'low' | 'door' | 'lock' | 'light' | 'difficult' | 'link' | 'erase'
   terrainDraw: null, // difficult terrain being drawn: { pointer, a, b }
   wallDraw: null, // the wall being drawn: { pointer, a, b, sx, sy }
+  curveBend: null, // a curved wall waiting to be bent: { a, b, m } (m follows the pointer; a click places it)
   live: null, // AbortController for the live stream
   pins: new Map(), // map id -> this person's private pins on it
   pinMode: false, // the next click on the map drops a pin
@@ -67,6 +68,7 @@ const state = {
 const base = () => `/campaigns/${state.campaignId}/maps`;
 const PICK_KEY = () => `dndapp.map.${state.campaignId}`;
 const SHOW_GRID_KEY = 'dndapp.map.showGrid';
+const SHOW_WALLS_KEY = 'dndapp.map.showWalls';
 
 function status(text, error = false) {
   const el = $('#map-status');
@@ -388,13 +390,16 @@ function renderWalls() {
   svg.setAttribute('viewBox', `0 0 ${map.image.width} ${map.image.height}`);
   svg.classList.toggle('players', !state.canEdit);
   svg.replaceChildren();
-  const list = state.canEdit ? map.walls : (map.doors ?? []);
+  // The DM can hide the walls for a clean map while playing; they show while Fog & walls is open.
+  const hidden = state.canEdit && storage.get(SHOW_WALLS_KEY) === '0' && $('#map-wall-tools').hidden;
+  svg.classList.toggle('walls-hidden', hidden);
+  const list = state.canEdit ? map.walls.filter((w) => !hidden || w.door) : (map.doors ?? []);
   const line = (w, cls) => svgEl('line', { x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, class: cls });
   const cls = (w) => (w.door || !state.canEdit
     ? `door${w.open ? ' open' : ''}${w.locked ? ' locked' : ''}`
     : `wall${w.kind === 'low' ? ' low' : ''}${w.source === 'ai' ? ' ai' : ''}`);
   // Lights (the DM's): the dim reach, the bright reach and the source.
-  if (state.canEdit) {
+  if (state.canEdit && !hidden) {
     const k = pxPerUnit(map);
     for (const l of map.lights ?? []) {
       svg.append(
@@ -410,7 +415,11 @@ function renderWalls() {
   // Doors on top, drawn as doors so nobody mistakes them for walls.
   for (const w of doors) svg.append(doorShape(map, w, cls(w)));
   const d = state.wallDraw;
-  if (d) svg.append(line({ x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y }, `wall-draft${state.wallMode === 'door' || state.wallMode === 'low' ? ` ${state.wallMode}` : ''}`));
+  const draft = state.wallMode === 'door' || state.wallMode === 'low' ? ` ${state.wallMode}` : '';
+  const path = (pts) => svgEl('polyline', { points: pts.map((p) => `${p.x},${p.y}`).join(' '), class: `wall-draft${draft}` });
+  if (d && state.wallMode === 'circle') svg.append(path(circlePoints(d.a, Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y))));
+  else if (d) svg.append(line({ x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y }, `wall-draft${draft}`));
+  if (state.curveBend) svg.append(path(arcThrough(state.curveBend.a, state.curveBend.m, state.curveBend.b)));
 }
 
 /**
@@ -527,6 +536,10 @@ async function walls(body) {
 function setTool({ fogMode = null, wallMode = null }) {
   state.fogMode = fogMode;
   state.wallMode = wallMode;
+  if (state.curveBend) {
+    state.curveBend = null;
+    if (state.current) renderWalls();
+  }
   if (fogMode || wallMode) Object.assign(state, { pinMode: false, measuring: false, templateDraft: null, ruler: null, pinging: false, drawing: false });
   renderPinTool();
   renderFogTools();
@@ -989,6 +1002,15 @@ function wallUp(e) {
   if (e.type !== 'pointerup') return;
   const map = state.current;
   const click = Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 4;
+  if (state.wallMode === 'curve' || state.wallMode === 'circle') {
+    if (click) return;
+    const r = Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y);
+    if (state.wallMode === 'circle') return walls({ circle: { x: d.a.x, y: d.a.y, r } });
+    // Now bend it: the middle follows the pointer until a click places it.
+    state.curveBend = { a: d.a, b: d.b, m: { x: (d.a.x + d.b.x) / 2, y: (d.a.y + d.b.y) / 2 } };
+    status('Move to bend the wall, then click. Esc to stop.');
+    return renderWalls();
+  }
   if (click) {
     const at = toImage(e.clientX, e.clientY);
     if (state.wallMode === 'light') {
@@ -1068,6 +1090,14 @@ function viewDown(e) {
     state.terrainDraw = { pointer: e.pointerId, a: at, b: at };
     return;
   }
+  // A curve being bent: this click places it.
+  if (state.curveBend && state.wallMode === 'curve') {
+    const { a, b, m } = state.curveBend;
+    state.curveBend = null;
+    renderWalls();
+    walls({ curve: { x1: a.x, y1: a.y, mx: m.x, my: m.y, x2: b.x, y2: b.y } });
+    return;
+  }
   if (state.wallMode && !state.pointers.size && !state.wallDraw) {
     const at = snapWallPoint(state.current, toImage(e.clientX, e.clientY), SNAP_PX / state.view.k);
     state.wallDraw = { pointer: e.pointerId, a: at, b: at, sx: e.clientX, sy: e.clientY };
@@ -1104,7 +1134,12 @@ function viewMove(e) {
     return renderTerrain();
   }
   if (state.wallDraw?.pointer === e.pointerId) {
-    state.wallDraw.b = snapWallPoint(state.current, toImage(e.clientX, e.clientY), SNAP_PX / state.view.k);
+    const at = toImage(e.clientX, e.clientY);
+    state.wallDraw.b = state.wallMode === 'circle' ? at : snapWallPoint(state.current, at, SNAP_PX / state.view.k);
+    return renderWalls();
+  }
+  if (state.curveBend) {
+    state.curveBend.m = toImage(e.clientX, e.clientY);
     return renderWalls();
   }
   const p = state.pointers.get(e.pointerId);
@@ -2164,9 +2199,20 @@ export function initMapActions() {
 
   document.addEventListener('keydown', (e) => {
     if ((e.key === ' ' || e.key === 'w' || e.key === 'W') && state.drag && addWaypoint()) e.preventDefault();
+    if (e.key === 'Escape' && state.curveBend) {
+      state.curveBend = null;
+      renderWalls();
+      status('');
+    }
   });
   $('#map-pick').addEventListener('change', (e) => show(state.maps.find((m) => m.id === e.target.value) ?? null));
   $('#map-fit').addEventListener('click', fit);
+  const showWalls = $('#map-show-walls');
+  showWalls.checked = storage.get(SHOW_WALLS_KEY) !== '0';
+  showWalls.addEventListener('change', () => {
+    storage.set(SHOW_WALLS_KEY, showWalls.checked ? null : '0');
+    if (state.current) renderWalls();
+  });
   const showGrid = $('#map-show-grid');
   showGrid.checked = storage.get(SHOW_GRID_KEY) === '1';
   showGrid.addEventListener('change', () => {
@@ -2185,6 +2231,7 @@ export function initMapActions() {
     tools.hidden = !tools.hidden;
     if (tools.hidden) setTool({});
     renderFogTools();
+    if (state.current) renderWalls(); // hidden walls show while the panel is open
   });
   $('#map-fog-on').addEventListener('change', (e) => {
     const on = e.target.checked;
@@ -2212,6 +2259,24 @@ export function initMapActions() {
     try {
       const saved = await state.guarded(() => api('POST', `${base()}/${map.id}/walls/draft`, {}));
       if (saved) onMap(saved);
+    } catch (err) {
+      report(err);
+    }
+  });
+  $('#map-walls-file').addEventListener('click', () => $('#map-walls-file-input').click());
+  $('#map-walls-file-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const map = state.current;
+    if (map.walls.some((w) => w.source === 'file') && !confirm('Replace the walls from the last file with this one? Walls you drew and the AI drafted stay.')) return;
+    try {
+      const data = await readBase64(file);
+      const saved = await state.guarded(() => api('POST', `${base()}/${map.id}/walls/file`, { data }));
+      if (!saved) return;
+      onMap(saved);
+      const n = saved.walls.filter((w) => w.source === 'file');
+      status(`From the file: ${n.filter((w) => !w.door).length} walls, ${n.filter((w) => w.door).length} doors, ${saved.lights.filter((l) => l.source === 'file').length} lights. ${saved.file_notes ?? ''}`.trim());
     } catch (err) {
       report(err);
     }

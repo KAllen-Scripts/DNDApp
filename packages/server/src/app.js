@@ -21,9 +21,10 @@ import { preparedTranscript } from './pipeline/prepare.js';
 import { SheetConflictError } from './sheets/store.js';
 import { SHEET_FORMAT, computeSheet } from '@dndapp/shared/sheet.js';
 import { parseRoll, rollDice, ROLL_MODES } from '@dndapp/shared/dice.js';
-import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, MAX_WALLS, WALL_KINDS, FOG_MAP, TEMPLATE_SHAPES, MAX_TEMPLATES, MAX_LIGHTS, MAX_TERRAIN, MAX_VARIANTS, MAX_LINKS, nearLink, pathCost, snapToken, wallBetween, doorReach, distanceToWall, dexModifier, stepTurn, canSee, squarePx } from '@dndapp/shared/map.js';
+import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, MAX_WALLS, WALL_KINDS, FOG_MAP, TEMPLATE_SHAPES, MAX_TEMPLATES, MAX_LIGHTS, MAX_TERRAIN, MAX_VARIANTS, MAX_LINKS, arcThrough, circlePoints, nearLink, pathCost, snapToken, wallBetween, doorReach, distanceToWall, dexModifier, stepTurn, canSee, squarePx } from '@dndapp/shared/map.js';
 import { inspectImage } from './maps/read.js';
 import { isPdf, renderPdfPage } from './maps/pdf.js';
+import { isUvtt, readUvtt, uvttImage, uvttContents } from './maps/uvtt.js';
 import { createPlayerImages } from './maps/image.js';
 import { newTokenId, isMapId } from './maps/store.js';
 import { PICTURE_KINDS, MAX_PICTURE_BYTES, inspectPicture } from './characters/pictures.js';
@@ -1177,7 +1178,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
    * was reading are left alone, and the AI's name only replaces the file
    * name (never a name the DM typed).
    */
-  function readMapInBackground(cid, map, userId) {
+  function readMapInBackground(cid, map, userId, { keepGrid = false } = {}) {
     const before = { grid: JSON.stringify(map.grid), scale: JSON.stringify(map.scale) };
     maps.change(cid, map.id, (m) => {
       m.reading = { status: 'pending', error: '', notes: '' };
@@ -1188,8 +1189,8 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       .then((r) =>
         maps.change(cid, map.id, (m) => {
           if (r.name && !m.named) m.name = r.name;
-          if (JSON.stringify(m.grid) === before.grid) m.grid = r.grid;
-          if (JSON.stringify(m.scale) === before.scale) m.scale = r.scale;
+          if (!keepGrid && JSON.stringify(m.grid) === before.grid) m.grid = r.grid;
+          if (!keepGrid && JSON.stringify(m.scale) === before.scale) m.scale = r.scale;
           m.kind = r.kind;
           m.description = r.description;
           m.reading = { status: 'done', error: '', notes: r.notes };
@@ -1207,6 +1208,25 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       });
   }
 
+  /**
+   * Put the walls, doors and lights from a Universal VTT file (.dd2vtt, .uvtt)
+   * on a map document, replacing any from an earlier file (`source: 'file'`).
+   * With `grid`, the file's grid (exact) and 5 ft squares too. Returns notes for the DM.
+   */
+  function applyUvtt(m, doc, { grid = false } = {}) {
+    const perSquare = m.scale?.per === 'square' ? m.scale.distance : 5;
+    const c = uvttContents(doc, { width: m.image.width, height: m.image.height, feetPerSquare: grid ? 5 : perSquare });
+    const own = m.walls.filter((w) => w.source !== 'file');
+    m.walls = [...own, ...c.walls.slice(0, MAX_WALLS - own.length).map((w) => ({ ...w, id: newTokenId(), source: 'file' }))];
+    const ownLights = m.lights.filter((l) => l.source !== 'file');
+    m.lights = [...ownLights, ...c.lights.slice(0, MAX_LIGHTS - ownLights.length).map((l) => ({ ...l, id: newTokenId(), source: 'file' }))];
+    if (grid) {
+      m.grid = c.grid;
+      m.scale = { distance: 5, unit: 'ft', per: 'square' };
+    }
+    return c.notes;
+  }
+
   /** Draft walls with the AI in the background. The new draft replaces the AI's old one; the DM's own walls stay. */
   function draftWallsInBackground(cid, map, userId) {
     maps.change(cid, map.id, (m) => {
@@ -1214,11 +1234,13 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     }, { by: userId, reason: 'drafting walls' });
     const buf = fs.readFileSync(maps.imagePath(cid, map.id, { base: true }).path);
     return mapReader
-      .walls({ buf, width: map.image.width, height: map.image.height, campaignId: cid, userId })
+      .walls({ buf, width: map.image.width, height: map.image.height, grid: map.grid, campaignId: cid, userId })
       .then((r) =>
         maps.change(cid, map.id, (m) => {
           const own = m.walls.filter((w) => w.source !== 'ai');
-          m.walls = [...own, ...r.walls.slice(0, MAX_WALLS - own.length).map((w) => ({ ...w, id: newTokenId(), open: false, source: 'ai' }))];
+          const groups = new Map();
+          const group = (g) => g && (groups.get(g) ?? groups.set(g, newTokenId()).get(g));
+          m.walls = [...own, ...r.walls.slice(0, MAX_WALLS - own.length).map((w) => ({ ...w, id: newTokenId(), open: false, source: 'ai', group: group(w.group) }))];
           // Lights the AI saw on the picture (torches, braziers, fires) replace its earlier ones too.
           const ownLights = m.lights.filter((l) => l.source !== 'ai');
           m.lights = [...ownLights, ...(r.lights ?? []).slice(0, MAX_LIGHTS - ownLights.length).map((l) => ({ ...l, id: newTokenId(), source: 'ai' }))];
@@ -1258,6 +1280,13 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       .parse(request.body);
     let buf = Buffer.from(data, 'base64');
     if (!buf.length) throw new BadRequestError('The file is empty.');
+    // A Universal VTT file (.dd2vtt, .uvtt): its picture is the map; its grid, walls, doors and lights come with it.
+    let uvtt = null;
+    if (isUvtt(buf)) {
+      uvtt = readUvtt(buf);
+      buf = uvttImage(uvtt);
+      if (!buf) throw new BadRequestError("That file has no picture of the map in it. Import the map's picture, then add the file's walls in Fog & walls.");
+    }
     // A PDF: draw the page asked for (default the first) and use that as the image.
     let pdf = null;
     let pages = 1;
@@ -1271,8 +1300,9 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     mapAiAllowed(request.user.id);
     let fromFile = filename.replace(/\.[^.]*$/, '').replace(/[_-]+/g, ' ').trim();
     if (pdf && pages > 1) fromFile = `${fromFile || 'Map'}, page ${pdf.page}`;
-    const map = maps.create(a.cid, { name: name || fromFile || 'Map', named: !!name, buf, ...image, pdf, by: request.user.id });
-    readMapInBackground(a.cid, map, request.user.id);
+    let map = maps.create(a.cid, { name: name || fromFile || 'Map', named: !!name, buf, ...image, pdf, by: request.user.id });
+    if (uvtt) map = maps.change(a.cid, map.id, (m) => applyUvtt(m, uvtt, { grid: true }), { by: request.user.id, reason: 'walls from the file' });
+    readMapInBackground(a.cid, map, request.user.id, { keepGrid: !!uvtt });
     reply.status(201);
     return maps.view(maps.get(a.cid, map.id), a);
   });
@@ -1559,19 +1589,33 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
 
   const POINT = z.number().min(0).max(100_000);
   const WALL = z.object({ x1: POINT, y1: POINT, x2: POINT, y2: POINT, door: z.boolean().default(false), kind: z.enum(WALL_KINDS).default('wall') });
+  // A curved wall: from (x1, y1) through (mx, my) to (x2, y2). A round one: centre and radius.
+  const CURVE = z.object({ x1: POINT, y1: POINT, mx: POINT, my: POINT, x2: POINT, y2: POINT, kind: z.enum(WALL_KINDS).default('wall') });
+  const CIRCLE = z.object({ x: POINT, y: POINT, r: z.number().positive().max(100_000), kind: z.enum(WALL_KINDS).default('wall') });
 
   /**
-   * Walls and doors (DM): { add?: {x1, y1, x2, y2, door?, kind?: wall | low}, remove?: id, toggle?: id (open or close a door),
-   * lock?: id (lock or unlock a door), clear?: ai | all }. Walls block line of sight and players' tokens, obstacles ('low')
+   * Walls and doors (DM): { add?: {x1, y1, x2, y2, door?, kind?: wall | low}, curve?: {x1, y1, mx, my, x2, y2, kind?}
+   * (a curved wall through the middle point), circle?: {x, y, r, kind?} (a round wall), remove?: id (with the rest of
+   * its curve), toggle?: id (open or close a door), lock?: id (lock or unlock a door), clear?: ai | all }. Curves are
+   * stored as short straight pieces sharing a `group`. Walls block line of sight and players' tokens, obstacles ('low')
    * only tokens. Players never get walls, only the doors they can see.
    */
   app.patch('/campaigns/:cid/maps/:mid/walls', async (request) => {
     const a = access(request, { dm: true });
     const { map } = viewableMap(request);
     const body = z
-      .object({ add: WALL.optional(), remove: z.string().max(20).optional(), toggle: z.string().max(20).optional(), lock: z.string().max(20).optional(), clear: z.enum(['ai', 'all']).optional() })
+      .object({ add: WALL.optional(), curve: CURVE.optional(), circle: CIRCLE.optional(), remove: z.string().max(20).optional(), toggle: z.string().max(20).optional(), lock: z.string().max(20).optional(), clear: z.enum(['ai', 'all']).optional() })
       .parse(request.body ?? {});
-    if (body.add && map.walls.length >= MAX_WALLS) throw new BadRequestError(`A map can have at most ${MAX_WALLS} walls.`);
+    // A curve or circle, as its pieces.
+    let pieces = null;
+    if (body.curve) {
+      const c = body.curve;
+      pieces = arcThrough({ x: c.x1, y: c.y1 }, { x: c.mx, y: c.my }, { x: c.x2, y: c.y2 });
+    } else if (body.circle) {
+      pieces = circlePoints(body.circle, body.circle.r).map((p) => ({ x: Math.max(0, p.x), y: Math.max(0, p.y) }));
+    }
+    const adding = body.add ? 1 : pieces ? pieces.length - 1 : 0;
+    if (adding && map.walls.length + adding > MAX_WALLS) throw new BadRequestError(`A map can have at most ${MAX_WALLS} walls.`);
     for (const id of [body.remove, body.toggle, body.lock]) {
       if (id !== undefined && !map.walls.some((w) => w.id === id)) throw new NotFoundError('No such wall');
     }
@@ -1581,7 +1625,10 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     const saved = maps.change(a.cid, map.id, (m) => {
       if (body.clear === 'all') m.walls = [];
       if (body.clear === 'ai') m.walls = m.walls.filter((w) => w.source !== 'ai');
-      if (body.remove) m.walls = m.walls.filter((w) => w.id !== body.remove);
+      if (body.remove) {
+        const group = m.walls.find((w) => w.id === body.remove).group;
+        m.walls = m.walls.filter((w) => w.id !== body.remove && !(group && w.group === group));
+      }
       if (body.toggle) {
         const door = m.walls.find((w) => w.id === body.toggle);
         door.open = !door.open;
@@ -1593,6 +1640,13 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
         if (door.locked) door.open = false;
       }
       if (body.add) m.walls.push({ ...body.add, id: newTokenId(), open: false, source: 'dm' });
+      if (pieces) {
+        const group = newTokenId();
+        const kind = (body.curve ?? body.circle).kind;
+        for (let i = 1; i < pieces.length; i++) {
+          m.walls.push({ x1: pieces[i - 1].x, y1: pieces[i - 1].y, x2: pieces[i].x, y2: pieces[i].y, door: false, kind, id: newTokenId(), open: false, source: 'dm', group });
+        }
+      }
     }, { by: request.user.id, reason: body.toggle ? 'door' : 'walls' });
     return maps.view(saved, a);
   });
@@ -1683,6 +1737,26 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     mapAiAllowed(request.user.id);
     draftWallsInBackground(a.cid, map, request.user.id);
     return maps.view(maps.get(a.cid, map.id), a);
+  });
+
+  /**
+   * Walls, doors and lights from a map maker's Universal VTT file (.dd2vtt,
+   * .uvtt) of this map (DM): { data: base64 }. Exact, no AI. Replaces those from
+   * an earlier file; the DM's own and the AI's stay. The file is stretched to
+   * fit the map's picture, so an export at another size still lines up.
+   */
+  app.post('/campaigns/:cid/maps/:mid/walls/file', upload, async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const { data } = z.object({ data: z.string().min(1) }).parse(request.body);
+    const buf = Buffer.from(data, 'base64');
+    if (!isUvtt(buf)) throw new BadRequestError("That isn't a Universal VTT file. Export the map as .dd2vtt or .uvtt (Dungeondraft, Dungeon Alchemist and many map makers can).");
+    const doc = readUvtt(buf);
+    let notes = '';
+    const saved = maps.change(a.cid, map.id, (m) => {
+      notes = applyUvtt(m, doc);
+    }, { by: request.user.id, reason: 'walls from a file' });
+    return { ...maps.view(saved, a), file_notes: notes };
   });
 
   /** Read the map with the AI again (DM). Its grid, scale and description are replaced. */
