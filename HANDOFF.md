@@ -44,6 +44,7 @@ Read this first when picking the project up on another machine or with another A
 ## Next steps
 
 0. **The DM's creatures: review and merge the draft PR (ask the owner first), then try it:** make a few creatures as the DM (one with a picture, one filled by the real AI), place a group of goblins on a real map, save a token from a map, and check the Creatures tab on a phone (only seen in jsdom). PR #14 (layout options) also changes `index.html` and `app.js`; whichever merges second needs a small merge.
+0. **Creatures, later (owner, 2026-10-08):** when all the books are scanned in, add a ready-made creature library from them to choose from; and let the DM ask the AI to pull in creatures from unofficial sources when they exist. Not started (SPEC §6.6 "Later, creatures").
 0. **Sheet beside the map: review and merge the PR (ask the owner first), then try it** with a real sheet next to a real map: is the default width (540 px) right, and is the stacked layout usable on a phone? Try Sheet window on a second screen.
 
 - **Tests:** when you change the web page, add or update a test in `packages/web/test/` (see README "Tests"). Not covered by page tests: the dice special effects' visuals (`dice-fx.js` ~73%) and some admin-sessions polling paths.

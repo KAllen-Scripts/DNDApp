@@ -408,6 +408,7 @@ Owner's requirements (2026-10-07): no premade maps. The DM imports their own map
 - **Live:** `GET /campaigns/:cid/maps/events` (SSE) sends each change to everyone with the map open, filtered per viewer (a map being hidden is sent as `gone` to players).
 - **Stored like sheets:** each map is one JSON document (`maps` table, schema v7) with a version. Every change appends only what changed to `maps/<id>/changes.jsonl` in the archive (the first line is the whole map), so restore replays it. Removing a map only marks it removed; nothing in the archive is deleted.
 - Shared geometry (snapping, distances, sizes) is in `shared/src/map.js`, served to the page at `/shared/map.js`.
+- **Later, creatures** (owner's request, 2026-10-08): once the group's books are all scanned in, a ready-made creature library to choose from (built from the books' stat blocks), and the DM asking the AI to pull in other creatures from unofficial sources when they exist.
 - **Later** (from the research on other VTTs, 2026-10-07: `/mnt/project-files/map-research/vtt-feature-gaps.md` in the project): ambient sound and weather (left out by the owner, 2026-10-08). Also party-shared sight, and light ranges that dim (bright vs dim light are drawn for the DM but players see both the same). 3D renders of maps were looked into and parked by the owner (2026-10-07).
 
 ### 6.7 Handouts
