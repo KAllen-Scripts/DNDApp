@@ -14,7 +14,7 @@ import { initDice, setDiceCampaign } from './dice.js';
 import { loadMaps, initMapActions, stopMaps } from './map.js';
 import { placeCreature } from './map-dm.js';
 import { loadTable, stopTable, handoutsOpened } from './table.js';
-import { loadArchivist, initArchivistActions } from './dm.js';
+import { loadArchivist, initArchivistActions } from './archivist.js';
 import { loadCreatures, initCreatureActions } from './creatures.js';
 import { SHEET_WINDOW, windowCampaign, besidePanel, placeBeside, setSheetCampaign, initSheetPlace } from './sheet-place.js';
 
