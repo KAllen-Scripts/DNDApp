@@ -180,8 +180,9 @@ test('sheet: clicking a save, skill or ability rolls it; an attack offers its da
 
       page.click(byLabel(page, 'Roll this attack'), { shiftKey: true });
       await page.settle();
-      const rolls = () => page.requests.filter((r) => r.path.endsWith('/roll')).map((r) => r.body);
+      const rolls = () => page.requests.filter((r) => r.path.endsWith('/roll')).map(({ body: { label: _l, visibility: _v, ...b } }) => b);
       assert.deepEqual(rolls().at(-1), { notation: '1d20+5', mode: 'advantage' });
+      assert.deepEqual(page.requests.filter((r) => r.path.endsWith('/roll')).at(-1).body, { notation: '1d20+5', mode: 'advantage', label: 'Shortsword: to hit', visibility: 'party' });
       assert.equal(page.text('#dice-result .dr-label'), 'Shortsword: to hit');
       const buttons = page.$$('#dice-result .dr-actions button').map((b) => b.textContent);
       assert.deepEqual(buttons, ['Damage (1d6+3)', 'Critical damage (2d6+3)']);

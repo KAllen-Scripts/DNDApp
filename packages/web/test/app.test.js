@@ -386,12 +386,50 @@ test('notes: saved with the button or Ctrl+Enter, grouped by session date, priva
     await page.settle();
     assert.equal(page.requests.length, sent);
     assert.equal(page.$$('#notes section').length, 1);
-    const notes = page.$$('#notes .note').map((n) => n.lastChild.textContent);
+    const notes = page.$$('#notes .note-text').map((n) => n.textContent);
     assert.deepEqual(notes, ['Ask about the silver key.', 'The innkeeper seemed nervous.']);
     assert.match(page.text('#notes h2'), /\d{4}/);
 
     const alexNotes = await t.request('GET', `/campaigns/${t.campaign.id}/notes`, { as: t.alex.token });
     assert.equal(alexNotes.json().length, 0);
+  });
+});
+
+test('notes: you can edit and delete your own; the archive keeps every version', async () => {
+  await withPage({ page: (t) => ({ as: t.sam }) }, async (page, t) => {
+    page.click('[data-tab=notes]');
+    page.type('#note-form textarea', 'The innkeeper is called Brother Hall.');
+    page.submit('#note-form');
+    await page.settle();
+
+    page.click('#notes .note-actions button'); // Edit
+    assert.equal(page.$('#notes .note textarea').value, 'The innkeeper is called Brother Hall.');
+    page.type('#notes .note textarea', 'The innkeeper is called Brother Hal.');
+    page.click('#notes .note .primary');
+    await page.settle();
+    assert.equal(page.text('#notes .note-text'), 'The innkeeper is called Brother Hal.');
+    assert.match(page.text('#notes .note-head'), /edited/);
+    const [note] = (await t.request('GET', `/campaigns/${t.campaign.id}/notes`, { as: t.sam.token })).json();
+    assert.equal(note.text, 'The innkeeper is called Brother Hal.');
+    assert.ok(note.edited_at);
+
+    // Someone else can't change it.
+    const other = await t.request('PATCH', `/campaigns/${t.campaign.id}/notes/${note.id}`, { as: t.alex.token, body: { text: 'Mine now' } });
+    assert.equal(other.statusCode, 404);
+
+    page.answers.confirm = true;
+    page.click('#notes .note-actions .danger');
+    await page.settle();
+    assert.match(page.text('#notes'), /No notes yet/);
+    assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/notes`, { as: t.sam.token })).json().length, 0);
+
+    // The archive has the note, the edit and the delete, in order.
+    const lines = t.archive.readPlayerNotes(t.campaign.slug, note.session_date);
+    assert.deepEqual(lines.map((l) => (l.deleted_at ? 'deleted' : l.edited_at ? `edited: ${l.text}` : `written: ${l.text}`)), [
+      'written: The innkeeper is called Brother Hall.',
+      'edited: The innkeeper is called Brother Hal.',
+      'deleted',
+    ]);
   });
 });
 

@@ -171,12 +171,13 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
      * Players get only the spell templates they placed or whose origin they
      * can see, and only the visible tokens' places in the turn order.
      * Tokens carry `move_speed`: how far they walk in a turn, if known.
-     * Player character tokens carry `picture`: the key of their player's token picture, or null.
+     * Tokens carry `picture`: the key of their picture (a player character's
+     * own token picture, or the one the DM gave an NPC or enemy), or null.
      */
     view(map, { role, userId }) {
       if (!map || map.removed) return null;
-      // A player character's token shows the token picture its player uploaded.
-      const picture = (t) => (t.kind === 'pc' && pictures ? pictures.tokenKey(map.campaign_id, t.user_id) : null);
+      // A player character's token shows the token picture its player uploaded; others, the DM's.
+      const picture = (t) => (t.kind === 'pc' ? (pictures ? pictures.tokenKey(map.campaign_id, t.user_id) : null) : t.art ? t.art.file.replace(/\.[^.]*$/, '') : null);
       // How far it walks in a turn: what the DM set, else the player's sheet, else the stat block.
       const moveSpeed = (t) => {
         if (t.speed != null) return t.speed;
@@ -196,7 +197,8 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
       const variantKey = map.variant ? `-${map.variant}` : '';
       const out = {
         ...map,
-        tokens: map.tokens.map((t) => ({ ...t, picture: picture(t), move_speed: moveSpeed(t) })),
+        // The picture's file name stays on the server; `picture` is its key.
+        tokens: map.tokens.map(({ art: _art, ...t }) => ({ ...t, picture: picture({ ...t, art: _art }), move_speed: moveSpeed(t) })),
         links: links.map(({ target: m, ...l }) => ({ ...l, to_name: m?.name ?? null })),
       };
       delete out.campaign_id;

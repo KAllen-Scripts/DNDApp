@@ -218,6 +218,40 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
 .notes h2 { font-size: 0.95rem; margin: 0 0 0.4rem; color: var(--muted); }
 .note { padding: 0.6rem 0.8rem; margin-bottom: 0.4rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .note time { display: block; font-size: 0.8rem; color: var(--muted); }
+.note-head { display: flex; gap: 0.4rem; align-items: baseline; }
+.note-edited { font-size: 0.75rem; }
+.note-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 0.3rem; white-space: normal; }
+.note textarea { display: block; width: 100%; margin: 0.3rem 0; white-space: pre-wrap; }
+
+/* ---------- handouts and the DM's archivist tab ---------- */
+.tab-badge {
+  display: inline-block; min-width: 1.1rem; margin-left: 0.3rem; padding: 0 0.3rem; border-radius: 999px;
+  background: var(--accent); color: var(--surface); font-size: 0.7rem; font-weight: 700; line-height: 1.1rem; text-align: center;
+}
+.handouts-panel, .archivist-panel { overflow-y: auto; }
+.handouts { display: grid; gap: 0.75rem; align-content: start; }
+.handout { padding: 0.75rem 0.9rem; display: grid; gap: 0.5rem; }
+.handout-head { display: flex; align-items: baseline; gap: 0.75rem; justify-content: space-between; flex-wrap: wrap; }
+.handout-head h3 { margin: 0; }
+.handout-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.handout-picture-link { display: block; padding: 0; border: none; background: none; cursor: zoom-in; justify-self: start; max-width: 100%; }
+.handout-picture { display: block; max-width: min(100%, 28rem); max-height: 22rem; border-radius: 8px; object-fit: contain; }
+.handout-picture-link.zoomed { cursor: zoom-out; justify-self: stretch; }
+.handout-picture-link.zoomed .handout-picture { max-width: 100%; max-height: none; }
+.handout-dm { display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; align-items: center; border-top: 1px solid var(--border); padding-top: 0.5rem; }
+.handout-dm details { flex: 1 1 14rem; }
+.handout-form { padding: 0.75rem 0.9rem; display: grid; gap: 0.5rem; margin-bottom: 0.75rem; }
+.handout-form h2 { margin: 0; font-size: 1.05rem; }
+.handout-to { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin: 0.25rem 0; }
+.dm-questions { display: grid; gap: 0.6rem; }
+.dm-question { padding: 0.7rem 0.9rem; display: grid; gap: 0.4rem; }
+.dm-question p { margin: 0; }
+.dm-q { font-weight: 600; }
+.dm-corrections { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.correction { padding: 0.5rem 0.8rem; }
+.correction p { margin: 0.2rem 0 0; white-space: pre-wrap; }
+.archivist-panel h2 { margin: 0.5rem 0 0; font-size: 1.05rem; }
+.archivist-panel h3 { margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--muted); }
 
 @media (max-width: 560px) {
   .topbar { gap: 0.5rem; }
@@ -391,6 +425,17 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 .dice-history li { display: grid; grid-template-columns: 2.6rem minmax(0, 1fr) auto; gap: 0.5rem; align-items: center; padding: 0.3rem 0.2rem; border-top: 1px solid var(--border); }
 .dice-history li:first-child { border-top: none; }
 .dice-history .dh-none { display: block; }
+.dice-history .dh-other .dh-total { color: var(--muted); }
+.dice-history .dh-private .dh-what strong::after { content: ' 🔒'; font-size: 0.75em; }
+.dice-share { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); }
+.dice-open.has-share::after { content: '🔒'; font-size: 0.7em; margin-left: 0.15rem; }
+.dice-toast {
+  position: fixed; z-index: 11; right: 16px; top: calc(4rem + env(safe-area-inset-top)); max-width: min(22rem, calc(100vw - 32px));
+  padding: 0.5rem 0.8rem; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+  border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.25); font-size: 0.9rem; animation: dice-pop-in 0.2s ease-out;
+}
+.dice-toast .dt-total { font-size: 1.1rem; color: var(--head-color); }
+@keyframes dice-pop-in { from { opacity: 0; transform: translateY(-0.4rem); } }
 .dh-total { font: 700 1.2rem/1 var(--font-head); text-align: center; font-variant-numeric: tabular-nums; }
 .dh-what { display: grid; min-width: 0; }
 .dh-what strong { font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

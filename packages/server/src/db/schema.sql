@@ -68,18 +68,22 @@ CREATE TABLE IF NOT EXISTS sessions (
   status           TEXT NOT NULL DEFAULT 'archived',  -- archived | queued | processing | ready | failed
   error            TEXT,
   pipeline_version INTEGER,
+  processed_at     TEXT,            -- ISO; when the archivist last finished it (schema v11)
   created_at       TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (campaign_id, number)
 );
 
--- Notes players take during a session. Private to the author. Never edited.
+-- Notes players take during a session. Private to the author. The author can
+-- edit or delete them; the archive keeps every version (schema v11).
 CREATE TABLE IF NOT EXISTS player_notes (
   id            TEXT PRIMARY KEY,   -- random id, same as in the archive
   campaign_id   INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   user_id       INTEGER NOT NULL,
   session_date  TEXT NOT NULL,      -- YYYY-MM-DD; matched to sessions.played_on
   written_at    TEXT NOT NULL,      -- ISO timestamp
-  text          TEXT NOT NULL
+  text          TEXT NOT NULL,
+  edited_at     TEXT,               -- last edit, if any
+  deleted_at    TEXT                -- deleted by the author: hidden everywhere
 );
 CREATE INDEX IF NOT EXISTS player_notes_lookup ON player_notes(campaign_id, session_date);
 
@@ -148,7 +152,25 @@ CREATE TABLE IF NOT EXISTS character_pictures (
   PRIMARY KEY (campaign_id, user_id)
 );
 
+-- Handouts the DM gives players (a picture and/or text), to everyone or chosen
+-- players. Archived as handouts/<id>/changes.jsonl (the whole handout each
+-- time) plus the picture as uploaded. Schema v11.
+CREATE TABLE IF NOT EXISTS handouts (
+  id           TEXT PRIMARY KEY,  -- random, also the archive folder name
+  campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  data         TEXT NOT NULL,     -- JSON; see normalizeHandout in src/handouts.js
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS handouts_campaign ON handouts(campaign_id);
+
 -- ---------- DERIVED ----------
+
+-- How far the archivist has read sheet changes and note edits (see kb/updates.js). Schema v11.
+CREATE TABLE IF NOT EXISTS archivist_marks (
+  campaign_id    INTEGER PRIMARY KEY REFERENCES campaigns(id) ON DELETE CASCADE,
+  updates_until  TEXT NOT NULL      -- ISO timestamp
+);
 
 -- Who was at each session (from the speaker map, player notes, and the archivist).
 CREATE TABLE IF NOT EXISTS attendance (
@@ -245,10 +267,22 @@ CREATE TABLE IF NOT EXISTS logins (
   last_used_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Dice rolls, shared live with the party, the DM, or kept to yourself. Schema v11.
+CREATE TABLE IF NOT EXISTS rolls (
+  id           INTEGER PRIMARY KEY,
+  campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  user_id      INTEGER NOT NULL,
+  visibility   TEXT NOT NULL,     -- party | dm | self
+  label        TEXT NOT NULL DEFAULT '',
+  result       TEXT NOT NULL,     -- JSON, as rollDice returns it
+  rolled_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS rolls_campaign ON rolls(campaign_id, id);
+
 CREATE TABLE IF NOT EXISTS jobs (
   id           INTEGER PRIMARY KEY,
   campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
-  type         TEXT NOT NULL,     -- ingest | correct | rebuild
+  type         TEXT NOT NULL,     -- ingest | correct | updates | rebuild
   params       TEXT NOT NULL DEFAULT '{}',
   status       TEXT NOT NULL DEFAULT 'queued',  -- queued | running | done | failed
   progress     REAL NOT NULL DEFAULT 0,

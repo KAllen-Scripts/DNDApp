@@ -1,6 +1,8 @@
 /**
  * Dice: a tray (the Dice button in the header), 3D dice that tumble across
- * the screen, the result, and a history of this tab's rolls.
+ * the screen, the result, and the table's rolls: yours and everyone's you may
+ * see. Each roll goes to the party (default), only the DM (a secret roll when
+ * the DM makes it), or only you; others' rolls arrive live (table.js).
  *
  * The server decides every roll (POST /campaigns/:cid/roll). The dice are then
  * thrown and land on the server's numbers, by one of several rollers (ROLLERS
@@ -82,9 +84,17 @@ const state = {
   shown3d: false, // the last roll's dice were shown (else its big moments play at the result card)
   fadeTimer: null,
   hideTimer: null,
-  settings: { threeD: true, sound: true, effects: true, style: 'match', roller: '' }, // roller '': the server's choice
+  settings: { threeD: true, sound: true, effects: true, style: 'match', roller: '', share: 'party' }, // roller '': the server's choice
   fx: null,
+  isDm: false,
+  userId: null,
+  toastTimer: null,
 };
+
+// Who sees a roll (the server's visibility values). The DM's "only the DM" is a secret roll.
+const SHARE_NAMES = { party: 'Everyone', dm: 'Only the DM', self: 'Only me' };
+const shareOptions = () => (state.isDm ? { party: 'Everyone', dm: 'Only me (secret)' } : SHARE_NAMES);
+const share = () => (state.settings.share in shareOptions() ? state.settings.share : 'party');
 
 try {
   Object.assign(state.settings, JSON.parse(storage.get(SETTINGS_KEY)) ?? {});
@@ -102,12 +112,48 @@ const animated = () => state.settings.threeD && rollerKey() !== 'none' && !reduc
 const effects = () => state.settings.effects && !reducedMotion?.matches;
 const style = () => STYLES[state.settings.style] ?? STYLES.match;
 
-/** Rolls belong to a campaign (called when entering one). roller is the server's default (DICE_ROLLER). */
-export function setDiceCampaign({ campaignId, guarded, roller = null }) {
-  Object.assign(state, { campaignId, guarded, history: [] });
+/**
+ * Rolls belong to a campaign (called when entering one). roller is the
+ * server's default (DICE_ROLLER). Loads the table's recent rolls.
+ */
+export async function setDiceCampaign({ campaignId, guarded, roller = null, isDm = false, userId = null }) {
+  Object.assign(state, { campaignId, guarded, history: [], isDm, userId });
   if (roller in ROLLERS) state.serverRoller = roller;
   drawHistory();
   drawSettings();
+  try {
+    const res = await guarded(() => api('GET', `/campaigns/${campaignId}/rolls`));
+    if (res && state.campaignId === campaignId) {
+      state.history = res.rolls.map(fromServer);
+      drawHistory();
+    }
+  } catch { /* the log is a nicety; rolling still works */ }
+}
+
+/** A roll from the server's log or live stream, as the history keeps it. */
+const fromServer = (r) => ({ id: r.id, label: r.label || r.result.notation, result: r.result, at: new Date(r.rolled_at), name: r.name, mine: r.user_id === state.userId, visibility: r.visibility, from_dm: r.from_dm });
+
+/** Someone's roll arrived live (table.js). Yours are already shown; others' get a short note. */
+export function tableRoll(r) {
+  if (r.user_id === state.userId || state.history.some((e) => e.id === r.id)) return;
+  const entry = fromServer(r);
+  state.history.unshift(entry);
+  state.history.length = Math.min(state.history.length, 50);
+  drawHistory();
+  const toast = $('#dice-toast');
+  if (!toast) return;
+  const secret = entry.visibility !== 'party' ? ` (${visibilityNote(entry)})` : '';
+  toast.replaceChildren(h('strong', {}, entry.name), ` rolled ${entry.label}: `, h('strong', { class: 'dt-total' }, String(r.result.total)), r.result.natural === 20 ? ' (natural 20!)' : r.result.natural === 1 ? ' (natural 1)' : '', secret);
+  toast.hidden = false;
+  clearTimeout(state.toastTimer);
+  state.toastTimer = setTimeout(() => (toast.hidden = true), 6000);
+}
+
+/** Who else saw a roll, in words, for the history (party rolls say nothing). */
+function visibilityNote(e) {
+  if (e.visibility === 'self') return 'only you saw it';
+  if (e.visibility === 'dm') return e.from_dm ? 'secret' : e.mine ? 'only the DM saw it' : 'to the DM';
+  return '';
 }
 
 /** Shift-click rolls with advantage, Alt-click with disadvantage. */
@@ -124,15 +170,16 @@ export async function roll(notation, { label = '', mode = null, then = null } = 
   const id = ++state.seq;
   let result;
   try {
-    result = await state.guarded(() => api('POST', `/campaigns/${state.campaignId}/roll`, { notation, mode: mode ?? state.nextMode }));
+    result = await state.guarded(() => api('POST', `/campaigns/${state.campaignId}/roll`, { notation, mode: mode ?? state.nextMode, label, visibility: share() }));
   } catch (err) {
     return showError(err.message);
   }
   if (!result) return; // logged out
   if (result.natural != null && state.nextMode !== 'normal') setNextMode('normal');
-  const entry = { label: label || result.notation, result, then, at: new Date() };
+  const entry = { ...(result.roll ? fromServer(result.roll) : { label: label || result.notation, at: new Date(), mine: true, visibility: share() }), result, then };
+  entry.label = label || result.notation;
   state.history.unshift(entry);
-  state.history.length = Math.min(state.history.length, 25);
+  state.history.length = Math.min(state.history.length, 50);
   drawHistory();
   const threeD = animated() && diceCount(result) <= MAX_3D_DICE;
   if (threeD) await animate(result, id);
@@ -448,6 +495,10 @@ function drawSettings() {
   $('#dice-effects').checked = state.settings.effects;
   $('#dice-effects').disabled = !!reducedMotion?.matches;
   for (const b of document.querySelectorAll('.dice-style')) b.setAttribute('aria-checked', String(b.dataset.style === (state.settings.style in STYLES ? state.settings.style : 'match')));
+  const sharePick = $('#dice-share');
+  sharePick.replaceChildren(...Object.entries(shareOptions()).map(([k, name]) => new Option(name, k)));
+  sharePick.value = share();
+  $('#dice-open').classList.toggle('has-share', share() !== 'party');
 }
 
 /** A swatch per style: its colours, with a number in its ink. */
@@ -484,11 +535,13 @@ function drawHistory() {
   if (!list) return;
   list.replaceChildren(
     ...(state.history.length
-      ? state.history.map(({ label, result, at }) =>
-        h('li', {},
-          h('span', { class: 'dh-total' }, String(result.total)),
-          h('span', { class: 'dh-what' }, h('strong', {}, label), h('span', { class: 'muted small' }, breakdown(result))),
-          h('time', { class: 'muted small', datetime: at.toISOString() }, at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
+      ? state.history.map((e) =>
+        h('li', { class: `${e.mine ? 'dh-mine' : 'dh-other'}${e.visibility !== 'party' ? ' dh-private' : ''}` },
+          h('span', { class: 'dh-total' }, String(e.result.total)),
+          h('span', { class: 'dh-what' },
+            h('strong', {}, e.mine ? e.label : `${e.name}: ${e.label}`),
+            h('span', { class: 'muted small' }, [breakdown(e.result), visibilityNote(e)].filter(Boolean).join(' · '))),
+          h('time', { class: 'muted small', datetime: e.at.toISOString() }, e.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
         ))
       : [h('li', { class: 'muted small dh-none' }, 'No rolls yet.')]),
   );
@@ -516,6 +569,8 @@ export function initDice() {
     h('header', { class: 'dice-panel-head' }, h('h2', {}, 'Dice'), h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Close', onclick: () => toggle(false) }, '×')),
     form,
     h('div', { class: 'dice-mode-row' }, h('span', { class: 'muted small' }, 'Next d20:'), modes),
+    h('label', { class: 'dice-share small' }, 'Who sees my rolls',
+      h('select', { id: 'dice-share', onchange: (e) => { state.settings.share = e.target.value; saveSettings(); drawSettings(); } })),
     h('p', { class: 'muted small dice-hint' }, 'On your sheet, click a save, skill, ability or the dice by an attack to roll it. Shift-click for advantage, Alt-click for disadvantage.'),
     h('h3', { class: 'dice-history-title' }, 'Dice style'),
     stylePicker(),
@@ -530,7 +585,7 @@ export function initDice() {
       h('button', { type: 'button', class: 'link', onclick: () => preview() }, 'Try it'),
       h('span', { id: 'dice-3d-note', class: 'muted small' }),
     ),
-    h('h3', { class: 'dice-history-title' }, 'This session'),
+    h('h3', { class: 'dice-history-title' }, 'Table rolls'),
     h('ol', { id: 'dice-history', class: 'dice-history' }),
   );
   const toggle = (show = panel.hidden) => {
@@ -552,6 +607,7 @@ export function initDice() {
     fxCanvas,
     h('div', { id: 'dice-fx-layer', class: 'dice-fx-layer', 'aria-hidden': 'true' }),
     h('div', { id: 'dice-result', class: 'dice-result', role: 'status', 'aria-live': 'polite', hidden: true }),
+    h('div', { id: 'dice-toast', class: 'dice-toast', role: 'status', 'aria-live': 'polite', hidden: true }),
   );
   state.fx = createFx(fxCanvas);
   reducedMotion?.addEventListener?.('change', drawSettings);

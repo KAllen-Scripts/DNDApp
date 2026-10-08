@@ -8,6 +8,7 @@ import { replaySheet } from './sheets/store.js';
 import { replayMap } from './maps/store.js';
 import { normalizePins } from '@dndapp/shared/map.js';
 import { normalizePictures } from './characters/pictures.js';
+import { normalizeHandout } from './handouts.js';
 
 export class NotFoundError extends Error {}
 export class BadRequestError extends Error {}
@@ -196,15 +197,74 @@ export function createStore({ db, archive, config }) {
       return note;
     },
 
-    /** Notes for a campaign, optionally filtered to one author and/or one session date. */
+    /** One of this person's own notes (not deleted), or null. */
+    ownNote(campaignId, userId, noteId) {
+      return db.prepare('SELECT * FROM player_notes WHERE id = ? AND campaign_id = ? AND user_id = ? AND deleted_at IS NULL').get(String(noteId), campaignId, userId) ?? null;
+    },
+
+    /**
+     * Change the text of your own note. The archive keeps the old version: the
+     * edit is a new line with the same id in that date's file.
+     */
+    editPlayerNote(campaignId, userId, noteId, { text }) {
+      const c = getCampaign(campaignId);
+      const note = store.ownNote(campaignId, userId, noteId);
+      if (!note) throw new NotFoundError('No such note');
+      if (note.text === text) return note;
+      const edited_at = new Date().toISOString();
+      archive.appendPlayerNote(c.slug, { id: note.id, user_id: userId, session_date: note.session_date, edited_at, text });
+      db.prepare('UPDATE player_notes SET text = ?, edited_at = ? WHERE id = ?').run(text, edited_at, note.id);
+      return { ...note, text, edited_at };
+    },
+
+    /** Delete your own note. It disappears everywhere; the archive keeps it, with a line saying it was deleted. */
+    deletePlayerNote(campaignId, userId, noteId) {
+      const c = getCampaign(campaignId);
+      const note = store.ownNote(campaignId, userId, noteId);
+      if (!note) throw new NotFoundError('No such note');
+      const deleted_at = new Date().toISOString();
+      archive.appendPlayerNote(c.slug, { id: note.id, user_id: userId, session_date: note.session_date, deleted_at });
+      db.prepare('UPDATE player_notes SET deleted_at = ? WHERE id = ?').run(deleted_at, note.id);
+      return { ...note, deleted_at };
+    },
+
+    /** Notes for a campaign (not deleted ones), optionally filtered to one author and/or one session date. */
     playerNotes(campaignId, { userId, date } = {}) {
       return db
         .prepare(
           `SELECT n.*, u.name AS user_name FROM player_notes n LEFT JOIN users u ON u.id = n.user_id
-           WHERE n.campaign_id = @campaignId AND (@userId IS NULL OR n.user_id = @userId) AND (@date IS NULL OR n.session_date = @date)
+           WHERE n.campaign_id = @campaignId AND n.deleted_at IS NULL AND (@userId IS NULL OR n.user_id = @userId) AND (@date IS NULL OR n.session_date = @date)
            ORDER BY n.written_at`,
         )
         .all({ campaignId, userId: userId ?? null, date: date ?? null });
+    },
+
+    /**
+     * Notes written, edited or deleted after `since` (up to `until`), with the
+     * text as it was at `since`, for the archivist (see kb/updates.js).
+     */
+    noteChanges(campaignId, { since, until }) {
+      const c = getCampaign(campaignId);
+      const changed = db
+        .prepare(
+          `SELECT n.*, u.name AS user_name FROM player_notes n LEFT JOIN users u ON u.id = n.user_id
+           WHERE n.campaign_id = ? AND COALESCE(n.deleted_at, n.edited_at, n.written_at) > ? AND COALESCE(n.deleted_at, n.edited_at, n.written_at) <= ?
+           ORDER BY COALESCE(n.deleted_at, n.edited_at, n.written_at)`,
+        )
+        .all(campaignId, since, until);
+      const files = new Map();
+      return changed.map((n) => {
+        if (!files.has(n.session_date)) files.set(n.session_date, archive.readPlayerNotes(c.slug, n.session_date));
+        // The text as it was at `since`: the original, or the last edit before then.
+        let before = null;
+        let after = null;
+        for (const line of files.get(n.session_date).filter((l) => l.id === n.id)) {
+          const at = line.deleted_at ?? line.edited_at ?? line.written_at;
+          if ('text' in line && at <= since) before = line.text;
+          if (at <= until) after = line.deleted_at ? null : line.text ?? after;
+        }
+        return { id: n.id, user_id: n.user_id, user_name: n.user_name, session_date: n.session_date, written_at: n.written_at, at: n.deleted_at ?? n.edited_at ?? n.written_at, before, after, deleted: !!n.deleted_at && n.deleted_at <= until };
+      });
     },
 
     // ---------- corrections ----------
@@ -251,7 +311,7 @@ export function createStore({ db, archive, config }) {
           }
         }
         for (const entry of archive.readAll()) {
-          const { campaign, sessions, members, speakers, glossary, corrections, playerNotes, sheets = [], maps = [], characters = [] } = entry;
+          const { campaign, sessions, members, speakers, glossary, corrections, playerNotes, sheets = [], maps = [], characters = [], handouts = [] } = entry;
           if (db.prepare('SELECT 1 FROM campaigns WHERE slug = ?').get(campaign.slug)) continue;
           const cid = Number(
             db
@@ -280,7 +340,14 @@ export function createStore({ db, archive, config }) {
           const insN = db.prepare(
             'INSERT OR IGNORE INTO player_notes (id, campaign_id, user_id, session_date, written_at, text) VALUES (?, ?, ?, ?, ?, ?)',
           );
-          for (const n of playerNotes) insN.run(n.id, cid, n.user_id, n.session_date, n.written_at, n.text);
+          const editN = db.prepare('UPDATE player_notes SET text = ?, edited_at = ? WHERE id = ? AND campaign_id = ?');
+          const deleteN = db.prepare('UPDATE player_notes SET deleted_at = ? WHERE id = ? AND campaign_id = ?');
+          // Each date's lines are in the order written: the note first, then its edits and its delete.
+          for (const n of playerNotes) {
+            if (n.deleted_at) deleteN.run(n.deleted_at, n.id, cid);
+            else if (n.edited_at) editN.run(n.text, n.edited_at, n.id, cid);
+            else insN.run(n.id, cid, n.user_id, n.session_date, n.written_at, n.text);
+          }
           const insSheet = db.prepare('INSERT INTO character_sheets (campaign_id, user_id, data, version, updated_at) VALUES (?, ?, ?, ?, ?)');
           for (const { user_id, entries } of sheets) {
             if (!entries.length || !userExists.get(user_id)) continue;
@@ -303,6 +370,8 @@ export function createStore({ db, archive, config }) {
             const last = entries.at(-1);
             if (last && userExists.get(user_id)) insPictures.run(cid, user_id, JSON.stringify(normalizePictures(last)), last.saved_at);
           }
+          const insHandout = db.prepare('INSERT OR IGNORE INTO handouts (id, campaign_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)');
+          for (const h of handouts.map(normalizeHandout)) insHandout.run(h.id, cid, JSON.stringify(h), h.created_at, h.updated_at);
           restored.push(campaign.slug);
         }
       })();

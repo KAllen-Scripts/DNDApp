@@ -6,7 +6,8 @@ import Database from 'better-sqlite3';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 // v5 only added the character_sheets table, v7 the maps table, v8 map_pins, v9 character_pictures and v10 map_explored (all created by schema.sql), so they need no migration.
-const SCHEMA_VERSION = 10;
+// v11 added handouts, rolls and archivist_marks (created by schema.sql), and edited_at/deleted_at to player_notes.
+const SCHEMA_VERSION = 11;
 
 /**
  * @param {string} file  path to the SQLite file, or ':memory:'
@@ -35,6 +36,19 @@ function migrateBeforeSchema(db) {
   if (version < 3) migrateV2(db);
   if (version < 4) migrateV3(db);
   if (version < 6) migrateV5(db, has);
+  if (version < 11) migrateV10(db, has);
+}
+
+/** v10 -> v11: players can edit and delete their notes; sessions remember when they were processed. */
+function migrateV10(db, has) {
+  const add = (table, column, definition) => {
+    if (!has(table)) return;
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  };
+  add('player_notes', 'edited_at', 'TEXT');
+  add('player_notes', 'deleted_at', 'TEXT');
+  add('sessions', 'processed_at', 'TEXT');
 }
 
 /** v5 -> v6: players can pin and delete their conversations. */
@@ -107,12 +121,12 @@ function migrateV2(db) {
 /** Delete all derived data for one campaign. */
 export function wipeDerived(db, campaignId) {
   db.transaction(() => {
-    for (const table of ['docs', 'kb_records', 'kb_journal', 'dm_questions']) {
+    for (const table of ['docs', 'kb_records', 'kb_journal', 'dm_questions', 'archivist_marks']) {
       db.prepare(`DELETE FROM ${table} WHERE campaign_id = ?`).run(campaignId);
     }
     db.prepare('DELETE FROM attendance WHERE session_id IN (SELECT id FROM sessions WHERE campaign_id = ?)').run(campaignId);
     db.prepare(
-      "UPDATE sessions SET status = 'archived', error = NULL, pipeline_version = NULL WHERE campaign_id = ?",
+      "UPDATE sessions SET status = 'archived', error = NULL, pipeline_version = NULL, processed_at = NULL WHERE campaign_id = ?",
     ).run(campaignId);
   })();
 }

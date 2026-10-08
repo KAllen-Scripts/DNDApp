@@ -18,7 +18,7 @@ const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
  * Bump this whenever chunking, prompts, schemas or the memory design change.
  * Every generated output is tagged with it so we know which approach made it.
  */
-export const PIPELINE_VERSION = 7;
+export const PIPELINE_VERSION = 8;
 
 const DEFAULT_MODEL = env.MODEL || 'claude-opus-5-5';
 
@@ -88,6 +88,8 @@ export const config = {
     maxToolResultTokens: num(env.ARCHIVIST_MAX_TOOL_RESULT_TOKENS, 8000),
     // Transcripts up to this size are given in full; longer ones are read in parts.
     inlineTranscriptTokens: num(env.ARCHIVIST_INLINE_TRANSCRIPT_TOKENS, 200_000),
+    // Sheet changes, late note edits and handouts reach the archivist this long after the last one (a quiet spell).
+    updatesDelayMinutes: num(env.ARCHIVIST_UPDATES_DELAY_MINUTES, 10),
   },
 
   kb: {
