@@ -825,10 +825,14 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     sheetAiCalls.set(userId, recent);
   };
 
-  /** Sheets belong to people in the campaign (not the admin login, which only manages). */
+  /**
+   * Sheets (and character pictures) belong to the players in the campaign: not the admin login, which only
+   * manages, and not the DM, who has Creatures instead.
+   */
   function sheetOwner(request) {
     const a = access(request);
     if (!a.membership) throw new AuthError('Only people in this campaign have character sheets', 403);
+    if (a.membership.role === 'dm') throw new AuthError('The DM has Creatures instead of a character sheet', 403);
     return a;
   }
 

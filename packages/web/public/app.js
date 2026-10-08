@@ -178,14 +178,21 @@ async function enterCampaign(campaign) {
   // The Archivist tab is the DM's; a player who was on it goes back to the first tab.
   $('[data-tab=archivist]').hidden = !isDm;
   // The DM gets Creatures (enemies and NPCs to put on maps) instead of a character sheet.
-  dmMode = isDm && !SHEET_WINDOW;
-  $('[data-tab=sheet]').hidden = dmMode;
+  $('[data-tab=sheet]').hidden = isDm;
   $('[data-tab=creatures]').hidden = !isDm;
+  $('#map-sheet-window').hidden = isDm;
   // A tab this person doesn't have (now) goes to Creatures for the DM's sheet, else the first tab.
   const here = $(`[data-tab="${currentTab}"]`);
-  if (dmMode && currentTab === 'sheet') showTab('creatures');
+  if (isDm && currentTab === 'sheet') showTab('creatures');
   else showTab(here.hidden || here.classList.contains('user-hidden') ? firstTab() : currentTab);
   setSheetCampaign(campaign.id);
+  if (SHEET_WINDOW && isDm) {
+    // A sheet window left open from before someone became the DM: there's no sheet to show.
+    $('#tab-sheet').hidden = false;
+    $('#sheet').replaceChildren(h('p', { class: 'muted' }, 'The DM has Creatures instead of a character sheet. Close this window.'));
+    $('.sheet-bar').hidden = true;
+    return;
+  }
   if (SHEET_WINDOW) {
     // The popped-out sheet: only the sheet, and dice to roll from it.
     document.title = `${campaign.character_name || 'Sheet'} · ${campaign.name}`;
@@ -200,7 +207,7 @@ async function enterCampaign(campaign) {
     setDiceCampaign({ campaignId: campaign.id, guarded, roller: state.me.dice?.roller, isDm, userId: state.me.user.id }),
     loadConversations(),
     loadNotes(),
-    loadSheet({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
+    isDm ? null : loadSheet({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
     loadMaps({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
     loadTable({ campaignId: campaign.id, guarded }),
     isDm ? loadArchivist({ campaignId: campaign.id, guarded }) : null,
@@ -245,7 +252,6 @@ for (const button of document.querySelectorAll('.logout')) {
 
 // The tab to open on: chosen under Look (look-boot.js), Ask unless changed.
 let currentTab = window.dndLook.get().startTab;
-let dmMode = false; // the DM's page: Creatures instead of a sheet
 
 /** Show a tab. On the map, another panel can be beside it too (sheet-place.js). */
 function showTab(name) {

@@ -24,6 +24,8 @@ test('creatures tab: the DM has Creatures instead of a Sheet; players keep their
     assert.ok(!page.visible('[data-tab=sheet]'));
     assert.ok(page.$('#map-beside option[value=sheet]').hidden, 'no sheet beside the map for the DM');
     assert.ok(!page.$('#map-beside option[value=creatures]').hidden, 'their creatures instead');
+    assert.ok(page.$('#map-sheet-window').hidden, 'no Sheet window for the DM either');
+    assert.ok(!page.requests.some((r) => r.path.endsWith('/sheet')), "the DM's page never loads a sheet");
     page.click('[data-tab=creatures]');
     assert.ok(page.visible('#tab-creatures'));
     assert.match(page.text('#creatures'), /No creatures yet/);
