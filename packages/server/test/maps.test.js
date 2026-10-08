@@ -575,6 +575,7 @@ test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and
         doors: [{ from: { x: 502, y: 500 }, to: { x: 502, y: 700 } }],
         obstacles: [{ points: [{ x: 100, y: 100 }, { x: 200, y: 100 }] }],
         lights: [{ x: 100, y: 900, kind: 'brazier' }],
+        difficult: [{ points: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }] }],
         notes: draft === 1 ? 'The tower walls are a guess.' : '',
       };
     }),
@@ -604,6 +605,7 @@ test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and
     // Lights it saw, as the light they give.
     assert.deepEqual(done.lights.map(({ x, y, bright, dim, source }) => ({ x, y, bright, dim, source })), [{ x: 70, y: 441, bright: 20, dim: 20, source: 'ai' }]);
     assert.deepEqual((await t.request('GET', base, { as: t.sam.token })).json().lights, [], 'players never get the lights');
+    assert.deepEqual(done.terrain.map(({ points, source }) => ({ points, source })), [{ points: [[0, 0], [70, 0], [70, 49]], source: 'ai' }]);
     const call = t.llm.calls.find((c) => c.purpose === 'map:walls');
     assert.equal(call.attachments.length, 1);
     assert.match(call.prompt, /700 × 490/);

@@ -242,7 +242,9 @@ export function createMapReader({ llm }) {
         .map((l) => ({ x1: l.a.x, y1: l.a.y, x2: l.b.x, y2: l.b.y, door: l.door, kind: l.kind ?? 'wall' }));
       // Light sources on the picture, as the 5e light they give (in feet).
       const lights = (out.lights ?? []).slice(0, MAX_LIGHTS).map((l) => ({ ...px(l), ...LIGHT_OF[l.kind] ?? LIGHT_OF.torch }));
-      return { walls, lights, notes: out.notes };
+      // Difficult terrain, as areas.
+      const terrain = (out.difficult ?? []).filter((a) => a.points.length >= 3).map((a) => ({ points: a.points.map((p) => px(p)).map(({ x, y }) => [x, y]) }));
+      return { walls, lights, terrain, notes: out.notes };
     },
   };
 }
@@ -279,6 +281,8 @@ const WallsOut = z.object({
   doors: z.array(z.object({ from: Point, to: Point })).describe('Each door or gate, from one side of the doorway to the other'),
   lights: z.array(z.object({ x: z.number(), y: z.number(), kind: z.enum(['candle', 'torch', 'lamp', 'brazier', 'fire', 'magic']) })).default([])
     .describe('Light sources drawn on the map: wall torches, braziers, campfires and hearths, lamps, candles, glowing magic'),
+  difficult: z.array(z.object({ points: z.array(Point).min(3).describe('The outline, in order round the area') })).default([])
+    .describe('Areas that are hard to move through: shallow water, mud, rubble, dense undergrowth, steep scree'),
   notes: z.string().describe("For the DM: anything you couldn't trace or are unsure of. Empty if nothing."),
 });
 
@@ -289,6 +293,7 @@ const WALLS_SYSTEM = `You trace walls on maps a Dungeon Master imports into a D&
 - Doors and gates go in doors, across the doorway. Leave open archways and gaps open.
 - Positions are from 0 to 1000 across and 0 to 1000 down the whole image. Be as accurate as you can; the DM corrects them afterwards.
 - A map with no walls (open countryside, a region map) gets no walls.
+- Difficult terrain: outline areas that are hard to walk through (shallow water, mud, rubble, dense undergrowth, scree). Not deep water or walls (those block).
 - Lights: every light source drawn on the map (wall torches, braziers, campfires, hearths, lamps, candles, glowing crystals or runes), at its centre. The app lights the area around them when it's dark.`;
 
 /** The light each kind of source gives (5e, in feet). */

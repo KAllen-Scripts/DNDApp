@@ -241,6 +241,7 @@ export function normalizeMap(input = {}) {
     fog: normalizeFog(m.fog, image),
     walls: normalizeWalls(m.walls, image),
     lights: normalizeLights(m.lights, image),
+    terrain: normalizeTerrain(m.terrain, image),
     // The AI drafting walls from the picture (the DM's; players never get it).
     wall_draft: {
       status: pick(m.wall_draft?.status, ['', 'pending', 'done', 'failed'], ''),
@@ -649,6 +650,8 @@ export function normalizeCombat(c, tokens = []) {
       id: e.id,
       init: num(e.init, { min: -99, max: 999, fallback: null }),
       mod: num(e.mod, { min: -99, max: 99, fallback: null }),
+      // How far it has moved on its turn so far (in the map's unit).
+      moved: round(num(e.moved, { min: 0, max: 1_000_000, fallback: 0 }), 2),
     });
   }
   const sorted = sortCombat(entries, tokens);
@@ -858,4 +861,76 @@ export function spellArea(spell) {
     if (found) return found.area;
   }
   return null;
+}
+
+// ---------- movement and difficult terrain ----------
+
+export const MAX_TERRAIN = 300;
+
+/** Difficult terrain: areas where moving costs double: [{ id, points: [[x, y], ...], source }]. */
+export function normalizeTerrain(list, image = {}) {
+  const { width = 1, height = 1 } = image;
+  const seen = new Set();
+  const out = [];
+  for (const a of Array.isArray(list) ? list : []) {
+    if (!a || !isTokenId(a.id) || seen.has(a.id) || out.length >= MAX_TERRAIN) continue;
+    const points = (Array.isArray(a.points) ? a.points : []).slice(0, 200)
+      .map((p) => [round(num(p?.[0], { min: 0, max: width, fallback: 0 }), 1), round(num(p?.[1], { min: 0, max: height, fallback: 0 }), 1)]);
+    if (points.length < 3) continue;
+    seen.add(a.id);
+    out.push({ id: String(a.id), points, source: pick(a.source, WALL_SOURCES, 'dm') });
+  }
+  return out;
+}
+
+/** Is this point in difficult terrain? */
+export const isDifficult = (map, x, y) => (map.terrain ?? []).some((a) => pointInPolygon(x, y, a.points));
+
+/**
+ * What a move along a path costs ({ value, unit, squares?, difficult }), or
+ * null without a scale. points: where it starts, any waypoints, where it
+ * ends. On a grid with a scale per square, each square entered costs one
+ * square (diagonals too, the 5e way), two in difficult terrain; otherwise
+ * it's the length of the path, doubled where it crosses difficult terrain.
+ */
+export function pathCost(map, points) {
+  const per = unitsPerPx(map);
+  if (per == null || points.length < 2) return null;
+  const { unit } = map.scale;
+  let difficult = false;
+  if (map.grid && map.scale.per === 'square') {
+    const g = map.grid.size;
+    let squares = 0;
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1];
+      const b = points[i];
+      const n = Math.max(Math.round(Math.abs(b.x - a.x) / g), Math.round(Math.abs(b.y - a.y) / g));
+      for (let k = 1; k <= n; k++) {
+        const hard = isDifficult(map, a.x + ((b.x - a.x) * k) / n, a.y + ((b.y - a.y) * k) / n);
+        difficult ||= hard;
+        squares += hard ? 2 : 1;
+      }
+    }
+    return { value: squares * map.scale.distance, unit, squares, difficult };
+  }
+  let px = 0;
+  const step = squarePx(map) / 4;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const n = Math.max(1, Math.ceil(len / step));
+    for (let k = 0; k < n; k++) {
+      const hard = isDifficult(map, a.x + ((b.x - a.x) * (k + 0.5)) / n, a.y + ((b.y - a.y) * (k + 0.5)) / n);
+      difficult ||= hard;
+      px += (len / n) * (hard ? 2 : 1);
+    }
+  }
+  return { value: px * per, unit, difficult };
+}
+
+/** A walking speed from a stat block's speed line ("30 ft., fly 60 ft." is 30), or null. */
+export function speedFromText(text) {
+  const m = String(text ?? '').match(/(\d+)\s*(?:ft|feet|foot|m\b)/i);
+  return m ? Number(m[1]) : null;
 }

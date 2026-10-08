@@ -19,7 +19,7 @@ import { preparedTranscript } from './pipeline/prepare.js';
 import { SheetConflictError } from './sheets/store.js';
 import { SHEET_FORMAT, computeSheet } from '@dndapp/shared/sheet.js';
 import { parseRoll, rollDice, ROLL_MODES } from '@dndapp/shared/dice.js';
-import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, MAX_WALLS, WALL_KINDS, FOG_MAP, TEMPLATE_SHAPES, MAX_TEMPLATES, MAX_LIGHTS, snapToken, wallBetween, doorReach, distanceToWall, dexModifier, stepTurn, canSee } from '@dndapp/shared/map.js';
+import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, MAX_WALLS, WALL_KINDS, FOG_MAP, TEMPLATE_SHAPES, MAX_TEMPLATES, MAX_LIGHTS, MAX_TERRAIN, pathCost, snapToken, wallBetween, doorReach, distanceToWall, dexModifier, stepTurn, canSee } from '@dndapp/shared/map.js';
 import { inspectImage } from './maps/read.js';
 import { isPdf, renderPdfPage } from './maps/pdf.js';
 import { createPlayerImages } from './maps/image.js';
@@ -1061,6 +1061,9 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
           // Lights the AI saw on the picture (torches, braziers, fires) replace its earlier ones too.
           const ownLights = m.lights.filter((l) => l.source !== 'ai');
           m.lights = [...ownLights, ...(r.lights ?? []).slice(0, MAX_LIGHTS - ownLights.length).map((l) => ({ ...l, id: newTokenId(), source: 'ai' }))];
+          // And difficult terrain (water, rubble, undergrowth).
+          const ownTerrain = m.terrain.filter((t) => t.source !== 'ai');
+          m.terrain = [...ownTerrain, ...(r.terrain ?? []).slice(0, MAX_TERRAIN - ownTerrain.length).map((t) => ({ ...t, id: newTokenId(), source: 'ai' }))];
           m.wall_draft = { status: 'done', error: '', notes: r.notes };
         }, { reason: 'walls drafted by the AI' }),
       )
@@ -1391,6 +1394,28 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     return maps.view(saved, a);
   });
 
+  /** Difficult terrain (DM): { add?: {points: [[x, y], ...]}, remove?: id, clear?: ai | all }. Moving through it costs double. */
+  app.patch('/campaigns/:cid/maps/:mid/terrain', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const body = z
+      .object({
+        add: z.object({ points: z.array(z.tuple([POINT, POINT])).min(3).max(200) }).optional(),
+        remove: z.string().max(20).optional(),
+        clear: z.enum(['ai', 'all']).optional(),
+      })
+      .parse(request.body ?? {});
+    if (body.add && map.terrain.length >= MAX_TERRAIN) throw new BadRequestError(`A map can have at most ${MAX_TERRAIN} areas of difficult terrain.`);
+    if (body.remove && !map.terrain.some((t) => t.id === body.remove)) throw new NotFoundError('No such area');
+    const saved = maps.change(a.cid, map.id, (m) => {
+      if (body.clear === 'all') m.terrain = [];
+      if (body.clear === 'ai') m.terrain = m.terrain.filter((t) => t.source !== 'ai');
+      if (body.remove) m.terrain = m.terrain.filter((t) => t.id !== body.remove);
+      if (body.add) m.terrain.push({ id: newTokenId(), points: body.add.points, source: 'dm' });
+    }, { by: request.user.id, reason: 'terrain' });
+    return maps.view(saved, a);
+  });
+
   /** Draft the walls and doors with the AI (DM), in the background. Replaces the AI's earlier draft; walls the DM drew stay. */
   app.post('/campaigns/:cid/maps/:mid/walls/draft', async (request) => {
     const a = access(request, { dm: true });
@@ -1436,6 +1461,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     stats: z.object({ text: z.string().max(8000), ac: z.number().int().nullable().optional(), hp_formula: z.string().max(40).optional(), speed: z.string().max(120).optional(), challenge: z.string().max(40).optional() }).nullable(),
     light: z.object(RADII).nullable(),
     darkvision: z.number().min(0).max(10_000),
+    speed: z.number().min(0).max(10_000).nullable(),
   });
   // What a player may change on their own token; everything else is the DM's.
   const OWNER_FIELDS = new Set(['x', 'y', 'hp', 'conditions', 'light', 'darkvision']);
@@ -1484,7 +1510,9 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     // Only tokens this viewer can see (players don't get to find tokens under the fog).
     const token = view.tokens.find((t) => t.id === request.params.tid);
     if (!token) throw new NotFoundError('No such token');
-    const body = TOKEN.partial().parse(request.body ?? {});
+    // A move can go by waypoints: path is where it turns on the way.
+    const { path = [], ...rest } = z.object({ path: z.array(z.tuple([z.number(), z.number()])).max(50).optional() }).passthrough().parse(request.body ?? {});
+    const body = TOKEN.partial().parse(rest);
     const moving = Object.keys(body).every((k) => k === 'x' || k === 'y');
     if (a.role !== 'dm') {
       if (token.user_id !== request.user.id) throw new AuthError('You can only change your own token', 403);
@@ -1493,9 +1521,10 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     checkTokenOwner(a.cid, { ...token, ...body });
     linkRecord(a.cid, body);
     // Players can't walk through walls or closed doors (the DM can put any token anywhere).
-    if (a.role !== 'dm' && (body.x !== undefined || body.y !== undefined)) {
-      const to = snapToken(map, token, body.x ?? token.x, body.y ?? token.y);
-      if (wallBetween(map, token, to)) throw new BadRequestError("There's a wall in the way.");
+    const moves = body.x !== undefined || body.y !== undefined;
+    const route = moves ? [{ x: token.x, y: token.y }, ...path.map(([x, y]) => ({ x, y })), snapToken(map, token, body.x ?? token.x, body.y ?? token.y)] : [];
+    if (a.role !== 'dm' && moves) {
+      for (let i = 1; i < route.length; i++) if (wallBetween(map, route[i - 1], route[i])) throw new BadRequestError("There's a wall in the way.");
     }
     const saved = maps.change(a.cid, map.id, (m) => {
       const t = m.tokens.find((x) => x.id === token.id);
@@ -1503,6 +1532,9 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       Object.assign(t, body);
       if (t.kind !== 'pc') t.user_id = null;
       Object.assign(t, snapToken(m, t, t.x, t.y));
+      // In a fight, count how far it has moved this turn (difficult terrain costs double).
+      const entry = moves && m.combat?.entries.find((e) => e.id === t.id);
+      if (entry) entry.moved = (entry.moved ?? 0) + (pathCost(map, route)?.value ?? 0);
     }, { by: request.user.id, reason: moving ? 'token moved' : 'token changed' });
     return { map: maps.view(saved, a), token: saved.tokens.find((t) => t.id === token.id) };
   });
@@ -1607,6 +1639,8 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
         m.combat = null;
       } else if (body.action === 'next' || body.action === 'prev') {
         Object.assign(m.combat, stepTurn(m.combat, body.action === 'next' ? 1 : -1));
+        // A new turn: its token hasn't moved yet.
+        if (body.action === 'next') for (const e of m.combat.entries) if (e.id === m.combat.turn) e.moved = 0;
       } else if (body.action === 'add') {
         for (const id of body.ids ?? []) {
           if (m.tokens.some((t) => t.id === id) && !m.combat.entries.some((e) => e.id === id)) m.combat.entries.push({ id, init: null, mod: null });

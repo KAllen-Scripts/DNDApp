@@ -149,3 +149,59 @@ test('pings and sketches: shown live for a moment; other players\' only where yo
     await page.waitFor(() => pings().length === 0, { what: 'the pings to go', timeout: 6000 });
   });
 });
+
+test('movement: Space adds a waypoint while dragging; the label counts difficult terrain and the turn\'s speed', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const map = await importMap(t, { patch: SHOWN });
+      const thorin = await addToken(t, map, { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 17.5, y: 17.5, speed: 30 });
+      const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+      await t.request('PATCH', `${base}/terrain`, { body: { add: { points: [[105, 0], [175, 0], [175, 490], [105, 490]] } } });
+      await t.request('POST', `${base}/combat`, { body: { action: 'start' } });
+      await t.request('POST', `${base}/combat`, { body: { action: 'set', id: thorin.id, init: 10 } });
+      await t.request('POST', `${base}/combat`, { body: { action: 'next' } });
+      return { map };
+    },
+    page: (t) => ({ as: t.sam }),
+  }, async (page, t, { map }) => {
+    await openMapTab(page);
+    assert.ok(page.$('#map-terrain polygon.difficult'), 'players see difficult terrain');
+    // Down two squares, Space, then right four (two of them difficult).
+    page.pointer(tokenEl(page, 'Thorin'), 'pointerdown', { clientX: 17, clientY: 17 });
+    page.pointer('#map-view', 'pointermove', { clientX: 17, clientY: 50 });
+    page.pointer('#map-view', 'pointermove', { clientX: 17, clientY: 87 });
+    page.key(page.window.document.body, ' ');
+    assert.equal(page.$$('#map-ruler-line circle.waypoint').length, 1);
+    page.pointer('#map-view', 'pointermove', { clientX: 157, clientY: 87 });
+    assert.equal(page.text('#map-measure'), '40 ft · difficult · 40 / 30 ft this turn');
+    assert.ok(page.$('#map-measure').classList.contains('over'));
+    page.pointer('#map-view', 'pointerup', { clientX: 157, clientY: 87 });
+    await page.settle();
+    const saved = await mapOf(t, map);
+    assert.deepEqual([saved.tokens[0].x, saved.tokens[0].y], [157.5, 87.5]);
+    assert.equal(saved.combat.entries[0].moved, 40);
+  });
+});
+
+test('difficult terrain: the DM drags an area (snapped to squares) and erases it', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => ({ map: await importMap(t, { patch: SHOWN }), dana: await addDm(t) }),
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t, { map }) => {
+    await openMapTab(page);
+    page.click('#map-fog-open');
+    page.click('[data-wall-mode=difficult]');
+    page.pointer('#map-view', 'pointerdown', { clientX: 40, clientY: 40 });
+    page.pointer('#map-view', 'pointermove', { clientX: 100, clientY: 90 });
+    assert.ok(page.$('#map-terrain polygon.difficult'), 'drawn while dragging');
+    page.pointer('#map-view', 'pointerup', { clientX: 100, clientY: 90 });
+    await page.settle();
+    assert.deepEqual((await mapOf(t, map)).terrain[0].points, [[35, 35], [105, 35], [105, 105], [35, 105]]);
+    page.click('[data-wall-mode=erase]');
+    click(page, 70, 70);
+    await page.settle();
+    assert.deepEqual((await mapOf(t, map)).terrain, []);
+  });
+});

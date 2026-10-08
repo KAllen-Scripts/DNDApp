@@ -99,7 +99,7 @@ test('initiative: the DM starts a fight (enemies roll with their Dex), players r
     assert.equal((await fight({ action: 'set', id: goblin.id, init: 1 })).json().map.combat.entries.at(-1).id, goblin.id);
     assert.equal((await fight({ action: 'remove', id: goblin.id })).json().map.combat.entries.length, 1);
     c = (await fight({ action: 'add', ids: [goblin.id] })).json().map.combat;
-    assert.deepEqual(c.entries.at(-1), { id: goblin.id, init: null, mod: null });
+    assert.deepEqual(c.entries.at(-1), { id: goblin.id, init: null, mod: null, moved: 0 });
     const all = (await fight({ action: 'roll' })).json();
     assert.deepEqual(all.rolls.map((x) => x.id), [goblin.id]); // only those not rolled yet
 
@@ -148,6 +148,49 @@ test('templates: anyone places areas of effect; only their owner or the DM chang
     // The DM removes anyone's.
     assert.equal((await t.request('DELETE', `${base}/templates/${fireball.id}`)).statusCode, 200);
     assert.deepEqual((await t.request('GET', base)).json().templates.map((x) => x.id), [cone.id]);
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('movement: paths with waypoints, walls checked on every leg, speed used per turn (double in difficult terrain)', async () => {
+  const t = await setup({ llm: createFakeLLM({ structured: async () => readOut }) });
+  try {
+    const { base, add } = await shownMap(t);
+    const sheet = (await t.request('GET', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token })).json();
+    await t.request('PUT', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token, body: { sheet: { ...sheet.sheet, race: 'Hill Dwarf' }, version: sheet.version } });
+    const thorin = await add({ kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 17.5, y: 17.5 });
+    const goblin = await add({ kind: 'enemy', name: 'Goblin', x: 612.5, y: 402.5, stats: { text: GOBLIN, speed: '30 ft.' } });
+    const view = async (as) => (await t.request('GET', base, { as })).json();
+    // How far each walks: the sheet (a dwarf: 25), the stat block, or what the DM sets.
+    assert.equal((await view(t.sam.token)).tokens.find((x) => x.id === thorin.id).move_speed, 25);
+    assert.equal((await view()).tokens.find((x) => x.id === goblin.id).move_speed, 30);
+
+    // Difficult terrain is the DM's; players get the areas they can see.
+    assert.equal((await t.request('PATCH', `${base}/terrain`, { as: t.sam.token, body: { add: { points: [[0, 0], [1, 0], [1, 1]] } } })).statusCode, 403);
+    const area = (await t.request('PATCH', `${base}/terrain`, { body: { add: { points: [[105, 0], [175, 0], [175, 490], [105, 490]] } } })).json().terrain[0];
+    assert.equal((await view(t.sam.token)).terrain.length, 1);
+
+    // A wall down column 2 with a gap at the bottom: a straight move is refused, a path round it isn't.
+    await t.request('PATCH', `${base}/walls`, { body: { add: { x1: 70, y1: 0, x2: 70, y2: 420 } } });
+    const move = (body) => t.request('PATCH', `${base}/tokens/${thorin.id}`, { as: t.sam.token, body });
+    assert.equal((await move({ x: 87.5, y: 17.5 })).statusCode, 400);
+    assert.equal((await move({ x: 87.5, y: 17.5, path: [[17.5, 437.5], [87.5, 437.5]] })).statusCode, 200);
+
+    // In a fight, moving counts against the turn; a new turn starts at nothing.
+    await t.request('POST', `${base}/combat`, { body: { action: 'start' } });
+    await t.request('POST', `${base}/combat`, { body: { action: 'set', id: thorin.id, init: 20 } });
+    await t.request('POST', `${base}/combat`, { body: { action: 'set', id: goblin.id, init: 10 } });
+    await t.request('POST', `${base}/combat`, { body: { action: 'next' } });
+    await move({ x: 192.5, y: 17.5 }); // 3 squares, two of them difficult: 5 squares
+    const moved = (await view(t.sam.token)).combat.entries.find((e) => e.id === thorin.id).moved;
+    assert.equal(moved, 25);
+    await t.request('POST', `${base}/combat`, { body: { action: 'next' } });
+    await t.request('POST', `${base}/combat`, { body: { action: 'next' } });
+    assert.equal((await view()).combat.entries.find((e) => e.id === thorin.id).moved, 0);
+
+    await t.request('PATCH', `${base}/terrain`, { body: { remove: area.id } });
+    assert.deepEqual((await view()).terrain, []);
   } finally {
     await t.cleanup();
   }

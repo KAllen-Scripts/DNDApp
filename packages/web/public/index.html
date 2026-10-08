@@ -218,9 +218,10 @@
         <button class="ghost" data-wall-mode="lock" aria-pressed="false" title="Click a door to lock or unlock it (players can't open a locked door)">Lock</button>
         <button class="ghost" data-wall-mode="light" aria-pressed="false" title="Click the map to put a light there (a torch, a brazier, a campfire)">Light</button>
         <select id="map-light-kind" aria-label="Which light"></select>
-        <button class="ghost" data-wall-mode="erase" aria-pressed="false" title="Click a wall, door or light to remove it">Erase</button>
+        <button class="ghost" data-wall-mode="difficult" aria-pressed="false" title="Drag over an area that's hard to move through (moving there costs double)">Difficult terrain</button>
+        <button class="ghost" data-wall-mode="erase" aria-pressed="false" title="Click a wall, door, light or difficult terrain to remove it">Erase</button>
         <button class="ghost" id="map-walls-draft" title="Let the AI trace the walls and doors from the picture, for you to correct">AI walls</button>
-        <button class="ghost" data-wall-action="clear-ai">Clear AI walls</button>
+        <button class="ghost" data-wall-action="clear-ai" title="Remove the walls, lights and difficult terrain the AI drafted">Clear AI draft</button>
         <button class="ghost" data-wall-action="forget" title="Players lose the dim view of places they saw before">Forget explored</button>
         <span id="map-wall-hint" class="muted small"></span>
       </div>
@@ -228,6 +229,7 @@
         <div id="map-stage" class="map-stage" hidden>
           <img id="map-image" alt="" draggable="false">
           <svg id="map-grid" class="map-grid" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <svg id="map-terrain" class="map-terrain" preserveAspectRatio="none" aria-hidden="true"></svg>
           <svg id="map-fog" class="map-fog" preserveAspectRatio="none" aria-hidden="true"></svg>
           <svg id="map-walls" class="map-walls" preserveAspectRatio="none" aria-hidden="true"></svg>
           <svg id="map-templates" class="map-templates" preserveAspectRatio="none" aria-hidden="true"></svg>

@@ -13,7 +13,8 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { normalizeMap, normalizePins, canSee, healthOf } from '@dndapp/shared/map.js';
+import { normalizeMap, normalizePins, canSee, healthOf, speedFromText } from '@dndapp/shared/map.js';
+import { computeSheet } from '@dndapp/shared/sheet.js';
 import { createSight } from './sight.js';
 import { diffJson, applyJson } from '../sheets/store.js';
 import { NotFoundError } from '../store.js';
@@ -44,7 +45,7 @@ function doorSeen(map, polygons, w) {
   return canSee(map, polygons, mx + nx, my + ny) || canSee(map, polygons, mx - nx, my - ny);
 }
 
-export function createMaps({ db, archive, store, pictures = null }) {
+export function createMaps({ db, archive, store, pictures = null, sheets = null }) {
   const events = new EventEmitter();
   events.setMaxListeners(0);
   const sight = createSight({ db });
@@ -133,13 +134,23 @@ export function createMaps({ db, archive, store, pictures = null }) {
      * rectangles. `image_key` changes when their image does.
      * Players get only the spell templates they placed or whose origin they
      * can see, and only the visible tokens' places in the turn order.
+     * Tokens carry `move_speed`: how far they walk in a turn, if known.
      * Player character tokens carry `picture`: the key of their player's token picture, or null.
      */
     view(map, { role, userId }) {
       if (!map || map.removed) return null;
       // A player character's token shows the token picture its player uploaded.
       const picture = (t) => (t.kind === 'pc' && pictures ? pictures.tokenKey(map.campaign_id, t.user_id) : null);
-      const out = { ...map, tokens: map.tokens.map((t) => ({ ...t, picture: picture(t) })) };
+      // How far it walks in a turn: what the DM set, else the player's sheet, else the stat block.
+      const moveSpeed = (t) => {
+        if (t.speed != null) return t.speed;
+        if (t.kind === 'pc' && t.user_id != null && sheets) {
+          const { sheet, version } = sheets.get(map.campaign_id, t.user_id);
+          return version ? Number(computeSheet(sheet).values.speed) || null : null;
+        }
+        return speedFromText(t.stats?.speed) ?? null;
+      };
+      const out = { ...map, tokens: map.tokens.map((t) => ({ ...t, picture: picture(t), move_speed: moveSpeed(t) })) };
       delete out.campaign_id;
       if (role === 'dm') return { ...out, image_key: 'dm', can_edit: true };
       if (!map.shown) return null;
@@ -153,6 +164,8 @@ export function createMaps({ db, archive, store, pictures = null }) {
         reading: { status: map.reading.status, error: '', notes: '' },
         walls: [],
         lights: [],
+        // Difficult terrain where they can see any of it.
+        terrain: map.terrain.filter((a) => a.points.some(([x, y]) => canSee(map, seen.polygons, x, y))),
         doors: map.walls
           .filter((w) => w.door && doorSeen(map, seen.polygons, w))
           .map(({ id, x1, y1, x2, y2, open, locked }) => ({ id, x1, y1, x2, y2, open, locked })),

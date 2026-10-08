@@ -15,7 +15,7 @@ import {
   TOKEN_KINDS, TOKEN_KIND_NAMES, TOKEN_SIZES, TOKEN_SIZE_NAMES, TOKEN_COLORS, UNITS,
   CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf,
   fogMask, FOG_MASK_FILL, snapWallPoint, nearestWall,
-  LIGHT_PRESETS, pxPerUnit, squarePx, TEMPLATE_SHAPES, TEMPLATE_SHAPE_NAMES, TEMPLATE_COLOR, templateShape, tokensInTemplate, inTemplate, snapTemplatePoint, spellArea,
+  LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, TEMPLATE_SHAPES, TEMPLATE_SHAPE_NAMES, TEMPLATE_COLOR, templateShape, tokensInTemplate, inTemplate, snapTemplatePoint, spellArea,
 } from './shared/map.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -38,7 +38,8 @@ const state = {
   draftGrid: undefined, // grid being edited in the settings dialog (shown live)
   fogMode: null, // DM drawing fog: 'reveal' | 'cover'
   fogDraw: null, // the rectangle being drawn: { pointer, a, b }
-  wallMode: null, // DM working on walls: 'wall' | 'low' | 'door' | 'lock' | 'light' | 'erase'
+  wallMode: null, // DM working on walls: 'wall' | 'low' | 'door' | 'lock' | 'light' | 'difficult' | 'erase'
+  terrainDraw: null, // difficult terrain being drawn: { pointer, a, b }
   wallDraw: null, // the wall being drawn: { pointer, a, b, sx, sy }
   live: null, // AbortController for the live stream
   pins: new Map(), // map id -> this person's private pins on it
@@ -234,6 +235,7 @@ function render() {
   stage.style.width = `${width}px`;
   stage.style.height = `${height}px`;
   renderGrid();
+  renderTerrain();
   renderFog();
   renderWalls();
   renderTemplates();
@@ -350,7 +352,7 @@ function renderFogTools() {
   memory.disabled = !map.fog.enabled || !map.fog.sight || map.fog.map !== 'dark';
   for (const b of walls.querySelectorAll('[data-wall-mode]')) b.setAttribute('aria-pressed', String(state.wallMode === b.dataset.wallMode));
   $('#map-walls-draft').disabled = map.wall_draft.status === 'pending';
-  walls.querySelector('[data-wall-action="clear-ai"]').disabled = !map.walls.some((w) => w.source === 'ai');
+  walls.querySelector('[data-wall-action="clear-ai"]').disabled = ![...map.walls, ...(map.lights ?? []), ...(map.terrain ?? [])].some((w) => w.source === 'ai');
   walls.querySelector('[data-wall-action="forget"]').disabled = !map.fog?.enabled || !map.fog.sight || !map.fog.memory;
   const count = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const doors = map.walls.filter((w) => w.door).length;
@@ -392,6 +394,34 @@ function renderWalls() {
   for (const w of list) svg.append(line(w, cls(w)));
   const d = state.wallDraw;
   if (d) svg.append(line({ x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y }, `wall-draft${state.wallMode === 'door' || state.wallMode === 'low' ? ` ${state.wallMode}` : ''}`));
+}
+
+/** Difficult terrain: hatched areas (players get the ones they can see). */
+function renderTerrain() {
+  const map = state.current;
+  const svg = $('#map-terrain');
+  svg.setAttribute('viewBox', `0 0 ${map.image.width} ${map.image.height}`);
+  svg.classList.toggle('players', !state.canEdit);
+  const size = squarePx(map) / 3;
+  const pattern = svgEl('pattern', { id: 'map-terrain-hatch', patternUnits: 'userSpaceOnUse', width: size, height: size, patternTransform: 'rotate(45)' });
+  pattern.append(svgEl('line', { x1: 0, y1: 0, x2: 0, y2: size, class: 'hatch' }));
+  const defs = svgEl('defs', {});
+  defs.append(pattern);
+  const pts = (list) => list.map((p) => p.join(',')).join(' ');
+  svg.replaceChildren(defs, ...(map.terrain ?? []).map((a) => svgEl('polygon', { points: pts(a.points), class: `difficult${a.source === 'ai' ? ' ai' : ''}` })));
+  if (state.terrainDraw) {
+    const r = fogRect(map, state.terrainDraw.a, state.terrainDraw.b);
+    svg.append(svgEl('polygon', { points: pts([[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]]), class: 'difficult' }));
+  }
+}
+
+async function terrain(body) {
+  try {
+    const saved = await state.guarded(() => api('PATCH', `${base()}/${state.current.id}/terrain`, body));
+    if (saved) onMap(saved);
+  } catch (err) {
+    report(err);
+  }
 }
 
 /** Open or close a door (anyone: players only doors next to their token; the server checks). */
@@ -809,6 +839,9 @@ function wallUp(e) {
     const near = nearestWall(map, at, SNAP_PX / state.view.k);
     const door = doorAt(e.clientX, e.clientY);
     if (state.wallMode === 'erase' && near) walls({ remove: near.id });
+    else if (state.wallMode === 'erase' && (map.terrain ?? []).some((a) => pointInPolygon(at.x, at.y, a.points))) {
+      terrain({ remove: map.terrain.findLast((a) => pointInPolygon(at.x, at.y, a.points)).id });
+    }
     else if (state.wallMode === 'door' && door) walls({ toggle: door.id });
     else if (state.wallMode === 'lock' && door) walls({ lock: door.id });
     return;
@@ -865,6 +898,11 @@ function viewDown(e) {
     state.fogDraw = { pointer: e.pointerId, a: at, b: at };
     return;
   }
+  if (state.wallMode === 'difficult' && !state.pointers.size && !state.terrainDraw) {
+    const at = toImage(e.clientX, e.clientY);
+    state.terrainDraw = { pointer: e.pointerId, a: at, b: at };
+    return;
+  }
   if (state.wallMode && !state.pointers.size && !state.wallDraw) {
     const at = snapWallPoint(state.current, toImage(e.clientX, e.clientY), SNAP_PX / state.view.k);
     state.wallDraw = { pointer: e.pointerId, a: at, b: at, sx: e.clientX, sy: e.clientY };
@@ -895,6 +933,10 @@ function viewMove(e) {
   if (state.fogDraw?.pointer === e.pointerId) {
     state.fogDraw.b = toImage(e.clientX, e.clientY);
     return renderFog();
+  }
+  if (state.terrainDraw?.pointer === e.pointerId) {
+    state.terrainDraw.b = toImage(e.clientX, e.clientY);
+    return renderTerrain();
   }
   if (state.wallDraw?.pointer === e.pointerId) {
     state.wallDraw.b = snapWallPoint(state.current, toImage(e.clientX, e.clientY), SNAP_PX / state.view.k);
@@ -940,6 +982,13 @@ function viewUp(e) {
     return;
   }
   if (state.wallDraw?.pointer === e.pointerId) return wallUp(e);
+  if (state.terrainDraw?.pointer === e.pointerId) {
+    const r = fogRect(state.current, state.terrainDraw.a, state.terrainDraw.b);
+    state.terrainDraw = null;
+    renderTerrain();
+    if (e.type === 'pointerup' && r.w > 0 && r.h > 0) terrain({ add: { points: [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]] } });
+    return;
+  }
   const p = state.pointers.get(e.pointerId);
   state.pointers.delete(e.pointerId);
   // A click on the map itself (not a drag) drops a pin when placing one, else clears the selection.
@@ -965,7 +1014,7 @@ function tokenDown(e, token) {
   if (!canMove(token)) return select(token.id);
   $('#map-view').setPointerCapture(e.pointerId);
   const at = toImage(e.clientX, e.clientY);
-  state.drag = { id: token.id, pointer: e.pointerId, start: { x: token.x, y: token.y }, grab: { x: at.x - token.x, y: at.y - token.y }, x: token.x, y: token.y, moved: false, sx: e.clientX, sy: e.clientY };
+  state.drag = { id: token.id, pointer: e.pointerId, start: { x: token.x, y: token.y }, grab: { x: at.x - token.x, y: at.y - token.y }, x: token.x, y: token.y, moved: false, sx: e.clientX, sy: e.clientY, waypoints: [], lastEvent: e };
 }
 
 function tokenMove(e) {
@@ -973,6 +1022,7 @@ function tokenMove(e) {
   if (e.pointerId !== drag.pointer) return;
   if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
   drag.moved = true;
+  drag.lastEvent = e;
   const at = toImage(e.clientX, e.clientY);
   drag.x = at.x - drag.grab.x;
   drag.y = at.y - drag.grab.y;
@@ -984,16 +1034,36 @@ function tokenMove(e) {
   el.style.left = `${drag.x - d / 2}px`;
   el.style.top = `${drag.y - d / 2}px`;
   el.classList.add('dragging');
-  // How far it's going, measured to where it would land.
+  // How far it's going, along its waypoints to where it would land (difficult terrain costs double).
   const end = snapToken(map, token, drag.x, drag.y);
-  const distance = formatDistance(measure(map, drag.start, end));
+  const cost = pathCost(map, [drag.start, ...drag.waypoints, end]);
+  let distance = formatDistance(cost);
+  if (cost?.difficult) distance += ' · difficult';
+  // In a fight: how much of its speed it has used this turn.
+  const entry = map.combat?.entries.find((x) => x.id === token.id);
+  const over = !!(entry && token.move_speed && entry.moved + cost.value > token.move_speed);
+  if (cost && entry && token.move_speed) distance += ` · ${Math.round((entry.moved + cost.value) * 10) / 10} / ${token.move_speed} ${cost.unit} this turn`;
   const label = $('#map-measure');
   label.hidden = !distance;
   label.textContent = distance;
+  label.classList.toggle('over', over);
   const box = $('#map-view').getBoundingClientRect();
   label.style.left = `${e.clientX - box.left + 14}px`;
   label.style.top = `${e.clientY - box.top - 30}px`;
   renderRuler();
+}
+
+/** While dragging a token, Space (or W) turns here: a waypoint where it would land now. */
+function addWaypoint() {
+  const drag = state.drag;
+  const map = state.current;
+  const token = drag?.moved && map?.tokens.find((t) => t.id === drag.id);
+  if (!token) return false;
+  const at = snapToken(map, token, drag.x, drag.y);
+  const last = drag.waypoints.at(-1) ?? drag.start;
+  if (at.x !== last.x || at.y !== last.y) drag.waypoints.push(at);
+  tokenMove(drag.lastEvent);
+  return true;
 }
 
 async function tokenUp(e) {
@@ -1001,6 +1071,7 @@ async function tokenUp(e) {
   if (e.pointerId !== drag.pointer) return;
   state.drag = null;
   $('#map-measure').hidden = true;
+  $('#map-measure').classList.remove('over');
   renderRuler();
   const map = state.current;
   const token = map.tokens.find((t) => t.id === drag.id);
@@ -1009,7 +1080,8 @@ async function tokenUp(e) {
   Object.assign(token, snapToken(map, token, drag.x, drag.y));
   renderTokens();
   try {
-    const res = await state.guarded(() => api('PATCH', `${base()}/${map.id}/tokens/${token.id}`, { x: drag.x, y: drag.y }));
+    const path = drag.waypoints.map((p) => [p.x, p.y]);
+    const res = await state.guarded(() => api('PATCH', `${base()}/${map.id}/tokens/${token.id}`, { x: drag.x, y: drag.y, ...(path.length && { path }) }));
     if (res) onMap(res.map);
   } catch (err) {
     Object.assign(token, drag.start);
@@ -1108,11 +1180,14 @@ function renderRuler() {
   svg.replaceChildren();
   let line = null;
   const token = state.drag?.moved && map.tokens.find((t) => t.id === state.drag.id);
-  if (token) line = [state.drag.start, snapToken(map, token, state.drag.x, state.drag.y)];
+  if (token) line = [state.drag.start, ...state.drag.waypoints, snapToken(map, token, state.drag.x, state.drag.y)];
   else if (state.ruler) line = [state.ruler.a, state.ruler.b];
   if (line) {
-    const [a, b] = line;
-    for (const cls of ['ruler-halo', 'ruler']) svg.append(svgEl('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: cls }));
+    for (let i = 1; i < line.length; i++) {
+      const [a, b] = [line[i - 1], line[i]];
+      for (const cls of ['ruler-halo', 'ruler']) svg.append(svgEl('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: cls }));
+    }
+    for (const p of line.slice(1, -1)) svg.append(svgEl('circle', { cx: p.x, cy: p.y, r: squarePx(map) / 6, class: 'waypoint' }));
   }
   if (state.drag) return; // the drag shows its own distance
   const label = $('#map-measure');
@@ -1775,6 +1850,9 @@ export function initMapActions() {
     if (!state.fitted) fit();
   }).observe(view);
 
+  document.addEventListener('keydown', (e) => {
+    if ((e.key === ' ' || e.key === 'w' || e.key === 'W') && state.drag && addWaypoint()) e.preventDefault();
+  });
   $('#map-pick').addEventListener('change', (e) => show(state.maps.find((m) => m.id === e.target.value) ?? null));
   $('#map-fit').addEventListener('click', fit);
   const showGrid = $('#map-show-grid');
@@ -1829,7 +1907,9 @@ export function initMapActions() {
   for (const b of document.querySelectorAll('[data-wall-action]')) {
     b.addEventListener('click', () => {
       if (b.dataset.wallAction === 'clear-ai') {
-        if (confirm('Remove all the walls the AI drafted? Walls you drew stay.')) walls({ clear: 'ai' });
+        if (confirm("Remove everything the AI drafted (walls, lights, difficult terrain)? What you drew stays.")) {
+          walls({ clear: 'ai' }).then(() => lights({ clear: 'ai' })).then(() => terrain({ clear: 'ai' }));
+        }
       } else if (confirm('Make players forget the places they saw before?')) {
         fog({ forget: true });
       }

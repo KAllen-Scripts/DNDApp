@@ -6,6 +6,7 @@ import {
   PERSON_KIND, MAX_PINS, PIN_COLOR, TOKEN_COLORS,
   normalizeWalls, segmentsCross, wallBetween, sightPolygon, pointInPolygon, sightOf, canSee, fogMask, nearestWall, snapWallPoint,
   distanceToWall, doorReach,
+  pathCost, isDifficult, speedFromText, normalizeTerrain,
   litAreas, inView, normalizeLights, normalizeLightRadii,
   normalizeCombat, stepTurn, dexModifier, normalizeTemplates, templateShape, tokensInTemplate, inTemplate, snapTemplatePoint, spellArea,
 } from '../src/map.js';
@@ -284,7 +285,7 @@ test('normalizeCombat keeps the turn order sorted, drops tokens that are gone, a
   assert.equal(c.turn, null, "Hal hasn't rolled, so it can't be his turn");
   assert.equal(c.round, 2);
   assert.equal(normalizeCombat(null, tokens), null);
-  assert.deepEqual(normalizeMap({ tokens: [{ id: 'aaaaaa' }], combat: { entries: [{ id: 'aaaaaa', init: 5 }], turn: 'aaaaaa' } }).combat, { round: 1, turn: 'aaaaaa', entries: [{ id: 'aaaaaa', init: 5, mod: null }] });
+  assert.deepEqual(normalizeMap({ tokens: [{ id: 'aaaaaa' }], combat: { entries: [{ id: 'aaaaaa', init: 5 }], turn: 'aaaaaa' } }).combat, { round: 1, turn: 'aaaaaa', entries: [{ id: 'aaaaaa', init: 5, mod: null, moved: 0 }] });
 });
 
 test('stepTurn goes round the rolled entries, into the next round and back', () => {
@@ -406,4 +407,31 @@ test('lights and token light radii are normalised', () => {
   assert.deepEqual(normalizeLights([{ id: 'llllll', x: 900, y: 5, bright: 5, dim: 5, source: 'ai' }, { id: 'mmmmmm', bright: 0 }], { width: 700, height: 490 }),
     [{ id: 'llllll', x: 700, y: 5, bright: 5, dim: 5, source: 'ai' }]);
   assert.equal(normalizeMap({}).fog.dark, false);
+});
+
+// ---------- movement ----------
+
+test('pathCost: squares the 5e way along waypoints, double in difficult terrain; length off a grid', () => {
+  const map = normalizeMap({
+    image: { width: 700, height: 490 }, grid: { size: 35, x: 0, y: 0 }, scale: { distance: 5, unit: 'ft', per: 'square' },
+    terrain: [{ id: 'dddddd', points: [[105, 0], [175, 0], [175, 490], [105, 490]] }], // columns 3 and 4
+  });
+  const p = (x, y) => ({ x: x * 35 + 17.5, y: y * 35 + 17.5 });
+  assert.deepEqual(pathCost(map, [p(0, 0), p(2, 0)]), { value: 10, unit: 'ft', squares: 2, difficult: false });
+  // Across the two difficult columns: 1 + 1 + 2 + 2 + 1.
+  assert.deepEqual(pathCost(map, [p(0, 0), p(5, 0)]), { value: 35, unit: 'ft', squares: 7, difficult: true });
+  // Waypoints: down 2, then across 2 diagonally (each diagonal step one square).
+  assert.equal(pathCost(map, [p(0, 0), p(0, 2), p(2, 4)]).squares, 4);
+  assert.ok(isDifficult(map, 120, 300));
+  const free = normalizeMap({ image: { width: 1000, height: 500 }, scale: { distance: 100, unit: 'ft', per: 'width' } });
+  assert.deepEqual(pathCost(free, [{ x: 0, y: 0 }, { x: 300, y: 400 }]), { value: 50, unit: 'ft', difficult: false });
+  assert.equal(pathCost(normalizeMap({ image: { width: 10, height: 10 } }), [{ x: 0, y: 0 }, { x: 5, y: 5 }]), null);
+});
+
+test('speedFromText and normalizeTerrain', () => {
+  assert.equal(speedFromText('30 ft., fly 60 ft.'), 30);
+  assert.equal(speedFromText('Speed 25 feet'), 25);
+  assert.equal(speedFromText(''), null);
+  assert.deepEqual(normalizeTerrain([{ id: 'dddddd', points: [[0, 0], [900, 0], [10, 10]], source: 'ai' }, { id: 'eeeeee', points: [[0, 0], [1, 1]] }], { width: 700, height: 490 }),
+    [{ id: 'dddddd', points: [[0, 0], [700, 0], [10, 10]], source: 'ai' }]);
 });

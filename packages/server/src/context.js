@@ -42,7 +42,7 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const sheetImport = createSheetImport({ llm });
   const pictures = createPictures({ db, archive, store });
   const pictureDescriber = createPictureDescriber({ llm });
-  const maps = createMaps({ db, archive, store, pictures });
+  const maps = createMaps({ db, archive, store, pictures, sheets });
   const mapReader = createMapReader({ llm });
   const statBlocks = createStatBlocks({ llm });
 
