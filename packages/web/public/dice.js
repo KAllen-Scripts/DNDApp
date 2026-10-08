@@ -5,11 +5,11 @@
  * the DM makes it), or only you; others' rolls arrive live (table.js).
  *
  * The server decides every roll (POST /campaigns/:cid/roll). The dice are then
- * thrown and land on the server's numbers, by one of several rollers (ROLLERS
+ * thrown and land on the server's numbers, by one of two rollers (ROLLERS
  * below; the server's DICE_ROLLER setting picks the default, and the tray can
- * pick another for this browser). The roller is loaded the first time someone
- * rolls. If WebGL isn't there, the 3D rollers fall back to the light one. With
- * reduced motion or the dice switched off, the result just appears.
+ * pick the other for this browser). The roller is loaded when the tray opens or
+ * on the first roll. If one can't start here, the other is tried; without WebGL,
+ * with reduced motion or with the dice switched off, the result just appears.
  */
 import { api, h, storage } from './api.js';
 import { parseRoll } from './shared/dice.js';
@@ -22,19 +22,15 @@ const MAX_3D_DICE = 30;
 const MODE_NAMES = { normal: 'Normal', advantage: 'Advantage', disadvantage: 'Disadvantage' };
 
 /**
- * The rollers, heaviest first. module is what's loaded (its default export
- * works like dice-box-threejs); hold is how long the dice stay after landing.
- * "none" shows only the result.
+ * The rollers. module is what's loaded (its default export works like
+ * dice-box-threejs); hold is how long the dice stay after landing. Internally,
+ * "none" means no dice can be shown here, so only the result appears.
  */
 export const ROLLERS = {
   deluxe: { name: 'Deluxe 3D', about: 'The fanciest: glossy, metal and see-through dice with reflections, soft shadows, glowing numbers and sounds', module: './dice-deluxe.js', hold: 2200 },
   classic: { name: 'Classic 3D', about: 'Full physics with shadows (slowest, about 3.5 s a roll)', module: '/vendor/dice/dice-box.js', hold: 2600 },
-  quick: { name: 'Quick 3D', about: 'The same 3D dice, no shadows, landing in about 1.5 s', module: './dice-quick.js', hold: 1800 },
-  lite: { name: 'Lite', about: '3D-looking dice drawn without WebGL or physics, about 1.2 s', module: './dice-lite.js', hold: 1600, options: { mode: 'lite' } },
-  flat: { name: 'Flat', about: 'Flat dice that spin in, under a second', module: './dice-lite.js', hold: 1400, options: { mode: 'flat' } },
-  none: { name: 'None', about: 'Just the result' },
 };
-const DEFAULT_ROLLER = 'quick';
+const DEFAULT_ROLLER = 'deluxe';
 
 /**
  * Dice styles: colours and textures for dice-box-threejs (its texture names;
@@ -102,11 +98,13 @@ try {
 const saveSettings = () => storage.set(SETTINGS_KEY, JSON.stringify(state.settings));
 
 const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-/** The roller to use: this browser's choice, else the server's, falling back to Lite where the 3D ones can't run. */
+/** The roller wanted: this browser's choice, else the server's. */
+const wantedRoller = () => (state.settings.roller in ROLLERS ? state.settings.roller : state.serverRoller in ROLLERS ? state.serverRoller : DEFAULT_ROLLER);
+/** The roller to use: the one wanted, else the other where that one can't start here, else none. */
 function rollerKey() {
-  let key = state.settings.roller in ROLLERS ? state.settings.roller : state.serverRoller in ROLLERS ? state.serverRoller : DEFAULT_ROLLER;
-  if (state.failed.has(key) && key !== 'lite' && key !== 'flat') key = 'lite';
-  return state.failed.has(key) ? 'none' : key;
+  const key = wantedRoller();
+  if (!state.failed.has(key)) return key;
+  return Object.keys(ROLLERS).find((k) => !state.failed.has(k)) ?? 'none';
 }
 const animated = () => state.settings.threeD && rollerKey() !== 'none' && !reducedMotion?.matches;
 const effects = () => state.settings.effects && !reducedMotion?.matches;
@@ -276,7 +274,7 @@ async function animate(result, id) {
   let box;
   let key;
   try {
-    // A 3D roller that can't run here falls back to Lite (rollerKey skips failed ones).
+    // A roller that can't run here falls back to the other (rollerKey skips failed ones).
     for (;;) {
       key = rollerKey();
       if (key === 'none') return;
@@ -479,8 +477,8 @@ function drawSettings() {
   const threeD = $('#dice-3d');
   if (!threeD) return;
   const key = rollerKey();
-  const wanted = state.settings.roller in ROLLERS ? state.settings.roller : state.serverRoller;
-  const none = key === 'none' && wanted !== 'none';
+  const wanted = wantedRoller();
+  const none = key === 'none';
   threeD.checked = state.settings.threeD && !none;
   threeD.disabled = none || !!reducedMotion?.matches;
   $('#dice-3d-note').textContent = none

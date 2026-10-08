@@ -106,7 +106,7 @@ test('dice: notation the server refuses is reported in the tray', async () => {
 
 test('dice: with 3D on, the dice are told to land on the server\'s numbers (a d100 is a tens and a units die)', async () => {
   fixDice([14, 3, 47]);
-  await withPage({ page: (t) => ({ as: t.sam, storage: { 'dndapp.dice': JSON.stringify({ sound: false }) } }) }, async (page) => {
+  await withPage({ page: (t) => ({ as: t.sam, storage: { 'dndapp.dice': JSON.stringify({ sound: false, roller: 'classic' }) } }) }, async (page) => {
     thrown().length = 0;
     page.click('#dice-open');
     page.type('#dice-notation', '1d20+1d6+1d100');
@@ -119,19 +119,19 @@ test('dice: with 3D on, the dice are told to land on the server\'s numbers (a d1
   mock.restoreAll();
 });
 
-test('dice: if the 3D dice can\'t start (no WebGL), the light dice take over and the setting says so', async () => {
+test('dice: where no 3D dice can start (no WebGL), the result just appears and the setting says so', async () => {
   globalThis.__diceBox = { thrown: [], made: [], fail: true };
   fixDice([3]);
   try {
-    await withPage({ page: (t) => ({ as: t.sam, storage: { 'dndapp.dice': JSON.stringify({ sound: false }) } }) }, async (page) => {
+    await withPage({ page: (t) => ({ as: t.sam, storage: { 'dndapp.dice': JSON.stringify({ sound: false, roller: 'classic' }) } }) }, async (page) => {
       page.click('#dice-open');
       page.type('#dice-notation', '1d4');
       page.submit('#dice-panel form');
-      await page.waitFor(() => page.visible('#dice-result'));
+      await page.waitFor(() => page.visible('#dice-result'), { timeout: 8000 });
       assert.equal(page.text('#dice-result .dr-total'), '3');
-      assert.match(page.text('#dice-3d-note'), /Quick 3D dice aren't available on this device, so it uses Lite/);
-      assert.equal(page.$('#dice-3d').checked, true, 'still animated, by Lite');
-      assert.equal(page.$$('#dice-stage canvas').length, 1, 'the light dice drew on their own canvas');
+      await page.waitFor(() => /Dice aren't available on this device/.test(page.text('#dice-3d-note')), { timeout: 8000 });
+      assert.equal(page.$('#dice-3d').checked, false);
+      assert.ok(page.$('#dice-3d').disabled);
     });
   } finally {
     globalThis.__diceBox.fail = false;
@@ -152,63 +152,23 @@ test('dice: the server\'s DICE_ROLLER picks the roller; the tray can pick anothe
     await page.waitFor(() => page.visible('#dice-result'));
     assert.deepEqual(globalThis.__diceBox.made, ['FakeDiceBox'], 'the classic library, as it comes');
 
-    page.type('#dice-roller', 'quick');
-    assert.equal(JSON.parse(page.window.localStorage.getItem('dndapp.dice')).roller, 'quick');
+    // Only two rollers to pick from; Deluxe can't start without WebGL (jsdom), so Classic carries on.
+    assert.deepEqual([...page.$('#dice-roller').options].map((o) => o.value), ['', 'deluxe', 'classic']);
+    page.type('#dice-roller', 'deluxe');
+    assert.equal(JSON.parse(page.window.localStorage.getItem('dndapp.dice')).roller, 'deluxe');
     page.submit('#dice-panel form');
-    await page.waitFor(() => thrown().length === 2);
-    assert.deepEqual(globalThis.__diceBox.made, ['FakeDiceBox', 'QuickDiceBox']);
+    await page.waitFor(() => thrown().length === 2, { timeout: 8000 });
+    assert.match(page.text('#dice-3d-note'), /Deluxe 3D dice aren't available on this device, so it uses Classic 3D/);
   });
   mock.restoreAll();
 });
 
-test('dice: the quick roller turns shadows off and speeds the physics up', async () => {
-  fixDice([2]);
-  await withPage({ page: (t) => ({ as: t.sam, storage: { 'dndapp.dice': JSON.stringify({ sound: false }) } }) }, async (page) => {
-    globalThis.__diceBox.made = [];
+test("dice: Deluxe is the default; a roller this browser picked that no longer exists goes back to the server's choice", async () => {
+  await withPage({ page: (t) => ({ as: t.sam, storage: { 'dndapp.dice': JSON.stringify({ sound: false, roller: 'lite' }) } }) }, async (page) => {
     page.click('#dice-open');
-    page.type('#dice-notation', '1d8');
-    page.submit('#dice-panel form');
-    await page.waitFor(() => page.visible('#dice-result'));
-    assert.deepEqual(globalThis.__diceBox.made, ['QuickDiceBox'], 'quick is the default');
-    const box = globalThis.__diceBox.last;
-    assert.equal(box.options.shadows, false);
-    assert.equal(box.options.gravity_multiplier, 700);
-    box.world.step(1 / 60);
-    assert.equal(box.world.steps.at(-1), 1.5 / 60, 'time runs 1.5× fast');
-    box.spawnDice({});
-    assert.equal(box.diceList.at(-1).body.sleepTimeLimit, 0.3, 'dice count as stopped sooner');
+    assert.equal(page.$('#dice-roller').value, '');
+    assert.equal(page.$('#dice-roller').options[0].textContent, "Server's choice (Deluxe 3D)");
   });
-  mock.restoreAll();
-});
-
-test('dice: the lite and flat rollers land on the server\'s numbers without WebGL; "None" shows just the result', async () => {
-  for (const roller of ['lite', 'flat']) {
-    fixDice([17]);
-    await withPage({ page: (t) => ({ as: t.sam, storage: { 'dndapp.dice': JSON.stringify({ sound: false, roller }) } }) }, async (page) => {
-      thrown().length = 0;
-      page.click('#dice-open');
-      page.type('#dice-notation', '1d20');
-      page.submit('#dice-panel form');
-      await page.settle();
-      assert.ok(page.$('#dice-stage').classList.contains('rolling'), `${roller}: dice on the stage`);
-      assert.ok(!page.visible('#dice-result'), `${roller}: the result waits for the dice to land`);
-      await page.waitFor(() => page.visible('#dice-result'));
-      assert.equal(page.text('#dice-result .dr-total'), '17');
-      assert.equal(thrown().length, 0, 'the 3D library was never asked');
-    });
-    mock.restoreAll();
-  }
-  fixDice([9]);
-  await withPage({ page: (t) => ({ as: t.sam, storage: { 'dndapp.dice': JSON.stringify({ sound: false, roller: 'none' }) } }) }, async (page) => {
-    page.click('#dice-open');
-    page.type('#dice-notation', '1d12');
-    page.submit('#dice-panel form');
-    await page.settle();
-    assert.equal(page.text('#dice-result .dr-total'), '9');
-    assert.ok(!page.$('#dice-stage').classList.contains('rolling'));
-    assert.equal(page.text('#dice-3d-note'), '');
-  });
-  mock.restoreAll();
 });
 
 test('dice: settings and the chosen style are kept in this browser', async () => {
@@ -254,7 +214,7 @@ test('dice: every roller\'s canvas sits on top of the others in the stage (a sec
   assert.match(rule, /inset:\s*0/);
 });
 
-test('dice: the Deluxe roller falls back to Lite where WebGL can\'t start, and the result still shows', async () => {
+test('dice: the Deluxe roller falls back to Classic where WebGL can\'t start, and the result still shows', async () => {
   fixDice([12]);
   await withPage({ page: (t) => ({ as: t.sam, storage: { 'dndapp.dice': JSON.stringify({ sound: false, roller: 'deluxe' }) } }) }, async (page) => {
     page.click('#dice-open');
@@ -262,7 +222,7 @@ test('dice: the Deluxe roller falls back to Lite where WebGL can\'t start, and t
     page.submit('#dice-panel form');
     await page.waitFor(() => page.visible('#dice-result'), { timeout: 8000 });
     assert.equal(page.text('#dice-result .dr-total'), '12');
-    await page.waitFor(() => /Deluxe 3D dice aren't available on this device, so it uses Lite/.test(page.text('#dice-3d-note')));
+    await page.waitFor(() => /Deluxe 3D dice aren't available on this device, so it uses Classic 3D/.test(page.text('#dice-3d-note')));
   });
   mock.restoreAll();
 });

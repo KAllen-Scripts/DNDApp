@@ -22,7 +22,7 @@
  * loadSounds), plus screenPosition(die) and glow(die, kind).
  */
 import * as THREE from '/vendor/three/three.module.js';
-import { SHAPES, parseForced, faceLabel } from './dice-lite.js';
+import { SHAPES, parseForced, faceLabel } from './dice-shapes.js';
 import { simulate, STEP, dieRadius } from './dice-physics.js';
 
 const SPEED = 1.2; // the throw plays a little faster than it was worked out: snappier

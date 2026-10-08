@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import './page.js'; // the module hooks: "/vendor/cannon-es.js" is the package the server serves
 const { simulate, STEP } = await import('../public/dice-physics.js');
-const { readDie, quat } = await import('../public/dice-lite.js');
+const { readDie, quat } = await import('../public/dice-shapes.js');
 
 test('dice-physics: thrown dice land on the asked-for numbers, on the table, within a few seconds', () => {
   const dice = [
