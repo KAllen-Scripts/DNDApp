@@ -7,6 +7,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import sharp from 'sharp';
 import { withPage, addDm, importMap, addToken, mapReading, createFakeLLM } from './helpers.js';
 
 const mapLLM = () => createFakeLLM({ structured: async () => mapReading() });
@@ -203,5 +204,86 @@ test('difficult terrain: the DM drags an area (snapped to squares) and erases it
     click(page, 70, 70);
     await page.settle();
     assert.deepEqual((await mapOf(t, map)).terrain, []);
+  });
+});
+
+test('variants: the DM adds a night picture in Map settings and switches to it from the map bar', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => ({ map: await importMap(t, { patch: SHOWN }), dana: await addDm(t) }),
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t, { map }) => {
+    await openMapTab(page);
+    assert.ok(page.$('#map-variant').hidden, 'no other pictures yet');
+    page.click('#map-settings');
+    const night = await sharp({ create: { width: 350, height: 245, channels: 3, background: '#102040' } }).png().toBuffer();
+    page.setFiles('#map-dialog input[type=file]', [{ name: 'clearing-night.png', type: 'image/png', content: night }]);
+    await page.waitFor(() => page.$$('#map-dialog .map-variants .map-row').length === 1, { what: 'the new picture listed' });
+    assert.match(page.text('#map-dialog .map-variants'), /clearing night/);
+    page.$('#map-dialog').close();
+
+    assert.equal(page.$('#map-variant').hidden, false);
+    const src = page.$('#map-image').getAttribute('src');
+    const [variant] = (await mapOf(t, map)).variants;
+    page.type('#map-variant', variant.id);
+    await page.settle();
+    assert.equal((await mapOf(t, map)).variant, variant.id);
+    await page.waitFor(() => page.$('#map-image').getAttribute('src') !== src, { what: 'the night picture loaded' });
+
+    // Removing it in Map settings brings the original back.
+    page.click('#map-settings');
+    page.click('#map-dialog [aria-label="Remove clearing night"]');
+    await page.settle();
+    const after = await mapOf(t, map);
+    assert.deepEqual([after.variant, after.variants], [null, []]);
+    assert.ok(page.$('#map-variant').hidden);
+  });
+});
+
+test('links: the DM puts stairs to the cellar; a player next to them takes their character down', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const map = await importMap(t, { patch: { ...SHOWN, name: 'Keep' } });
+      const cellar = await importMap(t, { patch: { ...SHOWN, name: 'Cellar' } });
+      await addToken(t, map, { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 52.5, y: 52.5 });
+      return { map, cellar, dana: await addDm(t) };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t, { map, cellar }) => {
+    await openMapTab(page);
+    page.type('#map-pick', map.id);
+    await page.settle();
+    page.click('#map-fog-open');
+    page.click('[data-wall-mode=link]');
+    assert.equal(page.$('#map-link-to').value, cellar.id);
+    click(page, 105, 52);
+    await page.settle();
+    const [link] = (await mapOf(t, map)).links;
+    assert.deepEqual([link.x, link.y, link.to], [105, 52, cellar.id]);
+    assert.ok(page.$('#map-links .map-link[aria-label="Way to Cellar"]'));
+  });
+
+  // The player: clicking the stairs takes Thorin (one square away) down, and the view follows.
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const map = await importMap(t, { patch: { ...SHOWN, name: 'Keep' } });
+      const cellar = await importMap(t, { patch: { ...SHOWN, name: 'Cellar' } });
+      await addToken(t, map, { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 52.5, y: 52.5 });
+      await t.request('PATCH', `/campaigns/${t.campaign.id}/maps/${map.id}/links`, { body: { add: { x: 105, y: 52.5, to: cellar.id, label: 'Stairs down' } } });
+      return { map, cellar };
+    },
+    page: (t) => ({ as: t.sam }),
+  }, async (page, t, { map, cellar }) => {
+    await openMapTab(page);
+    page.type('#map-pick', map.id);
+    await page.settle();
+    page.click('#map-links .map-link[aria-label="Stairs down to Cellar"]');
+    await page.settle();
+    assert.equal(page.$('#map-pick').value, cellar.id);
+    assert.ok(tokenEl(page, 'Thorin'), 'Thorin is on the cellar map');
+    assert.deepEqual((await mapOf(t, cellar)).tokens.map((x) => x.name), ['Thorin']);
+    assert.deepEqual((await mapOf(t, map)).tokens, []);
   });
 });

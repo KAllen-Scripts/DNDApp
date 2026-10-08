@@ -193,6 +193,7 @@
         <button id="map-combat-open" class="ghost map-needs-map" aria-pressed="false" title="The turn order in a fight">Initiative</button>
         <button id="map-add-token" class="ghost dm-only map-needs-map">Add token</button>
         <button id="map-fog-open" class="ghost dm-only map-needs-map" aria-pressed="false">Fog &amp; walls</button>
+        <select id="map-variant" class="dm-only" aria-label="Which picture of the map everyone sees" title="Which picture of the map everyone sees" hidden></select>
         <button id="map-settings" class="ghost dm-only map-needs-map">Map settings</button>
         <button id="map-import" class="ghost dm-only">Import map</button>
         <input id="map-file" type="file" accept="image/png,image/jpeg,image/webp,application/pdf,.pdf" hidden>
@@ -219,7 +220,9 @@
         <button class="ghost" data-wall-mode="light" aria-pressed="false" title="Click the map to put a light there (a torch, a brazier, a campfire)">Light</button>
         <select id="map-light-kind" aria-label="Which light"></select>
         <button class="ghost" data-wall-mode="difficult" aria-pressed="false" title="Drag over an area that's hard to move through (moving there costs double)">Difficult terrain</button>
-        <button class="ghost" data-wall-mode="erase" aria-pressed="false" title="Click a wall, door, light or difficult terrain to remove it">Erase</button>
+        <button class="ghost" data-wall-mode="link" aria-pressed="false" title="Click the map to put stairs or a door to another map there">Link</button>
+        <select id="map-link-to" aria-label="Leads to"></select>
+        <button class="ghost" data-wall-mode="erase" aria-pressed="false" title="Click a wall, door, light, difficult terrain or link to remove it">Erase</button>
         <button class="ghost" id="map-walls-draft" title="Let the AI trace the walls and doors from the picture, for you to correct">AI walls</button>
         <button class="ghost" data-wall-action="clear-ai" title="Remove the walls, lights and difficult terrain the AI drafted">Clear AI draft</button>
         <button class="ghost" data-wall-action="forget" title="Players lose the dim view of places they saw before">Forget explored</button>
@@ -236,6 +239,7 @@
           <div id="map-tokens" class="map-tokens"></div>
           <svg id="map-ruler-line" class="map-ruler" preserveAspectRatio="none" aria-hidden="true"></svg>
           <svg id="map-signals" class="map-signals" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <div id="map-links" class="map-links"></div>
           <div id="map-pins" class="map-pins"></div>
         </div>
         <p id="map-empty" class="map-empty muted" hidden></p>

@@ -118,9 +118,39 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
       return write(campaignId, id, { doc: docOf(current), version: current.version }, after, { by, reason }) ?? current;
     },
 
-    imagePath(campaignId, id) {
+    /** The image shown now (the chosen variant, if any), or with `base` the one imported. */
+    imagePath(campaignId, id, { base = false } = {}) {
       const map = maps.get(campaignId, id);
-      return { path: archive.mapImagePath(store.getCampaign(campaignId).slug, id, map.image.file), type: map.image.type };
+      const v = !base && map.variants.find((x) => x.id === map.variant);
+      return { path: archive.mapImagePath(store.getCampaign(campaignId).slug, id, (v || map.image).file), type: (v || map.image).type };
+    },
+
+    /**
+     * Another picture of the same map (DM). The upload is archived as it came
+     * (`variant-<id>-original.<ext>`) beside the copy fitted to the map's size,
+     * so tokens, walls and fog stay in place on it.
+     * @param {{ name: string, original: Buffer, ext: string, fitted: Buffer, type: string, by: number }} input
+     */
+    addVariant(campaignId, id, { name, original, ext, fitted, type, by }) {
+      const map = maps.get(campaignId, id);
+      const slug = store.getCampaign(campaignId).slug;
+      const vid = newTokenId();
+      const file = `variant-${vid}.${{ 'image/jpeg': 'jpg', 'image/webp': 'webp' }[type] ?? 'png'}`;
+      archive.saveMapImage(slug, map.id, `variant-${vid}-original.${ext}`, original);
+      archive.saveMapImage(slug, map.id, file, fitted);
+      return maps.change(campaignId, id, (m) => {
+        m.variants.push({ id: vid, name, file, type });
+      }, { by, reason: 'variant added' });
+    },
+
+    /** Every archived change line of a map, oldest first. */
+    history(campaignId, id) {
+      return archive.readMapChanges(store.getCampaign(campaignId).slug, id);
+    },
+
+    /** Every map ever made in the campaign, removed ones too. */
+    allIds(campaignId) {
+      return db.prepare('SELECT id FROM maps WHERE campaign_id = ? ORDER BY created_at, id').all(campaignId).map((r) => r.id);
     },
 
     /**
@@ -150,9 +180,21 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         }
         return speedFromText(t.stats?.speed) ?? null;
       };
-      const out = { ...map, tokens: map.tokens.map((t) => ({ ...t, picture: picture(t), move_speed: moveSpeed(t) })) };
+      // Where each link leads: the target map's name, or null if it's gone.
+      const target = (to) => {
+        const r = row(map.campaign_id, to);
+        const m = r && fromRow(r);
+        return m && !m.removed ? m : null;
+      };
+      const links = map.links.map((l) => ({ ...l, target: target(l.to) }));
+      const variantKey = map.variant ? `-${map.variant}` : '';
+      const out = {
+        ...map,
+        tokens: map.tokens.map((t) => ({ ...t, picture: picture(t), move_speed: moveSpeed(t) })),
+        links: links.map(({ target: m, ...l }) => ({ ...l, to_name: m?.name ?? null })),
+      };
       delete out.campaign_id;
-      if (role === 'dm') return { ...out, image_key: 'dm', can_edit: true };
+      if (role === 'dm') return { ...out, image_key: `dm${variantKey}`, can_edit: true };
       if (!map.shown) return null;
       const seen = sight.forPlayer(map, userId);
       const tokens = out.tokens.filter((t) => t.user_id === userId || (!t.hidden && canSee(map, seen.polygons, t.x, t.y)));
@@ -182,7 +224,12 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         },
         tokens: tokens
           .map((t) => (t.kind === 'pc' ? { ...t, stats: null, record: null } : { ...t, hp: null, health: healthOf(t.hp), stats: null, record: null })),
-        image_key: seen.key,
+        // Links to maps they're shown, where they can see the link; variants by name only.
+        links: links
+          .filter((l) => l.target?.shown && canSee(map, seen.polygons, l.x, l.y))
+          .map(({ target: m, ...l }) => ({ ...l, to_name: m.name })),
+        variants: map.variants.filter((v) => v.id === map.variant).map(({ id, name }) => ({ id, name })),
+        image_key: `${seen.key}${variantKey}`,
         can_edit: false,
       };
     },

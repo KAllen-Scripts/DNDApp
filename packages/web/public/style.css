@@ -942,6 +942,20 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .map-selection .map-pin-input { flex: 1; min-width: 8rem; max-width: 18rem; width: auto; padding: 0.25rem 0.5rem; }
 .map-selection .map-pin-color { width: 2.2rem; height: 1.9rem; padding: 0.1rem; flex: none; }
 
+/* Links to other maps: a marker that stays the same size on screen. */
+.map-links { position: absolute; inset: 0; pointer-events: none; }
+.map-link {
+  position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; display: grid; place-items: center;
+  transform: scale(var(--unzoom, 1)); border-radius: 6px; background: #3b2f5c; color: #fff; border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.5); pointer-events: auto; cursor: pointer; font-size: 15px; line-height: 1; padding: 0;
+}
+.map-link-label {
+  position: absolute; left: 50%; top: 28px; transform: translateX(-50%);
+  white-space: nowrap; font-size: 12px; padding: 1px 6px; border-radius: 4px; background: rgb(0 0 0 / 0.7); pointer-events: none;
+}
+.map-variants { display: grid; gap: 0.3rem; }
+.map-variants .map-row { align-items: center; }
+
 /* Measuring, spell templates and the turn order (map.js). */
 .map-ruler, .map-templates { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 .map-ruler line { stroke-linecap: round; vector-effect: non-scaling-stroke; }

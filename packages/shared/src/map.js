@@ -128,6 +128,49 @@ export function normalizeLights(list, image = {}) {
   return out;
 }
 
+export const MAX_VARIANTS = 20;
+
+/** Other pictures of a map: [{ id, name, file, type }]. `file` is the fitted copy in the map's archive folder. */
+export function normalizeVariants(list) {
+  const seen = new Set();
+  const out = [];
+  for (const v of Array.isArray(list) ? list : []) {
+    if (!v || !isTokenId(v.id) || seen.has(v.id) || out.length >= MAX_VARIANTS) continue;
+    const file = `variant-${v.id}.${{ 'image/jpeg': 'jpg', 'image/webp': 'webp' }[v.type] ?? 'png'}`;
+    if (v.file !== file) continue;
+    seen.add(v.id);
+    out.push({ id: String(v.id), name: str(v.name, 60) || 'Variant', file, type: pick(v.type, ['image/png', 'image/jpeg', 'image/webp'], 'image/png') });
+  }
+  return out;
+}
+
+export const MAX_LINKS = 50;
+
+/** Ways to another map (stairs, a door, a trapdoor): [{ id, x, y, to (map id), label }]. */
+export function normalizeLinks(list, image = {}) {
+  const { width = 1, height = 1 } = image;
+  const seen = new Set();
+  const out = [];
+  for (const l of Array.isArray(list) ? list : []) {
+    if (!l || !isTokenId(l.id) || seen.has(l.id) || out.length >= MAX_LINKS || !/^[a-f0-9]{10}$/.test(String(l.to))) continue;
+    seen.add(l.id);
+    out.push({
+      id: String(l.id),
+      x: round(num(l.x, { min: 0, max: width, fallback: width / 2 }), 2),
+      y: round(num(l.y, { min: 0, max: height, fallback: height / 2 }), 2),
+      to: String(l.to),
+      label: str(l.label, 60),
+    });
+  }
+  return out;
+}
+
+/** Is a point close enough to a link to use it? Within a square and a half (or 5% of the map's size without a grid). */
+export function nearLink(map, link, x, y) {
+  const reach = map.grid ? map.grid.size * 1.5 : Math.max(map.image.width, map.image.height) * 0.05;
+  return Math.hypot(link.x - x, link.y - y) <= reach;
+}
+
 export const MAX_PINS = 100;
 export const PIN_COLOR = '#d9a400';
 
@@ -250,8 +293,14 @@ export function normalizeMap(input = {}) {
     },
     // Where the image came from, when it was a page of a PDF (kept in the archive too).
     source: m.source?.file === 'source.pdf' ? { file: 'source.pdf', page: Math.max(1, Math.round(num(m.source.page, { min: 1, max: 100_000, fallback: 1 }))) } : null,
+    // Other pictures of the same map (night, after the fire...), fitted to the same size; `variant` is the one shown (null: the original).
+    variants: normalizeVariants(m.variants),
+    variant: null,
+    // Stairs and doors to another map.
+    links: normalizeLinks(m.links, image),
     tokens: [],
   };
+  if (out.variants.some((v) => v.id === m.variant)) out.variant = m.variant;
   // A scale per square means nothing without a grid.
   if (out.scale?.per === 'square' && !out.grid) out.scale = null;
   const seen = new Set();

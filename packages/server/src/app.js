@@ -4,6 +4,7 @@
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import sharp from 'sharp';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
@@ -19,7 +20,7 @@ import { preparedTranscript } from './pipeline/prepare.js';
 import { SheetConflictError } from './sheets/store.js';
 import { SHEET_FORMAT, computeSheet } from '@dndapp/shared/sheet.js';
 import { parseRoll, rollDice, ROLL_MODES } from '@dndapp/shared/dice.js';
-import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, MAX_WALLS, WALL_KINDS, FOG_MAP, TEMPLATE_SHAPES, MAX_TEMPLATES, MAX_LIGHTS, MAX_TERRAIN, pathCost, snapToken, wallBetween, doorReach, distanceToWall, dexModifier, stepTurn, canSee } from '@dndapp/shared/map.js';
+import { TOKEN_KINDS, TOKEN_SIZES, UNITS, SCALE_PER, MAX_TOKENS, MAX_FOG_SHAPES, FOG_OPS, CONDITIONS, PERSON_KIND, MAX_PINS, MAX_WALLS, WALL_KINDS, FOG_MAP, TEMPLATE_SHAPES, MAX_TEMPLATES, MAX_LIGHTS, MAX_TERRAIN, MAX_VARIANTS, MAX_LINKS, nearLink, pathCost, snapToken, wallBetween, doorReach, distanceToWall, dexModifier, stepTurn, canSee } from '@dndapp/shared/map.js';
 import { inspectImage } from './maps/read.js';
 import { isPdf, renderPdfPage } from './maps/pdf.js';
 import { createPlayerImages } from './maps/image.js';
@@ -1021,7 +1022,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     maps.change(cid, map.id, (m) => {
       m.reading = { status: 'pending', error: '', notes: '' };
     }, { by: userId, reason: 'reading' });
-    const buf = fs.readFileSync(maps.imagePath(cid, map.id).path);
+    const buf = fs.readFileSync(maps.imagePath(cid, map.id, { base: true }).path);
     return mapReader
       .read({ buf, width: map.image.width, height: map.image.height, campaignId: cid, userId })
       .then((r) =>
@@ -1051,7 +1052,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     maps.change(cid, map.id, (m) => {
       m.wall_draft = { status: 'pending', error: '', notes: '' };
     }, { by: userId, reason: 'drafting walls' });
-    const buf = fs.readFileSync(maps.imagePath(cid, map.id).path);
+    const buf = fs.readFileSync(maps.imagePath(cid, map.id, { base: true }).path);
     return mapReader
       .walls({ buf, width: map.image.width, height: map.image.height, campaignId: cid, userId })
       .then((r) =>
@@ -1237,19 +1238,20 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       // The file never changes, so the browser can keep it.
       return reply.header('Cache-Control', 'private, max-age=31536000, immutable').send(fs.createReadStream(file));
     }
-    return reply.header('Cache-Control', 'private, no-cache').send(await playerImages.get(map, file, { mask: view.fog.mask, key: view.image_key }));
+    return reply.header('Cache-Control', 'private, no-cache').send(await playerImages.get(map, file, { mask: view.fog.mask, key: view.image_key }, type));
   });
 
   const GRID = z.object({ size: z.number().positive(), x: z.number(), y: z.number() }).nullable();
   const SCALE = z.object({ distance: z.number().positive(), unit: z.enum(UNITS), per: z.enum(SCALE_PER) }).nullable();
 
-  /** Change a map (DM): { name?, shown?, grid?, scale? }. grid/scale null removes them. */
+  /** Change a map (DM): { name?, shown?, grid?, scale?, variant? }. grid/scale null removes them; variant: which picture everyone sees (null: the original). */
   app.patch('/campaigns/:cid/maps/:mid', async (request) => {
     const a = access(request, { dm: true });
     const { map } = viewableMap(request);
     const body = z
-      .object({ name: z.string().trim().min(1).max(100).optional(), shown: z.boolean().optional(), grid: GRID.optional(), scale: SCALE.optional() })
+      .object({ name: z.string().trim().min(1).max(100).optional(), shown: z.boolean().optional(), grid: GRID.optional(), scale: SCALE.optional(), variant: z.string().nullable().optional() })
       .parse(request.body ?? {});
+    if (body.variant != null && !map.variants.some((v) => v.id === body.variant)) throw new NotFoundError('No such variant');
     const saved = maps.change(a.cid, map.id, (m) => {
       if (body.name !== undefined) {
         m.name = body.name;
@@ -1258,8 +1260,102 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
       if (body.shown !== undefined) m.shown = body.shown;
       if (body.grid !== undefined) m.grid = body.grid;
       if (body.scale !== undefined) m.scale = body.scale;
+      if (body.variant !== undefined) m.variant = body.variant;
     }, { by: request.user.id });
     return maps.view(saved, a);
+  });
+
+  /**
+   * Another picture of the same map (DM): { filename, data (base64), name? }, e.g. the same room at night.
+   * It's stretched to the map's size so everything on the map stays in place; the upload is archived as it came.
+   */
+  app.post('/campaigns/:cid/maps/:mid/variants', upload, async (request, reply) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const { filename, data, name } = z
+      .object({ filename: z.string().max(200).default('variant'), data: z.string().min(1), name: z.string().trim().max(60).optional() })
+      .parse(request.body);
+    if (map.variants.length >= MAX_VARIANTS) throw new BadRequestError(`A map can have up to ${MAX_VARIANTS} other pictures.`);
+    const buf = Buffer.from(data, 'base64');
+    if (!buf.length) throw new BadRequestError('The file is empty.');
+    if (isPdf(buf)) throw new BadRequestError('Upload the other picture as a PNG, JPEG or WebP image.');
+    const image = await inspectImage(buf);
+    let fitted = sharp(buf).rotate().resize(map.image.width, map.image.height, { fit: 'fill' });
+    fitted = image.type === 'image/png' ? fitted.png() : image.type === 'image/webp' ? fitted.webp({ quality: 90 }) : fitted.jpeg({ quality: 90 });
+    const fromFile = filename.replace(/\.[^.]*$/, '').replace(/[_-]+/g, ' ').trim().slice(0, 60);
+    const saved = maps.addVariant(a.cid, map.id, { name: name || fromFile || 'Variant', original: buf, ext: image.ext, fitted: await fitted.toBuffer(), type: image.type, by: request.user.id });
+    reply.status(201);
+    return { map: maps.view(saved, a), variant: saved.variants.at(-1) };
+  });
+
+  /** Remove one of a map's other pictures (DM). Its files stay in the archive. If it was showing, the original comes back. */
+  app.delete('/campaigns/:cid/maps/:mid/variants/:vid', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    if (!map.variants.some((v) => v.id === request.params.vid)) throw new NotFoundError('No such variant');
+    const saved = maps.change(a.cid, map.id, (m) => {
+      m.variants = m.variants.filter((v) => v.id !== request.params.vid);
+      if (m.variant === request.params.vid) m.variant = null;
+    }, { by: request.user.id, reason: 'variant removed' });
+    return maps.view(saved, a);
+  });
+
+  /** Links to other maps (DM): { add?: { x, y, to, label? }, move?: { id, x, y }, remove?: id }. `to` is the map it leads to. */
+  app.patch('/campaigns/:cid/maps/:mid/links', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const body = z
+      .object({
+        add: z.object({ x: z.number(), y: z.number(), to: z.string(), label: z.string().trim().max(60).optional() }).optional(),
+        move: z.object({ id: z.string(), x: z.number(), y: z.number() }).optional(),
+        remove: z.string().optional(),
+      })
+      .parse(request.body ?? {});
+    if (body.add) {
+      if (body.add.to === map.id) throw new BadRequestError('A link has to lead to another map.');
+      maps.get(a.cid, body.add.to);
+      if (map.links.length >= MAX_LINKS) throw new BadRequestError(`A map can have up to ${MAX_LINKS} links.`);
+    }
+    if (body.move && !map.links.some((l) => l.id === body.move.id)) throw new NotFoundError('No such link');
+    if (body.remove && !map.links.some((l) => l.id === body.remove)) throw new NotFoundError('No such link');
+    const saved = maps.change(a.cid, map.id, (m) => {
+      if (body.add) m.links.push({ id: newTokenId(), x: body.add.x, y: body.add.y, to: body.add.to, label: body.add.label ?? '' });
+      if (body.move) Object.assign(m.links.find((l) => l.id === body.move.id), { x: body.move.x, y: body.move.y });
+      if (body.remove) m.links = m.links.filter((l) => l.id !== body.remove);
+    }, { by: request.user.id, reason: 'links' });
+    return maps.view(saved, a);
+  });
+
+  /**
+   * Take a token through a link to the other map: { token }. Players move their own character, standing
+   * next to a link they can see, to a map the DM has shown; the DM can send any token. It arrives at the
+   * link on the other map that leads back here, or the middle of that map.
+   */
+  app.post('/campaigns/:cid/maps/:mid/links/:lid/use', async (request) => {
+    const a = access(request);
+    const { map, view } = viewableMap(request);
+    const { token: tid } = z.object({ token: z.string() }).parse(request.body ?? {});
+    const link = view.links.find((l) => l.id === request.params.lid);
+    if (!link) throw new NotFoundError('No such link');
+    const token = map.tokens.find((t) => t.id === tid);
+    if (!token) throw new NotFoundError('No such token');
+    const dm = a.role === 'dm';
+    if (!dm && !(token.kind === 'pc' && token.user_id === request.user.id)) throw new AuthError('You can only move your own character.', 403);
+    if (!dm && !nearLink(map, link, token.x, token.y)) throw new BadRequestError(`Move ${token.name} next to it first.`);
+    const target = maps.get(a.cid, link.to);
+    if (!dm && !target.shown) throw new NotFoundError('No such map');
+    if (target.tokens.length >= MAX_TOKENS) throw new BadRequestError(`${target.name} is full.`);
+    const back = target.links.find((l) => l.to === map.id);
+    const { x, y } = snapToken(target, token, back?.x ?? target.image.width / 2, back?.y ?? target.image.height / 2);
+    maps.change(a.cid, map.id, (m) => {
+      if (m.combat?.turn === token.id) Object.assign(m.combat, stepTurn(m.combat, 1));
+      m.tokens = m.tokens.filter((t) => t.id !== token.id);
+    }, { by: request.user.id, reason: `left for ${target.id}` });
+    const id = target.tokens.some((t) => t.id === token.id) ? newTokenId() : token.id;
+    const arrived = maps.change(a.cid, target.id, (m) => {
+      m.tokens.push({ ...token, id, x, y });
+    }, { by: request.user.id, reason: `arrived from ${map.id}` });
+    return { map: maps.view(arrived, a), token: id };
   });
 
   /**

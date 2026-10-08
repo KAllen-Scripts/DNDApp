@@ -38,7 +38,7 @@ const state = {
   draftGrid: undefined, // grid being edited in the settings dialog (shown live)
   fogMode: null, // DM drawing fog: 'reveal' | 'cover'
   fogDraw: null, // the rectangle being drawn: { pointer, a, b }
-  wallMode: null, // DM working on walls: 'wall' | 'low' | 'door' | 'lock' | 'light' | 'difficult' | 'erase'
+  wallMode: null, // DM working on walls: 'wall' | 'low' | 'door' | 'lock' | 'light' | 'difficult' | 'link' | 'erase'
   terrainDraw: null, // difficult terrain being drawn: { pointer, a, b }
   wallDraw: null, // the wall being drawn: { pointer, a, b, sx, sy }
   live: null, // AbortController for the live stream
@@ -211,12 +211,14 @@ function renderPicker() {
 function render() {
   const map = state.current;
   const empty = $('#map-empty');
+  renderVariantPicker();
   $('#map-stage').hidden = !map;
   for (const b of document.querySelectorAll('.map-needs-map')) b.disabled = !map;
   if (!map) {
     $('#map-image').removeAttribute('src');
     $('#map-tokens').replaceChildren();
     $('#map-pins').replaceChildren();
+    $('#map-links').replaceChildren();
     $('#map-templates').replaceChildren();
     $('#map-ruler-line').replaceChildren();
     renderSelection();
@@ -241,6 +243,7 @@ function render() {
   renderTemplates();
   renderTokens();
   renderRuler();
+  renderLinks();
   renderPins();
   renderSelection();
   renderFogTools();
@@ -351,6 +354,14 @@ function renderFogTools() {
   memory.checked = map.fog.memory;
   memory.disabled = !map.fog.enabled || !map.fog.sight || map.fog.map !== 'dark';
   for (const b of walls.querySelectorAll('[data-wall-mode]')) b.setAttribute('aria-pressed', String(state.wallMode === b.dataset.wallMode));
+  // Where a new link leads: any other map.
+  const linkTo = $('#map-link-to');
+  const others = state.maps.filter((m) => m.id !== map.id);
+  const chosen = linkTo.value;
+  linkTo.replaceChildren(...others.map((m) => new Option(m.name, m.id)));
+  if (others.some((m) => m.id === chosen)) linkTo.value = chosen;
+  linkTo.disabled = !others.length;
+  walls.querySelector('[data-wall-mode="link"]').disabled = !others.length;
   $('#map-walls-draft').disabled = map.wall_draft.status === 'pending';
   walls.querySelector('[data-wall-action="clear-ai"]').disabled = ![...map.walls, ...(map.lights ?? []), ...(map.terrain ?? [])].some((w) => w.source === 'ai');
   walls.querySelector('[data-wall-action="forget"]').disabled = !map.fog?.enabled || !map.fog.sight || !map.fog.memory;
@@ -537,6 +548,66 @@ function renderTokens() {
       return el;
     }),
   );
+}
+
+/** The DM's quick switch between a map's pictures (day and night, before and after). */
+function renderVariantPicker() {
+  const select = $('#map-variant');
+  const map = state.current;
+  select.hidden = !state.canEdit || !map?.variants?.length;
+  if (select.hidden) return select.replaceChildren();
+  select.replaceChildren(new Option('Original picture', ''), ...map.variants.map((v) => new Option(v.name, v.id)));
+  select.value = map.variant ?? '';
+}
+
+/** Stairs and doors to other maps (players get the ones they can see that lead to maps they're shown). */
+function renderLinks() {
+  const map = state.current;
+  $('#map-links').replaceChildren(
+    ...(map.links ?? []).map((l) => {
+      const name = `${l.label || 'Way'} to ${l.to_name ?? 'a removed map'}`;
+      const el = h('button', { type: 'button', class: 'map-link', title: name, 'aria-label': name, 'data-link': l.id }, '⇅', h('span', { class: 'map-link-label' }, l.label || l.to_name || ''));
+      el.style.cssText = `left:${l.x}px;top:${l.y}px`;
+      el.addEventListener('pointerdown', (e) => e.stopPropagation());
+      el.addEventListener('click', () => useLink(l));
+      return el;
+    }),
+  );
+}
+
+/**
+ * Click a link: the DM erasing removes it. Otherwise the selected token (or a player's own
+ * character) goes through to the other map, and the view follows; with no token, just look at that map.
+ */
+async function useLink(link) {
+  const map = state.current;
+  if (state.canEdit && state.wallMode === 'erase') return links({ remove: link.id });
+  const selected = map.tokens.find((t) => t.id === state.selected && canMove(t));
+  const token = selected ?? (state.canEdit ? null : map.tokens.find((t) => t.kind === 'pc' && t.user_id === state.userId));
+  try {
+    if (!token) {
+      const target = state.maps.find((m) => m.id === link.to);
+      if (target) return show(target);
+      return status(`${link.to_name ?? 'That map'} isn't available.`, true);
+    }
+    const res = await state.guarded(() => api('POST', `${base()}/${map.id}/links/${link.id}/use`, { token: token.id }));
+    if (!res) return;
+    onMap(res.map);
+    await show(state.maps.find((m) => m.id === res.map.id) ?? res.map);
+    select(res.token);
+    status(`${token.name} went to ${res.map.name}.`);
+  } catch (err) {
+    report(err);
+  }
+}
+
+async function links(body) {
+  try {
+    const saved = await state.guarded(() => api('PATCH', `${base()}/${state.current.id}/links`, body));
+    if (saved) onMap(saved);
+  } catch (err) {
+    report(err);
+  }
 }
 
 const myPins = () => (state.current && state.pins.get(state.current.id)) || [];
@@ -834,6 +905,10 @@ function wallUp(e) {
       const { bright, dim } = LIGHT_PRESETS[$('#map-light-kind').value] ?? LIGHT_PRESETS.torch;
       return lights({ add: { x: at.x, y: at.y, bright, dim } });
     }
+    if (state.wallMode === 'link') {
+      const to = $('#map-link-to').value;
+      return to ? links({ add: { x: at.x, y: at.y, to } }) : status('Import another map to link to first.', true);
+    }
     const light = state.wallMode === 'erase' && (map.lights ?? []).find((l) => Math.hypot(l.x - at.x, l.y - at.y) <= SNAP_PX / state.view.k);
     if (light) return lights({ remove: light.id });
     const near = nearestWall(map, at, SNAP_PX / state.view.k);
@@ -846,7 +921,7 @@ function wallUp(e) {
     else if (state.wallMode === 'lock' && door) walls({ lock: door.id });
     return;
   }
-  if (state.wallMode === 'erase' || state.wallMode === 'lock' || state.wallMode === 'light') return;
+  if (state.wallMode === 'erase' || state.wallMode === 'lock' || state.wallMode === 'light' || state.wallMode === 'link') return;
   if (Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y) < 1) return;
   walls({ add: { x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y, door: state.wallMode === 'door', kind: state.wallMode === 'low' ? 'low' : 'wall' } });
 }
@@ -1576,6 +1651,48 @@ function settingsDialog() {
   };
   for (const el of [hasGrid, size, gx, gy]) el.addEventListener('input', preview);
 
+  // Other pictures of the same map (night, after the fire): added and removed here at once; which one shows is in the map bar.
+  const variants = h('div', { class: 'map-variants' });
+  const renderVariants = () => {
+    const m = state.maps.find((x) => x.id === map.id) ?? map;
+    variants.replaceChildren(
+      ...m.variants.map((v) => h('div', { class: 'map-row' },
+        h('span', {}, `${v.name}${m.variant === v.id ? ' (showing)' : ''}`),
+        h('button', { type: 'button', class: 'ghost danger', 'aria-label': `Remove ${v.name}`, onclick: async () => {
+          if (!confirm(`Remove the picture "${v.name}"? (It stays in the archive.)`)) return;
+          try {
+            const saved = await state.guarded(() => api('DELETE', `${base()}/${map.id}/variants/${v.id}`));
+            if (saved) onMap(saved);
+            renderVariants();
+          } catch (err) {
+            report(err);
+          }
+        } }, 'Remove'),
+      )),
+    );
+  };
+  const addVariant = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', 'aria-label': 'Another picture of this map' });
+  addVariant.addEventListener('change', async () => {
+    const file = addVariant.files[0];
+    addVariant.value = '';
+    if (!file) return;
+    try {
+      status('Uploading…');
+      const data = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1]);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      const res = await state.guarded(() => api('POST', `${base()}/${map.id}/variants`, { filename: file.name, data }));
+      if (res) onMap(res.map);
+      renderVariants();
+    } catch (err) {
+      report(err);
+    }
+  });
+  renderVariants();
+
   const reading = map.reading;
   const aiText = [map.description, reading.notes].filter(Boolean).join('\n\n');
   const save = async () => {
@@ -1599,6 +1716,10 @@ function settingsDialog() {
       h('p', { class: 'muted small' }, 'The grid is drawn over the map while this is open, so you can line it up.'),
       h('h3', {}, 'Scale'),
       h('div', { class: 'map-row' }, field('Distance', distance), field('Unit', unit), field('Measured', per)),
+      h('h3', {}, 'Other pictures'),
+      h('p', { class: 'muted small' }, 'The same map at night, after a fire, with a secret door showing… Each is stretched to fit this map, so everything stays in place. Pick which one everyone sees in the map bar.'),
+      variants,
+      field('Add a picture', addVariant),
       h('h3', {}, 'What the AI saw'),
       h('p', { class: 'muted small map-ai' }, reading.status === 'pending' ? 'Reading…' : reading.status === 'failed' ? reading.error : aiText || 'Nothing to add.'),
       h('p', { class: 'muted small' }, 'Only you see this.'),
@@ -1923,6 +2044,14 @@ export function initMapActions() {
     });
   }
   $('#map-settings').addEventListener('click', settingsDialog);
+  $('#map-variant').addEventListener('change', async (e) => {
+    try {
+      const saved = await state.guarded(() => api('PATCH', `${base()}/${state.current.id}`, { variant: e.target.value || null }));
+      if (saved) onMap(saved);
+    } catch (err) {
+      report(err);
+    }
+  });
   $('#map-pin').addEventListener('click', () => {
     state.pinMode = !state.pinMode;
     if (state.pinMode) Object.assign(state, { fogMode: null, wallMode: null, measuring: false, templateDraft: null, ruler: null, pinging: false, drawing: false });

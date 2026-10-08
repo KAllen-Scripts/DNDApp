@@ -35,12 +35,12 @@ export function createPlayerImages() {
      * @param {{ mask: object[], key: string }} sight  what this player sees (sight.forPlayer)
      * @returns {Promise<Buffer>} the image file for a player, fog applied
      */
-    async get(map, file, sight) {
+    async get(map, file, sight, type = map.image.type) {
       if (!sight.mask.length) return fs.readFileSync(file);
-      const key = `${map.id}:${sight.key}`;
+      const key = `${map.id}:${file}:${sight.key}`;
       if (cache.has(key)) return cache.get(key);
       let img = sharp(file).rotate().composite([{ input: Buffer.from(fogSvg(map.image, sight.mask)), top: 0, left: 0 }]);
-      img = map.image.type === 'image/png' ? img.png() : map.image.type === 'image/webp' ? img.webp({ quality: 90 }) : img.jpeg({ quality: 90 });
+      img = type === 'image/png' ? img.png() : type === 'image/webp' ? img.webp({ quality: 90 }) : img.jpeg({ quality: 90 });
       const buf = await img.toBuffer();
       cache.set(key, buf);
       if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value);
