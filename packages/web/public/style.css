@@ -485,6 +485,33 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 .sheet-bar #sheet-status { flex: 1; min-width: 12rem; }
 .sheet-bar button { padding: 0.35rem 0.8rem; font-size: 0.9rem; }
 
+/* ---------- the sheet beside the map, or in its own window (sheet-place.js) ---------- */
+
+#app-view.sheet-beside {
+  display: grid; max-width: none;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, var(--sheet-width, 540px));
+  grid-template-rows: auto minmax(0, 1fr);
+}
+#app-view.sheet-beside > .topbar { grid-column: 1 / -1; }
+#app-view.sheet-beside > #tab-map { grid-column: 1; grid-row: 2; padding-right: 8px; }
+#app-view.sheet-beside > #sheet-splitter { grid-column: 2; grid-row: 2; }
+#app-view.sheet-beside > #tab-sheet { grid-column: 3; grid-row: 2; padding-left: 8px; }
+.sheet-splitter {
+  width: 10px; margin-block: 0.75rem 16px; border-radius: 5px; cursor: col-resize; touch-action: none;
+  background: linear-gradient(var(--border), var(--border)) center / 2px 3rem no-repeat;
+}
+.sheet-splitter:hover, .sheet-splitter:focus-visible, .sheet-splitter.dragging { background-color: var(--surface-2); outline: none; }
+/* Too narrow to sit side by side: the sheet goes under the map, each with half the height. */
+@media (max-width: 760px) {
+  #app-view.sheet-beside { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr); }
+  #app-view.sheet-beside > #tab-map { grid-column: 1; grid-row: 2; padding-right: 16px; }
+  #app-view.sheet-beside > #tab-sheet { grid-column: 1; grid-row: 3; padding-left: 16px; border-top: 1px solid var(--border); }
+  #app-view.sheet-beside > #sheet-splitter { display: none; }
+}
+/* The popped-out window: just the sheet. */
+.sheet-window #app-view { max-width: none; }
+.sheet-window :is(.tabs, #switch-campaign, .change-password) { display: none !important; }
+
 /*
  * One set of measurements for the whole sheet, so boxes line up in every
  * layout: --ctl is the height of an ordinary box, --num the width of a small

@@ -46,9 +46,10 @@ let current = null;
  * Open the page. `as` logs in as that account first (anything with a .token,
  * e.g. t.sam, or { token }); `campaign` puts this tab in that campaign;
  * `storage` pre-fills localStorage (e.g. saved settings); `media` says which
- * media queries match ({ 'prefers-reduced-motion: reduce': true }).
+ * media queries match ({ 'prefers-reduced-motion: reduce': true }); `path` is
+ * the address opened (e.g. '/?view=sheet&campaign=1').
  */
-export async function openPage(t, { as = null, campaign = null, storage = {}, answers = {}, media = {}, settle = true } = {}) {
+export async function openPage(t, { as = null, campaign = null, storage = {}, answers = {}, media = {}, path = '/', settle = true } = {}) {
   if (current) throw new Error('openPage: close the previous page first');
   globalThis.__diceBox ??= { thrown: [], fail: false }; // what the fake 3D dice were asked to roll
   if (!t.app.server.listening) await t.app.listen({ port: 0, host: '127.0.0.1' });
@@ -57,7 +58,7 @@ export async function openPage(t, { as = null, campaign = null, storage = {}, an
   const errors = [];
   const virtualConsole = new VirtualConsole();
   virtualConsole.on('jsdomError', (err) => errors.push(err));
-  const dom = new JSDOM(HTML, { url: `${base}/`, pretendToBeVisual: true, runScripts: 'outside-only', virtualConsole });
+  const dom = new JSDOM(HTML, { url: `${base}${path}`, pretendToBeVisual: true, runScripts: 'outside-only', virtualConsole });
   const { window } = dom;
 
   const dialogs = [];
@@ -76,6 +77,10 @@ export async function openPage(t, { as = null, campaign = null, storage = {}, an
     /** Files the page offered to save: { name, text } (text is a promise). */
     downloads: [],
     printed: 0,
+    /** Windows the page opened with window.open(): { url, name, features }. */
+    opened: [],
+    /** Messages the page sent to its other windows (BroadcastChannel): { name, data }. */
+    broadcasts: [],
     /** Requests the page has made: { method, path, body }. */
     requests: [],
     inflight: 0,
@@ -293,6 +298,23 @@ function polyfill(window, page) {
   window.confirm = (message) => { page.dialogs.push({ kind: 'confirm', message: String(message) }); return answer('confirm') ?? true; };
   window.prompt = (message, value) => { page.dialogs.push({ kind: 'prompt', message: String(message), value }); return answer('prompt') ?? null; };
   window.print = () => { page.printed += 1; };
+  // A new window: remembered, not opened. answers.open === false acts like a pop-up blocker.
+  window.open = (url, name, features) => {
+    page.opened.push({ url: String(url), name, features });
+    return page.answers.open === false ? null : { focus() {} };
+  };
+  // Talking to the page's other windows: what it sends is kept; page.broadcast() sends it a message from one.
+  const channels = new Set();
+  window.BroadcastChannel = class {
+    constructor(name) { this.name = name; this.listeners = new Set(); channels.add(this); }
+    postMessage(data) { page.broadcasts.push({ name: this.name, data: structuredClone(data) }); }
+    addEventListener(type, fn) { if (type === 'message') this.listeners.add(fn); }
+    removeEventListener(type, fn) { this.listeners.delete(fn); }
+    close() { channels.delete(this); }
+  };
+  page.broadcast = (name, data) => {
+    for (const c of channels) if (c.name === name) for (const fn of c.listeners) fn(new window.MessageEvent('message', { data }));
+  };
   // A download link: keep what it would save instead of navigating.
   window.addEventListener('click', (e) => {
     const a = e.target.closest?.('a[download]');
