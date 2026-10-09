@@ -1012,6 +1012,57 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .map-bar button, .map-bar select { padding: 0.35rem 0.8rem; font-size: 0.9rem; }
 .map-bar select { max-width: 14rem; }
 .map-panel:not(.can-edit) .dm-only { display: none; }
+/* The DM's edit mode off: their set-up tools hide (map.js). */
+.map-panel.edit-off .map-edit-tool { display: none; }
+
+/* Full screen (map-full.js): the map fills the screen and its toolbars float over it,
+   see-through until pointed at; a tool that's on stays solid so you can tell. */
+:root[data-map-full] #app-view > .topbar { display: none; }
+:root[data-map-full] #app-view { max-width: none; }
+:root[data-map-full] #tab-map { position: relative; padding: 0; }
+:root[data-map-full] .map-view { min-height: 0; border: none; border-radius: 0; }
+:root[data-map-full] .map-bars {
+  position: absolute; z-index: 5; top: 0.5rem; left: 0.5rem; right: 0.5rem; gap: 0.4rem;
+  max-height: calc(100% - 1rem); overflow-y: auto; pointer-events: none;
+}
+:root[data-map-full] .map-bar { flex-direction: row; flex-wrap: wrap; align-items: center; }
+:root[data-map-full] .map-bar + .map-bar { padding-top: 0; border-top: none; }
+:root[data-map-full] .map-bar > * { pointer-events: auto; opacity: 0.55; transition: opacity 0.15s; }
+:root[data-map-full] .map-bar > .map-check, :root[data-map-full] .map-bar > #map-status:not(:empty), :root[data-map-full] .map-bar > .muted {
+  padding: 0.3rem 0.6rem; border-radius: 8px; background: var(--surface); color: var(--text);
+}
+:root[data-map-full] .map-bar > :is(button, select):not([aria-pressed="true"]) { background: var(--surface); color: var(--text); }
+:root[data-map-full] .map-fog-tools { border: none; padding: 0; }
+:root[data-map-full] .map-bar > #map-status { flex: none; min-width: 0; pointer-events: none; }
+/* Only the main tools show (and any that's switched on); More shows the rest after them. */
+#map-more { display: none; }
+:root[data-map-full] #map-more { display: inline-block; order: 2; }
+:root[data-map-full] #map-main-bar > .map-main { order: 1; }
+:root[data-map-full] #map-main-bar > #map-full { order: 3; }
+:root[data-map-full] #map-main-bar > :not(.map-main, #map-more) { order: 4; }
+:root[data-map-full] #map-main-bar:not(.more-open) > :not(.map-main, #map-more, [aria-pressed="true"]) { display: none; }
+:root[data-map-full] #map-main-bar.more-open > #map-status { display: none; }
+:root[data-map-full] .map-bars:is(:hover, :focus-within) .map-bar > *,
+:root[data-map-full] .map-bar > [aria-pressed="true"] { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { :root[data-map-full] .map-bar > * { transition: none; } }
+/* The turn order and the picked token's bar keep clear of the toolbars. */
+:root[data-map-full] .map-combat { top: calc(var(--bars-h, 0px) + 1rem); max-height: calc(100% - var(--bars-h, 0px) - 1.5rem); }
+/* Toolbars along the bottom (Look). */
+:root[data-map-full][data-map-bar="bottom"] .map-bars { top: auto; bottom: 0.5rem; }
+:root[data-map-full][data-map-bar="bottom"] .map-combat { top: 0.5rem; }
+:root[data-map-full][data-map-bar="bottom"] .map-selection { bottom: calc(var(--bars-h, 0px) + 1rem); }
+/* Down the left side (Look); on a phone there isn't room, so along the bottom. */
+@media (min-width: 561px) {
+  :root[data-map-full][data-map-bar="left"] .map-bars { right: auto; bottom: 0.5rem; width: 11.5rem; }
+  :root[data-map-full][data-map-bar="left"] .map-bar { flex-direction: column; align-items: stretch; flex-wrap: nowrap; }
+  :root[data-map-full][data-map-bar="left"] .map-combat { top: 0.5rem; max-height: calc(100% - 1rem); }
+  :root[data-map-full][data-map-bar="left"] .map-selection { left: calc(var(--bars-w, 0px) + 1rem); }
+}
+@media (max-width: 560px) {
+  :root[data-map-full][data-map-bar="left"] .map-bars { top: auto; bottom: 0.5rem; }
+  :root[data-map-full][data-map-bar="left"] .map-combat { top: 0.5rem; }
+  :root[data-map-full][data-map-bar="left"] .map-selection { bottom: calc(var(--bars-h, 0px) + 1rem); }
+}
 .map-check { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; }
 .map-check input { width: auto; margin: 0; }
 .map-view {

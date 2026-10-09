@@ -80,7 +80,7 @@ const TAB_NAMES = { ask: 'Ask', notes: 'Notes', sheet: 'Sheet (players)', invent
 
 const TOOL_NAMES = {
   grid: 'Grid', fit: 'Fit', pin: 'Pin', measure: 'Measure', ping: 'Ping', draw: 'Draw',
-  template: 'Template', initiative: 'Initiative', 'sheet-window': 'Sheet window',
+  template: 'Template', initiative: 'Initiative', fullscreen: 'Full screen', 'sheet-window': 'Sheet window',
 };
 
 // The dialog's groups, shown one at a time so it stays short on a phone.
