@@ -52,6 +52,7 @@ export const base = () => `/campaigns/${state.campaignId}/maps`;
 export const PICK_KEY = () => `dndapp.map.${state.campaignId}`;
 export const SHOW_GRID_KEY = 'dndapp.map.showGrid';
 export const SHOW_WALLS_KEY = 'dndapp.map.showWalls';
+export const EDITING_KEY = 'dndapp.map.editing';
 
 export function status(text, error = false) {
   const el = $('#map-status');

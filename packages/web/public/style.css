@@ -1012,6 +1012,8 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .map-bar button, .map-bar select { padding: 0.35rem 0.8rem; font-size: 0.9rem; }
 .map-bar select { max-width: 14rem; }
 .map-panel:not(.can-edit) .dm-only { display: none; }
+/* The DM's edit mode off: their set-up tools hide (map.js). */
+.map-panel.edit-off .map-edit-tool { display: none; }
 
 /* Full screen (map-full.js): the map fills the screen and its toolbars float over it,
    see-through until pointed at; a tool that's on stays solid so you can tell. */

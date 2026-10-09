@@ -279,7 +279,7 @@
         <select id="map-pick" aria-label="Which map" hidden></select>
         <span id="map-status" class="muted small" role="status"></span>
         <label class="map-check small" data-tool="grid"><input type="checkbox" id="map-show-grid"> Grid</label>
-        <label class="map-check small dm-only" title="Show the walls on the map (only you ever see them). Untick for a clean map while you play; they still show while Fog &amp; walls is open."><input type="checkbox" id="map-show-walls"> Walls</label>
+        <label class="map-check small dm-only map-edit-tool" title="Show the walls on the map (only you ever see them). Untick for a clean map while you play; they still show while Fog &amp; walls is open."><input type="checkbox" id="map-show-walls"> Walls</label>
         <button id="map-fit" data-tool="fit" class="ghost map-main map-needs-map" title="Fit the whole map on screen">Fit</button>
         <button id="map-pin" data-tool="pin" class="ghost map-needs-map" aria-pressed="false" title="Drop a pin only you can see: a note to yourself on the map">Pin</button>
         <button id="map-ruler" data-tool="measure" class="ghost map-main map-needs-map" aria-pressed="false" title="Drag on the map to measure a distance (only you see it)">Measure</button>
@@ -303,11 +303,12 @@
         <button id="map-full" data-tool="fullscreen" class="ghost map-main" aria-pressed="false">Full screen</button>
         <button id="map-more" class="ghost" aria-expanded="false" aria-controls="map-main-bar" title="Show the rest of the map tools">More</button>
         <button id="map-sheet-window" data-tool="sheet-window" class="ghost" title="Open your character sheet in its own window (to put beside this one, or on another screen)">Sheet window</button>
-        <button id="map-add-token" class="ghost dm-only map-needs-map">Add token</button>
-        <button id="map-fog-open" class="ghost dm-only map-needs-map" aria-pressed="false">Fog &amp; walls</button>
+        <button id="map-edit" class="ghost dm-only map-main" aria-pressed="true" title="Show or hide your tools for setting up the map (adding tokens, fog and walls, settings, importing)">Edit</button>
+        <button id="map-add-token" class="ghost dm-only map-edit-tool map-needs-map">Add token</button>
+        <button id="map-fog-open" class="ghost dm-only map-edit-tool map-needs-map" aria-pressed="false">Fog &amp; walls</button>
         <select id="map-variant" class="dm-only" aria-label="Which picture of the map everyone sees" title="Which picture of the map everyone sees" hidden></select>
-        <button id="map-settings" class="ghost dm-only map-needs-map">Map settings</button>
-        <button id="map-import" class="ghost dm-only">Import map</button>
+        <button id="map-settings" class="ghost dm-only map-edit-tool map-needs-map">Map settings</button>
+        <button id="map-import" class="ghost dm-only map-edit-tool">Import map</button>
         <input id="map-file" type="file" accept="image/png,image/jpeg,image/webp,application/pdf,.pdf,.dd2vtt,.uvtt,.df2vtt" hidden>
       </div>
       <div id="map-fog-tools" class="map-bar map-fog-tools dm-only" hidden>

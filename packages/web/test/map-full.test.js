@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { withPage, importMap, createFakeLLM, mapReading } from './helpers.js';
+import { withPage, addDm, importMap, createFakeLLM, mapReading } from './helpers.js';
 
 const SHOWN = { shown: true, grid: { size: 35, x: 0, y: 0 }, scale: { distance: 5, unit: 'ft', per: 'square' } };
 const withMap = {
@@ -109,7 +109,7 @@ test('full screen: only the main tools show; More shows the rest until the map i
     const bar = page.$('#map-main-bar');
     const more = page.$('#map-more');
     const main = page.$$('#map-main-bar > .map-main').map((el) => el.id);
-    assert.deepEqual(main, ['map-fit', 'map-ruler', 'map-ping', 'map-draw', 'map-template', 'map-combat-open', 'map-full']);
+    assert.deepEqual(main, ['map-fit', 'map-ruler', 'map-ping', 'map-draw', 'map-template', 'map-combat-open', 'map-full', 'map-edit']);
 
     page.click('#map-full');
     await page.settle();
@@ -135,6 +135,47 @@ test('full screen: only the main tools show; More shows the rest until the map i
     assert.ok(!bar.classList.contains('more-open'));
     assert.equal(more.getAttribute('aria-expanded'), 'false');
   });
+});
+
+test('edit mode: the DM shows or hides the tools for setting up the map, remembered in this browser; players never see it', async () => {
+  const asDm = { ...withMap, before: async (t) => ({ ...(await withMap.before(t)), dana: await addDm(t) }), page: (t, { dana }) => ({ as: dana }) };
+  const editTools = ['#map-add-token', '#map-fog-open', '#map-settings', '#map-import'];
+  let saved;
+  await withPage(asDm, async (page) => {
+    page.click('[data-tab=map]');
+    await page.settle();
+    const panel = page.$('#tab-map');
+    const edit = page.$('#map-edit');
+    assert.ok(edit.classList.contains('dm-only') && edit.classList.contains('map-main'), 'DM only, and out in full screen');
+    for (const sel of editTools) assert.ok(page.$(sel).classList.contains('map-edit-tool'), sel);
+    assert.ok(page.$('#map-show-walls').closest('label').classList.contains('map-edit-tool'));
+    assert.ok(!page.$('#map-variant').classList.contains('map-edit-tool'), 'switching pictures is for play too');
+    assert.equal(edit.getAttribute('aria-pressed'), 'true', 'on to start with');
+    assert.ok(!panel.classList.contains('edit-off'));
+
+    // Fog & walls open, then edit mode off: the panel closes with the tools.
+    page.click('#map-fog-open');
+    page.click('[data-wall-mode=wall]');
+    assert.ok(page.visible('#map-wall-tools'));
+    page.click('#map-edit');
+    assert.ok(panel.classList.contains('edit-off'));
+    assert.equal(edit.getAttribute('aria-pressed'), 'false');
+    assert.ok(!page.visible('#map-fog-tools') && !page.visible('#map-wall-tools'));
+    assert.ok(!page.$('#map-view').classList.contains('fog-drawing'), 'no wall tool left on');
+    saved = page.window.localStorage.getItem('dndapp.map.editing');
+    assert.equal(saved, '0');
+  });
+  // Off again next time; then back on.
+  await withPage({ ...asDm, page: (t, { dana }) => ({ as: dana, storage: { 'dndapp.map.editing': saved } }) }, async (page) => {
+    page.click('[data-tab=map]');
+    await page.settle();
+    assert.ok(page.$('#tab-map').classList.contains('edit-off'));
+    page.click('#map-edit');
+    assert.ok(!page.$('#tab-map').classList.contains('edit-off'));
+    assert.equal(page.window.localStorage.getItem('dndapp.map.editing'), null);
+  });
+  const css = await readFile(new URL('../public/style.css', import.meta.url), 'utf8');
+  assert.match(css, /\.map-panel\.edit-off \.map-edit-tool \{ display: none; \}/);
 });
 
 test('full screen: the floating tools are see-through, solid when pointed at, focused or switched on', async () => {

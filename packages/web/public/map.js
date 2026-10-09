@@ -10,7 +10,7 @@
  */
 import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from './api.js';
 import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, FOG_MASK_FILL, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, inTemplate, snapTemplatePoint } from './shared/map.js';
-import { PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, base, report, state, status } from './map-state.js';
+import { EDITING_KEY, PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, base, report, state, status } from './map-state.js';
 import { canChangeTemplate, placeTemplate, renderTemplates, selectTemplate, templateControls, templateDialog, templateMove, templateUp } from './map-templates.js';
 import { openShop } from './merchants.js';
 import { chooseTokenPicture, fillStats, forgetPlayers, importMap, recordDialog, removeToken, removeTokenPicture, saveCreature, settingsDialog, statsDialog, tokenDialog } from './map-dm.js';
@@ -1408,6 +1408,20 @@ export function initMapActions() {
     e.target.value = '';
     if (file) state.guarded(() => importMap(file)).catch(report);
   });
+  // The DM's edit mode: their tools for setting up the map show or hide (kept per browser).
+  const setEditing = (on) => {
+    storage.set(EDITING_KEY, on ? null : '0');
+    $('#tab-map').classList.toggle('edit-off', !on);
+    $('#map-edit').setAttribute('aria-pressed', String(on));
+    if (!on && !$('#map-fog-tools').hidden) {
+      $('#map-fog-tools').hidden = true;
+      setTool({});
+      renderFogTools();
+      if (state.current) renderWalls();
+    }
+  };
+  setEditing(storage.get(EDITING_KEY) !== '0');
+  $('#map-edit').addEventListener('click', () => setEditing($('#tab-map').classList.contains('edit-off')));
   $('#map-add-token').addEventListener('click', () => tokenDialog().catch(report));
   $('#map-fog-open').addEventListener('click', () => {
     const tools = $('#map-fog-tools');
