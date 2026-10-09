@@ -1032,6 +1032,14 @@ details.spell > summary::-webkit-details-marker { display: none; }
 :root[data-map-full] .map-bar > :is(button, select):not([aria-pressed="true"]) { background: var(--surface); color: var(--text); }
 :root[data-map-full] .map-fog-tools { border: none; padding: 0; }
 :root[data-map-full] .map-bar > #map-status { flex: none; min-width: 0; pointer-events: none; }
+/* Only the main tools show (and any that's switched on); More shows the rest after them. */
+#map-more { display: none; }
+:root[data-map-full] #map-more { display: inline-block; order: 2; }
+:root[data-map-full] #map-main-bar > .map-main { order: 1; }
+:root[data-map-full] #map-main-bar > #map-full { order: 3; }
+:root[data-map-full] #map-main-bar > :not(.map-main, #map-more) { order: 4; }
+:root[data-map-full] #map-main-bar:not(.more-open) > :not(.map-main, #map-more, [aria-pressed="true"]) { display: none; }
+:root[data-map-full] #map-main-bar.more-open > #map-status { display: none; }
 :root[data-map-full] .map-bars:is(:hover, :focus-within) .map-bar > *,
 :root[data-map-full] .map-bar > [aria-pressed="true"] { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { :root[data-map-full] .map-bar > * { transition: none; } }

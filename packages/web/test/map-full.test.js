@@ -102,6 +102,41 @@ test('full screen: going to another tab leaves it', async () => {
   });
 });
 
+test('full screen: only the main tools show; More shows the rest until the map is touched', async () => {
+  await withPage(withMap, async (page) => {
+    page.click('[data-tab=map]');
+    await page.settle();
+    const bar = page.$('#map-main-bar');
+    const more = page.$('#map-more');
+    const main = page.$$('#map-main-bar > .map-main').map((el) => el.id);
+    assert.deepEqual(main, ['map-fit', 'map-ruler', 'map-ping', 'map-draw', 'map-template', 'map-combat-open', 'map-full']);
+
+    page.click('#map-full');
+    await page.settle();
+    assert.equal(more.textContent, 'More');
+    assert.ok(!bar.classList.contains('more-open'));
+    page.click('#map-more');
+    assert.ok(bar.classList.contains('more-open'));
+    assert.equal(more.getAttribute('aria-expanded'), 'true');
+    assert.equal(more.textContent, 'Less');
+    page.click('#map-more');
+    assert.ok(!bar.classList.contains('more-open'));
+
+    // Opened, then back to the map: tucked away again.
+    page.click('#map-more');
+    page.pointer('#map-view', 'pointerdown', { clientX: 10, clientY: 10 });
+    page.pointer('#map-view', 'pointerup', { clientX: 10, clientY: 10 });
+    assert.ok(!bar.classList.contains('more-open'));
+
+    // Leaving full screen closes it too, so it starts tucked away next time.
+    page.click('#map-more');
+    page.click('#map-full');
+    await page.settle();
+    assert.ok(!bar.classList.contains('more-open'));
+    assert.equal(more.getAttribute('aria-expanded'), 'false');
+  });
+});
+
 test('full screen: the floating tools are see-through, solid when pointed at, focused or switched on', async () => {
   const css = await readFile(new URL('../public/style.css', import.meta.url), 'utf8');
   const rule = (selector) => {
@@ -115,4 +150,7 @@ test('full screen: the floating tools are see-through, solid when pointed at, fo
   assert.match(solid, /\[aria-pressed="true"\][^{]*\{\s*opacity:\s*1/);
   assert.match(rule(':root[data-map-full] #app-view > .topbar'), /display:\s*none/);
   assert.match(rule(':root[data-map-full] .map-bars'), /position:\s*absolute/);
+  // The rest are tucked away unless More is open; a tool that's switched on stays out.
+  assert.match(rule(':root[data-map-full] #map-main-bar:not(.more-open) > :not(.map-main, #map-more, [aria-pressed="true"])'), /display:\s*none/);
+  assert.match(rule('#map-more'), /display:\s*none/, 'More only in full screen');
 });

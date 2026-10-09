@@ -275,18 +275,18 @@
     <section id="tab-map" class="panel map-panel" hidden>
       <!-- The toolbars: above the map, below it or down its left side (Look). -->
       <div class="map-bars">
-      <div class="map-bar">
+      <div id="map-main-bar" class="map-bar">
         <select id="map-pick" aria-label="Which map" hidden></select>
         <span id="map-status" class="muted small" role="status"></span>
         <label class="map-check small" data-tool="grid"><input type="checkbox" id="map-show-grid"> Grid</label>
         <label class="map-check small dm-only" title="Show the walls on the map (only you ever see them). Untick for a clean map while you play; they still show while Fog &amp; walls is open."><input type="checkbox" id="map-show-walls"> Walls</label>
-        <button id="map-fit" data-tool="fit" class="ghost map-needs-map" title="Fit the whole map on screen">Fit</button>
+        <button id="map-fit" data-tool="fit" class="ghost map-main map-needs-map" title="Fit the whole map on screen">Fit</button>
         <button id="map-pin" data-tool="pin" class="ghost map-needs-map" aria-pressed="false" title="Drop a pin only you can see: a note to yourself on the map">Pin</button>
-        <button id="map-ruler" data-tool="measure" class="ghost map-needs-map" aria-pressed="false" title="Drag on the map to measure a distance (only you see it)">Measure</button>
-        <button id="map-ping" data-tool="ping" class="ghost map-needs-map" aria-pressed="false" title="Click the map to point everyone at a spot (Alt+click works any time)">Ping</button>
-        <button id="map-draw" data-tool="draw" class="ghost map-needs-map" aria-pressed="false" title="Sketch on the map for everyone to see; it fades after a while">Draw</button>
-        <button id="map-template" data-tool="template" class="ghost map-needs-map" aria-pressed="false" title="Place a spell's area (a sphere, cone, line or cube) and see who it catches">Template</button>
-        <button id="map-combat-open" data-tool="initiative" class="ghost map-needs-map" aria-pressed="false" title="The turn order in a fight">Initiative</button>
+        <button id="map-ruler" data-tool="measure" class="ghost map-main map-needs-map" aria-pressed="false" title="Drag on the map to measure a distance (only you see it)">Measure</button>
+        <button id="map-ping" data-tool="ping" class="ghost map-main map-needs-map" aria-pressed="false" title="Click the map to point everyone at a spot (Alt+click works any time)">Ping</button>
+        <button id="map-draw" data-tool="draw" class="ghost map-main map-needs-map" aria-pressed="false" title="Sketch on the map for everyone to see; it fades after a while">Draw</button>
+        <button id="map-template" data-tool="template" class="ghost map-main map-needs-map" aria-pressed="false" title="Place a spell's area (a sphere, cone, line or cube) and see who it catches">Template</button>
+        <button id="map-combat-open" data-tool="initiative" class="ghost map-main map-needs-map" aria-pressed="false" title="The turn order in a fight">Initiative</button>
         <select id="map-beside" aria-label="Beside the map" title="Show your sheet, chats, notes or handouts beside the map">
           <option value="">Nothing beside</option>
           <option value="sheet">Sheet beside</option>
@@ -299,7 +299,9 @@
           <option value="handouts">Handouts beside</option>
           <option value="archivist">Archivist beside</option>
         </select>
-        <button id="map-full" data-tool="fullscreen" class="ghost" aria-pressed="false">Full screen</button>
+        <!-- In full screen only the main tools show; More shows the rest. -->
+        <button id="map-full" data-tool="fullscreen" class="ghost map-main" aria-pressed="false">Full screen</button>
+        <button id="map-more" class="ghost" aria-expanded="false" aria-controls="map-main-bar" title="Show the rest of the map tools">More</button>
         <button id="map-sheet-window" data-tool="sheet-window" class="ghost" title="Open your character sheet in its own window (to put beside this one, or on another screen)">Sheet window</button>
         <button id="map-add-token" class="ghost dm-only map-needs-map">Add token</button>
         <button id="map-fog-open" class="ghost dm-only map-needs-map" aria-pressed="false">Fog &amp; walls</button>

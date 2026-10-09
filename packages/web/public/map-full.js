@@ -4,6 +4,10 @@
  * work; the top bar hides, the map fills the screen and its toolbars float
  * over it, see-through until you point at them.
  *
+ * Only the main tools show (Fit, Measure, Ping, Draw, Template, Initiative,
+ * and any tool that's switched on); More shows the rest until the map is
+ * touched again.
+ *
  * Where the browser can't go full screen (an iPhone, or it says no), the map
  * still fills the window. Escape, or the button again, goes back.
  */
@@ -27,6 +31,7 @@ export async function enterFull() {
 export function leaveFull() {
   if (!isFull()) return;
   root.removeAttribute('data-map-full');
+  showMore(false);
   renderButton();
   if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
 }
@@ -39,8 +44,19 @@ function renderButton() {
   button.title = on ? 'Back to the normal page (Escape)' : 'Fill the screen with the map; the tools float over it';
 }
 
+/** Show or tuck away the rest of the tools (full screen only). */
+function showMore(on) {
+  $('#map-main-bar').classList.toggle('more-open', on);
+  const more = $('#map-more');
+  more.setAttribute('aria-expanded', String(on));
+  more.textContent = on ? 'Less' : 'More';
+}
+
 export function initMapFull() {
   $('#map-full').addEventListener('click', () => (isFull() ? leaveFull() : enterFull()));
+  $('#map-more').addEventListener('click', () => showMore(!$('#map-main-bar').classList.contains('more-open')));
+  // Back to the main tools once you go back to the map.
+  $('#map-view').addEventListener('pointerdown', () => showMore(false));
   renderButton();
   // The browser left full screen (Escape, or its own controls): so does the map.
   document.addEventListener('fullscreenchange', () => {
