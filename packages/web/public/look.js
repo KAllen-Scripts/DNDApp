@@ -76,7 +76,7 @@ const TOKEN_LABELS = {
   never: ['Never', 'Just the tokens. Their names are still in the tooltip.'],
 };
 
-const TAB_NAMES = { ask: 'Ask', notes: 'Notes', sheet: 'Sheet (players)', creatures: 'Creatures (DM only)', items: 'Items (DM only)', merchants: 'Merchants (DM only)', map: 'Map', handouts: 'Handouts', archivist: 'Archivist (DM only)' };
+const TAB_NAMES = { ask: 'Ask', notes: 'Notes', sheet: 'Sheet (players)', inventory: 'Inventory (players)', creatures: 'Creatures (DM only)', items: 'Items (DM only)', merchants: 'Merchants (DM only)', map: 'Map', handouts: 'Handouts', archivist: 'Archivist (DM only)' };
 
 const TOOL_NAMES = {
   grid: 'Grid', fit: 'Fit', pin: 'Pin', measure: 'Measure', ping: 'Ping', draw: 'Draw',

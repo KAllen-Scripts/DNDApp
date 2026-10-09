@@ -3,11 +3,13 @@
  * kept once and stocked by merchants (merchants.js). Like Creatures: make
  * one by hand, look one up (your own items first, then the books, then the
  * AI), or have the AI find one online with a picture. Players never see
- * this list, only what a merchant sells.
+ * this list, only what a merchant sells. Below it: what each player has
+ * equipped (from their Inventory), so the DM can check it.
  */
 import { api, fileUrl, h, readBase64, LoggedOut } from './api.js';
 import { markdownBox } from './markdown.js';
 import { formatPrice, splitPrice, COIN_VALUES } from './shared/coins.js';
+import { EFFECT_TARGETS } from './shared/gear.js';
 
 const $ = (sel) => document.querySelector(sel);
 export const ITEM_KIND_NAMES = { weapon: 'Weapon', armor: 'Armour', gear: 'Adventuring gear', tool: 'Tool', potion: 'Potion', scroll: 'Scroll', magic: 'Magic item', other: 'Other' };
@@ -44,8 +46,41 @@ export async function loadItems({ campaignId, guarded }) {
   Object.assign(state, { campaignId, guarded, list: [], filter: '' });
   $('#items-filter').value = '';
   status('');
-  state.list = (await api('GET', base())).items;
+  const [{ items }] = await Promise.all([api('GET', base()), loadEquipped()]);
+  state.list = items;
   draw();
+}
+
+const LOAD = { encumbered: 'encumbered', heavy: 'heavily encumbered', over: 'over their carrying capacity' };
+
+/** What each player has equipped, with the AC and attacks it gives them (the rest of their sheet stays private). */
+async function loadEquipped() {
+  const box = $('#items-equipped');
+  try {
+    const res = await state.guarded(() => api('GET', `/campaigns/${state.campaignId}/gear/equipped`));
+    if (!res) return;
+    const sign = (n) => (n >= 0 ? `+${n}` : `${n}`);
+    box.replaceChildren(...(res.players.length ? res.players.map((p) => h('article', { class: 'equipped-player' },
+      h('h3', {}, p.character || p.name, p.character ? h('span', { class: 'muted small' }, ` (${p.name})`) : null,
+        p.ac != null ? h('span', { class: 'tag', title: p.ac_own ? 'The player typed this AC themselves' : 'Worked out from what they have equipped' }, `AC ${p.ac}${p.ac_own ? ' (typed)' : ''}`) : null),
+      p.carried != null ? h('p', { class: 'muted small' },
+        `Carrying ${p.carried} lb${p.capacity ? ` of ${p.capacity}` : ''}`,
+        LOAD[p.load] ? h('strong', {}, ` (${LOAD[p.load]})`) : '',
+        ` · attuned to ${p.attuned} item${p.attuned === 1 ? '' : 's'}`) : null,
+      p.gear.length
+        ? h('ul', { class: 'equipped-list' }, p.gear.map((g) => h('li', {},
+          h('strong', {}, g.name), g.equipped > 1 ? ` ×${g.equipped}` : '',
+          g.to_hit != null ? ` · ${sign(g.to_hit)} to hit, ${g.damage ?? 'no damage'}` : '',
+          g.armor ? (g.armor.type === 'shield' ? ` · +${g.armor.base + g.magic} AC` : ` · ${g.armor.type} armour, AC ${g.armor.base + g.magic}`) : '',
+          g.effects?.length ? ` · ${g.effects.map((e) => `${EFFECT_TARGETS[e.target] ?? e.target} ${e.value > 0 && !e.target.startsWith('score.') ? '+' : ''}${e.value}`).join(', ')}` : '',
+          (g.weapon || g.armor || g.to_hit != null) && !g.proficient ? h('span', { class: 'muted' }, ' · not proficient') : '',
+          g.attunement ? h('span', { class: 'muted' }, g.attuned ? ' · attuned' : ' · not attuned') : '')))
+        : h('p', { class: 'muted small' }, 'Nothing equipped.'),
+    )) : [h('p', { class: 'muted' }, 'No players in this campaign yet.')]));
+  } catch (err) {
+    if (err instanceof LoggedOut) throw err;
+    box.replaceChildren(h('p', { class: 'error small' }, `Couldn't load the players' gear: ${err.message}`));
+  }
 }
 
 /** The items as last loaded (the Merchants tab stocks them). */
@@ -385,6 +420,7 @@ export function initItemActions() {
   $('#item-new').addEventListener('click', () => editDialog());
   $('#item-lookup').addEventListener('click', () => lookupDialog());
   $('#item-find').addEventListener('click', () => findDialog());
+  $('#equipped-refresh').addEventListener('click', () => loadEquipped());
   $('#items-filter').addEventListener('input', (e) => {
     state.filter = e.target.value;
     draw();

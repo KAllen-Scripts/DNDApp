@@ -3,6 +3,8 @@
  * first, then mirrored into the database. Everything here survives a rebuild.
  */
 import crypto from 'node:crypto';
+import { EventEmitter } from 'node:events';
+import { normalizeSettings } from '@dndapp/shared/settings.js';
 import { json } from './db/index.js';
 import { replaySheet } from './sheets/store.js';
 import { replayMap } from './maps/store.js';
@@ -50,6 +52,27 @@ export function createStore({ db, archive, config }) {
 
   const store = {
     getCampaign,
+
+    /** Hears 'settings' { campaign_id, settings } when the DM changes them. */
+    events: new EventEmitter(),
+
+    /** The campaign's settings (the defaults if the DM never changed them). */
+    getSettings(campaignId) {
+      const row = db.prepare('SELECT settings FROM campaign_settings WHERE campaign_id = ?').get(campaignId);
+      return normalizeSettings(row ? json.parse(row.settings, {}) : {});
+    },
+
+    /** Change some settings (the rest stay); archived, then sent live. */
+    setSettings(campaignId, patch) {
+      const c = getCampaign(campaignId);
+      const settings = normalizeSettings({ ...store.getSettings(campaignId), ...patch });
+      const updated_at = new Date().toISOString();
+      archive.saveSettings(c.slug, { ...settings, updated_at });
+      db.prepare('INSERT INTO campaign_settings (campaign_id, settings, updated_at) VALUES (?, ?, ?) ON CONFLICT(campaign_id) DO UPDATE SET settings = excluded.settings, updated_at = excluded.updated_at')
+        .run(campaignId, json.str(settings), updated_at);
+      store.events.emit('settings', { campaign_id: campaignId, settings });
+      return settings;
+    },
 
     createCampaign(name) {
       name = cleanName(name);
@@ -315,7 +338,7 @@ export function createStore({ db, archive, config }) {
           }
         }
         for (const entry of archive.readAll()) {
-          const { campaign, sessions, members, speakers, glossary, corrections, playerNotes, sheets = [], maps = [], characters = [], handouts = [], creatures = [], rests = [], items = [], merchants = [] } = entry;
+          const { campaign, sessions, members, speakers, settings = null, glossary, corrections, playerNotes, sheets = [], maps = [], characters = [], handouts = [], creatures = [], rests = [], items = [], merchants = [] } = entry;
           if (db.prepare('SELECT 1 FROM campaigns WHERE slug = ?').get(campaign.slug)) continue;
           const cid = Number(
             db
@@ -335,6 +358,10 @@ export function createStore({ db, archive, config }) {
           }
           const insS = db.prepare('INSERT INTO sessions (campaign_id, number, title, played_on, checksum) VALUES (?, ?, ?, ?, ?)');
           for (const s of sessions) insS.run(cid, s.number, s.title, s.played_on, s.sha256);
+          if (settings) {
+            const { updated_at, ...rest } = settings;
+            db.prepare('INSERT INTO campaign_settings (campaign_id, settings, updated_at) VALUES (?, ?, ?)').run(cid, json.str(normalizeSettings(rest)), updated_at ?? new Date().toISOString());
+          }
           const insSp = db.prepare('INSERT INTO speakers (campaign_id, speaker, display_name, user_id) VALUES (?, ?, ?, ?)');
           for (const s of speakers) insSp.run(cid, s.speaker, s.display_name, s.user_id ?? null);
           const insG = db.prepare('INSERT INTO glossary (campaign_id, term, variants, note) VALUES (?, ?, ?, ?)');

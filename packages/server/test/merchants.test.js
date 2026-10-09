@@ -55,7 +55,7 @@ async function shop(t, { onMap = true, ...fields } = {}) {
   return { m, potion, rope, map, token, base: `${base}/${m.id}` };
 }
 
-const giveCoins = (t, who, coins, equipment = '') => t.sheets.save(t.campaign.id, who.id, { ...emptySheet({ name: who.name === 'Sam' ? 'Thorin' : 'Lyra' }), coins: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, ...coins }, equipment });
+const giveCoins = (t, who, coins, inventory = []) => t.sheets.save(t.campaign.id, who.id, { ...emptySheet({ name: who.name === 'Sam' ? 'Thorin' : 'Lyra' }), coins: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, ...coins }, inventory });
 
 test('normalizeItem and normalizeMerchant: defaults, and anything unknown dropped', () => {
   const x = normalizeItem({ id: 'abc', name: ' ', kind: 'spaceship', rarity: 'mythic', price: -5, weight: 'heavy', sneaky: 1 });
@@ -219,12 +219,12 @@ test('merchants: the DM sets one up with stock and puts it on a map; players see
   }
 });
 
-test('merchants: a player buys; coins come off their sheet (with change), the item goes into equipment, stock goes down', async () => {
+test('merchants: a player buys; coins come off their sheet (with change), the item goes into their inventory, stock goes down', async () => {
   const t = await setup({ llm: llm() });
   try {
     const { m, base } = await shop(t);
     const [potionLine, ropeLine] = m.stock;
-    giveCoins(t, t.sam, { gp: 120, sp: 3 }, 'Backpack\nPotion of Healing');
+    giveCoins(t, t.sam, { gp: 120, sp: 3 }, [{ name: 'Backpack' }, { name: 'Potion of Healing', kind: 'potion' }]);
     const buy = (body, as = t.sam.token) => t.request('POST', `${base}/buy`, { as, body });
 
     const res = await buy({ line: potionLine.id, qty: 2 });
@@ -233,7 +233,7 @@ test('merchants: a player buys; coins come off their sheet (with change), the it
     const { sheet, version } = t.sheets.get(t.campaign.id, t.sam.id);
     assert.equal(res.json().sheet_version, version);
     assert.deepEqual(sheet.coins, { cp: 0, sp: 3, ep: 0, gp: 20, pp: 0 });
-    assert.equal(sheet.equipment, 'Backpack\nPotion of Healing x3', 'the count goes up');
+    assert.deepEqual(sheet.inventory.map((g) => [g.name, g.qty]), [['Backpack', 1], ['Potion of Healing', 3]], 'the count goes up');
     assert.equal(res.json().shop.stock[0].qty, 0);
 
     assert.equal((await buy({ line: potionLine.id })).statusCode, 400, 'sold out');
@@ -242,7 +242,7 @@ test('merchants: a player buys; coins come off their sheet (with change), the it
     assert.equal((await buy({ line: ropeLine.id }, t.alex.token)).statusCode, 200);
     const alex = t.sheets.get(t.campaign.id, t.alex.id).sheet;
     assert.deepEqual(alex.coins, { cp: 0, sp: 5, ep: 0, gp: 0, pp: 0 });
-    assert.equal(alex.equipment, 'Rope');
+    assert.deepEqual(alex.inventory.map((g) => [g.name, g.qty, g.equipped]), [['Rope', 1, 0]]);
     const tooDear = await buy({ line: ropeLine.id, qty: 6 }, t.alex.token);
     assert.equal(tooDear.statusCode, 400);
     assert.match(tooDear.json().error, /costs 6 gp and you have 5 sp/);

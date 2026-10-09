@@ -4,6 +4,7 @@
 import { onMap, select } from './map.js';
 import { api, h } from './api.js';
 import { base, report, state, status } from './map-state.js';
+import { roll, rollModeFromEvent } from './dice.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -74,7 +75,10 @@ export function renderCombat() {
       h('span', { class: 'swatch', style: `background:${t.color}` }),
       h('button', { class: 'who', title: `Show ${t.name} on the map`, onclick: () => select(t.id) }, t.name),
       init,
-      mine(t) && (e.init == null || state.canEdit) ? h('button', { class: 'ghost', 'aria-label': `Roll initiative for ${t.name}`, title: 'Roll a d20 plus their initiative', onclick: () => combat({ action: 'roll', id: t.id }) }, e.init == null ? 'Roll' : '↻') : null,
+      mine(t) && (e.init == null || state.canEdit) ? h('button', { class: 'ghost', 'aria-label': `Roll initiative for ${t.name}`, title: 'Roll a d20 plus their initiative', onclick: (ev) => (e.init == null && !state.canEdit
+        // A player's own roll goes through the dice (3D, shared like any roll) and into the fight.
+        ? roll(null, { label: 'Initiative', initiative: true, mode: rollModeFromEvent(ev) })
+        : combat({ action: 'roll', id: t.id })) }, e.init == null ? 'Roll' : '↻') : null,
       state.canEdit ? h('button', { class: 'ghost icon-btn', 'aria-label': `Take ${t.name} out of the fight`, onclick: () => combat({ action: 'remove', id: t.id }) }, '✕') : null);
   });
   const whose = turnToken ? `${turnToken.name}'s turn` : c.turn_unseen ? "someone you can't see" : 'not started yet';

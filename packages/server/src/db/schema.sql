@@ -39,6 +39,13 @@ CREATE TABLE IF NOT EXISTS memberships (
   PRIMARY KEY (campaign_id, user_id)
 );
 
+-- The DM's choices for a campaign (shared/src/settings.js), as JSON. No row: the defaults.
+CREATE TABLE IF NOT EXISTS campaign_settings (
+  campaign_id  INTEGER PRIMARY KEY REFERENCES campaigns(id) ON DELETE CASCADE,
+  settings     TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+
 -- Maps a name as it appears in the transcript (Discord display name) to who it is.
 CREATE TABLE IF NOT EXISTS speakers (
   campaign_id   INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,

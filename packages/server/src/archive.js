@@ -7,6 +7,7 @@
  *     campaign.json
  *     members.json                     memberships (user id, role, character)
  *     speakers.json                    current speaker map  (+ history/speakers-<ts>.json)
+ *     settings.json                    the DM's campaign settings (+ history/settings-<ts>.json)
  *     glossary.json                    current glossary     (+ history/glossary-<ts>.json)
  *     corrections.jsonl                DM corrections, append-only
  *     player-notes/<YYYY-MM-DD>.jsonl  private player notes, append-only; an edit or a
@@ -161,6 +162,7 @@ export function createArchive(root) {
 
     saveSpeakers: (slug, speakers) => replaceWithHistory(slug, 'speakers', speakers),
     saveGlossary: (slug, glossary) => replaceWithHistory(slug, 'glossary', glossary),
+    saveSettings: (slug, settings) => replaceWithHistory(slug, 'settings', settings),
 
     appendCorrection: (slug, correction) => appendLine(path.join(campaignDir(slug), 'corrections.jsonl'), correction),
 
@@ -343,6 +345,7 @@ export function createArchive(root) {
           sessions,
           members: readJson(path.join(campaignDir(slug), 'members.json'), []),
           speakers: readJson(path.join(campaignDir(slug), 'speakers.json'), []),
+          settings: readJson(path.join(campaignDir(slug), 'settings.json'), null),
           glossary: readJson(path.join(campaignDir(slug), 'glossary.json'), []),
           corrections: readLines(path.join(campaignDir(slug), 'corrections.jsonl')),
           playerNotes,

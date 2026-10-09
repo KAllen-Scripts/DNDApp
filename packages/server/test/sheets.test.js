@@ -253,3 +253,103 @@ test('character sheets are restored from the archive', async () => {
     await t.cleanup();
   }
 });
+
+test("gear lookup: the weapon and armour tables first (no AI), then the books and the AI, never the DM's own items", async () => {
+  const llm = createFakeLLM({
+    structured: async ({ purpose, prompt }) => {
+      if (purpose === 'item:ai') return { found: /Bag of Holding/.test(prompt), name: 'Bag of Holding', kind: 'magic', rarity: 'uncommon', attunement: false, price: '', weight_lb: 15, description: 'This bag has an interior space considerably larger than its outside dimensions.' };
+      throw new Error(`unexpected ${purpose}`);
+    },
+  });
+  const t = await setup({ llm });
+  try {
+    const lookup = (name, as = t.sam.token) => t.request('GET', `/campaigns/${t.campaign.id}/gear/lookup?name=${encodeURIComponent(name)}`, { as });
+    const sword = await lookup('+1 longsword');
+    assert.equal(sword.statusCode, 200);
+    assert.equal(sword.json().from, 'srd');
+    assert.equal(sword.json().item.name, '+1 Longsword');
+    assert.equal(sword.json().item.magic, 1);
+    assert.equal(sword.json().item.weapon.damage, '1d8 slashing');
+    assert.deepEqual((await lookup('chain mail')).json().item.armor, { base: 16, type: 'heavy', strength: 13, stealth: true });
+    assert.equal((await lookup('chain mail')).json().item.weight, 55);
+    assert.equal(llm.calls.length, 0);
+
+    // The DM's prepared item of the same name stays secret: the player gets the AI's.
+    t.items.create(t.campaign.id, { name: 'Bag of Holding', kind: 'magic', text: 'Secretly cursed.', notes: 'DM only' }, { by: t.dm.id });
+    const bag = (await lookup('Bag of Holding')).json();
+    assert.equal(bag.from, 'ai');
+    assert.doesNotMatch(JSON.stringify(bag), /cursed|DM only/);
+    assert.equal(bag.item.weight, 15);
+    assert.equal((await lookup('Made Up Thing')).statusCode, 404);
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test("equipped gear: the DM sees each player's equipped items, AC and attacks, and nothing else; players can't", async () => {
+  const t = await setup();
+  try {
+    t.sheets.save(t.campaign.id, t.sam.id, {
+      ...emptySheet({ name: 'Thorin' }),
+      classes: [{ name: 'Fighter', level: 1 }],
+      abilities: { str: 16, dex: 12, con: 14, int: 10, wis: 10, cha: 10 },
+      backstory: 'A secret past.',
+      inventory: [
+        { name: 'Handaxe', kind: 'weapon', qty: 2, equipped: 2, proficient: true, weapon: { damage: '1d6 slashing', ability: 'str', category: 'simple', properties: ['light', 'thrown'] } },
+        { name: 'Chain mail', kind: 'armor', equipped: 1, proficient: true, armor: { base: 16, type: 'heavy' } },
+        { name: 'Love letter', kind: 'other', qty: 1 },
+      ],
+    });
+    const url = `/campaigns/${t.campaign.id}/gear/equipped`;
+    assert.equal((await t.request('GET', url, { as: t.sam.token })).statusCode, 403);
+    const res = await t.request('GET', url);
+    assert.equal(res.statusCode, 200);
+    const { players } = res.json();
+    assert.deepEqual(players.map((p) => p.name).sort(), ['Alex', 'Sam']);
+    const sam = players.find((p) => p.name === 'Sam');
+    assert.equal(sam.character, 'Thorin');
+    assert.equal(sam.ac, 16);
+    assert.deepEqual(sam.gear.map((g) => [g.name, g.equipped, g.to_hit, g.damage]), [['Handaxe', 2, 5, '1d6+3 slashing'], ['Chain mail', 1, null, null]]);
+    assert.doesNotMatch(res.body, /secret past|Love letter/);
+    assert.deepEqual(players.find((p) => p.name === 'Alex').gear, []);
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('campaign settings: the DM sets the weight rule; everyone gets it; it changes speeds, is archived and restored', async () => {
+  const t = await setup();
+  try {
+    const url = `/campaigns/${t.campaign.id}/settings`;
+    const mine = async (as) => (await t.request('GET', '/me', { as })).json().campaigns.find((c) => c.id === t.campaign.id).settings;
+    assert.deepEqual(await mine(t.sam.token), { weight: 'capacity' });
+    assert.equal((await t.request('PATCH', url, { as: t.sam.token, body: { weight: 'ignore' } })).statusCode, 403);
+    assert.equal((await t.request('PATCH', url, { body: { weight: 'heavy' } })).statusCode, 400);
+    const heard = [];
+    t.store.events.on('settings', (e) => heard.push(e));
+    const res = await t.request('PATCH', url, { body: { weight: 'variant' } });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.json(), { weight: 'variant' });
+    assert.deepEqual(heard, [{ campaign_id: t.campaign.id, settings: { weight: 'variant' } }]);
+    assert.deepEqual(await mine(t.sam.token), { weight: 'variant' });
+    assert.deepEqual((await t.request('GET', `/campaigns/${t.campaign.id}`, { as: t.sam.token })).json().settings, { weight: 'variant' });
+
+    // Str 10 with 120 lb: heavily encumbered under the variant rule (the DM sees it), fine when weight is ignored.
+    t.sheets.save(t.campaign.id, t.sam.id, { ...emptySheet({ name: 'Thorin' }), race: 'Human', inventory: [{ name: 'Anvil', weight: 120 }] });
+    const sam = async () => (await t.request('GET', `/campaigns/${t.campaign.id}/gear/equipped`)).json().players.find((p) => p.name === 'Sam');
+    assert.deepEqual(await sam().then(({ carried, capacity, load, attuned }) => ({ carried, capacity, load, attuned })), { carried: 120, capacity: 150, load: 'heavy', attuned: 0 });
+    await t.request('PATCH', url, { body: { weight: 'ignore' } });
+    assert.equal((await sam()).load, null);
+
+    const ctx = await createContext({ config: t.config, paths: { ...t.paths, db: path.join(t.dir, 'restored.sqlite') }, llm: createFakeLLM(), embedder: fakeEmbedder, log: { error() {} } });
+    try {
+      const cid = ctx.db.prepare('SELECT id FROM campaigns WHERE slug = ?').get(t.campaign.slug).id;
+      assert.deepEqual(ctx.store.getSettings(cid), { weight: 'ignore' });
+    } finally {
+      ctx.jobs.stop();
+      ctx.db.close();
+    }
+  } finally {
+    await t.cleanup();
+  }
+});

@@ -1,7 +1,7 @@
 /**
  * Character sheet rules (D&D 5e, 2014 Player's Handbook).
  *
- * Plain JS with no imports: the server uses it, and the web page loads the
+ * Plain JS (it imports only gear.js, the inventory rules): the server uses it, and the web page loads the
  * same file from /shared/sheet.js so automatic values update as the player
  * types. The server stays the authority on what is saved.
  *
@@ -10,6 +10,10 @@
  * the automatic value is shown unless the player typed their own. A typed
  * value is kept in sheet.overrides[key] and always wins until they reset it.
  */
+
+import { WEAPONS, activeEffects, armorClass, attunementLimit, carriedWeight, encumbrance, normalizeInventory } from './gear.js';
+
+export { WEAPONS };
 
 export const SHEET_FORMAT = 'dndapp-sheet';
 
@@ -110,6 +114,18 @@ export const TEXT_FIELDS = {
 };
 
 const COINS = ['cp', 'sp', 'ep', 'gp', 'pp'];
+
+/**
+ * What an attack adds to hit and to damage: '' = nothing (the bonus and
+ * damage are as written, as on sheets from before 2026-10-09 and uploads),
+ * an ability, finesse (the better of Strength and Dexterity) or spell (the
+ * spellcasting ability).
+ */
+export const ATTACK_ABILITIES = ['', ...ABILITIES, 'finesse', 'spell'];
+export const DAMAGE_TYPES = ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder'];
+
+/** A new attack: proficient, Strength, nothing written yet. */
+export const newAttack = () => ({ name: '', kind: 'attack', ability: 'str', proficient: true, magic: 0, bonus: '', save: '', dc: '', damage: '', notes: '' });
 const SPELL_SOURCES = ['srd', 'book', 'ai', 'import', 'manual'];
 
 // ---------- helpers ----------
@@ -153,7 +169,8 @@ export function emptySheet({ name = '', player_name = '' } = {}) {
     hp: { current: null, temp: null },
     hit_dice_spent: {}, // die size -> how many of those hit dice are spent, e.g. { 10: 2, 6: 1 }
     death_saves: { successes: 0, failures: 0 },
-    attacks: [], // { name, bonus, damage, notes }
+    attacks: [], // see newAttack() and normalizeAttack()
+    inventory: [], // gear carried and equipped (gear.js)
     coins: Object.fromEntries(COINS.map((c) => [c, 0])),
     spellcasting: { class: '', slots_used: {}, pact_used: 0 },
     spells: [],
@@ -172,7 +189,60 @@ export function coerceDerived(key, v) {
   }
 }
 
+/**
+ * An attack or other action on the sheet. kind: attack (a d20 to hit, then
+ * damage) or save (the target saves against a DC; damage only). bonus and dc
+ * are the player's own numbers (blank: worked out); damage is dice and a
+ * type, "1d8 slashing", plus anything extra the player adds ("1d8+1d6 slashing").
+ */
+export function normalizeAttack(a = {}) {
+  return {
+    name: str(a.name, 100),
+    kind: a.kind === 'save' ? 'save' : 'attack',
+    // Attacks saved before abilities existed keep their numbers exactly as written.
+    ability: ATTACK_ABILITIES.includes(a.ability) ? a.ability : '',
+    proficient: a.proficient === undefined ? true : bool(a.proficient),
+    magic: int(a.magic, { min: -10, max: 10, fallback: 0 }),
+    bonus: str(a.bonus, 20),
+    save: ABILITIES.includes(a.save) ? a.save : '',
+    dc: str(a.dc, 20),
+    damage: str(a.damage, 100),
+    notes: str(a.notes, 500),
+  };
+}
+
+const ABILITY_WORDS = Object.fromEntries(ABILITIES.map((a) => [ABILITY_NAMES[a].toLowerCase(), a]));
+const DICE = String.raw`\d+\s*d\s*\d+(?:\s*\+\s*\d+(?!\s*d))?`;
+
+/**
+ * How a spell rolls, read from its description: { attack: '' | 'attack' |
+ * 'save', save: ability, damage: "8d6 fire" | "1d8 healing", damage_mod: add
+ * the spellcasting modifier, higher_damage: dice added per slot level above
+ * the spell's (a cantrip: at 5th, 11th and 17th level) }. A guess the player
+ * can change on the sheet.
+ */
+export function guessSpellRolls({ description = '', higher_levels = '', level = null } = {}) {
+  const text = String(description);
+  const out = { attack: '', save: '', damage: '', damage_mod: false, higher_damage: '' };
+  const attack = /\bmake (?:a|an|one) (?:melee|ranged) spell attack/i.exec(text);
+  const save = /\b(strength|dexterity|constitution|intelligence|wisdom|charisma) saving throw/i.exec(text);
+  if (attack && (!save || attack.index < save.index)) out.attack = 'attack';
+  else if (save) Object.assign(out, { attack: 'save', save: ABILITY_WORDS[save[1].toLowerCase()] });
+  const damage = new RegExp(`(${DICE})\\s+(${DAMAGE_TYPES.join('|')})\\s+damage`, 'i').exec(text);
+  const heal = new RegExp(`regains?\\s+(?:a\\s+number\\s+of\\s+)?hit\\s+points\\s+equal\\s+to\\s+(${DICE})`, 'i').exec(text);
+  const first = [damage, heal].filter(Boolean).sort((x, y) => x.index - y.index)[0];
+  if (first) {
+    out.damage = `${first[1].replace(/\s+/g, '')} ${first === damage ? damage[2].toLowerCase() : 'healing'}`;
+    out.damage_mod = /^\s*\+\s*your spellcasting ability modifier/i.test(text.slice(first.index + first[0].length));
+  }
+  const more = /\b(?:damage|healing)\s+increases\s+by\s+(\d+d\d+)/i.exec(level === 0 ? text : higher_levels);
+  if (more && out.damage) out.higher_damage = more[1];
+  return out;
+}
+
 export function normalizeSpell(s = {}) {
+  // A spell from before rolls existed (or a new one): read how it rolls from its text.
+  const rolls = s.attack === undefined ? guessSpellRolls({ description: str(s.description, 20_000), higher_levels: str(s.higher_levels, 5000), level: int(s.level, { min: 0, max: 9 }) }) : s;
   return {
     id: str(s.id, 64) || newId(),
     name: str(s.name, 120).trim(),
@@ -187,6 +257,11 @@ export function normalizeSpell(s = {}) {
     ritual: bool(s.ritual),
     description: str(s.description, 20_000),
     higher_levels: str(s.higher_levels, 5000),
+    attack: ['attack', 'save'].includes(rolls.attack) ? rolls.attack : '',
+    save: ABILITIES.includes(rolls.save) ? rolls.save : '',
+    damage: str(rolls.damage, 100),
+    damage_mod: bool(rolls.damage_mod),
+    higher_damage: str(rolls.higher_damage, 40),
     prepared: bool(s.prepared),
     source: SPELL_SOURCES.includes(s.source) ? s.source : 'manual',
     source_note: str(s.source_note, 300),
@@ -222,9 +297,9 @@ export function normalizeSheet(input = {}) {
     successes: int(s.death_saves?.successes, { min: 0, max: 3, fallback: 0 }),
     failures: int(s.death_saves?.failures, { min: 0, max: 3, fallback: 0 }),
   };
-  out.attacks = (Array.isArray(s.attacks) ? s.attacks : []).slice(0, 50).map((a) => ({
-    name: str(a?.name, 100), bonus: str(a?.bonus, 20), damage: str(a?.damage, 100), notes: str(a?.notes, 500),
-  }));
+  out.attacks = (Array.isArray(s.attacks) ? s.attacks : []).slice(0, 50).map((a) => normalizeAttack(a ?? {}));
+  const artificer = (out.classes ?? []).filter((c) => classKey(c.name) === 'artificer').reduce((n, c) => n + (c.level || 0), 0);
+  out.inventory = normalizeInventory(s.inventory, { attuneMax: attunementLimit(artificer) });
   for (const c of COINS) out.coins[c] = int(s.coins?.[c], { min: 0, max: 99_999_999, fallback: 0 });
   out.spellcasting.class = str(s.spellcasting?.class, 60);
   for (let n = 1; n <= 9; n++) {
@@ -373,7 +448,14 @@ function slotsFor(casters) {
  * @returns {{ auto: Record<string, any>, values: Record<string, any>, overridden: Set<string>, level: number, casters: object[] }}
  *   auto: what the rules give; values: what to show and use (the player's override if there is one).
  */
-export function computeSheet(sheet) {
+/** Races with Powerful Build (count as one size larger for carrying). */
+const POWERFUL_BUILD = /goliath|firbolg|bugbear|loxodon|centaur|\borc\b/i;
+
+/**
+ * Everything worked out from the sheet. opts.weight is the campaign's weight
+ * rule (settings.js: 'capacity', 'variant' or 'ignore').
+ */
+export function computeSheet(sheet, { weight = 'capacity' } = {}) {
   const overrides = sheet.overrides ?? {};
   const auto = {};
   const values = {};
@@ -387,14 +469,23 @@ export function computeSheet(sheet) {
   const level = Math.min(20, Math.max(1, classes.reduce((sum, c) => sum + c.level, 0)));
 
   const pb = set('proficiency_bonus', 2 + Math.floor((level - 1) / 4));
-  for (const a of ABILITIES) set(`mod.${a}`, abilityMod(sheet.abilities?.[a] ?? 10));
+  // Magic items equipped (and attuned) change the sheet: a score set (Gauntlets of Ogre Power) or raised, AC, saves...
+  const effects = activeEffects(sheet.inventory);
+  const sum = (target) => effects.filter((e) => e.target === target).reduce((n, e) => n + e.value, 0);
+  const scores = {};
+  for (const a of ABILITIES) {
+    const own = Number(sheet.abilities?.[a] ?? 10);
+    const setTo = Math.max(own, ...effects.filter((e) => e.target === `score.${a}`).map((e) => e.value));
+    scores[a] = Math.min(30, setTo + sum(`bonus.${a}`));
+    set(`mod.${a}`, abilityMod(scores[a]));
+  }
   const mod = (a) => values[`mod.${a}`];
 
   // Saving throw proficiencies come from your first class.
   const first = classes[0]?.rules;
   for (const a of ABILITIES) {
     const prof = set(`save_prof.${a}`, !!first?.saves.includes(a));
-    set(`save.${a}`, mod(a) + (prof ? pb : 0));
+    set(`save.${a}`, mod(a) + (prof ? pb : 0) + sum('saves') + sum(`save.${a}`));
   }
 
   // Bards from 2nd level add half their proficiency bonus to checks they aren't proficient in.
@@ -406,17 +497,32 @@ export function computeSheet(sheet) {
     set(`skill.${k}`, mod(ability) + (mult ? mult * pb : half));
   }
   set('passive_perception', 10 + values['skill.perception']);
-  set('initiative', mod('dex') + half);
+  set('initiative', mod('dex') + half + sum('initiative'));
 
-  // Unarmoured AC. Armour, shields and magic items are typed in by the player.
-  const ac = [10 + mod('dex')];
-  if (levelIn('monk')) ac.push(10 + mod('dex') + mod('wis'));
-  if (levelIn('barbarian')) ac.push(10 + mod('dex') + mod('con'));
-  set('ac', Math.max(...ac));
+  // AC from the armour and shield equipped in the inventory, else unarmoured (monk and barbarian
+  // Unarmored Defense), plus magic items (a Ring of Protection; Bracers of Defense only with neither).
+  // Features that change AC some other way are typed in by the player.
+  const worn = armorClass(sheet.inventory, mod('dex'));
+  const shieldAc = worn?.shield ? worn.shield.armor.base + worn.shield.magic : 0;
+  const ac = [worn?.armor ? worn.ac : 10 + mod('dex') + shieldAc];
+  if (levelIn('monk') && !worn) ac.push(10 + mod('dex') + mod('wis'));
+  if (levelIn('barbarian') && !worn?.armor) ac.push(10 + mod('dex') + mod('con') + shieldAc);
+  set('ac', Math.max(...ac) + sum('ac') + (worn ? 0 : sum('ac_unarmored')));
 
+  // Speed: race and monk, magic items, then heavy armour without the Strength for it (−10 ft) and weight.
   const monk = levelIn('monk');
   const monkSpeed = monk >= 18 ? 30 : monk >= 14 ? 25 : monk >= 10 ? 20 : monk >= 6 ? 15 : monk >= 2 ? 10 : 0;
-  set('speed', raceSpeed(sheet.race) + monkSpeed);
+  const tooHeavy = worn?.armor && worn.armor.armor.strength > scores.str ? worn.armor : null;
+  const load = encumbrance(carriedWeight(sheet.inventory, sheet.coins), scores.str, weight, { bigger: POWERFUL_BUILD.test(sheet.race ?? '') });
+  let speed = raceSpeed(sheet.race) + monkSpeed + sum('speed') - (tooHeavy ? 10 : 0);
+  if (load) speed = load.speed == null ? 5 : speed + load.speed;
+  set('speed', Math.max(0, speed));
+
+  // Rolls made with disadvantage: Stealth in noisy armour; Strength, Dexterity and Constitution when heavily encumbered.
+  const disadvantage = [];
+  const noisy = (sheet.inventory ?? []).find((g) => g.equipped && g.armor?.stealth);
+  if (noisy) disadvantage.push({ why: noisy.name, skills: ['stealth'], abilities: [] });
+  if (load?.disadvantage) disadvantage.push({ why: load.level === 'over' ? 'over your carrying capacity' : 'heavily encumbered', skills: [], abilities: ['str', 'dex', 'con'] });
 
   // HP: max hit die at 1st level, then the fixed average per level; Constitution each level.
   const hillDwarf = /hill\s*dwarf/i.test(sheet.race ?? '') ? 1 : 0;
@@ -439,13 +545,22 @@ export function computeSheet(sheet) {
   const chosen = classKey(sheet.spellcasting?.class);
   const primary = casters.find((c) => c.key === chosen) ?? casters[0];
   const ability = set('spell_ability', primary?.ability ?? '');
-  set('spell_dc', ability ? 8 + pb + mod(ability) : null);
-  set('spell_attack', ability ? pb + mod(ability) : null);
+  set('spell_dc', ability ? 8 + pb + mod(ability) + sum('spell_dc') : null);
+  set('spell_attack', ability ? pb + mod(ability) + sum('spell_attack') : null);
   const slots = slotsFor(casters);
   for (let n = 1; n <= 9; n++) set(`slots.${n}`, slots[n - 1] ?? 0);
   const [pactSlots, pactLevel] = PACT[Math.min(20, levelIn('warlock'))];
   set('pact_slots', pactSlots);
   set('pact_level', pactLevel);
 
-  return { auto, values, overridden: new Set(Object.keys(overrides).filter((k) => k in auto)), level, casters };
+  return { auto, values, overridden: new Set(Object.keys(overrides).filter((k) => k in auto)), level, casters, scores, effects, load, tooHeavy, disadvantage };
+}
+
+/**
+ * Why a roll has disadvantage from the sheet ('' if it doesn't): pass the
+ * ability it uses (str, dex... for checks, saves and attacks) and the skill, if any.
+ */
+export function rollDisadvantage(calc, { ability = '', skill = '' } = {}) {
+  const hit = (calc?.disadvantage ?? []).find((d) => d.skills.includes(skill) || d.abilities.includes(ability));
+  return hit ? hit.why : '';
 }

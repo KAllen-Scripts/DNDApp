@@ -582,6 +582,8 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 .sheet-bar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .sheet-bar #sheet-status { flex: 1; min-width: 12rem; }
 .sheet-bar button { padding: 0.35rem 0.8rem; font-size: 0.9rem; }
+.sheet-bar .sheet-modes { display: flex; align-items: center; gap: 0.35rem; }
+.sheet-bar .dice-modes button { padding: 0.25rem 0.55rem; font-size: 0.8rem; }
 
 /* ---------- a panel beside the map, or the sheet in its own window (sheet-place.js) ---------- */
 
@@ -684,7 +686,42 @@ input.num, .sheet .num { text-align: center; }
 .sh-table .th { margin-bottom: -0.15rem; }
 .sh-table .th .lbl { padding-left: 0.1rem; }
 .classes .tr { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) var(--num) var(--ctl); }
-.attacks .tr { grid-template-columns: minmax(0, 1.25fr) 4.2rem minmax(0, 1.4fr) var(--ctl) var(--ctl); }
+.attacks .tr { grid-template-columns: minmax(0, 1.25fr) 4.2rem minmax(0, 1.4fr) var(--ctl) auto var(--ctl); }
+/* Under each attack: what it adds (ability, proficiency, magic) or the save it calls for, and what it rolls. */
+.attacks .atk-opts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.7rem; font-size: 0.8rem; padding-bottom: 0.3rem; border-bottom: 1px dashed var(--border); }
+.atk-opts select, .atk-opts input { height: auto; min-height: 0; padding: 0.15rem 0.3rem; font-size: 0.8rem; width: auto; }
+.atk-opts input.num { width: 3rem; }
+.atk-opts .fld.inline { flex-direction: row-reverse; align-items: center; gap: 0.3rem; }
+.atk-opts label.check { flex: none; font-size: 0.8rem; }
+.atk-sum { flex: 1 1 10rem; text-align: right; }
+.sheet button.dmg-roll { width: auto; padding: 0 0.45rem; font-size: 0.75rem; font-weight: 700; }
+.spell-rolls { display: inline-flex; align-items: center; gap: 0.3rem; }
+.spell-rolls:empty { display: none; }
+.spell-rolls select { width: auto; height: auto; padding: 0.1rem 0.25rem; font-size: 0.8rem; }
+/* Equipped weapons from the Inventory, shown in Attacks: worked out, not typed. */
+.attacks .gear-attack { padding: 0.15rem 0; border-bottom: 1px dashed var(--border); }
+.gear-attack .gear-name { font-weight: 600; overflow-wrap: anywhere; }
+.gear-attack .gear-dmg-pair { display: inline-flex; gap: 0.25rem; }
+
+/* The Inventory tab (players): one row per item, details folded away. */
+.inventory .gear-list { display: grid; gap: 0.4rem; }
+.gear-row { border: 1px solid var(--border); border-radius: 8px; padding: 0.4rem 0.6rem; }
+.gear-row.equipped { border-color: var(--accent); }
+.gear-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.8rem; }
+.gear-head .gear-title { flex: 1 1 8rem; overflow-wrap: anywhere; }
+.gear-head input.num { width: 3.5rem; }
+.gear-head .fld.inline { flex-direction: row-reverse; align-items: center; gap: 0.3rem; }
+.gear-head label.check { flex: none; }
+.gear-head .gear-sum { flex: 1 1 10rem; }
+.gear-head .gear-sum:empty { display: none; }
+.gear-details > summary { cursor: pointer; font-size: 0.85rem; margin-top: 0.2rem; }
+
+/* The DM's check on what players have equipped (Items tab). */
+.equipped-gear { margin-top: 1.2rem; }
+.equipped-player { margin: 0.6rem 0; }
+.equipped-player h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem; margin: 0 0 0.2rem; font-size: 1rem; }
+.equipped-list { margin: 0; padding-left: 1.2rem; }
+.spell-roll-fields { margin-top: 0.3rem; }
 .classes .th > :nth-child(3), .attacks .th > :nth-child(2) { text-align: center; padding: 0; white-space: nowrap; }
 .sheet button.icon-x {
   display: grid; place-items: center; width: var(--ctl); height: var(--ctl); padding: 0;
@@ -696,7 +733,9 @@ input.num, .sheet .num { text-align: center; }
   display: block; width: fit-content; max-width: 100%; height: auto; padding: 0;
   border: none; border-radius: 3px; background: none; text-align: left; cursor: pointer;
 }
-.sheet button.roll-name:hover { color: var(--accent); text-decoration: underline dotted; text-underline-offset: 0.2em; }
+.sheet button.roll-name { text-decoration: underline dotted color-mix(in srgb, currentColor 45%, transparent); text-underline-offset: 0.2em; }
+.sheet button.roll-name:hover { color: var(--accent); text-decoration-color: currentColor; }
+@media print { .sheet button.roll-name { text-decoration: none; } }
 .stat > button.roll-name, .ability > button.roll-name { margin-inline: auto; text-align: center; }
 .sheet button.icon-roll { display: grid; place-items: center; width: var(--ctl); height: var(--ctl); padding: 0; color: var(--accent); background: transparent; }
 .sheet button.icon-roll:hover { border-color: var(--accent); }
@@ -708,8 +747,9 @@ input.num, .sheet .num { text-align: center; }
 .sheet button.add-row:hover { border-style: solid; border-color: var(--accent); }
 /* Narrow boxes: damage goes on its own line, so names and damage aren't cut off. */
 @container (max-width: 400px) {
-  .attacks .tr { grid-template-columns: minmax(0, 1fr) var(--num) var(--ctl) var(--ctl); padding-bottom: 0.35rem; border-bottom: 1px dashed var(--border); }
+  .attacks .tr { grid-template-columns: minmax(0, 1fr) var(--num) var(--ctl) auto var(--ctl); }
   .attacks .tr > :nth-child(3) { grid-column: 1 / -1; grid-row: 2; }
+  .atk-sum { text-align: left; }
   .attacks .th { display: none; }
 }
 
@@ -937,7 +977,7 @@ details.spell > summary::-webkit-details-marker { display: none; }
 
 @media print {
   body { background: #fff; color: #000; }
-  .topbar, .sheet-bar, .add-spell, .spell-actions, .slot-help, .reset, .add-row, .icon-x, .sh-tabbar, button.link { display: none !important; }
+  .topbar, .sheet-bar, .add-spell, .spell-actions, .slot-help, .reset, .add-row, .icon-x, .icon-roll, .spell-rolls select, .sh-tabbar, button.link { display: none !important; }
   #app-view, #app-view.wide { max-width: none; height: auto; display: block; }
   .panel { display: block; overflow: visible; padding: 0; }
   .panel:not(#tab-sheet) { display: none !important; }
@@ -1205,3 +1245,18 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .map-terrain .difficult.ai { stroke: #b388ff; }
 .map-terrain.players .difficult { stroke-opacity: 0.6; }
 .map-terrain .hatch { stroke: rgb(201 162 39 / 0.55); stroke-width: 2px; }
+
+/* Inventory: weight and attunement above the list; charges and magic item effects on a row. */
+.gear-top { margin: 0.4rem 0; }
+.gear-summary { margin: 0; display: flex; flex-wrap: wrap; gap: 0.2rem 0.6rem; }
+.gear-warn, .sheet-warn { margin: 0.2rem 0; color: var(--error); }
+.sheet-warn { grid-column: 1 / -1; }
+.gear-warn[hidden], .sheet-warn[hidden] { display: none; }
+.charges { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; }
+.charges button { padding: 0.1rem 0.45rem; }
+.effects { display: grid; gap: 0.3rem; margin: 0.4rem 0; }
+.effects .effect { display: flex; gap: 0.4rem; align-items: center; }
+.effects .effect select { width: auto; }
+.effects .effect input.num { width: 4rem; }
+.item-score { display: block; text-align: center; font-size: 0.7rem; }
+.item-score:empty { display: none; }

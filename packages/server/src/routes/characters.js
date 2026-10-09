@@ -2,7 +2,9 @@
  * Players' character sheets (private to their player; the DM has Creatures instead) and pictures of
  * their characters (the token is seen by the campaign; the full picture is private).
  */
-import { SHEET_FORMAT } from '@dndapp/shared/sheet.js';
+import { SHEET_FORMAT, computeSheet } from '@dndapp/shared/sheet.js';
+import { ARMOR, WEAPONS, carriedWeight, itemStats, magicName } from '@dndapp/shared/gear.js';
+import { gearRolls } from '@dndapp/shared/rolls.js';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
 import { BadRequestError, NotFoundError } from '../store.js';
@@ -13,7 +15,7 @@ import { SheetConflictError } from '../sheets/store.js';
 import { SpendingCapError } from '../llm/index.js';
 
 export function registerCharacters(app, r) {
-  const { access, archive, auth, config, maps, pictureDescriber, pictures, publicMessage, sheetImport, sheets, spells, upload } = r;
+  const { access, archive, auth, config, db, itemFinder, maps, pictureDescriber, pictures, publicMessage, sheetImport, sheets, spells, store, upload } = r;
 
   // ---------- character sheets (private to their player) ----------
 
@@ -102,6 +104,76 @@ export function registerCharacters(app, r) {
     const spell = await spells.lookup(name, { campaignId: cid, userId: request.user.id, beforeAi: sheetAiAllowed(request.user.id) });
     if (!spell) throw new NotFoundError(`No spell called "${name}" was found in the SRD, your books, or the AI's memory.`);
     return spell;
+  });
+
+  // ---------- gear (the sheet's inventory: carried and equipped) ----------
+
+  /** A table weapon or armour in words, for its description. */
+  const tableText = (stats) => stats.weapon
+    ? `${stats.weapon.category === 'martial' ? 'Martial' : 'Simple'} weapon. ${stats.weapon.damage || 'No damage'}.${stats.weapon.properties.length ? ` ${stats.weapon.properties.map((p) => p[0].toUpperCase() + p.slice(1)).join(', ')}.` : ''}`
+    : stats.armor.type === 'shield' ? `Shield: +${stats.armor.base} AC.` : `${stats.armor.type[0].toUpperCase() + stats.armor.type.slice(1)} armour: AC ${stats.armor.base}${stats.armor.type === 'light' ? ' + Dex modifier' : stats.armor.type === 'medium' ? ' + Dex modifier (max 2)' : ''}.`;
+
+  /**
+   * Look up an item for your inventory (players): ?name=. Weapons and armour
+   * from the PHB tables at once (a "+1" in the name is its magic bonus); else
+   * the group's books, then the AI's knowledge (not the DM's own items, which
+   * players only meet at merchants). Returns { item: an inventory line, not
+   * saved: the page adds it to the sheet }, 404 if nobody knows it.
+   */
+  app.get('/campaigns/:cid/gear/lookup', async (request) => {
+    const a = sheetOwner(request);
+    const { name } = z.object({ name: z.string().trim().min(2).max(100) }).parse(request.query ?? {});
+    const { base } = magicName(name);
+    const table = WEAPONS[base] ?? ARMOR[base] ?? ARMOR[`${base} armor`];
+    if (table) {
+      const stats = itemStats({ name });
+      const magic = stats.magic ? `+${stats.magic} ` : '';
+      return { item: { name: `${magic}${table.name}`, kind: stats.kind, qty: 1, ...stats, text: tableText(stats), source: "Player's Handbook (SRD)" }, from: 'srd' };
+    }
+    const found = await itemFinder.lookup(name, { campaignId: a.cid, userId: request.user.id, own: false, beforeAi: sheetAiAllowed(request.user.id) });
+    if (!found) throw new NotFoundError(`Neither the books nor the AI know an item called "${name}". Add it by hand instead.`);
+    const f = found.fields;
+    const stats = itemStats({ name: f.name || name, kind: f.kind, text: f.text });
+    return {
+      item: { name: f.name || name, kind: stats.kind, qty: 1, attunement: !!f.attunement, weight: f.weight ?? stats.weight, text: f.text, weapon: stats.weapon, armor: stats.armor, magic: stats.magic, charges: stats.charges, effects: stats.effects, source: f.source?.from || (found.from === 'ai' ? "the AI's memory: check it" : '') },
+      from: found.from,
+    };
+  });
+
+  /**
+   * What each player has equipped (DM), so the DM can check it: { players:
+   * [{ user_id, name, character, ac, gear: [{ name, kind, equipped, qty,
+   * proficient, magic, attuned, attunement, armor, effects, to_hit, damage }],
+   * carried, capacity, load, attuned }] }. Only equipped gear, the AC worked
+   * out from it, the attacks it makes, the total weight carried against the
+   * campaign's limit and how many items they're attuned to; the rest of the
+   * sheet (and what's only carried) stays private.
+   */
+  app.get('/campaigns/:cid/gear/equipped', async (request) => {
+    const a = access(request, { dm: true });
+    const members = db.prepare("SELECT u.id, u.name, m.character_name FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.campaign_id = ? AND m.role != 'dm' ORDER BY u.name").all(a.cid);
+    return {
+      players: members.map((m) => {
+        const { sheet, version } = sheets.get(a.cid, m.id);
+        if (!version) return { user_id: m.id, name: m.name, character: m.character_name ?? '', ac: null, gear: [] };
+        const calc = computeSheet(sheet, store.getSettings(a.cid));
+        return {
+          user_id: m.id,
+          name: m.name,
+          character: sheet.name || m.character_name || '',
+          ac: calc.values.ac,
+          ac_own: 'ac' in sheet.overrides,
+          carried: carriedWeight(sheet.inventory, sheet.coins),
+          capacity: calc.load?.capacity ?? null,
+          load: calc.load?.level ?? null,
+          attuned: sheet.inventory.filter((g) => g.attuned).length,
+          gear: sheet.inventory.filter((g) => g.equipped).map((g) => {
+            const rolls = g.weapon ? gearRolls(g, calc) : null;
+            return { name: g.name, kind: g.kind, equipped: g.equipped, qty: g.qty, proficient: g.proficient, magic: g.magic, attuned: g.attuned, attunement: g.attunement, armor: g.armor, effects: g.effects, to_hit: rolls?.bonus ?? null, damage: rolls?.damage ? `${rolls.damage}${rolls.type ? ` ${rolls.type}` : ''}` : null };
+          }),
+        };
+      }),
+    };
   });
 
   // ---------- pictures of characters (the token is seen by the campaign; the full picture is private) ----------

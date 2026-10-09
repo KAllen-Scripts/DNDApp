@@ -183,7 +183,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         if (t.speed != null) return t.speed;
         if (t.kind === 'pc' && t.user_id != null && sheets) {
           const { sheet, version } = sheets.get(map.campaign_id, t.user_id);
-          return version ? Number(computeSheet(sheet).values.speed) || null : null;
+          return version ? Number(computeSheet(sheet, store.getSettings(map.campaign_id)).values.speed) || null : null;
         }
         return speedFromText(t.stats?.speed) ?? null;
       };

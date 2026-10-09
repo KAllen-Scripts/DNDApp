@@ -92,22 +92,27 @@ export function createItemFinder({ llm, books = null, items = null, fetchImage =
   return {
     /**
      * Fill in an item by name: the DM's own items, then the books, then the AI.
+     * own: false skips the DM's items (a player looking something up mustn't
+     * see the DM's prepared ones). beforeAi runs before each AI call (a rate
+     * limit: throw to stop).
      * @returns {Promise<{ fields: object, from: 'yours' | 'book' | 'ai' } | null>} null if nobody knows it
      */
-    async lookup(name, { campaignId, userId, exclude = null }) {
-      const own = items?.named(campaignId, name, { exclude });
+    async lookup(name, { campaignId, userId, exclude = null, own: useOwn = true, beforeAi = null }) {
+      const own = useOwn ? items?.named(campaignId, name, { exclude }) : null;
       if (own) {
         const { name: n, kind, rarity, attunement, price, weight, text, source } = own;
         return { fields: { name: n, kind, rarity, attunement, price, weight, text, source: source ?? { kind: 'dm', from: `your items (${n})` } }, from: 'yours' };
       }
       const printed = await fromBooks(name);
       if (printed) {
+        beforeAi?.();
         const out = await llm.structured({
           task: 'maps', purpose: 'item:book', campaignId, userId, system: BOOK_SYSTEM, schema: ItemOut,
           prompt: `<book title="${printed.book}" pages="${printed.page}-${printed.page + 1}">\n${printed.text}\n</book>\n\nThe item: ${name}`,
         });
         if (out.found && out.description.trim()) return { fields: fieldsFrom(out, { kind: 'book', from: `${printed.book}, page ${printed.page}` }), from: 'book' };
       }
+      beforeAi?.();
       const out = await llm.structured({ task: 'maps', purpose: 'item:ai', campaignId, userId, system: SYSTEM, schema: ItemOut, prompt: `The item: ${name}` });
       if (!out.found || !out.description.trim()) return null;
       return { fields: fieldsFrom(out, { kind: 'ai', from: '' }), from: 'ai' };

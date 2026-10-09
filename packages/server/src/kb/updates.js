@@ -100,8 +100,8 @@ export function sheetChanges(entries, { since, until }) {
 }
 
 /** The whole sheet as text for the archivist: what the player entered plus the numbers worked out from it. */
-export function sheetText(sheet) {
-  const { values, level } = computeSheet(sheet);
+export function sheetText(sheet, settings = {}) {
+  const { values, level } = computeSheet(sheet, settings);
   const lines = [];
   const add = (k, v) => v !== '' && v != null && lines.push(`${k}: ${v}`);
   add('Character', sheet.name);
@@ -116,6 +116,7 @@ export function sheetText(sheet) {
   const skills = Object.entries(sheet.skills).map(([k, p]) => `${SKILLS[k]?.name ?? k}${p === 'expertise' ? ' (expertise)' : ''}`);
   add('Skill proficiencies', skills.join(', '));
   add('Attacks', sheet.attacks.map((a) => [a.name, a.bonus, a.damage, a.notes].filter(Boolean).join(' ')).join('; '));
+  add('Inventory', sheet.inventory.map((g) => `${g.name}${g.qty > 1 ? ` ×${g.qty}` : ''}${g.equipped ? (g.qty > 1 ? ` (${g.equipped} equipped)` : ' (equipped)') : ''}${g.attuned ? ' (attuned)' : ''}${g.charges ? ` (${g.charges.max - g.charges.used} of ${g.charges.max} charges)` : ''}`).join(', '));
   add('Coins', Object.entries(sheet.coins).filter(([, n]) => n).map(([c, n]) => `${n} ${c}`).join(', '));
   if (values.spell_ability) add('Spell save DC', values.spell_dc);
   add('Spells', sheet.spells.map((s) => `${s.name} (${s.level ? `level ${s.level}` : 'cantrip'}${s.prepared ? ', prepared' : ''})`).join(', '));
@@ -155,7 +156,7 @@ export function createUpdates({ db, store, archive, handoutsBetween = () => [] }
           head,
           before ? 'You have read this sheet before. Changes since then, oldest first:' : `New sheet, first saved ${localTime(created?.at ?? changes[0].at)}.`,
           ...(before ? list : list.length ? ['Changes after it was first saved, oldest first:', ...list] : []),
-          `Sheet now:\n${sheetText(after)}`,
+          `Sheet now:\n${sheetText(after, store.getSettings(cid))}`,
           '</character_sheet>',
         ].join('\n'),
       );

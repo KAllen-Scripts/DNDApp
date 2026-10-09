@@ -6,7 +6,7 @@
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { withPage, createFakeLLM } from './helpers.js';
+import { withPage, addDm, createFakeLLM, openPage } from './helpers.js';
 import { emptySheet, SHEET_FORMAT } from '@dndapp/shared/sheet.js';
 
 const NO_3D = { 'dndapp.dice': JSON.stringify({ threeD: false, sound: false }) };
@@ -155,7 +155,8 @@ test('sheet: classes, attacks, coins, hit points, death saves and spell slots us
     await saved(page);
     const { sheet } = await serverSheet(t);
     assert.equal(sheet.classes.length, 1);
-    assert.deepEqual(sheet.attacks, [{ name: 'Longbow', bonus: '+5', damage: '1d8+3 piercing', notes: '' }]);
+    // Longbow is a weapon from the book: Dexterity, proficient (the damage was typed over).
+    assert.deepEqual(sheet.attacks, [{ name: 'Longbow', kind: 'attack', ability: 'dex', proficient: true, magic: 0, bonus: '+5', save: '', dc: '', damage: '1d8+3 piercing', notes: '' }]);
     assert.equal(sheet.coins.gp, 37);
     assert.deepEqual(sheet.hp, { current: 20, temp: null });
     assert.deepEqual(sheet.death_saves, { successes: 1, failures: 1 });
@@ -166,7 +167,7 @@ test('sheet: classes, attacks, coins, hit points, death saves and spell slots us
   });
 });
 
-test('sheet: clicking a save, skill or ability rolls it; an attack offers its damage, doubled on a natural 20', async () => {
+test('sheet: clicking a save, skill, ability or initiative rolls it (advantage from the sheet bar too); an attack offers its damage, doubled on a natural 20', async () => {
   const dice = [20, 6, 4, 11];
   mock.method(crypto, 'randomInt', (min) => dice.shift() ?? min);
   try {
@@ -174,9 +175,12 @@ test('sheet: clicking a save, skill or ability rolls it; an attack offers its da
       page.click('[data-tab=sheet]');
       page.type(byLabel(page, 'Dexterity score'), '16');
       page.click(page.$$('#sheet .add-row').find((b) => b.textContent.includes('Add an attack')));
+      // A weapon from the book fills in its damage and ability (finesse: Dex +3); to hit and damage are worked out.
       page.type(byLabel(page, 'Attack name'), 'Shortsword');
-      page.type(byLabel(page, 'Attack bonus'), '+5');
-      page.type(byLabel(page, 'Damage and type'), '1d6+3 piercing');
+      assert.equal(byLabel(page, 'Damage and type').value, '1d6 piercing');
+      assert.equal(byLabel(page, 'Ability added').value, 'finesse');
+      assert.equal(byLabel(page, 'Attack bonus').placeholder, '+5');
+      assert.equal(page.text('#sheet .atk-sum'), '1d20+5 to hit · 1d6+3 piercing');
 
       page.click(byLabel(page, 'Roll this attack'), { shiftKey: true });
       await page.settle();
@@ -190,6 +194,14 @@ test('sheet: clicking a save, skill or ability rolls it; an attack offers its da
       await page.settle();
       assert.deepEqual(rolls().at(-1), { notation: '2d6+3', mode: 'normal' });
       assert.equal(page.text('#dice-result .dr-label'), 'Shortsword: damage (critical)');
+
+      // Damage on its own, with a +1 weapon.
+      page.type(byLabel(page, 'Magic bonus'), '1');
+      page.click(byLabel(page, 'Roll damage'));
+      await page.settle();
+      assert.deepEqual(rolls().at(-1), { notation: '1d6+4', mode: 'normal' });
+      assert.equal(page.text('#dice-result .dr-label'), 'Shortsword: damage');
+      page.type(byLabel(page, 'Magic bonus'), '0');
 
       const dexSave = page.$$('#sheet .saves .roll-name').find((b) => b.textContent === 'Dexterity');
       page.click(dexSave, { altKey: true });
@@ -205,10 +217,99 @@ test('sheet: clicking a save, skill or ability rolls it; an attack offers its da
       await page.settle();
       assert.equal(rolls().at(-1).notation, '1d20');
       assert.equal(page.text('#dice-result .dr-label'), 'Death save');
+
+      // On a phone there's no Shift or Alt: the sheet's own Next d20 buttons (kept in step with the tray's).
+      const modeButton = (where, mode) => page.$(`${where} .dice-modes [data-mode=${mode}]`);
+      page.click(modeButton('.sheet-bar', 'advantage'));
+      assert.equal(modeButton('#dice-panel', 'advantage').getAttribute('aria-pressed'), 'true');
+      // Initiative also goes into a fight waiting for the character (none here).
+      page.click(page.$$('#sheet .roll-name').find((b) => b.textContent === 'Initiative'));
+      await page.settle();
+      assert.deepEqual(page.requests.filter((r) => r.path.endsWith('/roll')).at(-1).body, { notation: '1d20+3', mode: 'advantage', label: 'Initiative', visibility: 'party', initiative: true });
+      assert.equal(modeButton('.sheet-bar', 'normal').getAttribute('aria-pressed'), 'true', 'back to normal after one d20');
     });
   } finally {
     mock.restoreAll();
   }
+});
+
+test('sheet: an attack that is a saving throw rolls damage only, with its DC; a Strength attack with Strength 8', async () => {
+  await withPage(sheetPage(), async (page) => {
+    page.click('[data-tab=sheet]');
+    page.type(byLabel(page, 'Constitution score'), '14');
+    page.click(page.$$('#sheet .add-row').find((b) => b.textContent.includes('Add an attack')));
+    page.type(byLabel(page, 'Attack name'), 'Fire breath');
+    page.type(byLabel(page, 'Damage and type'), '2d6 fire');
+    page.type(byLabel(page, 'Attack or save'), 'save');
+    page.type(byLabel(page, 'Ability added'), 'con');
+    page.type(byLabel(page, 'Saving throw ability'), 'dex');
+    assert.equal(page.$('#sheet [aria-label="Roll this attack"]'), null, 'no roll to hit');
+    assert.equal(byLabel(page, 'Save DC').placeholder, 'DC 12'); // 8 + 2 + 2
+    page.click(byLabel(page, 'Roll damage'));
+    await page.settle();
+    const last = () => page.requests.filter((r) => r.path.endsWith('/roll')).at(-1).body;
+    assert.equal(last().notation, '2d6');
+    assert.equal(last().label, 'Fire breath: damage (DC 12 Dex save)');
+
+    page.click(page.$$('#sheet .add-row').find((b) => b.textContent.includes('Add an attack')));
+    page.type(page.$$('#sheet [aria-label="Attack name"]')[1], 'Rock');
+    page.type(page.$$('#sheet [aria-label="Damage and type"]')[1], '1d4 bludgeoning');
+    page.type(byLabel(page, 'Strength score'), '8');
+    page.click(page.$$('#sheet [aria-label="Roll this attack"]')[0]); // the breath has none
+    await page.settle();
+    assert.equal(last().notation, '1d20+1'); // proficient (+2), Strength 8 (−1)
+    assert.match(page.text('#dice-result .dr-actions'), /Damage \(1d4-1\)/);
+  });
+});
+
+test('sheet: spells roll to hit with the spell attack bonus, or show their DC, and roll damage cast higher or healing with the modifier', async () => {
+  await withPage(sheetPage(), async (page) => {
+    page.click('[data-tab=sheet]');
+    page.type(byLabel(page, 'Intelligence score'), '18');
+    page.type(byLabel(page, 'Class'), 'Wizard');
+    page.type(byLabel(page, 'Level'), '5');
+    const add = async (name) => {
+      page.type('#sheet .add-spell input', name);
+      page.submit('#sheet .add-spell');
+      // Looked up (from the SRD) and drawn again.
+      return page.waitFor(() => page.$$('#sheet .spell').find((c) => c.querySelector('strong').textContent === name && c.querySelector('.source-srd')), { what: name });
+    };
+    const last = () => page.requests.filter((r) => r.path.endsWith('/roll')).at(-1).body;
+
+    // Fireball (SRD): a Dex save against the spell DC; 8d6, more with a higher slot.
+    let card = await add('Fireball');
+    assert.equal(page.text(card.querySelector('.spell-dc')), 'DC 15 Dex');
+    page.type(card.querySelector('[aria-label="Fireball slot level"]'), '5');
+    page.click(card.querySelector('[aria-label="Roll Fireball damage"]'));
+    await page.settle();
+    assert.equal(last().notation, '10d6');
+    assert.equal(last().label, 'Fireball: damage at 5th level (DC 15 Dex save)');
+
+    // Fire Bolt: a spell attack (+7), damage offered after; at 5th level it's 2d10.
+    card = await add('Fire Bolt');
+    page.click(card.querySelector('[aria-label="Roll Fire Bolt to hit"]'));
+    await page.settle();
+    assert.equal(last().notation, '1d20+7');
+    assert.equal(page.$$('#dice-result .dr-actions button')[0].textContent, 'Damage (2d10)');
+
+    // Cure Wounds heals 1d8 + Int; the details show how it rolls, and can be changed.
+    card = await add('Cure Wounds');
+    page.click(card.querySelector('[aria-label="Roll Cure Wounds healing"]'));
+    await page.settle();
+    assert.equal(last().notation, '1d8+4');
+    card.open = true;
+    card.dispatchEvent(new page.window.Event('toggle'));
+    assert.equal(card.querySelector('[aria-label="Spell damage"]').value, '1d8 healing');
+    assert.equal(card.querySelector('[aria-label="Add spellcasting modifier"]').checked, true);
+    page.type(card.querySelector('[aria-label="Add spellcasting modifier"]'), false);
+    page.click(card.querySelector('[aria-label="Roll Cure Wounds healing"]'));
+    await page.settle();
+    assert.equal(last().notation, '1d8');
+
+    // Shield has nothing to roll.
+    card = await add('Shield');
+    assert.equal(card.querySelector('.spell-rolls').childElementCount, 0);
+  });
 });
 
 test('sheet: changed elsewhere meanwhile: keep mine (OK) or load the other version (Cancel)', async () => {
@@ -419,5 +520,200 @@ test('sheet: "Fill in missing details" and "Look up details" ask the server agai
     card().open = true;
     card().dispatchEvent(new page.window.Event('toggle'));
     assert.match(card().querySelector('[aria-label="Description"]').value, /You brandish/);
+  });
+});
+
+test('inventory: items looked up and added, weapons equipped (two daggers), one armour at a time, proficiency from the class; equipped weapons attack from the sheet and armour sets AC', async () => {
+  const dice = [15, 4];
+  mock.method(crypto, 'randomInt', (min) => dice.shift() ?? min);
+  try {
+    await withPage(sheetPage(), async (page, t) => {
+      page.click('[data-tab=sheet]');
+      page.type(byLabel(page, 'Class'), 'Wizard');
+      page.type(byLabel(page, 'Dexterity score'), '14');
+      page.type(byLabel(page, 'Strength score'), '12');
+      assert.equal(byLabel(page, 'Armour class').value, '12');
+
+      page.click('[data-tab=inventory]');
+      assert.match(page.text('#inventory'), /Nothing here yet/);
+      const add = async (name) => {
+        page.el('#gear-name').value = name;
+        page.submit('#gear-add');
+        await page.waitFor(() => /^Added|Couldn|know/.test(page.text('#gear-status')), { what: `${name} to be added` });
+      };
+      const row = (name) => page.$$('#inventory .gear-row').find((r) => r.querySelector('.gear-title').textContent === name);
+      const inv = (label) => page.el(`#inventory [aria-label="${label}"]`);
+
+      await add('Dagger');
+      await add('Longsword');
+      await add('Chain mail');
+      await add('Leather armor');
+      assert.deepEqual(page.$$('#inventory .gear-title').map((e) => e.textContent), ['Dagger', 'Longsword', 'Chain mail', 'Leather armor']);
+      // A wizard: proficient with daggers, not longswords or armour (they can change it).
+      assert.equal(inv('Proficient: Dagger').checked, true);
+      assert.equal(inv('Proficient: Longsword').checked, false);
+      assert.equal(inv('Proficient: Chain mail').checked, false);
+      assert.match(row('Dagger').querySelector('.gear-sum').textContent, /^\+4 to hit · 1d4\+2 piercing/);
+
+      // Two daggers: equip both.
+      page.type(inv('How many: Dagger'), '2');
+      page.type(inv('How many equipped: Dagger'), '2');
+      page.click(inv('Equipped: Longsword'));
+      page.click(inv('Proficient: Longsword'));
+
+      // One suit of armour: putting on the second takes off the first. AC follows.
+      page.click(inv('Equipped: Chain mail'));
+      page.click(inv('Equipped: Leather armor'));
+      assert.equal(inv('Equipped: Chain mail').checked, false);
+      assert.equal(inv('Equipped: Leather armor').checked, true);
+      assert.match(page.text('#gear-status'), /Took off Chain mail/);
+      page.click('[data-tab=sheet]');
+      assert.equal(byLabel(page, 'Armour class').value, '13');
+
+      // Equipped weapons show in Attacks, worked out, with to hit and damage rolls (versatile: both hands too).
+      const attacks = page.$$('#sheet .gear-attack');
+      assert.deepEqual(attacks.map((a) => a.querySelector('.gear-name').textContent), ['Dagger ×2', 'Longsword']);
+      assert.deepEqual(attacks.map((a) => a.querySelector('.gear-num').textContent), ['+4', '+3']);
+      page.click(byLabel(page, 'Roll Longsword to hit'));
+      await page.settle();
+      const rolls = () => page.requests.filter((r) => r.path.endsWith('/roll')).map((r) => r.body);
+      assert.deepEqual(rolls().at(-1), { notation: '1d20+3', mode: 'normal', label: 'Longsword: to hit', visibility: 'party' });
+      page.click(byLabel(page, 'Roll Longsword damage with both hands'));
+      await page.settle();
+      assert.equal(rolls().at(-1).notation, '1d10+1');
+
+      await saved(page);
+      const { sheet } = await serverSheet(t);
+      assert.deepEqual(sheet.inventory.map((g) => [g.name, g.qty, g.equipped, g.proficient]), [['Dagger', 2, 2, true], ['Longsword', 1, 1, true], ['Chain mail', 1, 0, false], ['Leather armor', 1, 1, false]]);
+
+      // The DM sees what's equipped, and nothing else on the sheet.
+      const dm = (await t.request('GET', `/campaigns/${t.campaign.id}/gear/equipped`)).json();
+      assert.deepEqual(dm.players.find((p) => p.name === 'Sam').gear.map((g) => g.name), ['Dagger', 'Longsword', 'Leather armor']);
+    });
+  } finally {
+    mock.restoreAll();
+  }
+});
+
+test('inventory: the DM sees what each player has equipped in the Items tab, and refreshes it', async () => {
+  const thorin = (inventory) => ({ ...emptySheet({ name: 'Thorin' }), inventory });
+  await withPage({
+    before: async (t) => {
+      t.sheets.save(t.campaign.id, t.sam.id, thorin([{ name: 'Shield', kind: 'armor', equipped: 1, proficient: false, armor: { base: 2, type: 'shield' } }, { name: 'Rope', kind: 'gear' }]));
+      return { dana: await addDm(t) };
+    },
+    page: (t, { dana }) => ({ as: dana, storage: NO_3D }),
+  }, async (page, t) => {
+    page.click('[data-tab=items]');
+    await page.waitFor(() => page.$$('#items-equipped .equipped-player').length === 2, { what: 'the players\u2019 gear' });
+    const card = (name) => page.$$('#items-equipped .equipped-player').find((p) => p.textContent.includes(name));
+    assert.match(card('Thorin').textContent, /AC 12/);
+    assert.match(card('Thorin').textContent, /Shield · \+2 AC · not proficient/);
+    assert.doesNotMatch(card('Thorin').textContent, /Rope/);
+    assert.match(card('Alex').textContent, /Nothing equipped/);
+    assert.ok(!page.visible('[data-tab=inventory]'), 'the DM has no inventory');
+
+    const v = t.sheets.get(t.campaign.id, t.sam.id).version;
+    t.sheets.save(t.campaign.id, t.sam.id, thorin([{ name: 'Greataxe', kind: 'weapon', equipped: 1, proficient: true, weapon: { damage: '1d12 slashing', ability: 'str', category: 'martial', properties: ['heavy', 'two-handed'] } }]), { version: v });
+    page.click('#equipped-refresh');
+    await page.waitFor(() => /Greataxe/.test(card('Thorin').textContent), { what: 'the new gear' });
+    assert.match(card('Thorin').textContent, /Greataxe · \+2 to hit, 1d12 slashing/);
+  });
+});
+
+test('inventory: weight against the campaign rule, charges used and rolled back, three attunements, magic items on the sheet, noisy armour on Stealth', async () => {
+  const dice = [5, 3, 12];
+  mock.method(crypto, 'randomInt', (min) => dice.shift() ?? min);
+  const magic = (name, text, extra = {}) => ({ name, kind: 'magic', text, attunement: true, ...extra });
+  try {
+    await withPage(sheetPage({
+      before: async (t) => {
+        t.sheets.save(t.campaign.id, t.sam.id, {
+          ...emptySheet({ name: 'Thorin' }), race: 'Human', classes: [{ name: 'Fighter', level: 1 }],
+          abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+          inventory: [
+            magic('Wand of Magic Missiles', 'x', { attunement: false, charges: { max: 7, used: 0, recharge: '1d6+1', when: 'dawn' } }),
+            magic('Gauntlets of Ogre Power', 'g', { effects: [{ target: 'score.str', value: 19 }], equipped: 1 }),
+            magic('Ring of Protection', 'r', { effects: [{ target: 'ac', value: 1 }, { target: 'saves', value: 1 }], equipped: 1, attuned: true }),
+            magic('Cloak of Elvenkind', 'c', { attuned: true }),
+            magic('Amulet', 'a', { attuned: true }),
+            { name: 'Chain mail', kind: 'armor', weight: 55, armor: { base: 16, type: 'heavy', strength: 13, stealth: true } },
+            { name: 'Anvil', weight: 100 },
+          ],
+        });
+      },
+    }), async (page) => {
+      page.click('[data-tab=inventory]');
+      const inv = (label) => page.el(`#inventory [aria-label="${label}"]`);
+      const top = () => page.text('#tab-inventory .gear-summary');
+      assert.match(top(), /Carrying 155 lb of 150 lb\. Attuned to 3 of 3\./);
+      assert.match(page.text('#tab-inventory .gear-warn'), /Over your carrying capacity \(155 of 150 lb\): speed 5 ft/);
+
+      // A fourth attunement is refused.
+      page.click(inv('Attuned: Gauntlets of Ogre Power'));
+      assert.equal(inv('Attuned: Gauntlets of Ogre Power').checked, false);
+      assert.match(page.text('#gear-status'), /attuned to 3 items at most/);
+      page.click(inv('Attuned: Amulet'));
+      page.click(inv('Attuned: Gauntlets of Ogre Power'));
+      assert.equal(inv('Attuned: Gauntlets of Ogre Power').checked, true);
+      // Strength 19 now: capacity 285, so not over any more.
+      assert.match(top(), /of 285 lb/);
+      assert.ok(page.$('#tab-inventory .gear-warn').hidden);
+
+      // Charges: use two, then recharge with the wand's 1d6+1 (rolled: 3 + 1).
+      page.click(inv('Use a charge: Wand of Magic Missiles'));
+      page.click(inv('Use a charge: Wand of Magic Missiles'));
+      assert.match(page.text('#inventory .charges'), /5 of 7 charges/);
+      page.click(inv('Recharge: Wand of Magic Missiles'));
+      await page.settle();
+      assert.equal(page.requests.filter((r) => r.path.endsWith('/roll')).at(-1).body.notation, '1d6+1');
+      await page.waitFor(() => /7 of 7 charges/.test(page.text('#inventory .charges')), { what: 'the charges back' });
+
+      // The sheet: Strength from the gauntlets, AC and saves from the ring, Stealth with disadvantage in chain mail.
+      page.click('[data-tab=sheet]');
+      assert.equal(byLabel(page, 'Strength modifier').value, '+4');
+      assert.match(page.text('#sheet .item-score'), /19 with items/);
+      assert.equal(byLabel(page, 'Armour class').value, '11');
+      assert.equal(byLabel(page, 'Wisdom save').value, '+1');
+      page.click('[data-tab=inventory]');
+      page.click(inv('Equipped: Chain mail'));
+      page.click('[data-tab=sheet]');
+      assert.equal(byLabel(page, 'Armour class').value, '17');
+      assert.match(page.text('#sheet .sheet-warn'), /Chain mail: disadvantage on Stealth/);
+      page.click(page.$$('#sheet .roll-name').find((b) => b.textContent.startsWith('Stealth')));
+      await page.settle();
+      const last = page.requests.filter((r) => r.path.endsWith('/roll')).at(-1).body;
+      assert.equal(last.mode, 'disadvantage');
+      assert.equal(last.label, 'Stealth (disadvantage: Chain mail)');
+    });
+  } finally {
+    mock.restoreAll();
+  }
+});
+
+test('campaign settings: the DM ignores weight limits from Settings', async () => {
+  await withPage({ before: async (t) => ({ dana: await addDm(t) }), page: (t, { dana }) => ({ as: dana, storage: NO_3D }) }, async (page, t) => {
+    page.click('#settings-open');
+    assert.equal(page.el('#setting-weight').value, 'capacity');
+    page.type('#setting-weight', 'ignore');
+    await page.waitFor(() => /Saved/.test(page.text('#settings-dialog')), { what: 'the setting to save' });
+    assert.deepEqual(t.store.getSettings(t.campaign.id), { weight: 'ignore' });
+  });
+});
+
+test('campaign settings: a player\u2019s sheet follows the DM\u2019s weight rule live; players have no Settings', async () => {
+  await withPage(sheetPage({
+    before: async (t) => { t.sheets.save(t.campaign.id, t.sam.id, { ...emptySheet({ name: 'Thorin' }), race: 'Human', inventory: [{ name: 'Anvil', weight: 200 }] }); },
+  }), async (page, t) => {
+    assert.ok(!page.visible('#settings-open'));
+    page.click('[data-tab=inventory]');
+    assert.match(page.text('#tab-inventory .gear-warn'), /Over your carrying capacity/);
+    page.click('[data-tab=sheet]');
+    assert.equal(byLabel(page, 'Speed (feet)').value, '5');
+    await t.request('PATCH', `/campaigns/${t.campaign.id}/settings`, { body: { weight: 'ignore' } });
+    await page.waitFor(() => byLabel(page, 'Speed (feet)').value === '30', { what: 'the sheet to hear the new rule' });
+    page.click('[data-tab=inventory]');
+    assert.match(page.text('#tab-inventory .gear-summary'), /Carrying 200 lb \(ignore weight limits: this campaign has none\)/);
+    assert.ok(page.$('#tab-inventory .gear-warn').hidden);
   });
 });
