@@ -14,6 +14,7 @@
 import { json } from '../db/index.js';
 import { renderRecord } from '../kb/store.js';
 import { createTools } from './tools.js';
+import { handbookEditions } from '../sheets/books.js';
 
 export class RateLimitError extends Error {}
 
@@ -74,9 +75,7 @@ How to format:
 
 /** Which rules the group plays by, judged from their Player's Handbook(s). */
 export function groupEdition(shelf) {
-  const editions = [
-    ...new Set(shelf.filter((b) => /player.?s\s*hand\s*book/i.test(b.title)).map((b) => (b.year ? (b.year >= 2024 ? '2024' : '2014') : /2024/.test(b.title) ? '2024' : /2014/.test(b.title) ? '2014' : null))),
-  ];
+  const editions = handbookEditions(shelf);
   const known = editions.filter(Boolean);
   if (known.length === 1 && editions.length === 1) {
     return `The group's edition: their Player's Handbook is the ${known[0]} one, so answer with the ${known[0]} rules unless the player, the archivist's guide or the pinned records say they play otherwise.`;

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { emptySheet, normalizeSheet, computeSheet, formatBonus, classKey } from '../src/sheet.js';
+import { emptySheet, normalizeSheet, computeSheet, formatBonus, classKey, hitDicePool, hitDice, spendHitDie, shortRest, longRest } from '../src/sheet.js';
 
 const sheetWith = (over) => normalizeSheet({ ...emptySheet(), ...over });
 
@@ -146,4 +146,67 @@ test('normalizeSheet: attacks keep what was typed (spaces too, as it\'s typed li
   assert.deepEqual(s.attacks[1], { name: '', bonus: '', damage: '', notes: '' });
   assert.equal(s.attacks.length, 50);
   assert.deepEqual(s.death_saves, { successes: 3, failures: 0 });
+});
+
+test('hit dice: read from the Hit dice box (typed or automatic), kept per die size; old sheets count spent dice from the biggest down', () => {
+  assert.deepEqual(hitDicePool('4d10 + 3d6'), { 10: 4, 6: 3 });
+  assert.deepEqual(hitDicePool('2d8, 1 d8 and 3d7'), { 8: 3 });
+  assert.deepEqual(hitDicePool(''), {});
+  const multi = { classes: [{ name: 'Fighter', subclass: '', level: 4 }, { name: 'Wizard', subclass: '', level: 3 }] };
+  // A sheet saved before hit dice were kept per size had one number.
+  assert.deepEqual(normalizeSheet({ ...multi, hit_dice_used: 5 }).hit_dice_spent, { 10: 4, 6: 1 });
+  assert.deepEqual(normalizeSheet({ ...multi, hit_dice_used: 5, hit_dice_spent: { 6: 1 } }).hit_dice_spent, { 6: 1 });
+  assert.deepEqual(normalizeSheet({ hit_dice_spent: { 8: 2, 7: 1, 10: 0, 12: 'x' } }).hit_dice_spent, { 8: 2 });
+  // A typed Hit dice box is what counts.
+  const typed = sheetWith({ ...multi, overrides: { hit_dice: '7d8' }, hit_dice_spent: { 8: 9, 10: 1 } });
+  assert.deepEqual(hitDice(typed), [{ die: 8, total: 7, spent: 7, left: 0 }]);
+});
+
+test('spending a hit die heals what was rolled (never less than nothing), up to the maximum; a blank Current means full', () => {
+  // Wizard 3, Con 14: 6+2 + 2×(4+2) = 20 hit points, 3d6.
+  const s = sheetWith({ classes: [{ name: 'Wizard', subclass: '', level: 3 }], abilities: { str: 10, dex: 10, con: 14, int: 10, wis: 10, cha: 10 }, hp: { current: 12, temp: null } });
+  const a = spendHitDie(s, 6, 5);
+  assert.equal(a.healed, 5);
+  assert.equal(a.sheet.hp.current, 17);
+  assert.deepEqual(a.sheet.hit_dice_spent, { 6: 1 });
+  assert.equal(s.hp.current, 12, 'the sheet passed in is not changed');
+  assert.equal(spendHitDie(a.sheet, 6, 6).sheet.hp.current, 20);
+  assert.equal(spendHitDie(a.sheet, 6, -1).healed, 0);
+  assert.equal(spendHitDie(sheetWith({ ...s, hp: { current: null } }), 6, 4).sheet.hp.current, 20);
+  assert.throws(() => spendHitDie(s, 8, 4), /no d8/);
+  assert.throws(() => spendHitDie(sheetWith({ ...s, hit_dice_spent: { 6: 3 } }), 6, 4), /no d6 hit dice left/);
+});
+
+test('rests: a short rest gives back Pact Magic; a long rest gives back everything, with half the hit dice (2014) or all (2024)', () => {
+  const s = sheetWith({
+    classes: [{ name: 'Warlock', subclass: '', level: 5 }, { name: 'Cleric', subclass: '', level: 2 }],
+    hp: { current: 3, temp: 5 },
+    hit_dice_spent: { 8: 6 },
+    death_saves: { successes: 2, failures: 1 },
+    spellcasting: { class: 'Cleric', slots_used: { 1: 2 }, pact_used: 2 },
+  });
+  const short = shortRest(s);
+  assert.equal(short.spellcasting.pact_used, 0);
+  assert.deepEqual(short.spellcasting.slots_used, { 1: 2 });
+  assert.equal(short.hp.current, 3);
+
+  const max = computeSheet(s).values.hp_max;
+  const long = longRest(s);
+  assert.equal(long.rested, true);
+  assert.equal(long.sheet.hp.current, max);
+  assert.equal(long.sheet.hp.temp, null);
+  assert.deepEqual(long.sheet.death_saves, { successes: 0, failures: 0 });
+  assert.deepEqual(long.sheet.spellcasting.slots_used, {});
+  assert.equal(long.sheet.spellcasting.pact_used, 0);
+  // 7 hit dice: 3 come back.
+  assert.deepEqual(long.sheet.hit_dice_spent, { 8: 3 });
+  assert.deepEqual(long.regained, { hp: max - 3, hit_dice: 3 });
+  assert.deepEqual(longRest(s, { edition: '2024' }).sheet.hit_dice_spent, {});
+  // At least one comes back, even at 1st level.
+  assert.deepEqual(longRest(sheetWith({ classes: [{ name: 'Rogue', subclass: '', level: 1 }], hit_dice_spent: { 8: 1 } })).sheet.hit_dice_spent, {});
+  // 2014: at 0 hit points a long rest does nothing; 2024 doesn't have that rule.
+  const down = sheetWith({ ...s, hp: { current: 0, temp: null } });
+  assert.equal(longRest(down).rested, false);
+  assert.equal(longRest(down).sheet, down);
+  assert.equal(longRest(down, { edition: '2024' }).sheet.hp.current, max);
 });

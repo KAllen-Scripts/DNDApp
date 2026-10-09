@@ -24,6 +24,11 @@
  *     maps/<map id>/tokens/<file>      a picture the DM gave a token (NPCs, enemies), as uploaded
  *     creatures/<id>/<picture file>    a picture for one of the DM's saved creatures, as uploaded
  *     creatures/<id>/changes.jsonl     the whole creature after each change, append-only
+ *     items/<id>/<picture file>        a picture for one of the DM's saved items, as uploaded
+ *     items/<id>/changes.jsonl         the whole item after each change, append-only
+ *     merchants/<id>/<picture file>    a merchant's picture, as uploaded
+ *     merchants/<id>/changes.jsonl     the whole merchant (stock, prices, sales) after each change, append-only
+ *     rests.jsonl                      short and long rests the DM called, append-only
  *     sessions/0001/
  *       transcript.txt                 byte-for-byte as uploaded, read-only
  *       meta.json                      number, title, played_on, sha256
@@ -51,6 +56,12 @@ const mapDir = (id) => {
 const userDir = (id) => {
   if (!Number.isInteger(Number(id)) || Number(id) <= 0) throw new Error(`Bad user id: ${id}`);
   return String(Number(id));
+};
+/** The archive folders the DM's items and merchants live in. */
+const LIBRARY_FOLDERS = ['items', 'merchants'];
+const libraryDir = (folder) => {
+  if (!LIBRARY_FOLDERS.includes(folder)) throw new Error(`Bad library folder: ${folder}`);
+  return folder;
 };
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
 export const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
@@ -234,6 +245,19 @@ export function createArchive(root) {
 
     appendCreature: (slug, id, entry) => appendLine(path.join(campaignDir(slug), 'creatures', mapDir(id), 'changes.jsonl'), entry),
 
+    /** Keep a picture for one of the DM's items or merchants exactly as uploaded (never replaced). */
+    saveLibraryImage(slug, folder, id, file, buf) {
+      const dest = path.join(campaignDir(slug), libraryDir(folder), mapDir(id), path.basename(file));
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, buf, { flag: 'wx' });
+    },
+
+    libraryImagePath: (slug, folder, id, file) => path.join(campaignDir(slug), libraryDir(folder), mapDir(id), path.basename(file)),
+
+    /** The whole item or merchant after a change. */
+    appendLibrary: (slug, folder, id, entry) => appendLine(path.join(campaignDir(slug), libraryDir(folder), mapDir(id), 'changes.jsonl'), entry),
+    appendRest: (slug, entry) => appendLine(path.join(campaignDir(slug), 'rests.jsonl'), entry),
+
     /** Knowledge-base snapshot and journal after an archivist run. */
     saveRunOutput(slug, runLabel, files) {
       const dir = path.join(campaignDir(slug), 'outputs', `v${PIPELINE_VERSION}`, `${stamp()}-${runLabel.replace(/\W+/g, '-')}`);
@@ -304,6 +328,16 @@ export function createArchive(root) {
               .map((id) => readLines(path.join(creaturesDir, id, 'changes.jsonl')).at(-1))
               .filter(Boolean)
           : [];
+        const lastOfEach = (folder) => {
+          const dir = path.join(campaignDir(slug), folder);
+          return fs.existsSync(dir)
+            ? fs
+                .readdirSync(dir)
+                .filter((d) => /^[a-f0-9]{10}$/.test(d))
+                .map((id) => readLines(path.join(dir, id, 'changes.jsonl')).at(-1))
+                .filter(Boolean)
+            : [];
+        };
         yield {
           campaign,
           sessions,
@@ -317,6 +351,9 @@ export function createArchive(root) {
           characters,
           handouts,
           creatures,
+          items: lastOfEach('items'),
+          merchants: lastOfEach('merchants'),
+          rests: readLines(path.join(campaignDir(slug), 'rests.jsonl')),
         };
       }
     },

@@ -278,6 +278,34 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
 @media (prefers-reduced-motion: reduce) { .creature.pending .creature-face { animation: none; } }
 .creature-source a { color: inherit; }
 
+/* ---------- the DM's items and merchants, and the shop ---------- */
+.merchants { grid-template-columns: repeat(auto-fill, minmax(min(100%, 28rem), 1fr)); }
+.merchant-open { color: var(--success, #3f8a4a); }
+.merchant-open.closed { color: var(--error); }
+table.stock { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+table.stock td { padding: 0.2rem 0.3rem; border-top: 1px solid var(--border); vertical-align: middle; }
+table.stock td.num { white-space: nowrap; text-align: right; }
+table.stock .stock-actions { white-space: nowrap; text-align: right; }
+table.stock .stock-actions button { padding: 0.15rem 0.45rem; font-size: 0.8rem; }
+.price-inputs { display: flex; gap: 0.3rem; }
+.price-inputs input { min-width: 0; flex: 1; }
+.price-inputs select { width: auto; }
+.sales { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.3rem; max-height: 55vh; overflow-y: auto; }
+.shop-dialog { width: min(40rem, calc(100vw - 2rem)); }
+.shop-head { display: flex; gap: 0.75rem; align-items: center; }
+.shop-head h2 { margin: 0; }
+.shop-head p { margin: 0.2rem 0 0; }
+.shop-purse { font-weight: 600; margin: 0.25rem 0; }
+.shop-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; max-height: 55vh; overflow-y: auto; }
+.shop-item { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; padding: 0.4rem 0; border-top: 1px solid var(--border); }
+.shop-item .creature-face { width: 2.4rem; height: 2.4rem; font-size: 0.85rem; }
+.shop-item-body { display: grid; flex: 1 1 10rem; min-width: 0; }
+.shop-item-name { text-align: left; font-weight: 600; }
+.shop-price { font-weight: 600; white-space: nowrap; }
+.shop-left { white-space: nowrap; }
+.shop-buy { display: flex; gap: 0.3rem; align-items: center; }
+.shop-qty { width: 4rem; }
+
 @media (max-width: 560px) {
   .topbar { gap: 0.5rem; }
   .who { flex-basis: 100%; }
@@ -773,8 +801,15 @@ input.num, .sheet .num { text-align: center; }
 .tiles .stat .auto, .tiles .stat input { width: 100%; }
 .tiles .stat input { height: 2.5rem; padding: 0 0.3rem; font-size: 1.3rem; font-weight: 600; text-align: center; }
 .hp .hp-current input { font-size: 1.6rem; font-weight: 700; }
-.hd .tiles { grid-template-columns: minmax(0, 1fr) var(--num); }
 .hd .tiles .stat:first-child input { padding: 0 0.15rem; font-size: 0.88rem; }
+/* A row per hit die size: ticks for spent dice, how many are left, Spend (rests in sheet.js). */
+.hd-rows { display: grid; gap: 0.3rem; margin-top: 0.4rem; }
+.hd-row { display: flex; align-items: center; gap: 0.4rem; min-height: var(--row); font-size: 0.82rem; }
+.hd-row .hd-die { font-weight: 600; min-width: 2.2em; }
+.hd-row .pips { flex: 1; justify-content: flex-start; }
+.hd-row .hd-left { white-space: nowrap; }
+.hd-spend, .hd-short-rest { padding: 0.2rem 0.6rem; font-size: 0.8rem; }
+.hd-short-rest { align-self: center; margin-top: 0.4rem; }
 .ds { flex: 1; display: grid; gap: 0.35rem; align-content: center; }
 .ds-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-height: var(--row); font-size: 0.82rem; }
 .ds-failures input[type=checkbox]:checked { background: var(--error); border-color: var(--error); }
@@ -993,6 +1028,10 @@ details.spell > summary::-webkit-details-marker { display: none; }
 
 .map-dialog { width: min(32rem, calc(100vw - 32px)); padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: inherit; }
 .map-dialog::backdrop { background: rgb(0 0 0 / 0.35); }
+/* The DM's Rest dialog (rests.js). */
+.rest-who { display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; margin: 0; border: 1px solid var(--border); border-radius: var(--radius); }
+.rest-list { margin: 0.3rem 0 0; padding-left: 1.2rem; }
+.rest-result:empty { display: none; }
 .map-dialog-inner { display: grid; gap: 0.6rem; padding: 1rem 1.1rem; }
 .map-dialog h2 { margin: 0; font-size: 1.15rem; }
 .map-dialog h3 { margin: 0.4rem 0 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
@@ -1050,6 +1089,10 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .token-conditions {
   position: absolute; top: -0.12em; right: -0.12em; min-width: 0.55em; height: 0.55em; padding: 0 0.12em; border-radius: 1em;
   background: #7e57c2; color: #fff; font-size: 0.45em; line-height: 0.55em; text-align: center; box-sizing: content-box; pointer-events: none;
+}
+.token-shop {
+  position: absolute; top: -0.12em; left: -0.12em; width: 0.6em; height: 0.6em; border-radius: 1em;
+  background: #c9a227; color: #1b1405; font-size: 0.42em; line-height: 0.6em; text-align: center; pointer-events: none;
 }
 .map-selection .hp-text { font-weight: 600; font-size: 0.9rem; }
 .map-selection .hp-change { width: 6.5rem; padding: 0.25rem 0.4rem; }

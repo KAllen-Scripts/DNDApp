@@ -88,6 +88,16 @@ function vote(pages, numbersOn) {
  */
 export const bookTitle = (file) => file.replace(/\.pdf$/i, '').split(/\s+--\s+/)[0].replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
 
+/**
+ * The editions of the group's Player's Handbooks on the shelf (books.status().books):
+ * '2014', '2024', or null for one whose year can't be told, each once.
+ */
+export function handbookEditions(shelf) {
+  return [
+    ...new Set(shelf.filter((b) => /player.?s\s*hand\s*book/i.test(b.title)).map((b) => (b.year ? (b.year >= 2024 ? '2024' : '2014') : /2024/.test(b.title) ? '2024' : /2014/.test(b.title) ? '2014' : null))),
+  ];
+}
+
 /** The year the book was first printed, from its credits page ("First Printing: August 2014"). */
 function printedYear(texts) {
   const front = texts.slice(0, 12).join('\n');

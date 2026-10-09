@@ -8,7 +8,8 @@
     "./sheet.js": "./src/sheet.js",
     "./dice.js": "./src/dice.js",
     "./map.js": "./src/map.js",
-    "./citations.js": "./src/citations.js"
+    "./citations.js": "./src/citations.js",
+    "./coins.js": "./src/coins.js"
   },
   "scripts": {
     "test": "node --test \"test/*.test.js\""

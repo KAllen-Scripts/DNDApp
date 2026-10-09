@@ -663,6 +663,7 @@ export function registerMaps(app, r) {
     light: z.object(RADII).nullable(),
     darkvision: z.number().min(0).max(10_000),
     speed: z.number().min(0).max(10_000).nullable(),
+    merchant: z.string().regex(/^[a-f0-9]{10}$/).nullable(),
   });
   // What a player may change on their own token; everything else is the DM's.
   const OWNER_FIELDS = new Set(['x', 'y', 'hp', 'conditions', 'light', 'darkvision']);

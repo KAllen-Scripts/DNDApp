@@ -360,6 +360,23 @@ function placeDialog(c) {
   count.select?.();
 }
 
+/** Put one of the DM's merchants on the map on screen (from the Merchants tab), in the middle of what's showing. */
+export async function placeMerchant(m) {
+  document.querySelector('[data-tab=map]').click();
+  if (!state.current) return status('Import a map first, then place your merchants on it.', true);
+  try {
+    const box = $('#map-view').getBoundingClientRect();
+    const middle = toImage(box.left + box.width / 2, box.top + box.height / 2);
+    const res = await state.guarded(() => api('POST', `${base()}/${state.current.id}/merchants/${m.id}`, middle));
+    if (!res) return;
+    onMap(res.map);
+    select(res.token.id);
+    status(`${m.name} is on the map. Players open the shop from the token.`);
+  } catch (err) {
+    report(err);
+  }
+}
+
 /** Keep a token from the map in the DM's creatures. */
 export async function saveCreature(token) {
   try {

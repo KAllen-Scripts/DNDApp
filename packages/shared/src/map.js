@@ -86,6 +86,8 @@ export function normalizeToken(t = {}, map) {
     speed: num(t.speed, { min: 0, max: 10_000, fallback: null }),
     // A picture the DM gave an NPC or enemy (a player character shows its player's own token picture instead).
     art: kind !== 'pc' ? normalizeTokenArt(t.art) : null,
+    // The DM's merchant this token stands for (players open its shop from the token); null for none.
+    merchant: kind !== 'pc' && /^[a-f0-9]{10}$/.test(String(t.merchant ?? '')) ? String(t.merchant) : null,
   };
 }
 
