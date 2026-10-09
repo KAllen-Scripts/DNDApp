@@ -660,7 +660,7 @@ The owner sent a screenshot of a creature's Edit dialog: the stat block was raw 
 ### 2026-10-09: Rests, merchants and stat blocks merged; rules edition per campaign noted
 
 - The owner OK'd merging rests (#22) and merchants (#23). `main` had moved on with #20 (stat blocks), so it was merged into the merchants branch first: `context.js` passes the DM's creatures to Q&A, stat blocks and Find online as #20 does, and wires items and rests as before. Both #20 and the items prompts had bumped `PIPELINE_VERSION` to 12, so it is now **13**. Schema v14. 334 tests.
-- Owner, about the rules edition (rests follow 2014 or 2024 from `REST_RULES` or the group's PHB): "We WILL want to have a setting to toggle this, per campaign." Noted in SPEC §6.2 and next step 0; not built.
+- Owner, about the rules edition (rests follow 2014 or 2024 from `REST_RULES` or the group's PHB): "We WILL want to have a setting to toggle this, per campaign." Noted in SPEC §6.2, §6.8 and §9 (open questions: where the setting lives, whether Q&A and sheet rules follow it, what happens to sheets when it changes) and next step 0; not built.
 
 ## Verified vs. not verified
 
