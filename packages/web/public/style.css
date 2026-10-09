@@ -278,6 +278,34 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
 @media (prefers-reduced-motion: reduce) { .creature.pending .creature-face { animation: none; } }
 .creature-source a { color: inherit; }
 
+/* ---------- the DM's items and merchants, and the shop ---------- */
+.merchants { grid-template-columns: repeat(auto-fill, minmax(min(100%, 28rem), 1fr)); }
+.merchant-open { color: var(--success, #3f8a4a); }
+.merchant-open.closed { color: var(--error); }
+table.stock { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+table.stock td { padding: 0.2rem 0.3rem; border-top: 1px solid var(--border); vertical-align: middle; }
+table.stock td.num { white-space: nowrap; text-align: right; }
+table.stock .stock-actions { white-space: nowrap; text-align: right; }
+table.stock .stock-actions button { padding: 0.15rem 0.45rem; font-size: 0.8rem; }
+.price-inputs { display: flex; gap: 0.3rem; }
+.price-inputs input { min-width: 0; flex: 1; }
+.price-inputs select { width: auto; }
+.sales { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.3rem; max-height: 55vh; overflow-y: auto; }
+.shop-dialog { width: min(40rem, calc(100vw - 2rem)); }
+.shop-head { display: flex; gap: 0.75rem; align-items: center; }
+.shop-head h2 { margin: 0; }
+.shop-head p { margin: 0.2rem 0 0; }
+.shop-purse { font-weight: 600; margin: 0.25rem 0; }
+.shop-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; max-height: 55vh; overflow-y: auto; }
+.shop-item { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; padding: 0.4rem 0; border-top: 1px solid var(--border); }
+.shop-item .creature-face { width: 2.4rem; height: 2.4rem; font-size: 0.85rem; }
+.shop-item-body { display: grid; flex: 1 1 10rem; min-width: 0; }
+.shop-item-name { text-align: left; font-weight: 600; }
+.shop-price { font-weight: 600; white-space: nowrap; }
+.shop-left { white-space: nowrap; }
+.shop-buy { display: flex; gap: 0.3rem; align-items: center; }
+.shop-qty { width: 4rem; }
+
 @media (max-width: 560px) {
   .topbar { gap: 0.5rem; }
   .who { flex-basis: 100%; }
@@ -1050,6 +1078,10 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .token-conditions {
   position: absolute; top: -0.12em; right: -0.12em; min-width: 0.55em; height: 0.55em; padding: 0 0.12em; border-radius: 1em;
   background: #7e57c2; color: #fff; font-size: 0.45em; line-height: 0.55em; text-align: center; box-sizing: content-box; pointer-events: none;
+}
+.token-shop {
+  position: absolute; top: -0.12em; left: -0.12em; width: 0.6em; height: 0.6em; border-radius: 1em;
+  background: #c9a227; color: #1b1405; font-size: 0.42em; line-height: 0.6em; text-align: center; pointer-events: none;
 }
 .map-selection .hp-text { font-weight: 600; font-size: 0.9rem; }
 .map-selection .hp-change { width: 6.5rem; padding: 0.25rem 0.4rem; }

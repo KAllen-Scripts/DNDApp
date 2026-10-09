@@ -10,7 +10,7 @@ import { MAX_HANDOUT_TEXT, canSeeHandout } from '../handouts.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 
 export function registerTable(app, r) {
-  const { access, auth, db, handouts, openLiveStream } = r;
+  const { access, auth, db, handouts, merchants, openLiveStream } = r;
 
   // ---------- dice ----------
 
@@ -143,7 +143,9 @@ export function registerTable(app, r) {
   /**
    * Live news for the whole campaign (SSE): roll {roll} for rolls you may see;
    * handout {handout} when one is given to you or changed; handout-gone {id}
-   * when one is taken back or no longer for you.
+   * when one is taken back or no longer for you; merchant {id} when a
+   * merchant's stock, prices or shop changed (the page looks again if it has
+   * that shop open; the shop itself checks who may see it).
    */
   app.get('/campaigns/:cid/live', async (request, reply) => {
     const { cid } = access(request);
@@ -161,11 +163,18 @@ export function registerTable(app, r) {
       if (canSeeHandout(handout, a)) sse.send('handout', handouts.view(handout, a));
       else sse.send('handout-gone', { id: handout.id });
     };
+    const onMerchant = ({ campaign_id, merchant }) => {
+      if (campaign_id !== cid) return;
+      if (!current()) return sse.end();
+      sse.send('merchant', { id: merchant.id });
+    };
     rollEvents.on('roll', onRoll);
     handouts.events.on('update', onHandout);
+    merchants.events.on('update', onMerchant);
     sse.onClose(() => {
       rollEvents.off('roll', onRoll);
       handouts.events.off('update', onHandout);
+      merchants.events.off('update', onMerchant);
     });
   });
 }

@@ -138,6 +138,15 @@ export async function flush() {
   if (state.dirty && !state.saving) await save();
 }
 
+/** The server changed the sheet (something bought from a merchant): show the new version, here and in other windows. */
+export async function reloadSheet() {
+  if (!state.campaignId || state.dirty || state.saving) return;
+  const res = await state.guarded(() => api('GET', `${base()}/sheet`)).catch(() => null);
+  if (!res || state.dirty || state.saving) return;
+  useSheet(res.sheet, res.version);
+  announce();
+}
+
 document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flush());
 window.addEventListener('beforeunload', (e) => {
   if (state.dirty || state.saving) {

@@ -8,7 +8,7 @@ The design is in [SPEC.md](SPEC.md). Project status, change log and next steps a
 
 ```
 packages/
-  shared/   plain JS both sides use: transcript parser, citation format, character sheet rules, dice, map geometry
+  shared/   plain JS both sides use: transcript parser, citation format, character sheet rules, dice, map geometry, coins
   server/   Node.js server: API (src/routes/), archive, processing pipeline, Q&A agent; also serves the web page
   web/      the web page (plain HTML/CSS/JS in public/, no build step)
 ```
@@ -122,6 +122,10 @@ In place of a character sheet, the DM keeps enemies and friendly NPCs: name, siz
 
 Everyone can drop **pins** with a note on a map; only the person who placed them sees them, not even the DM.
 
+### Items and merchants (the DM)
+
+**Items** keeps what merchants sell: make one, **Look up** one by name (your items first, then the books in `DND books`, then the AI), or **Find online**. **Merchants** sets up shops: add items with a price, how many are in stock (or no limit) and what restocking brings them back up to; restock every so many long rests, or with **Restock now**; **Place on map** puts the merchant down as a token with a gold badge. Players pick the token, press **Shop** and buy on their own: the coins come off their sheet (with change) and the item goes into their equipment. **Sales** shows who bought what.
+
 ### The public address
 
 `PUBLIC_URL` in `.env` is the address players use (a placeholder, `https://dnd.example.xyz`, until the domain is bought). It's the only place the URL is set. The web page is served by this server and calls it with relative paths, so the page itself never needs the URL. The server prints it on start-up.
@@ -142,7 +146,7 @@ The first time a transcript is processed, the server downloads a small search mo
 
 Everything lives in `data/` (git-ignored):
 
-- `data/archive/` is the permanent record: accounts, original transcripts, player notes (every version), character sheets (every change, plus uploaded files), character pictures, maps (the images or PDFs as imported, other pictures of them, token pictures, every change, and everyone's private pins), handouts, the DM's creatures, speaker map, glossary, DM corrections, and a snapshot of the knowledge base after every archivist run. **Back this folder up.**
+- `data/archive/` is the permanent record: accounts, original transcripts, player notes (every version), character sheets (every change, plus uploaded files), character pictures, maps (the images or PDFs as imported, other pictures of them, token pictures, every change, and everyone's private pins), handouts, the DM's creatures, items and merchants (with recent sales), speaker map, glossary, DM corrections, and a snapshot of the knowledge base after every archivist run. **Back this folder up.**
 - `data/dndapp.sqlite` is the working database. It can be rebuilt from the archive.
 
 ### Rebuilding
@@ -227,7 +231,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/spells/lookup?name=` | A spell's details: SRD, else your books (tidied by the AI), else the AI's memory. 404 if not found; 429 past `SHEET_AI_PER_HOUR` AI calls |
 | POST | `/campaigns/:cid/roll` | Roll dice: `{notation: "1d20+5", mode?: normal \| advantage \| disadvantage, label?, visibility?: party \| dm \| self}` → `{notation, mode, terms, total, natural, roll}`. d2–d20 and d100, up to 50 dice. Logged and sent live to whoever may see it (`party`: everyone, the default; `dm`: the DM and you, a secret roll for the DM; `self`: only you) |
 | GET | `/campaigns/:cid/rolls` | The last 50 rolls you may see `{rolls: [{id, user_id, name, from_dm, visibility, label, result, rolled_at}]}` |
-| GET | `/campaigns/:cid/live` | Live news for the campaign (SSE): `roll` (a roll you may see), `handout` (one given to you, or changed), `handout-gone` `{id}` |
+| GET | `/campaigns/:cid/live` | Live news for the campaign (SSE): `roll` (a roll you may see), `handout` (one given to you, or changed), `handout-gone` `{id}`, `merchant` `{id}` (a merchant's stock, prices or shop changed) |
 | GET / POST | `/campaigns/:cid/handouts` | Handouts given to you (DM: all) `{can_edit, handouts}` / give one (DM) `{title, text?, to: "everyone" \| [user ids], picture?: {filename, data (base64)}}` (text or a picture) |
 | PATCH / DELETE | `/campaigns/:cid/handouts/:hid` | Change one (DM) `{title?, text?, to?}` / take it back (DM; kept in the archive) |
 | GET | `/campaigns/:cid/handouts/:hid/image` | A handout's picture (only for those it was given to, and the DM) |
@@ -258,6 +262,22 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | PATCH / DELETE | `/campaigns/:cid/creatures/:crid` | Change one (DM; placed tokens keep what they had) / remove it (DM; kept in the archive) |
 | GET / PUT / DELETE | `/campaigns/:cid/creatures/:crid/picture` | Its picture, cut to a square (DM) / give it one `{filename, data}` / back to initials |
 | POST | `/campaigns/:cid/creatures/:crid/stats` | Fill its stat block with the AI (DM) `{name?}`; 404 if the AI doesn't know the creature |
+| GET / POST | `/campaigns/:cid/items` | The DM's items (DM only) `{items}` / save one `{name, kind?, rarity?, attunement?, price? (copper), weight?, text?, notes?, picture?: {filename, data}}` |
+| PATCH / DELETE | `/campaigns/:cid/items/:iid` | Change one (DM) / take it off the list (DM; merchants keep selling it; kept in the archive) |
+| GET / PUT / DELETE | `/campaigns/:cid/items/:iid/picture` | Its picture, square (DM) / give it one `{filename, data}` / none |
+| POST | `/campaigns/:cid/items/lookup` | Look an item up and save it (DM) `{name}`: your items, then the books, then the AI → `{item, from: yours \| book \| ai}`; 404 if no one knows it |
+| POST | `/campaigns/:cid/items/:iid/fill` | Fill in a saved item the same way (DM) `{name?}`; a price you set stays |
+| POST | `/campaigns/:cid/items/find` | Have the AI find an item on the web with a picture (DM) `{query}`; 202, fills in in the background like creatures |
+| GET / POST | `/campaigns/:cid/merchants` | The DM's merchants with stock, sales and where their tokens are (DM only) / set one up `{name, description?, notes?, color?, open?, restock_every? (long rests), picture?}` |
+| PATCH / DELETE | `/campaigns/:cid/merchants/:mid` | Change one (DM) / close it down (DM; its tokens stay as NPCs) |
+| GET / PUT / DELETE | `/campaigns/:cid/merchants/:mid/picture` | Its picture (the DM, or a player who can see it) / give it one (DM) / none (DM) |
+| POST | `/campaigns/:cid/merchants/:mid/stock` | Sell an item (DM) `{item, price? (copper; default its usual price), qty? (null: no limit; default 1), full? (restock to; default qty)}` |
+| PATCH / DELETE | `/campaigns/:cid/merchants/:mid/stock/:lid` | Change a line `{price?, qty?, full?}` / stop selling it (DM) |
+| POST | `/campaigns/:cid/merchants/:mid/restock` | Everything back up to its restock level now (DM) |
+| POST | `/campaigns/:cid/maps/:mid/merchants/:mrid` | Put a merchant on a map as a token (DM) `{x?, y?, hidden?}` → `{map, token}` |
+| GET | `/campaigns/:cid/merchants/:mid/shop` | The shop: what it sells, prices, how many are left, and (players) the coins on your sheet. Players: only while they can see one of its tokens (else 404) |
+| GET | `/campaigns/:cid/merchants/:mid/items/:iid/picture` | The picture of an item it sells (as the shop) |
+| POST | `/campaigns/:cid/merchants/:mid/buy` | Buy (players) `{line, qty?}`: the coins come off your sheet (with change), the item goes into its equipment, the stock goes down → `{shop, sheet_version, bought}`; 400 if closed, sold out or you can't afford it |
 | POST | `/campaigns/:cid/creatures/find` | Have the AI find a creature on the web, official or not, with a picture (DM) `{query}`. 202 with the creature as `finding: {status: pending}`; it fills in (or `failed`, with `error`) in the background. 429 past `MAP_AI_PER_HOUR` |
 | POST | `/campaigns/:cid/maps/:mid/combat` | The fight on a map `{action: start \| end \| next \| prev \| add \| remove \| roll \| set, ids?, id?, init?}` (entries count `moved` this turn) → `{map, rolls: [{id, name, d20, mod, total}]}`. DM: everything (`start` with `ids` or every token; NPCs and enemies roll at once; `roll` without `id` rolls every NPC not rolled yet). A player: `roll` (once) or `set` for their own token, and `next` on their own turn |
 | POST | `/campaigns/:cid/maps/:mid/templates` | Place an area of effect (anyone who can see the map) `{shape: circle \| cone \| line \| cube, x, y, angle?, size, width?, label?, color?}` (size and width in the map's unit) |

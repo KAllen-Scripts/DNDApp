@@ -2,7 +2,8 @@
  * The web page. Display only: it sends what people type to the DNDApp server
  * and shows what comes back. Players get Ask and Notes; the admin login gets
  * the admin screen (admin.js) instead. The Sheet tab is in sheet.js; the DM
- * gets Creatures (creatures.js) in its place.
+ * gets Creatures (creatures.js) in its place, and Items (items.js) and
+ * Merchants (merchants.js) to set up shops.
  */
 import { api, stream, storage, getToken, setToken, LoggedOut, h } from './api.js';
 import { showAdmin } from './admin.js';
@@ -12,10 +13,12 @@ import { CITATION_RE } from './shared/citations.js';
 import { initLook } from './look.js';
 import { initDice, setDiceCampaign } from './dice.js';
 import { loadMaps, initMapActions, stopMaps } from './map.js';
-import { placeCreature } from './map-dm.js';
+import { placeCreature, placeMerchant } from './map-dm.js';
 import { loadTable, stopTable, handoutsOpened } from './table.js';
 import { loadArchivist, initArchivistActions } from './archivist.js';
 import { loadCreatures, initCreatureActions } from './creatures.js';
+import { loadItems, initItemActions } from './items.js';
+import { loadMerchants, initMerchantActions, merchantsOpened } from './merchants.js';
 import { SHEET_WINDOW, windowCampaign, besidePanel, placeBeside, setSheetCampaign, initSheetPlace } from './sheet-place.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -181,6 +184,9 @@ async function enterCampaign(campaign) {
   // The DM gets Creatures (enemies and NPCs to put on maps) instead of a character sheet.
   $('[data-tab=sheet]').hidden = isDm;
   $('[data-tab=creatures]').hidden = !isDm;
+  // ...and Items and Merchants, to set up shops players buy from.
+  $('[data-tab=items]').hidden = !isDm;
+  $('[data-tab=merchants]').hidden = !isDm;
   $('#map-sheet-window').hidden = isDm;
   // A tab this person doesn't have (now) goes to Creatures for the DM's sheet, else the first tab.
   const here = $(`[data-tab="${currentTab}"]`);
@@ -213,6 +219,8 @@ async function enterCampaign(campaign) {
     loadTable({ campaignId: campaign.id, guarded }),
     isDm ? loadArchivist({ campaignId: campaign.id, guarded }) : null,
     isDm ? loadCreatures({ campaignId: campaign.id, guarded }) : null,
+    isDm ? loadItems({ campaignId: campaign.id, guarded }) : null,
+    loadMerchants({ campaignId: campaign.id, guarded, isDm }),
   ]);
 }
 
@@ -265,8 +273,9 @@ function showTab(name) {
   }
   placeBeside(beside);
   if (beside === 'handouts') handoutsOpened();
+  if (name === 'merchants' || beside === 'merchants') merchantsOpened();
   // The sheet and maps need more room than Ask and Notes.
-  $('#app-view').classList.toggle('wide', name === 'sheet' || name === 'map' || name === 'creatures');
+  $('#app-view').classList.toggle('wide', name === 'sheet' || name === 'map' || name === 'creatures' || name === 'items' || name === 'merchants');
 }
 
 /** The first tab along the bar that's shown (tabs can be reordered and hidden under Look). */
@@ -732,6 +741,8 @@ showTab(currentTab);
 initMapActions();
 initArchivistActions();
 initCreatureActions({ place: placeCreature });
+initItemActions();
+initMerchantActions({ place: placeMerchant });
 initDice();
 initLook();
 start().catch((err) => showLogin(err.message));

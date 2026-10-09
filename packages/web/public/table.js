@@ -8,6 +8,7 @@
  */
 import { api, listen, fileUrl, h, readBase64, LoggedOut } from './api.js';
 import { tableRoll } from './dice.js';
+import { merchantChanged } from './merchants.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -60,6 +61,7 @@ function startLive() {
           if (event === 'roll') tableRoll(data);
           else if (event === 'handout') onHandout(data);
           else if (event === 'handout-gone') onGone(data.id);
+          else if (event === 'merchant') merchantChanged(data.id);
         }, { signal: controller.signal });
       } catch (err) {
         if (controller.signal.aborted) return;

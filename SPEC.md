@@ -1,6 +1,7 @@
 # DNDApp — Project Spec
 
-> Status: v0.17 (2026-10-08). Walls and doors: doors drawn as doors and locked from a click, curved and round walls, a thorough AI wall draft (ruler, a checking pass, close-ups), walls from .dd2vtt files, hideable walls (§6.6).
+> Status: v0.18 (2026-10-09). Merchants and items: the DM's Items and Merchants tabs, merchant tokens players buy from on their own (coins off the sheet, the item into its equipment), restocking every so many long rests (§6.8).
+> Previously v0.17 (2026-10-08). Walls and doors: doors drawn as doors and locked from a click, curved and round walls, a thorough AI wall draft (ruler, a checking pass, close-ups), walls from .dd2vtt files, hideable walls (§6.6).
 > Previously v0.16 (2026-10-08). Q&A checks every rules question in the group's books, with editions (§5.3).
 > Previously v0.15 (2026-10-08). Housekeeping: the DM has no character sheet at all (Creatures instead, §6.6); dice rollers cut to Deluxe (default) and Classic (§6.5); server routes and the map page split into files (§3.1); this spec checked against the code throughout.
 > Previously v0.14 (2026-10-08). The DM's saved creatures and Find online (§6.6); the Archivist tab, shared rolls, handouts (§6.7), the sheet beside the map, layout options (§3.3); lights, initiative, templates, variants and links on maps.
@@ -69,7 +70,8 @@ DNDApp/
     shared/src/   plain JS used by both the server and the page (the page loads them from /shared/<file>):
                   transcript.js (transcript parser), citations.js (the [S12 01:23:45] citation format),
                   sheet.js (character sheet rules), dice.js (dice notation and rolling),
-                  map.js (map documents, snapping, distances, line of sight, templates, lights)
+                  map.js (map documents, snapping, distances, line of sight, templates, lights),
+                  coins.js (prices in copper, paying from a purse with change, adding to equipment)
     server/
       src/
         index.js          start-up
@@ -80,7 +82,8 @@ DNDApp/
                           sessions, notes, corrections, the archivist's questions, jobs, Q&A, usage),
                           characters.js (sheets, character pictures), table.js (dice rolls, handouts),
                           maps.js (maps, tokens, fog, walls, lights, terrain, variants, links, pins, pings),
-                          combat.js (initiative, spell templates), creatures.js (the DM's creatures, Find online)
+                          combat.js (initiative, spell templates), creatures.js (the DM's creatures, Find online),
+                          items.js (the DM's items: look up, Find online), merchants.js (merchants, stock, buying, placing on maps)
         context.js        wires everything together (tests pass a fake AI and embedder)
         config.js         all settings (env vars), PIPELINE_VERSION
         archive.js        archive files
@@ -93,9 +96,13 @@ DNDApp/
                           token-square / shrunk copies sent to the page
         handouts.js       handouts (archived, restored)
         creatures.js      the DM's saved creatures (archived, restored); creatures-find.js: Find online
+        items.js          the DM's items; items-find.js: look up (your items, the books, the AI) and Find online
+        merchants.js      merchants: stock, prices, sales, restocking after long rests
+        library.js        the storage items and merchants share (a row per entry, the whole entry archived on each change)
+        campaign-events.js  campaign events other parts react to (`long-rest`: merchants restock)
         net/              fetch-public.js (downloads from the public internet only, for Find online's pictures)
         characters/       pictures.js (token and full pictures of characters; the AI's description)
-        db/               schema.sql + migrations (schema v12)
+        db/               schema.sql + migrations (schema v13)
         llm/              providers: claude-code.js, api.js, common.js (operations: structured, agent, research)
         kb/               store.js (knowledge-base records, journal), archivist.js (agent + tools),
                           updates.js (sheet changes, late note changes and handouts for the archivist between sessions)
@@ -113,7 +120,8 @@ DNDApp/
                   index.html; app.js (login, password, campaign picker, tabs, Ask, Notes); api.js (requests, SSE, element helper);
                   admin.js + admin-sessions.js (admin screen); sheet.js (Sheet tab); sheet-place.js (a panel beside the map, Sheet window);
                   map.js (Map tab) with map-state.js (shared state), map-dm.js (the DM's tools), map-combat.js (turn order),
-                  map-templates.js (spell templates); creatures.js (the DM's Creatures tab); archivist.js (the DM's Archivist tab);
+                  map-templates.js (spell templates); creatures.js (the DM's Creatures tab); items.js (the DM's Items tab);
+                  merchants.js (the DM's Merchants tab, and the shop players buy from); archivist.js (the DM's Archivist tab);
                   table.js (the campaign live stream: others' rolls, the Handouts tab); dice.js (tray, rolls) with dice-deluxe.js,
                   dice-physics.js, dice-shapes.js (the Deluxe roller) and dice-fx.js (effects); markdown.js (AI text to safe HTML);
                   stat-block.js (the stat block dialog); look.js + look-boot.js (the Look dialog, applied before first paint);
@@ -143,7 +151,7 @@ Electron was dropped (owner's call: overkill, since there's a server and an addr
 - **Look** (per browser, saved in localStorage, applied before first paint by `look-boot.js`): 12 themes (colours, system fonts, background art; Tavern follows the device's light/dark), 4 layouts (classic, sidebar, full width, app with bottom tabs), 3 text sizes, 4 chat styles (bubbles, play script, letters, terminal), 6 sheet styles (match theme, official, grimoire, index cards, blueprint, terminal) and 5 sheet layouts (three columns, combat first, by ability like the 2024 sheet, tabs like the sheet apps, one column). Also (2026-10-08, the owner asked for more layout options): an accent colour of your own over any theme; the tabs' order, which are hidden (never all) and which opens first; and for the map page, the toolbar's place (above, below, or down the left), which side a panel beside the map goes on (§6.4 "On the map"), token names (always, on hover, never) and which of the general map tools show. The dialog is grouped (Page, Ask, Sheet, Map). All in `themes.css`, keyed by `data-*` attributes; previews in the dialog reuse the same CSS. Only system fonts, nothing loaded from outside. Printing is always black on white.
 - **Dice** (§6.5): a Dice button in the player header opens the dice tray; rolls from the sheet; 3D dice over the page; results, and the table's rolls you may see.
 - **Map** (§6.6): a Map tab. The DM imports maps (or a PDF page), places tokens, runs the fog, tracks hit points and conditions, and gets stat blocks and records; players see shown maps, move their own token and keep private pins; changes are live.
-- **DM tabs:** for someone with the `dm` role, Creatures replaces the Sheet tab (the DM has no character sheet: no Sheet tab, no Sheet window, and the server refuses `/sheet` for the `dm` role; §6.6), and an Archivist tab holds the archivist's open questions and the DM's corrections (§4.1). Both can go beside the map too.
+- **DM tabs:** for someone with the `dm` role, Creatures replaces the Sheet tab (the DM has no character sheet: no Sheet tab, no Sheet window, and the server refuses `/sheet` for the `dm` role; §6.6), an Archivist tab holds the archivist's open questions and the DM's corrections (§4.1), and Items and Merchants set up shops (§6.8). All of them can go beside the map too.
 - **Handouts tab** (§6.7) for everyone.
 - **Not built yet: more DM / host features** (split between DM and host to be decided with the DM role): glossary editing; a full speaker-map editor (links are currently set while uploading). Transcript upload is on the admin screen.
 - On each `turn` event from `/ask`, replace displayed text rather than appending.
@@ -173,7 +181,7 @@ All AI calls go through `src/llm/` (operations: `structured`, `agent`, `research
 | Q&A | Claude Opus 5.5 | medium | 12 per question |
 | Sheet upload (`import`) | Claude Opus 5.5 | medium | none (one structured call, file attached) |
 | Spell from a book or memory (`spells`) | Claude Opus 5.5 | low | none (one structured call) |
-| Reading an imported map, drafting walls, a creature's stat block, Find online (`maps`) | Claude Opus 5.5 | medium | none (one structured call each; the map's image attached), except Find online (a web research run, then one structured call) |
+| Reading an imported map, drafting walls, a creature's stat block, looking up an item, Find online for creatures and items (`maps`) | Claude Opus 5.5 | medium | none (one structured call each; the map's image attached), except Find online (a web research run, then one structured call) |
 
 `structured()` takes optional attachments (images, PDFs); the Claude Code provider sends them as a streamed user message.
 
@@ -216,6 +224,8 @@ Also accepted: `[MM:SS]`, fractional seconds, no brackets, `0:01:30 - Name: text
 | `character_pictures` | source | Which token picture and full picture each player is using per campaign (JSON; the files are in the archive). Schema v9. |
 | `handouts` | source | Handouts the DM gave (JSON: title, text, picture, `to`: "everyone" or user ids, removed). Schema v11. |
 | `creatures` | source | The DM's saved enemies and NPCs (JSON: name, kind, size, colour, max HP, darkvision, speed, stat block, picture, record link, notes, `source` when found online, `finding` while the AI searches, removed). Schema v12. |
+| `items` | source | The DM's items (JSON: name, kind, rarity, attunement, usual price in copper, weight, description, notes, picture, `source`: dm, book, ai or web, `finding` while the AI searches, removed). Schema v13. |
+| `merchants` | source | Merchants (JSON: name, description, notes, colour, picture, open, `stock`: lines of item, price, qty, restock level; `restock`: every N long rests and the count; the last 50 `sales`, removed). Schema v13. |
 | `corrections` | source | DM corrections with `after_session` (where to replay them in a rebuild). |
 | `attendance` | derived | Who was at each session. |
 | `kb_records` | derived | The archivist's knowledge base (§5.1). |
@@ -251,6 +261,10 @@ data/archive/
     handouts/<id>/changes.jsonl       append-only: the whole handout after each change
     creatures/<id>/<picture>          a picture for one of the DM's creatures, as uploaded
     creatures/<id>/changes.jsonl      append-only: the whole creature after each change
+    items/<id>/<picture>              a picture for one of the DM's items, as uploaded
+    items/<id>/changes.jsonl          append-only: the whole item after each change
+    merchants/<id>/<picture>          a merchant's picture, as uploaded
+    merchants/<id>/changes.jsonl      append-only: the whole merchant (stock, prices, recent sales) after each change
     sessions/0001/transcript.txt      read-only, sha256 in meta.json
     outputs/v<PIPELINE_VERSION>/<timestamp>-<run>/report.json, journal.json, knowledge_base.json, questions.json
     deleted.json                      only if the admin deleted the campaign (restore skips it; nothing else is touched)
@@ -258,9 +272,9 @@ data/archive/
 
 - **Deleting a campaign** removes it and everything derived or mirrored from it from the database (foreign-key cascades), but never touches the archive: the folder gets `deleted.json` and restore skips it. New campaigns never reuse an existing archive folder's slug. Undo by hand: remove the marker, restart, rebuild.
 - A transcript can never be replaced (different bytes for an existing session number → 409).
-- **Restore:** on start-up, accounts, campaigns, members, sessions, speakers, glossary, corrections, notes (with their edits and deletes), character sheets and maps (both replayed from their change lines), character pictures, handouts, the DM's creatures, and private map pins missing from the database are restored from the archive, and notes are re-indexed. Then run a rebuild to regenerate the knowledge base.
+- **Restore:** on start-up, accounts, campaigns, members, sessions, speakers, glossary, corrections, notes (with their edits and deletes), character sheets and maps (both replayed from their change lines), character pictures, handouts, the DM's creatures, items and merchants, and private map pins missing from the database are restored from the archive, and notes are re-indexed. Then run a rebuild to regenerate the knowledge base.
 - **Rebuild:** `npm run rebuild -- --campaign <id> --yes` (or `POST /rebuild`) wipes all derived data, re-indexes notes, then replays every session in order, each correction right after the session it was made against. Sheet changes and handouts are read in time order between the sessions (those from before a session's day, before it; the rest at the end). The archivist is non-deterministic, so a rebuild gives an equivalent knowledge base, not an identical one.
-- Bump `PIPELINE_VERSION` (now 11) when prompts, tools or the memory design change.
+- Bump `PIPELINE_VERSION` (now 12) when prompts, tools or the memory design change.
 
 ## 5. Knowledge base and Q&A (core design)
 
@@ -324,6 +338,7 @@ Who-knows-what is decided by the archivist and enforced by the server:
 | Handout | The DM, and the players it was given to (`to`: everyone, or chosen players). Its picture is served only to them. Players aren't told who else got it. |
 | Map | The DM: everything except players' private pins. Players: only maps the DM has shown, without the AI's description and reading notes, stat blocks, record links, hidden tokens, or anything under the fog (the image itself is blacked out there on the server); NPCs' and enemies' hit points only as how hurt they look; they can change only their own token. Private pins: only their owner. The archivist gets what happened on maps players could see, without hidden tokens (§6.6 "Map events"); Q&A doesn't read maps. |
 | Creatures | Only the DM (the Creatures tab and its API). A token placed from one is an ordinary token: players see it like any other. |
+| Items, merchants | The lists, notes and sales: only the DM. A player sees a merchant's shop (name, description, picture, what it sells, prices, how many are left, and each item's description and picture) only while one of its tokens is on a map they can see (shown, not hidden, in their sight); otherwise 404. Buying changes only the buyer's own sheet. |
 | Archivist | Sees everything, including all notes; decides `known_by`. |
 
 The archivist's rules: openly happened → attendees (everyone if all attended); only in a player's note → that player; whispered/secret perception → that player; absent players don't know unless told later (then widen); mixed records get split; when in doubt, restrict.
@@ -371,6 +386,7 @@ The archivist's rules: openly happened → attendees (everyone if all attended);
 - [x] Find a creature online: the AI searches the web, official or homebrew, with a picture (§6.6).
 - [x] The sheet (or another panel) beside the map, or in its own window (§6.4).
 - [x] Layout options under Look: tab order, map toolbar place, hidden map tools, token names, accent colour (§3.3).
+- [x] Merchants and items: the DM's Items (made, looked up, or found online) and Merchants tabs; merchant tokens players buy from on their own; restocking every N long rests (§6.8).
 
 ### 6.2 Next
 
@@ -455,6 +471,19 @@ Owner's request (2026-10-08): the DM gives players a picture and/or text (a lett
 - **Server** (`src/handouts.js`): `to` is "everyone" (everyone in the campaign, including people who join later) or user ids, all checked to be in the campaign. Players never see handouts not given to them, their pictures, or who else got one. Taking one back hides it from everyone (players' pages drop it live); the archive keeps it.
 - **Archive:** the picture as uploaded and `handouts/<id>/changes.jsonl` (the whole handout after each change); restore takes the last line.
 - **Archivist:** new, changed and taken-back handouts go to the archivist between sessions (§5.2) with who got them; it can't see pictures (only that there is one).
+
+### 6.8 Merchants and items
+
+Owner's request (2026-10-09): "merchant tokens… the DM can set up and add items to. The items list will work similar to the creatures tab… Merchants can then have these items, with a stock level and price, that players can buy on their own, without having to go through the DM… restock every x number of long rests."
+
+- **Items** (the DM's Items tab, `src/items.js`, `web/public/items.js`): kept once, like creatures. Each has a name, kind (weapon, armour, adventuring gear, tool, potion, scroll, magic item, other), rarity, attunement, a usual price (stored in copper pieces), weight, a description players see at a merchant (Markdown), notes only the DM sees, and a picture. Three ways to get one besides typing it: **Look up** by name looks in the DM's own items first (no AI call), then the group's books (keyword search for the name, then the AI copies the entry from that page and the next, labelled with the book and page; purpose `item:book`), then the AI's knowledge of 5e (`item:ai`, labelled as the AI's). The same order as creatures' stat blocks. **Fill in** does the same for one already saved (a price the DM set stays). **Find online** is like creatures': a web research run (`item:find`) and a tidy-up call (`item:tidy`), in the background, with a picture from the public internet only; `source` keeps the page, its title and whether it's official. Prices the AI gives ("50 gp") are read into copper (`parsePrice` in `shared/src/coins.js`). Removing an item takes it off the list; merchants that stock it keep selling it.
+- **Merchants** (the DM's Merchants tab, `src/merchants.js`, `web/public/merchants.js`): a name, a description players see, notes only the DM sees, a token colour (gold by default), a picture, open or closed, and **stock**: lines of an item, its price here (the item's usual price unless the DM sets one), how many are left (or no limit) and a **restock level** (by default what it started with; empty: restocking leaves it alone). "Add item" takes any name: one not in Items yet is looked up and added there. The DM changes a line's price and levels, stops selling it, restocks by hand ("Restock now"), sees what players see ("See shop"), and sees the last 50 sales (who, what, how many, for how much).
+- **On the map:** "Place on map" puts a token in the middle of the view: an NPC token with the merchant's name, colour and picture, and `merchant: <id>` (players can't change it). It has a gold ⚖ badge. Clicking it (anyone who can see it) shows a **Shop** button. Closing the merchant down leaves its tokens as ordinary NPCs.
+- **Buying** (players, `POST /campaigns/:cid/merchants/:mid/buy` `{ line, qty }`): the shop shows what each costs, how many are left and the coins on their sheet. The page asks once, saves anything waiting on the sheet, and the server then, with no waiting in between (so two buyers can't both take the last one): checks the shop is open and has enough; takes the price from the sheet's coins, big coins first, breaking a coin and giving change in gold, silver and copper if needed (`payCoins`; refused, saying what it costs and what they have, if they can't afford it); adds the item to the sheet's equipment (a new line "Rope", or "Potion of Healing x3" when a line for it is there; `addToEquipment`); saves the sheet as a new version with the reason ("bought 2 × Potion of Healing from Mira for 100 gp"), so it reaches the archivist like any sheet change; and lowers the stock. The sheet on screen (and in a popped-out window) shows the new version. The DM can't buy (no sheet). Not built: selling items back.
+- **Restocking:** a merchant can restock every N long rests (`restock.every`). Each line with a restock level and fewer left goes back up to it (never down). Long rests come from the campaign event `long-rest { campaignId, userIds, by, at }` (`src/campaign-events.js`), which the rests on the character sheet emit. Rests within 2 hours of the last one counted are the same party rest, so a party of four resting counts once.
+- **Live:** any change to a merchant (a sale, a restock, the DM's edits) sends `merchant {id}` on the campaign's live stream; an open shop and the DM's list look again.
+- **Archive:** like creatures: `items/<id>/` and `merchants/<id>/`, the whole entry after each change, pictures as uploaded; restored on start-up. The archivist doesn't read them; purchases reach it through the sheet changes.
+- **Later:** selling items to merchants; haggling or prices per player; the archivist hearing about sales directly.
 
 ## 7. Security & cost controls
 

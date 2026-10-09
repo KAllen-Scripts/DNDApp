@@ -8,9 +8,9 @@ Read this first when picking the project up on another machine or with another A
 
 ---
 
-## Current state (2026-10-08)
+## Current state (2026-10-09)
 
-Rewritten (not appended to) on 2026-10-08 after a housekeeping audit. Everything below is on `main`.
+Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept current since. Everything below is on `main` except **merchants and items**, which is on branch `claude/project-thread-hi04fl` waiting for the owner's OK to merge.
 
 **What's built** (SPEC has the design of each; §6.1 is the list):
 - **Server, end to end with real AI calls:** player notes → transcript upload (with date) → attendance → the **archivist** (an AI with full authority over the knowledge base) → per-player Q&A with privacy. Verified with a realistic two-session privacy scenario through Claude Code. Between sessions the archivist also reads character sheets (in full, then each change with its time), late note changes, handouts, and (with each session) what happened on the maps.
@@ -21,15 +21,16 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit. Everything
 - **Maps:** the DM imports any map (or a PDF page); the AI reads kind, name, grid and scale, and the server measures the grid; tokens for characters, NPCs and enemies (with pictures), moved live; fog of war, walls, doors and line of sight (drawn or AI-drafted), darkness, lights and darkvision, hit points and conditions, hidden tokens, AI stat blocks, NPCs from the records, private pins, Measure, spell templates, initiative, pings and sketches, waypoints and difficult terrain, other pictures of a map, links between maps.
 - **Walls and doors** (PR #17, merged 2026-10-08): doors drawn as doors and locked or unlocked with a click; Curve and Circle tools; a Walls tick box hides walls while playing; a thorough AI wall draft (a ruler on the map, a checking pass, close-ups on big maps, arcs and circles, max effort on its own `walls` task, straight walls put on the grid); exact walls, doors and lights from `.dd2vtt`/`.uvtt` files.
 - **The DM:** a **Creatures** tab instead of a character sheet (saved enemies and NPCs placed on maps, several at a time; "Find online" has the AI find one on the web with a picture), an **Archivist** tab (answer the archivist's questions, send corrections), **Handouts** for everyone or chosen players. The DM has no sheet at all: no Sheet tab or window, and the server refuses it.
+- **Merchants and items** (branch `claude/project-thread-hi04fl`, not merged yet): the DM's **Items** tab (made by hand, looked up in their own items, then the books, then the AI, or found online with a picture) and **Merchants** tab (stock with prices, how many are left and a restock level; restock every N long rests or by hand; recent sales). A merchant goes on a map as a token with a gold badge; players pick it, press Shop and buy on their own: the coins come off their sheet (with change) and the item goes into its equipment. SPEC §6.8.
 - **Look:** 12 themes, 4 page layouts, chat and sheet styles and layouts, plus tab order, the map toolbar's place, which panel goes beside the map, token names and an accent colour. All per browser. The owner hasn't decided which to keep (don't prune yet).
 - **Security:** audited 2026-10-07 (headers, strict CSP: scripts only from the server, body limits, login limits, live streams that end with access). Hosting must go through Cloudflare Tunnel with `HOST=127.0.0.1`.
 
-**Numbers:** schema **v12**, `PIPELINE_VERSION` **11**, **298 tests** passing (`npm test`: server 134, shared 49, web 115). Tests are offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools; the page is tested in jsdom against a real test server (`packages/web/test/page.js`). Headless Chromium is only needed for what jsdom can't show (real layout, WebGL dice, touch). There's no CI: `npm test` is the check.
+**Numbers:** schema **v13**, `PIPELINE_VERSION` **12**, **314 tests** passing (`npm test`: server 144, shared 52, web 118) with the merchants branch; `main` is schema v12, `PIPELINE_VERSION` 11, 298 tests. Tests are offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools; the page is tested in jsdom against a real test server (`packages/web/test/page.js`). Headless Chromium is only needed for what jsdom can't show (real layout, WebGL dice, touch). There's no CI: `npm test` is the check.
 
-**Git:** `main` has PRs #1–#18 merged (#16: housekeeping; #17: walls and doors; #18: book lookups checked and fixed). Merges to `main` need the owner's OK.
+**Git:** `main` has PRs #1–#19 merged (#16: housekeeping; #17: walls and doors; #18: book lookups checked and fixed; #19: HANDOFF). Open: #20 (stat blocks formatted, from your creatures and books first) and the merchants and items PR. Merges to `main` need the owner's OK.
 
 **Installs:**
-- **Owner's PC** (the server): `data/` holds the admin login ("admin") and a player account for Kenny. The database upgrades itself to v12 on the next start. Start with `npm start`, open http://127.0.0.1:4400. `.env` is in the repo root (copy of `.env.example`).
+- **Owner's PC** (the server): `data/` holds the admin login ("admin") and a player account for Kenny. The database upgrades itself (to v13 with merchants) on the next start. Start with `npm start`, open http://127.0.0.1:4400. `.env` is in the repo root (copy of `.env.example`).
 - **Owner's laptop** (2026-10-07): Node 24.19, installed with the `--ignore-scripts` workaround; `data/` has only the admin login.
 
 **Not set up yet:** the domain (`PUBLIC_URL` is the placeholder `https://dnd.example.xyz`) and Cloudflare Tunnel. **No real transcript** has been tried; the parser is built to an assumed format.
@@ -37,6 +38,8 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit. Everything
 **Real AI not yet tried on:** real maps (reading, walls, lights, terrain, stat blocks), Find online, character picture descriptions, sheets reaching the archivist, map events reaching the archivist, the book tools with all the books. Most page features have only been seen in jsdom or headless Chromium, not on a real phone or GPU.
 
 ## Next steps
+
+0. **Merchants and items (open PR): long rests and a real try.** Restocking listens for the campaign event `long-rest` (`src/campaign-events.js`: `events.emit('long-rest', { campaignId, userIds, by, at })`). The "Rests and hit dice" work (another thread, 2026-10-09) builds the rests; its rest route must emit that event after a long rest is saved, or restocking only happens by hand ("Restock now"). Whichever of the two merges second wires it up. Then try it for real: set up a shop with a few looked-up items (one from the PHB, one from the AI, one found online), put it on a map, buy as a player on a phone and check the sheet's coins and equipment.
 
 0. **Walls and doors (merged): try them for real:** have the real AI draft walls on a gridded dungeon, a map with a round tower or cave, and a big map (over 1800 px, so close-ups are used); see what still needs fixing and how long and how much a draft costs at max effort (2 to 10 calls). Import a `.dd2vtt` from Dungeondraft or a map pack. Check the door badge size at normal zoom. If drafts are still off on clean maps, the next step is snapping walls to the dark lines in the picture (option 4 in `/mnt/project-files/walls-doors/ai-walls-options.md`).
 
@@ -138,6 +141,7 @@ Details are in SPEC §3–5.
 | **The DM has no character sheet** | Owner's call (2026-10-08, with the Creatures tab); the audit found it was only hidden, so it's now refused by the server and skipped by the archivist. A DM sheet saved before stays in the archive. |
 | Server routes split by part of the app (`src/routes/`) | Housekeeping (owner's OK, 2026-10-08): `app.js` had reached 2,468 lines. No behaviour change. |
 | **The server decides dice rolls; the 3D dice are animated to land on them** | Owner's call (2026-10-07): fine as long as it looks the same to the player. D&D Beyond lets the browser's physics decide; server rolls are evenly random and can't be faked from the page, which matters once rolls are shared. The library really throws the dice, then relabels faces. |
+| **Buying from a merchant pays from the sheet and fills its equipment automatically** | Owner (2026-10-09): players buy "on their own, without having to go through the DM". Picked by Claude: the server takes the coins (with change) and adds the item to the equipment text as one sheet save, so the sheet's history and the archivist see it. |
 
 ## Change log
 
@@ -617,6 +621,17 @@ The owner asked to double-check how the AI looks things up in the books ("this r
 - **Smaller things:** "AC", "HP", "hex" and other terms of 3 letters or fewer match whole words only ("AC" found "action"); a heading that is the search term counts much more (Hex the spell now beats the DMG's pages about hex grids), bookmarks count as headings; an unknown book name or an ambiguous one ("Player's Handbook" with both editions) now returns an error naming the books instead of an empty search, which read as "not in the book"; `read_book` returns two full pages (it was cut at 10k characters); a PDF with mostly empty pages is logged at start-up as needing OCR; spell lookup reads the 2024 layout ("Level 3 Evocation (Wizard)") and skips class sections that looked like spells ("Arcane Trickster Spellcasting", "Cantrips").
 - `PIPELINE_VERSION` 9 → 10 (Q&A prompt). Tests: 4 new in `books.test.js` (290 in all after the housekeeping merge).
 - **Not checked:** the real AI with the new prompt, and how much time the extra lookup adds.
+
+### 2026-10-09: Merchants and items
+
+- Owner: "merchant tokens… the DM can set up and add items to. The items list will work similar to the creatures tab. You can add custom items, pull in items from books, or from the web. Merchants can then have these items, with a stock level and price, that players can buy on their own… restock every x number of long rests." (Long and short rests, hit dice and rolling from the sheet went to other threads.)
+- **Items** (DM tab, `src/items.js`, `src/items-find.js`, `web/public/items.js`): like Creatures. Look up by name checks the DM's own items first, then the books (keyword search for the name, the AI copies the entry from that page and the next, `item:book`), then the AI's knowledge (`item:ai`), the same order the "Saved enemies and NPCs" thread gave creatures' stat blocks (PR #20). Find online as for creatures (`item:find`, `item:tidy`), with a picture. Prices are kept in copper pieces.
+- **Merchants** (DM tab, `src/merchants.js`, `web/public/merchants.js`): stock lines (item, price, how many left or no limit, restock level), open or closed, notes, picture, colour, the last 50 sales. "Add item" accepts any name and looks it up if it isn't in Items. Placed on a map as an NPC token with `merchant: <id>` and a gold ⚖ badge.
+- **Buying:** a player picks the token, presses Shop, and buys. Defaults picked (the coordinator's, not asked): buying takes the price from the sheet's coins automatically (big coins first, with change, `payCoins` in the new `shared/src/coins.js`) and adds the item to the sheet's equipment text ("Potion of Healing x3" when it's already there), as a new sheet version with the reason; the stock goes down. Both happen with no waiting in between, so two players can't buy the last one. The page saves the sheet first and reloads it after. Not built: selling back.
+- **Restocking:** every N long rests per merchant, or "Restock now". Long rests come in as the campaign event `long-rest` (new `src/campaign-events.js`); rests within 2 hours count once, so a party resting counts once. The rests themselves are another thread's; it was asked to emit the event.
+- Shared storage for items and merchants (`src/library.js`: a row per entry, the whole entry archived on each change, pictures as uploaded); `archive.js` got `items/` and `merchants/`; restore brings both back. New tables `items` and `merchants`, schema v12 → v13. `PIPELINE_VERSION` 11 → 12 (new prompts). The live stream sends `merchant {id}` on any change. Items and Merchants are tabs to order, hide and put beside the map under Look.
+- **Privacy:** players only see a shop while one of its tokens is on a map they can see (shown, not hidden, in their sight), and never notes or sales.
+- **Tests:** 314 (server: `merchants.test.js`, 9 tests; shared: `coins.test.js`; web: `merchants.test.js`, 3 tests; the tab-order tests updated for the two new tabs). Not tried with the real AI, the real books or in a real browser.
 
 ## Verified vs. not verified
 
