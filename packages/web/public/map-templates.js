@@ -53,7 +53,7 @@ export function renderTemplates() {
 }
 
 export function selectTemplate(id) {
-  Object.assign(state, { selectedTemplate: id, selected: null, selectedPin: null });
+  Object.assign(state, { selectedTemplate: id, selected: null, selectedPin: null, selectedDoor: null });
   renderTemplates();
   renderTokens();
   renderPins();

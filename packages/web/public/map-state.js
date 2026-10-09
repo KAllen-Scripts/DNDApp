@@ -22,9 +22,10 @@ export const state = {
   draftGrid: undefined, // grid being edited in the settings dialog (shown live)
   fogMode: null, // DM drawing fog: 'reveal' | 'cover'
   fogDraw: null, // the rectangle being drawn: { pointer, a, b }
-  wallMode: null, // DM working on walls: 'wall' | 'low' | 'door' | 'lock' | 'light' | 'difficult' | 'link' | 'erase'
+  wallMode: null, // DM working on walls: 'wall' | 'low' | 'door' | 'curve' | 'circle' | 'lock' | 'light' | 'difficult' | 'link' | 'erase'
   terrainDraw: null, // difficult terrain being drawn: { pointer, a, b }
   wallDraw: null, // the wall being drawn: { pointer, a, b, sx, sy }
+  curveBend: null, // a curved wall waiting to be bent: { a, b, m } (m follows the pointer; a click places it)
   live: null, // AbortController for the live stream
   pins: new Map(), // map id -> this person's private pins on it
   pinMode: false, // the next click on the map drops a pin
@@ -36,6 +37,7 @@ export const state = {
   templateDraft: null, // a template about to be placed: { shape, size, width, label, color }
   templatePlace: null, // the template being placed: { pointer, a, b }
   selectedTemplate: null, // template id
+  selectedDoor: null, // the DM's: a door's id (to open, close, lock or unlock it)
   templateDrag: null, // a template being moved: { id, pointer, grab, x, y, moved, sx, sy }
   caught: new Set(), // tokens inside the selected (or placed) template
   combatOpen: false, // the turn order panel is open
@@ -49,6 +51,7 @@ export const state = {
 export const base = () => `/campaigns/${state.campaignId}/maps`;
 export const PICK_KEY = () => `dndapp.map.${state.campaignId}`;
 export const SHOW_GRID_KEY = 'dndapp.map.showGrid';
+export const SHOW_WALLS_KEY = 'dndapp.map.showWalls';
 
 export function status(text, error = false) {
   const el = $('#map-status');
