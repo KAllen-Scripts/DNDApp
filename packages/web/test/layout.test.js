@@ -110,7 +110,7 @@ test('map tools: untick the ones you never use and they leave the toolbar, in th
     assert.ok(!page.$('#map-ping').classList.contains('user-hidden'));
     openLook(page, 'map');
     const boxes = page.$$('[data-tool-show]');
-    assert.deepEqual(boxes.map((b) => b.dataset.toolShow), ['grid', 'fit', 'pin', 'measure', 'ping', 'draw', 'template', 'initiative', 'sheet-window']);
+    assert.deepEqual(boxes.map((b) => b.dataset.toolShow), ['grid', 'fit', 'pin', 'measure', 'ping', 'draw', 'template', 'initiative', 'fullscreen', 'sheet-window']);
     assert.ok(boxes.every((b) => b.checked));
 
     page.type('[data-tool-show=ping]', false);

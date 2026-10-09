@@ -29,7 +29,7 @@
   };
   // The tabs, and the map tools that can be hidden (each is an element with data-tool on the map bar).
   var TABS = OPTIONS.startTab;
-  var TOOLS = ['grid', 'fit', 'pin', 'measure', 'ping', 'draw', 'template', 'initiative', 'sheet-window'];
+  var TOOLS = ['grid', 'fit', 'pin', 'measure', 'ping', 'draw', 'template', 'initiative', 'fullscreen', 'sheet-window'];
   var DEFAULTS = {
     theme: 'tavern', layout: 'classic', density: 'cozy', chat: 'bubbles', sheetStyle: 'match', sheetLayout: 'classic',
     mapBar: 'top', besideSide: 'right', tokenLabels: 'always', startTab: 'ask',

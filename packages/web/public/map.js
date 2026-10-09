@@ -15,6 +15,7 @@ import { canChangeTemplate, placeTemplate, renderTemplates, selectTemplate, temp
 import { openShop } from './merchants.js';
 import { chooseTokenPicture, fillStats, forgetPlayers, importMap, recordDialog, removeToken, removeTokenPicture, saveCreature, settingsDialog, statsDialog, tokenDialog } from './map-dm.js';
 import { renderCombat } from './map-combat.js';
+import { initMapFull } from './map-full.js';
 
 const $ = (sel) => document.querySelector(sel);
 const KIND_LABELS = { battle: 'Battle map', dungeon: 'Dungeon', building: 'Building', town: 'Town', region: 'Region', world: 'World', other: 'Map' };
@@ -1388,6 +1389,7 @@ export function initMapActions() {
   });
   $('#map-pick').addEventListener('change', (e) => show(state.maps.find((m) => m.id === e.target.value) ?? null));
   $('#map-fit').addEventListener('click', fit);
+  initMapFull();
   const showWalls = $('#map-show-walls');
   showWalls.checked = storage.get(SHOW_WALLS_KEY) !== '0';
   showWalls.addEventListener('change', () => {
