@@ -438,7 +438,7 @@ export async function fillStats(token, name) {
     const res = await state.guarded(() => api('POST', `${base()}/${state.current.id}/tokens/${token.id}/stats`, name ? { name } : {}));
     if (!res) return;
     onMap(res.map);
-    status(statsFound(res.token.name, res.token.stats.name));
+    status(statsFound(res.token.name, res.token.stats));
   } catch (err) {
     report(err);
   }

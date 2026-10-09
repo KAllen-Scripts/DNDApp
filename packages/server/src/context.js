@@ -55,8 +55,8 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const sheetImport = createSheetImport({ llm });
   const pictureDescriber = createPictureDescriber({ llm });
   const mapReader = createMapReader({ llm });
-  const statBlocks = createStatBlocks({ llm });
-  const creatureFinder = createCreatureFinder({ llm, ...(fetchImage && { fetchImage }) });
+  const statBlocks = createStatBlocks({ llm, books, creatures });
+  const creatureFinder = createCreatureFinder({ llm, books, ...(fetchImage && { fetchImage }) });
 
   // If the database was lost or replaced, bring back accounts and campaigns from the archive.
   const restored = store.restoreFromArchive();

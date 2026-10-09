@@ -5,7 +5,9 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { withPage, addDm, importMap, addToken, terrain, createFakeLLM, mapReading } from './helpers.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { withPage, addDm, importMap, addToken, terrain, createFakeLLM, makePdf, mapReading } from './helpers.js';
 
 const ogreBlock = {
   found: true, name: 'Goblin', size: 'small', ac: 15, hp_average: 7, hp_formula: '2d6', speed: '30 ft.', challenge: '1/4 (50 XP)',
@@ -204,5 +206,28 @@ test('creatures tab: a new creature starts with the empty stat block box to type
     assert.ok(!form.querySelector('[name=stats]').hidden);
     assert.ok(form.querySelector('.stat-block').hidden);
     assert.ok(!button(page, '#creature-dialog', 'Edit text') || button(page, '#creature-dialog', 'Edit text').hidden);
+  });
+});
+
+test('creatures tab: "Stat block (AI)" takes it from the group\'s books and says which book and page', async () => {
+  await withPage({
+    setup: { llm: createFakeLLM({ structured: (opts) => (opts.purpose === 'map:stats-book' ? ogreBlock : mapReading()) }) },
+    before: async (t) => {
+      fs.mkdirSync(t.config.booksDir, { recursive: true });
+      fs.writeFileSync(path.join(t.config.booksDir, 'Monster Manual.pdf'), makePdf([['GOBLIN', 'Small humanoid (goblinoid), neutral evil', 'Armor Class 15', 'Hit Points 7 (2d6)']]));
+      const dana = await addDm(t);
+      await t.request('POST', `/campaigns/${t.campaign.id}/creatures`, { body: { name: 'Goblin', kind: 'enemy' } });
+      return { dana };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page) => {
+    page.click('[data-tab=creatures]');
+    await page.waitFor(() => button(page, '#creatures .creature', 'Stat block (AI)'));
+    page.click(button(page, '#creatures .creature', 'Stat block (AI)'));
+    await page.waitFor(() => page.text('#creatures').includes('From your books'));
+    assert.match(page.text('#creatures .creature-source'), /From your books · Monster Manual, page 1/);
+    assert.match(page.text('#creatures-status'), /Stat block for Goblin: Goblin, from Monster Manual, page 1/);
+    page.click(button(page, '#creatures .creature', 'Stat block'));
+    assert.match(page.text('#creature-dialog'), /From your books: Monster Manual, page 1\./);
   });
 });

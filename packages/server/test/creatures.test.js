@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { setup, createFakeLLM, fakeEmbedder, terrain } from './helpers.js';
+import { setup, createFakeLLM, fakeEmbedder, makePdf, terrain } from './helpers.js';
 import { createContext } from '../src/context.js';
 import { normalizeCreature, tokenNames } from '../src/creatures.js';
 
@@ -337,6 +337,101 @@ test('find online: nothing found says so; while searching it can\'t be placed; a
     for (let i = 0; i < 200 && (done = (await t.request('GET', base)).json().creatures.find((x) => x.id === slow.id)).finding; i++) await new Promise((r) => setTimeout(r, 10));
     assert.equal(done.finding, null, 'the search that was still running finishes it after all');
     assert.equal(done.picture, null, 'no picture worked');
+  } finally {
+    await t.cleanup();
+  }
+});
+
+/** The group's Monster Manual, with the Ogre's stat block on printed page 1. */
+function addMonsterManual(t) {
+  fs.mkdirSync(t.config.booksDir, { recursive: true });
+  fs.writeFileSync(path.join(t.config.booksDir, 'Monster Manual.pdf'), makePdf([
+    ['OGRE', 'Large giant, chaotic evil', 'Armor Class 11 (hide armor)', 'Hit Points 59 (7d10 + 21)', 'Speed 40 ft.', 'Greatclub. Melee Weapon Attack: +6 to hit.'],
+  ]));
+}
+
+test('stat blocks come from the group\'s books first; the AI\'s memory only for creatures the books don\'t have', async () => {
+  const llm = createFakeLLM({
+    structured: (opts) => (opts.purpose === 'map:stats-book' ? { ...ogreBlock, stat_block: '**Ogre** (from the book)' } : opts.purpose === 'map:stats' ? { ...ogreBlock, name: 'Ettin' } : readOut),
+  });
+  const t = await setup({ llm });
+  try {
+    addMonsterManual(t);
+    const base = `/campaigns/${t.campaign.id}/creatures`;
+    const ogre = (await t.request('POST', base, { body: { name: 'Ogre', kind: 'enemy' } })).json();
+    const filled = (await t.request('POST', `${base}/${ogre.id}/stats`, {})).json();
+    assert.equal(filled.stats.source, 'book');
+    assert.equal(filled.stats.from, 'Monster Manual, page 1');
+    assert.equal(filled.stats.text, '**Ogre** (from the book)');
+    assert.equal(filled.hp_max, 59);
+    const call = t.llm.calls.find((c) => c.purpose === 'map:stats-book');
+    assert.match(call.prompt, /<book title="Monster Manual" page="1">[\s\S]*Armor Class 11 \(hide armor\)/);
+    assert.ok(!t.llm.calls.some((c) => c.purpose === 'map:stats'), 'no guessing from memory when the book has it');
+
+    // Not in the books: from the AI's memory, labelled so.
+    const ettin = (await t.request('POST', base, { body: { name: 'Ettin', kind: 'enemy' } })).json();
+    const guessed = (await t.request('POST', `${base}/${ettin.id}/stats`, {})).json();
+    assert.equal(guessed.stats.source, 'ai');
+    assert.equal(guessed.stats.from, undefined);
+
+    // Tokens on a map use the books too.
+    const map = await importMap(t);
+    const token = (await t.request('POST', `${map.base}/tokens`, { body: { kind: 'enemy', name: 'Ogre 2', x: 100, y: 100 } })).json().token;
+    const res = (await t.request('POST', `${map.base}/tokens/${token.id}/stats`, {})).json();
+    assert.equal(res.token.stats.source, 'book');
+    assert.equal(res.token.stats.from, 'Monster Manual, page 1');
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('find online: a creature in the group\'s books takes its stat block from there, and the web only for a picture', async () => {
+  const picture = await terrain(70, 70);
+  const llm = createFakeLLM({
+    research: () => 'Ogre from the Monster Manual page 1. Picture: https://img.example/ogre.png',
+    structured: (opts) => (opts.purpose === 'creature:tidy' ? { ...wyrmling, name: 'Ogre', size: 'large', stat_block: '**Ogre**', official: true, image_urls: ['https://img.example/ogre.png'] } : readOut),
+  });
+  const t = await setup({ llm, fetchImage: async () => ({ buf: picture }) });
+  try {
+    addMonsterManual(t);
+    const res = await t.request('POST', `/campaigns/${t.campaign.id}/creatures/find`, { body: { query: 'an ogre' } });
+    const c = await waitFound(t, res.json().id);
+    assert.equal(c.name, 'Ogre');
+    assert.equal(c.stats.source, 'book');
+    assert.equal(c.stats.from, 'Monster Manual, page 1');
+    assert.equal(c.source, null, 'no web page: it came from the book');
+    assert.ok(c.picture, 'the picture still comes from the web');
+    const call = t.llm.calls.find((x) => x.purpose === 'creature:find-book');
+    assert.match(call.prompt, /stat block comes from there, not the web[\s\S]*Armor Class 11 \(hide armor\)[\s\S]*Search the web only for pictures/);
+    assert.ok(!t.llm.calls.some((x) => x.purpose === 'creature:find'));
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test("stat blocks: the DM's own creature of that name beats the books and the AI", async () => {
+  const llm = createFakeLLM({ structured: (opts) => (opts.purpose.startsWith('map:stats') ? ogreBlock : readOut) });
+  const t = await setup({ llm });
+  try {
+    addMonsterManual(t);
+    const base = `/campaigns/${t.campaign.id}/creatures`;
+    await t.request('POST', base, { body: { name: 'Ogre', kind: 'enemy', size: 2, hp_max: 80, stats: { text: '**Ogre** the DM\'s tougher one', ac: 14 } } });
+    const map = await importMap(t);
+    const token = (await t.request('POST', `${map.base}/tokens`, { body: { kind: 'enemy', name: 'Ogre 3', x: 100, y: 100 } })).json().token;
+    const before = t.llm.calls.length;
+    const res = (await t.request('POST', `${map.base}/tokens/${token.id}/stats`, {})).json();
+    assert.equal(res.token.stats.text, "**Ogre** the DM's tougher one");
+    assert.equal(res.token.stats.ac, 14);
+    assert.equal(res.token.stats.from, 'your creatures (Ogre)');
+    assert.deepEqual(res.token.hp, { current: 80, max: 80 });
+    assert.equal(res.token.size, 2);
+    assert.equal(t.llm.calls.length, before, 'no AI call at all');
+
+    // A creature never copies itself: re-filling the DM's Ogre goes to the book.
+    const mine = (await t.request('GET', base)).json().creatures[0];
+    const refilled = (await t.request('POST', `${base}/${mine.id}/stats`, {})).json();
+    assert.equal(refilled.stats.source, 'book');
+    assert.equal(refilled.stats.from, 'Monster Manual, page 1');
   } finally {
     await t.cleanup();
   }

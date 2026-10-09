@@ -122,7 +122,7 @@ export function registerCreatures(app, r) {
     const c = creatures.get(a.cid, request.params.crid);
     const { name } = z.object({ name: z.string().trim().min(1).max(100).optional() }).parse(request.body ?? {});
     mapAiAllowed(request.user.id);
-    const found = await statBlocks.lookup(name ?? c.name, { campaignId: a.cid, userId: request.user.id });
+    const found = await statBlocks.lookup(name ?? c.name, { campaignId: a.cid, userId: request.user.id, exclude: c.id });
     if (!found) throw new NotFoundError(`The AI doesn't know a creature called "${name ?? c.name}". Try its proper name, like "Goblin" or "Adult Red Dragon".`);
     const fields = { stats: found.stats };
     if (!c.hp_max && found.hp) fields.hp_max = found.hp;

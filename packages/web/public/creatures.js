@@ -59,7 +59,7 @@ function watchSearches() {
       state.list = (await api('GET', base())).creatures;
       for (const c of state.list) {
         if (was.get(c.id) !== 'pending' || c.finding?.status === 'pending') continue;
-        status(c.finding ? `The AI couldn't find "${c.finding.query}".` : `Found ${c.name}${c.source ? ` (${c.source.official ? 'official' : 'unofficial'}, from ${c.source.title || 'the web'})` : ''}. Check its stat block before you use it.`, !!c.finding);
+        status(c.finding ? `The AI couldn't find "${c.finding.query}".` : `Found ${c.name}${c.stats?.source === 'book' ? ` in your books (${c.stats.from})` : c.source ? ` (${c.source.official ? 'official' : 'unofficial'}, from ${c.source.title || 'the web'})` : ''}. Check its stat block before you use it.`, !!c.finding);
       }
       draw();
     } catch (err) {
@@ -165,6 +165,7 @@ function searchCard(c) {
 
 /** Where one found online came from, as a link. */
 function sourceLine(c) {
+  if (c.stats?.source === 'book') return h('p', { class: 'muted small creature-source' }, `From your books · ${c.stats.from || 'a book'}`);
   if (!c.source) return null;
   return h('p', { class: 'muted small creature-source' }, c.source.official ? 'Official · from ' : 'Unofficial · from ',
     h('a', { href: c.source.url, target: '_blank', rel: 'noopener noreferrer' }, c.source.title || new URL(c.source.url).hostname));
@@ -315,7 +316,7 @@ async function fillStats(c, other) {
     const res = await state.guarded(() => api('POST', `${base()}/${c.id}/stats`, other ? { name: other } : {}));
     if (!res) return;
     upsert(res);
-    status(statsFound(res.name, res.stats.name));
+    status(statsFound(res.name, res.stats));
   } catch (err) {
     report(err);
   }
