@@ -11,6 +11,8 @@ import { createKB } from './kb/store.js';
 import { createArchivist } from './kb/archivist.js';
 import { createUpdates } from './kb/updates.js';
 import { createHandouts } from './handouts.js';
+import { createRolls } from './rolls.js';
+import { createRests } from './rests.js';
 import { createCreatures } from './creatures.js';
 import { createCreatureFinder } from './creatures-find.js';
 import { createPipeline } from './pipeline/ingest.js';
@@ -51,6 +53,8 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const jobs = createJobs({ db, store, search, pipeline, config, log });
   const books = createBooks({ dir: config.booksDir, log });
   const qa = createQA({ db, store, kb, search, books, llm, config });
+  const rolls = createRolls({ db });
+  const rests = createRests({ db, archive, store, sheets, rolls, books, config });
   const spells = createSpells({ books, llm });
   const sheetImport = createSheetImport({ llm });
   const pictureDescriber = createPictureDescriber({ llm });
@@ -69,5 +73,5 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   // Changes made while the server was off (or before its last run finished) still reach the archivist.
   for (const { id } of db.prepare('SELECT id FROM campaigns').all()) if (updates.pendingSince(id)) jobs.scheduleUpdates(id);
 
-  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, creatures, pipeline, jobs, qa, books, spells, sheets, sheetImport, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, restored };
+  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, creatures, rolls, rests, pipeline, jobs, qa, books, spells, sheets, sheetImport, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, restored };
 }

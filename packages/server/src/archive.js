@@ -24,6 +24,7 @@
  *     maps/<map id>/tokens/<file>      a picture the DM gave a token (NPCs, enemies), as uploaded
  *     creatures/<id>/<picture file>    a picture for one of the DM's saved creatures, as uploaded
  *     creatures/<id>/changes.jsonl     the whole creature after each change, append-only
+ *     rests.jsonl                      short and long rests the DM called, append-only
  *     sessions/0001/
  *       transcript.txt                 byte-for-byte as uploaded, read-only
  *       meta.json                      number, title, played_on, sha256
@@ -234,6 +235,8 @@ export function createArchive(root) {
 
     appendCreature: (slug, id, entry) => appendLine(path.join(campaignDir(slug), 'creatures', mapDir(id), 'changes.jsonl'), entry),
 
+    appendRest: (slug, entry) => appendLine(path.join(campaignDir(slug), 'rests.jsonl'), entry),
+
     /** Knowledge-base snapshot and journal after an archivist run. */
     saveRunOutput(slug, runLabel, files) {
       const dir = path.join(campaignDir(slug), 'outputs', `v${PIPELINE_VERSION}`, `${stamp()}-${runLabel.replace(/\W+/g, '-')}`);
@@ -317,6 +320,7 @@ export function createArchive(root) {
           characters,
           handouts,
           creatures,
+          rests: readLines(path.join(campaignDir(slug), 'rests.jsonl')),
         };
       }
     },

@@ -22,6 +22,7 @@ import { registerTable } from './routes/table.js';
 import { registerMaps } from './routes/maps.js';
 import { registerCombat } from './routes/combat.js';
 import { registerCreatures } from './routes/creatures.js';
+import { registerRests } from './routes/rests.js';
 
 /**
  * Open a Server-Sent Events stream on a request. `stillAllowed`, if given, is
@@ -235,7 +236,7 @@ export function exposureWarnings({ host, publicUrl }) {
 
 const trustProxySetting = (v) => (v === 'true' ? true : v === 'false' || v === 'off' || v === '' ? false : v);
 
-export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, handouts, creatures, archive, config, logger = true }) {
+export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, handouts, creatures, rolls, rests, archive, config, logger = true }) {
   const app = Fastify({
     logger,
     bodyLimit: SMALL_BODY,
@@ -340,7 +341,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     !db.prepare('SELECT 1 FROM attendance WHERE session_id = ?').get(sessionId);
 
   // The routes, by part of the app (routes/). Each takes what it needs from r and adds what later ones use.
-  const r = { db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, handouts, creatures, archive, config, upload, requireAdmin, access, openLiveStream, forViewer, attended, openSse, publicMessage, DATE };
+  const r = { db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, handouts, creatures, rolls, rests, archive, config, upload, requireAdmin, access, openLiveStream, forViewer, attended, openSse, publicMessage, DATE };
   registerAccounts(app, r);
   registerCampaign(app, r);
   registerCharacters(app, r);
@@ -348,6 +349,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   registerMaps(app, r);
   registerCombat(app, r);
   registerCreatures(app, r);
+  registerRests(app, r);
 
   serveWebPage(app, config.webDir);
 

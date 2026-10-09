@@ -773,8 +773,15 @@ input.num, .sheet .num { text-align: center; }
 .tiles .stat .auto, .tiles .stat input { width: 100%; }
 .tiles .stat input { height: 2.5rem; padding: 0 0.3rem; font-size: 1.3rem; font-weight: 600; text-align: center; }
 .hp .hp-current input { font-size: 1.6rem; font-weight: 700; }
-.hd .tiles { grid-template-columns: minmax(0, 1fr) var(--num); }
 .hd .tiles .stat:first-child input { padding: 0 0.15rem; font-size: 0.88rem; }
+/* A row per hit die size: ticks for spent dice, how many are left, Spend (rests in sheet.js). */
+.hd-rows { display: grid; gap: 0.3rem; margin-top: 0.4rem; }
+.hd-row { display: flex; align-items: center; gap: 0.4rem; min-height: var(--row); font-size: 0.82rem; }
+.hd-row .hd-die { font-weight: 600; min-width: 2.2em; }
+.hd-row .pips { flex: 1; justify-content: flex-start; }
+.hd-row .hd-left { white-space: nowrap; }
+.hd-spend, .hd-short-rest { padding: 0.2rem 0.6rem; font-size: 0.8rem; }
+.hd-short-rest { align-self: center; margin-top: 0.4rem; }
 .ds { flex: 1; display: grid; gap: 0.35rem; align-content: center; }
 .ds-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-height: var(--row); font-size: 0.82rem; }
 .ds-failures input[type=checkbox]:checked { background: var(--error); border-color: var(--error); }
@@ -993,6 +1000,10 @@ details.spell > summary::-webkit-details-marker { display: none; }
 
 .map-dialog { width: min(32rem, calc(100vw - 32px)); padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: inherit; }
 .map-dialog::backdrop { background: rgb(0 0 0 / 0.35); }
+/* The DM's Rest dialog (rests.js). */
+.rest-who { display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; margin: 0; border: 1px solid var(--border); border-radius: var(--radius); }
+.rest-list { margin: 0.3rem 0 0; padding-left: 1.2rem; }
+.rest-result:empty { display: none; }
 .map-dialog-inner { display: grid; gap: 0.6rem; padding: 1rem 1.1rem; }
 .map-dialog h2 { margin: 0; font-size: 1.15rem; }
 .map-dialog h3 { margin: 0.4rem 0 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }

@@ -8,9 +8,9 @@ Read this first when picking the project up on another machine or with another A
 
 ---
 
-## Current state (2026-10-08)
+## Current state (2026-10-09)
 
-Rewritten (not appended to) on 2026-10-08 after a housekeeping audit. Everything below is on `main`.
+Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, kept current since. Everything below is on `main` except rests and hit dice (branch `claude/project-thread-9o2cpk`, PR open, waiting on the owner's OK).
 
 **What's built** (SPEC has the design of each; §6.1 is the list):
 - **Server, end to end with real AI calls:** player notes → transcript upload (with date) → attendance → the **archivist** (an AI with full authority over the knowledge base) → per-player Q&A with privacy. Verified with a realistic two-session privacy scenario through Claude Code. Between sessions the archivist also reads character sheets (in full, then each change with its time), late note changes, handouts, and (with each session) what happened on the maps.
@@ -20,16 +20,17 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit. Everything
 - **Dice:** the server rolls, 3D dice land on its numbers; two rollers, **Deluxe (default)** and Classic; 23 styles plus "Match the page", special effects; rolls shared live with the party, only the DM, or only yourself.
 - **Maps:** the DM imports any map (or a PDF page); the AI reads kind, name, grid and scale, and the server measures the grid; tokens for characters, NPCs and enemies (with pictures), moved live; fog of war, walls, doors and line of sight (drawn or AI-drafted), darkness, lights and darkvision, hit points and conditions, hidden tokens, AI stat blocks, NPCs from the records, private pins, Measure, spell templates, initiative, pings and sketches, waypoints and difficult terrain, other pictures of a map, links between maps.
 - **Walls and doors** (PR #17, merged 2026-10-08): doors drawn as doors and locked or unlocked with a click; Curve and Circle tools; a Walls tick box hides walls while playing; a thorough AI wall draft (a ruler on the map, a checking pass, close-ups on big maps, arcs and circles, max effort on its own `walls` task, straight walls put on the grid); exact walls, doors and lights from `.dd2vtt`/`.uvtt` files.
+- **Rests and hit dice** (2026-10-09, PR open): the sheet's Hit dice box has a row per die size; **Spend** has the server roll the die plus Con (shared like any roll) and heal; **Short rest** gives back Pact Magic. The DM's **Rest** button calls a short or long rest for everyone or chosen players, by the group's edition (2014 unless their PHB is 2024, or `REST_RULES`); sheets change and players hear it live. Rests are archived (`rests.jsonl`) and counted (`rests.count`, `rests.events`), the hook for merchants restocking every N long rests (SPEC §6.8).
 - **The DM:** a **Creatures** tab instead of a character sheet (saved enemies and NPCs placed on maps, several at a time; "Find online" has the AI find one on the web with a picture), an **Archivist** tab (answer the archivist's questions, send corrections), **Handouts** for everyone or chosen players. The DM has no sheet at all: no Sheet tab or window, and the server refuses it.
 - **Look:** 12 themes, 4 page layouts, chat and sheet styles and layouts, plus tab order, the map toolbar's place, which panel goes beside the map, token names and an accent colour. All per browser. The owner hasn't decided which to keep (don't prune yet).
 - **Security:** audited 2026-10-07 (headers, strict CSP: scripts only from the server, body limits, login limits, live streams that end with access). Hosting must go through Cloudflare Tunnel with `HOST=127.0.0.1`.
 
-**Numbers:** schema **v12**, `PIPELINE_VERSION` **11**, **298 tests** passing (`npm test`: server 134, shared 49, web 115). Tests are offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools; the page is tested in jsdom against a real test server (`packages/web/test/page.js`). Headless Chromium is only needed for what jsdom can't show (real layout, WebGL dice, touch). There's no CI: `npm test` is the check.
+**Numbers:** schema **v13**, `PIPELINE_VERSION` **11**, **310 tests** passing (`npm test`: server 140, shared 52, web 118). Tests are offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools; the page is tested in jsdom against a real test server (`packages/web/test/page.js`). Headless Chromium is only needed for what jsdom can't show (real layout, WebGL dice, touch). There's no CI: `npm test` is the check.
 
-**Git:** `main` has PRs #1–#18 merged (#16: housekeeping; #17: walls and doors; #18: book lookups checked and fixed). Merges to `main` need the owner's OK.
+**Git:** `main` has PRs #1–#19 merged (#16: housekeeping; #17: walls and doors; #18: book lookups checked and fixed; #19: HANDOFF after #17). Open when this was written: #20 (stat blocks formatted in the creature dialog) and the rests PR. Merges to `main` need the owner's OK.
 
 **Installs:**
-- **Owner's PC** (the server): `data/` holds the admin login ("admin") and a player account for Kenny. The database upgrades itself to v12 on the next start. Start with `npm start`, open http://127.0.0.1:4400. `.env` is in the repo root (copy of `.env.example`).
+- **Owner's PC** (the server): `data/` holds the admin login ("admin") and a player account for Kenny. The database upgrades itself to v13 on the next start. Start with `npm start`, open http://127.0.0.1:4400. `.env` is in the repo root (copy of `.env.example`).
 - **Owner's laptop** (2026-10-07): Node 24.19, installed with the `--ignore-scripts` workaround; `data/` has only the admin login.
 
 **Not set up yet:** the domain (`PUBLIC_URL` is the placeholder `https://dnd.example.xyz`) and Cloudflare Tunnel. **No real transcript** has been tried; the parser is built to an assumed format.
@@ -40,8 +41,9 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit. Everything
 
 0. **Walls and doors (merged): try them for real:** have the real AI draft walls on a gridded dungeon, a map with a round tower or cave, and a big map (over 1800 px, so close-ups are used); see what still needs fixing and how long and how much a draft costs at max effort (2 to 10 calls). Import a `.dd2vtt` from Dungeondraft or a map pack. Check the door badge size at normal zoom. If drafts are still off on clean maps, the next step is snapping walls to the dark lines in the picture (option 4 in `/mnt/project-files/walls-doors/ai-walls-options.md`).
 
-1. **Books folder (owner):** rename `Players Handbook 5th Edition DD.pdf` to `Player's Handbook (2014).pdf` so answers cite a clean title (the DMG's long download name is trimmed automatically). The 2014 DMG is an EPUB, which isn't read. The server warns at start-up about a PDF with no text layer or unreadable page numbers.
-2. **Try things for real** (the owner, with the group; each line is one feature that has only been tested offline):
+1. **Rests (PR open): review and merge, then try with the group:** a player spends hit dice and takes a short rest from the sheet; the DM calls a long rest from the Rest button (check the 0 hit points rule and the hit dice coming back). Check which edition the Rest dialog says: it follows the PHB in the books folder. The merchants work hooks into `rests.count` / `rests.events` (SPEC §6.8). Not built: class features that recharge on a rest (Second Wind, Arcane Recovery, Channel Divinity) and exhaustion, since the sheet doesn't track them; map token HP isn't synced with sheets.
+2. **Books folder (owner):** rename `Players Handbook 5th Edition DD.pdf` to `Player's Handbook (2014).pdf` so answers cite a clean title (the DMG's long download name is trimmed automatically). The 2014 DMG is an EPUB, which isn't read. The server warns at start-up about a PDF with no text layer or unreadable page numbers.
+3. **Try things for real** (the owner, with the group; each line is one feature that has only been tested offline):
    - **Real transcript:** upload one from the recorder on the admin screen (check the speaker preview; if names come out wrong, adapt `packages/shared/src/transcript.js`), link speakers to accounts, process, then look at the knowledge base (`GET /campaigns/:cid/kb`) and the archivist's questions. Time the archivist and Q&A.
    - **Ask in the browser with the real AI:** a general question ("stat block for a brown bear"), a campaign one, and vague and exact rules questions against the books: check it reads the right page, cites the printed page, and keeps to the 2014 rules. It now checks the books on every rules question; time it, and if that's too slow, the old rule (books only when the wording matters) is one prompt line.
    - **Maps with the real AI:** import a battle map, a town and a PDF page; check kind, name, scale and the measured grid (faint grids may not be measured: `detectGrid` in `maps/read.js`); have it draft walls on a map with braziers and water (lights, difficult terrain); check a few AI stat blocks against the Monster Manual.
@@ -51,10 +53,10 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit. Everything
    - **Archivist between sessions:** fill in a sheet with real Claude Code running, wait 10 minutes, check what the archivist made of it; again after a level-up. Process a session played with a map and check it used `<map_events>`.
    - **Dice:** Deluxe and Classic on a real GPU and a phone (Safari and Firefox untested). Deluxe is the default now; the owner can change it with `DICE_ROLLER`.
    - **Look:** show the players; see which themes, layouts and layout options they use, then prune (owner's call).
-3. **Decisions waiting on the owner** (SPEC §9): the DM role (what the DM sees, including note- and sheet-derived knowledge through Q&A, currently yes); should the DM see players' sheets, and should Q&A read the asker's sheet; should rolls go into the archive; should the archivist see handout pictures; party-shared sight and dimming light ranges.
-4. **Later, planned:** a ready-made creature library from the books once they're all scanned (SPEC §6.6); glossary and speaker-map editing on the page; session notes design (`/mnt/project-files/notes-sessions/notes-only-sessions.md` in the project files).
-5. **Hosting:** buy the domain, set `PUBLIC_URL`, set up Cloudflare Tunnel, write a short player guide. Check whether Claude Code's WebFetch (Find online) can reach addresses on the home network before opening it up (SPEC §3.5).
-6. **Install workaround (owner's call):** keep typing `npm install --ignore-scripts`, or add `ignore-scripts=true` to a project `.npmrc`. Revisit when npm fixes the `gypfile` bug or `better-sqlite3` changes how it ships binaries.
+4. **Decisions waiting on the owner** (SPEC §9): the DM role (what the DM sees, including note- and sheet-derived knowledge through Q&A, currently yes); should the DM see players' sheets, and should Q&A read the asker's sheet; should rolls go into the archive; should the archivist see handout pictures; party-shared sight and dimming light ranges.
+5. **Later, planned:** a ready-made creature library from the books once they're all scanned (SPEC §6.6); glossary and speaker-map editing on the page; session notes design (`/mnt/project-files/notes-sessions/notes-only-sessions.md` in the project files).
+6. **Hosting:** buy the domain, set `PUBLIC_URL`, set up Cloudflare Tunnel, write a short player guide. Check whether Claude Code's WebFetch (Find online) can reach addresses on the home network before opening it up (SPEC §3.5).
+7. **Install workaround (owner's call):** keep typing `npm install --ignore-scripts`, or add `ignore-scripts=true` to a project `.npmrc`. Revisit when npm fixes the `gypfile` bug or `better-sqlite3` changes how it ships binaries.
 
 When you change the web page, add or update a test in `packages/web/test/` (README "Tests"). Not covered by page tests: the dice effects' visuals (`dice-fx.js`) and some admin-sessions polling paths.
 
@@ -137,6 +139,7 @@ Details are in SPEC §3–5.
 | **Two dice rollers: Deluxe (default) and Classic** | Owner's call (2026-10-08): "just keep the classic and deluxe 3D dice, scrap the rest". Quick, Lite, Flat and None were removed. Deluxe as the default was picked by Claude (the fancier one; the owner can switch with `DICE_ROLLER`). |
 | **The DM has no character sheet** | Owner's call (2026-10-08, with the Creatures tab); the audit found it was only hidden, so it's now refused by the server and skipped by the archivist. A DM sheet saved before stays in the archive. |
 | Server routes split by part of the app (`src/routes/`) | Housekeeping (owner's OK, 2026-10-08): `app.js` had reached 2,468 lines. No behaviour change. |
+| **Rests follow the group's edition; the DM calls long rests, players spend their own hit dice** | Owner asked for rests and hit dice (2026-10-09); the defaults were Claude's: 2014 rules unless the PHB in the books is 2024 (`REST_RULES` to force), the DM calls party rests so nobody long-rests mid-dungeon, hit dice rolled by the server through the roll log. Hit dice kept per die size for multiclass characters. |
 | **The server decides dice rolls; the 3D dice are animated to land on them** | Owner's call (2026-10-07): fine as long as it looks the same to the player. D&D Beyond lets the browser's physics decide; server rolls are evenly random and can't be faked from the page, which matters once rolls are shared. The library really throws the dice, then relabels faces. |
 
 ## Change log
@@ -617,6 +620,16 @@ The owner asked to double-check how the AI looks things up in the books ("this r
 - **Smaller things:** "AC", "HP", "hex" and other terms of 3 letters or fewer match whole words only ("AC" found "action"); a heading that is the search term counts much more (Hex the spell now beats the DMG's pages about hex grids), bookmarks count as headings; an unknown book name or an ambiguous one ("Player's Handbook" with both editions) now returns an error naming the books instead of an empty search, which read as "not in the book"; `read_book` returns two full pages (it was cut at 10k characters); a PDF with mostly empty pages is logged at start-up as needing OCR; spell lookup reads the 2024 layout ("Level 3 Evocation (Wizard)") and skips class sections that looked like spells ("Arcane Trickster Spellcasting", "Cantrips").
 - `PIPELINE_VERSION` 9 → 10 (Q&A prompt). Tests: 4 new in `books.test.js` (290 in all after the housekeeping merge).
 - **Not checked:** the real AI with the new prompt, and how much time the extra lookup adds.
+
+### 2026-10-09: Long and short rests, spending hit dice
+
+Owner's request: "a long rest and short rest feature. And a way to spend hit die", plus merchants that restock "every x number of long rests" (another thread), which needs a long rest to hook into.
+
+- **Rules** in `shared/sheet.js` (pure): hit dice kept per die size (`hit_dice_spent`, replacing `hit_dice_used`; old sheets are converted, biggest die first); `spendHitDie` (die + Con, never negative, up to max), `shortRest` (Pact Magic), `longRest` (HP, temp HP, slots, death saves, hit dice: half at least one under 2014, all under 2024; nothing at 0 HP under 2014).
+- **Server:** `rolls.js` (rolling, logging and sending a roll, moved out of `routes/table.js` so other features can roll), `rests.js` and `routes/rests.js`: `POST /sheet/hit-dice`, `POST /sheet/short-rest` (players), `GET`/`POST /rests` (the DM calls one for everyone or chosen players). The edition comes from `REST_RULES` or the group's PHB (`handbookEditions` in `sheets/books.js`, now shared with Q&A's `groupEdition`, same wording). Sheets are saved with a reason. Rests the DM calls are archived (`rests.jsonl`), mirrored in `rests` (schema v12 → v13), restored, sent live (`rest` on `/live`) and counted (`rests.count`, `rests.events`). Who got nothing (0 HP) is only told to the DM and that player.
+- **Page:** the Hit dice box has a row per die size with ticks, how many are left, Spend (rolls through the dice tray, so the 3D dice show it) and Short rest; the DM's Rest button in the header opens a dialog (who rests, Short or Long, which rules, recent rests); players get a note and their sheet reloads (`web/public/rests.js`, `restCalled` in `sheet.js`, `showToast` in `dice.js`).
+- No AI prompt or schema changed, so `PIPELINE_VERSION` stays 11. Tests: 12 new (server 5 in `rests.test.js` + the v13 migration, shared 3, web 3 in `rests.test.js`), 310 in all.
+- **Not checked:** the page in a real browser (only jsdom), the 3D dice for a hit die (same path as other rolls), the archivist's reading of rest changes with the real AI.
 
 ## Verified vs. not verified
 

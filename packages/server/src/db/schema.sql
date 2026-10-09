@@ -291,6 +291,17 @@ CREATE TABLE IF NOT EXISTS rolls (
 );
 CREATE INDEX IF NOT EXISTS rolls_campaign ON rolls(campaign_id, id);
 
+-- Short and long rests the DM called for the party. Archived as rests.jsonl.
+-- Things that happen "every N long rests" count these. Schema v13.
+CREATE TABLE IF NOT EXISTS rests (
+  id           TEXT PRIMARY KEY,  -- random
+  campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  kind         TEXT NOT NULL,     -- short | long
+  at           TEXT NOT NULL,
+  data         TEXT NOT NULL      -- JSON; see normalizeRest in src/rests.js
+);
+CREATE INDEX IF NOT EXISTS rests_campaign ON rests(campaign_id, kind, at);
+
 CREATE TABLE IF NOT EXISTS jobs (
   id           INTEGER PRIMARY KEY,
   campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
