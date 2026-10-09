@@ -115,6 +115,57 @@ test('initiative: the DM starts a fight (enemies roll with their Dex), players r
   }
 });
 
+test('initiative from the dice (the sheet or the map): it goes into every fight waiting for your character, and is a shared roll', async () => {
+  const t = await setup({ llm: createFakeLLM({ structured: async () => readOut }) });
+  try {
+    const { base, add } = await shownMap(t);
+    const sheet = (await t.request('GET', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token })).json();
+    await t.request('PUT', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token, body: { sheet: { ...sheet.sheet, abilities: { ...sheet.sheet.abilities, dex: 16 } }, version: sheet.version } });
+    const thorin = await add({ kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 52.5, y: 52.5 });
+    const mira = await add({ kind: 'pc', name: 'Mira', user_id: t.alex.id, x: 122.5, y: 52.5 });
+    const roll = (body, as = t.sam.token) => t.request('POST', `/campaigns/${t.campaign.id}/roll`, { body, as });
+
+    // No fight: just a roll. A roll needs dice unless it's initiative.
+    assert.equal((await roll({ mode: 'normal' })).statusCode, 400);
+    const plain = (await roll({ initiative: true })).json();
+    assert.equal(plain.notation, '1d20+3'); // d20 + the sheet's initiative
+    assert.equal(plain.initiative.length, 0);
+    assert.equal(plain.roll.label, 'Initiative');
+
+    await t.request('POST', `${base}/combat`, { body: { action: 'start' } });
+    // Not an initiative roll: the fight still waits.
+    await roll({ notation: '1d20+3', label: 'Stealth' });
+    assert.equal(t.maps.get(t.campaign.id, (await t.request('GET', base)).json().id).combat.entries.find((e) => e.id === thorin.id).init, null);
+
+    // From the sheet (its own number), shared with the party, into the fight; only Thorin's entry.
+    const res = (await roll({ notation: '1d20+3', label: 'Initiative', initiative: true })).json();
+    assert.deepEqual(res.initiative, [{ map_id: res.initiative[0].map_id, map: 'Cave', token_id: thorin.id, name: 'Thorin' }]);
+    let combat = (await t.request('GET', base)).json().combat;
+    assert.deepEqual(combat.entries.find((e) => e.id === thorin.id), { id: thorin.id, init: res.total, mod: 3, moved: 0 });
+    assert.equal(combat.entries.find((e) => e.id === mira.id).init, null);
+    const seen = (await t.request('GET', `/campaigns/${t.campaign.id}/rolls`, { as: t.alex.token })).json().rolls;
+    assert.equal(seen[0].label, 'Initiative');
+    assert.equal(seen[0].result.total, res.total);
+
+    // Once rolled, another initiative roll doesn't change it (only the DM rolls again).
+    const again = (await roll({ notation: '1d20+3', initiative: true })).json();
+    assert.equal(again.initiative.length, 0);
+    combat = (await t.request('GET', base)).json().combat;
+    assert.equal(combat.entries.find((e) => e.id === thorin.id).init, res.total);
+
+    // Damage dice don't count as initiative.
+    const dmg = (await roll({ notation: '2d6+3', initiative: true }, t.alex.token)).json();
+    assert.equal(dmg.initiative, undefined);
+    // Alex's roll with advantage: the modifier is what's added to the kept die.
+    const adv = (await roll({ notation: '1d20+1', mode: 'advantage', initiative: true }, t.alex.token)).json();
+    combat = (await t.request('GET', base)).json().combat;
+    assert.deepEqual(combat.entries.find((e) => e.id === mira.id), { id: mira.id, init: adv.total, mod: 1, moved: 0 });
+    assert.equal(adv.natural + 1, adv.total);
+  } finally {
+    await t.cleanup();
+  }
+});
+
 test('templates: anyone places areas of effect; only their owner or the DM changes them; fog hides others\' from players', async () => {
   const t = await setup({ llm: createFakeLLM({ structured: async () => readOut }) });
   try {

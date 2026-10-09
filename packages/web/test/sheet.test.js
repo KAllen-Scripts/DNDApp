@@ -166,7 +166,7 @@ test('sheet: classes, attacks, coins, hit points, death saves and spell slots us
   });
 });
 
-test('sheet: clicking a save, skill or ability rolls it; an attack offers its damage, doubled on a natural 20', async () => {
+test('sheet: clicking a save, skill, ability or initiative rolls it (advantage from the sheet bar too); an attack offers its damage, doubled on a natural 20', async () => {
   const dice = [20, 6, 4, 11];
   mock.method(crypto, 'randomInt', (min) => dice.shift() ?? min);
   try {
@@ -205,6 +205,16 @@ test('sheet: clicking a save, skill or ability rolls it; an attack offers its da
       await page.settle();
       assert.equal(rolls().at(-1).notation, '1d20');
       assert.equal(page.text('#dice-result .dr-label'), 'Death save');
+
+      // On a phone there's no Shift or Alt: the sheet's own Next d20 buttons (kept in step with the tray's).
+      const modeButton = (where, mode) => page.$(`${where} .dice-modes [data-mode=${mode}]`);
+      page.click(modeButton('.sheet-bar', 'advantage'));
+      assert.equal(modeButton('#dice-panel', 'advantage').getAttribute('aria-pressed'), 'true');
+      // Initiative also goes into a fight waiting for the character (none here).
+      page.click(page.$$('#sheet .roll-name').find((b) => b.textContent === 'Initiative'));
+      await page.settle();
+      assert.deepEqual(page.requests.filter((r) => r.path.endsWith('/roll')).at(-1).body, { notation: '1d20+3', mode: 'advantage', label: 'Initiative', visibility: 'party', initiative: true });
+      assert.equal(modeButton('.sheet-bar', 'normal').getAttribute('aria-pressed'), 'true', 'back to normal after one d20');
     });
   } finally {
     mock.restoreAll();

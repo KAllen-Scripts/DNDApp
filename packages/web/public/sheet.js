@@ -15,7 +15,7 @@ import {
   computeSheet, coerceDerived, formatBonus, normalizeSheet, normalizeSpell,
 } from './shared/sheet.js';
 import { d20Plus, findRoll } from './shared/dice.js';
-import { roll, rollModeFromEvent, D20_ICON } from './dice.js';
+import { roll, rollModeFromEvent, modeButtons, D20_ICON } from './dice.js';
 
 const $ = (sel) => document.querySelector(sel);
 const LEVEL_NAMES = ['Cantrips', '1st level', '2nd level', '3rd level', '4th level', '5th level', '6th level', '7th level', '8th level', '9th level'];
@@ -306,7 +306,7 @@ function rollButton(content, get, cls = '') {
   const b = h('button', { type: 'button', class: `roll-name ${cls}`, title: 'Click to roll (Shift: advantage, Alt: disadvantage)' }, content);
   b.addEventListener('click', (e) => {
     const r = get();
-    roll(r.notation, { label: r.label, mode: rollModeFromEvent(e), then: r.then });
+    roll(r.notation, { label: r.label, mode: rollModeFromEvent(e), then: r.then, initiative: r.initiative });
   });
   return b;
 }
@@ -455,7 +455,7 @@ const core = () => h('div', { class: 'core' }, abilityTiles(), h('div', { class:
 const vitals = () =>
   h('div', { class: 'vitals' },
     stat(auto('ac', { label: 'Armour class' }), 'Armour class', 'big'),
-    stat(auto('initiative', { kind: 'bonus', label: 'Initiative' }), 'Initiative', 'big', check('initiative', 'Initiative')),
+    stat(auto('initiative', { kind: 'bonus', label: 'Initiative' }), 'Initiative', 'big', () => ({ ...check('initiative', 'Initiative')(), initiative: true })),
     stat(auto('speed', { label: 'Speed (feet)' }), 'Speed', 'big'),
   );
 
@@ -1080,4 +1080,6 @@ export function initSheetActions() {
   });
 
   $('#sheet-print').addEventListener('click', () => window.print());
+  // Advantage and disadvantage without Shift or Alt (phones).
+  $('#sheet-status').after(h('div', { class: 'sheet-modes' }, h('span', { class: 'muted small' }, 'Next d20:'), modeButtons({ normal: 'Normal', advantage: 'Adv.', disadvantage: 'Disadv.' })));
 }

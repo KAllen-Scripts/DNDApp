@@ -8,9 +8,9 @@ Read this first when picking the project up on another machine or with another A
 
 ---
 
-## Current state (2026-10-08)
+## Current state (2026-10-09)
 
-Rewritten (not appended to) on 2026-10-08 after a housekeeping audit. Everything below is on `main`.
+Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, kept current since. Everything below is on `main` unless it says a PR is open.
 
 **What's built** (SPEC has the design of each; §6.1 is the list):
 - **Server, end to end with real AI calls:** player notes → transcript upload (with date) → attendance → the **archivist** (an AI with full authority over the knowledge base) → per-player Q&A with privacy. Verified with a realistic two-session privacy scenario through Claude Code. Between sessions the archivist also reads character sheets (in full, then each change with its time), late note changes, handouts, and (with each session) what happened on the maps.
@@ -18,15 +18,16 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit. Everything
 - **Q&A** answers campaign questions from the sources and general D&D questions from the model's own knowledge, except that with book PDFs in `DND books` (no database) every rules question is looked up in them, using the edition of the group's Player's Handbook (checked on the owner's real PHB 2014 and DMG 2024 scans, 2026-10-08).
 - **Character sheets** (players only): laid out like the 5e sheet, automatic values the player can override (always kept), autosave with version checks, AI upload of existing sheets, spell lookup (SRD, then the books, then the AI), a token picture and a private full picture the AI describes. Can sit beside the map or open in its own window.
 - **Dice:** the server rolls, 3D dice land on its numbers; two rollers, **Deluxe (default)** and Classic; 23 styles plus "Match the page", special effects; rolls shared live with the party, only the DM, or only yourself.
+- **Rolling from the sheet** (PR open, 2026-10-09; the owner asked for it): saves, skills, ability checks, initiative, spell attack, attacks (to hit, then damage, doubled on a natural 20) and death saves roll with a click, through the dice and shared rolls (most of this was already built; the PR adds the rest). Initiative from the sheet, or the player's Roll in the map's turn order, goes into a fight waiting for their character. Advantage and disadvantage from the sheet bar for phones; rollable names are underlined with dots.
 - **Maps:** the DM imports any map (or a PDF page); the AI reads kind, name, grid and scale, and the server measures the grid; tokens for characters, NPCs and enemies (with pictures), moved live; fog of war, walls, doors and line of sight (drawn or AI-drafted), darkness, lights and darkvision, hit points and conditions, hidden tokens, AI stat blocks, NPCs from the records, private pins, Measure, spell templates, initiative, pings and sketches, waypoints and difficult terrain, other pictures of a map, links between maps.
 - **Walls and doors** (PR #17, merged 2026-10-08): doors drawn as doors and locked or unlocked with a click; Curve and Circle tools; a Walls tick box hides walls while playing; a thorough AI wall draft (a ruler on the map, a checking pass, close-ups on big maps, arcs and circles, max effort on its own `walls` task, straight walls put on the grid); exact walls, doors and lights from `.dd2vtt`/`.uvtt` files.
 - **The DM:** a **Creatures** tab instead of a character sheet (saved enemies and NPCs placed on maps, several at a time; "Find online" has the AI find one on the web with a picture), an **Archivist** tab (answer the archivist's questions, send corrections), **Handouts** for everyone or chosen players. The DM has no sheet at all: no Sheet tab or window, and the server refuses it.
 - **Look:** 12 themes, 4 page layouts, chat and sheet styles and layouts, plus tab order, the map toolbar's place, which panel goes beside the map, token names and an accent colour. All per browser. The owner hasn't decided which to keep (don't prune yet).
 - **Security:** audited 2026-10-07 (headers, strict CSP: scripts only from the server, body limits, login limits, live streams that end with access). Hosting must go through Cloudflare Tunnel with `HOST=127.0.0.1`.
 
-**Numbers:** schema **v12**, `PIPELINE_VERSION` **11**, **298 tests** passing (`npm test`: server 134, shared 49, web 115). Tests are offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools; the page is tested in jsdom against a real test server (`packages/web/test/page.js`). Headless Chromium is only needed for what jsdom can't show (real layout, WebGL dice, touch). There's no CI: `npm test` is the check.
+**Numbers:** schema **v12**, `PIPELINE_VERSION` **11**, **299 tests** passing (`npm test`: server 135, shared 49, web 115). Tests are offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools; the page is tested in jsdom against a real test server (`packages/web/test/page.js`). Headless Chromium is only needed for what jsdom can't show (real layout, WebGL dice, touch). There's no CI: `npm test` is the check.
 
-**Git:** `main` has PRs #1–#18 merged (#16: housekeeping; #17: walls and doors; #18: book lookups checked and fixed). Merges to `main` need the owner's OK.
+**Git:** `main` has PRs #1–#19 merged (#16: housekeeping; #17: walls and doors; #18: book lookups checked and fixed). Open: #20 (stat blocks formatted in the creature Edit dialog) and the rolling-from-the-sheet PR (branch `claude/project-thread-ljiz21`). Merges to `main` need the owner's OK.
 
 **Installs:**
 - **Owner's PC** (the server): `data/` holds the admin login ("admin") and a player account for Kenny. The database upgrades itself to v12 on the next start. Start with `npm start`, open http://127.0.0.1:4400. `.env` is in the repo root (copy of `.env.example`).
@@ -38,6 +39,7 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit. Everything
 
 ## Next steps
 
+0. **Rolling from the sheet (PR open):** review and merge (owner's OK). Then try it at the table: a short fight where players roll initiative from their sheets, attacks with damage, and Adv./Disadv. on a phone. Not built: automatic attack bonuses from weapons (the player types the bonus), rolling a spell's damage from the spell list, hit dice (the rests thread has those).
 0. **Walls and doors (merged): try them for real:** have the real AI draft walls on a gridded dungeon, a map with a round tower or cave, and a big map (over 1800 px, so close-ups are used); see what still needs fixing and how long and how much a draft costs at max effort (2 to 10 calls). Import a `.dd2vtt` from Dungeondraft or a map pack. Check the door badge size at normal zoom. If drafts are still off on clean maps, the next step is snapping walls to the dark lines in the picture (option 4 in `/mnt/project-files/walls-doors/ai-walls-options.md`).
 
 1. **Books folder (owner):** rename `Players Handbook 5th Edition DD.pdf` to `Player's Handbook (2014).pdf` so answers cite a clean title (the DMG's long download name is trimmed automatically). The 2014 DMG is an EPUB, which isn't read. The server warns at start-up about a PDF with no text layer or unreadable page numbers.
@@ -617,6 +619,16 @@ The owner asked to double-check how the AI looks things up in the books ("this r
 - **Smaller things:** "AC", "HP", "hex" and other terms of 3 letters or fewer match whole words only ("AC" found "action"); a heading that is the search term counts much more (Hex the spell now beats the DMG's pages about hex grids), bookmarks count as headings; an unknown book name or an ambiguous one ("Player's Handbook" with both editions) now returns an error naming the books instead of an empty search, which read as "not in the book"; `read_book` returns two full pages (it was cut at 10k characters); a PDF with mostly empty pages is logged at start-up as needing OCR; spell lookup reads the 2024 layout ("Level 3 Evocation (Wizard)") and skips class sections that looked like spells ("Arcane Trickster Spellcasting", "Cantrips").
 - `PIPELINE_VERSION` 9 → 10 (Q&A prompt). Tests: 4 new in `books.test.js` (290 in all after the housekeeping merge).
 - **Not checked:** the real AI with the new prompt, and how much time the extra lookup adds.
+
+### 2026-10-09: Rolling attacks and stats from the character sheet
+
+The owner asked for "a function to roll attacks from the character sheet, as well as other stats". Most of it was already there (since the dice, 2026-10-07): clicking a save, skill, ability, initiative or spell attack rolls it, each attack has a roll button (to hit, then damage, doubled on a natural 20), death saves have one, and every roll goes through the chosen roller and shared rolls. It was easy to miss and didn't work well on phones or with the map's fights. This adds:
+
+- **Initiative goes into the fight.** `POST /campaigns/:cid/roll` takes `initiative: true`: the total goes into every fight on a map the player can see where one of their player character tokens hasn't rolled yet (`joinFights` in `routes/table.js`; the entry's `mod` is the total minus the kept d20). The notation may be left out (d20 + the sheet's initiative, `sheetInitiative` in `routes/combat.js`, shared with the combat route). The sheet's Initiative sends it; so does a player's Roll button in the turn order (`map-combat.js`), which used to roll on the server with no dice shown and nothing in the shared rolls. The DM's rolls for tokens are unchanged. The result card says which map it went into.
+- **Next d20 on the sheet bar:** Normal / Adv. / Disadv. buttons (`modeButtons` in `dice.js`, kept in step with the tray's), since Shift- and Alt-click don't exist on phones.
+- **Rollable names are underlined with dots** all the time (accent colour on hover), not only on hover; not when printed.
+- No schema or `PIPELINE_VERSION` change. Tests: 299 (server 135, shared 49, web 115); new server test for initiative from the dice, and the sheet and map turn-order page tests extended.
+- **Not done:** automatic attack bonuses from weapons, a damage roll from a spell in the spell list, hit dice (left to the rests work).
 
 ## Verified vs. not verified
 

@@ -161,14 +161,16 @@ export const rollModeFromEvent = (e) => (e?.shiftKey ? 'advantage' : e?.altKey ?
  * Roll some dice and show them. label names the roll ("Stealth"); mode is
  * advantage/disadvantage (default: whatever the tray says for the next d20);
  * then is a follow-up offered with the result ({ label, notation }: damage
- * after an attack).
+ * after an attack). initiative: also put it in any fight on a map waiting for
+ * your character to roll (notation may be null: the server adds the
+ * initiative on your sheet).
  */
-export async function roll(notation, { label = '', mode = null, then = null } = {}) {
+export async function roll(notation, { label = '', mode = null, then = null, initiative = false } = {}) {
   if (!state.campaignId) return;
   const id = ++state.seq;
   let result;
   try {
-    result = await state.guarded(() => api('POST', `/campaigns/${state.campaignId}/roll`, { notation, mode: mode ?? state.nextMode, label, visibility: share() }));
+    result = await state.guarded(() => api('POST', `/campaigns/${state.campaignId}/roll`, { ...(notation != null && { notation }), mode: mode ?? state.nextMode, label, visibility: share(), ...(initiative && { initiative: true }) }));
   } catch (err) {
     return showError(err.message);
   }
@@ -424,6 +426,7 @@ function showResult({ label, result, then }) {
       ),
     ),
     ...(follow.length ? [h('div', { class: 'dr-actions' }, follow)] : []),
+    ...(result.initiative?.length ? [h('p', { class: 'dr-note small' }, `In the turn order on ${[...new Set(result.initiative.map((j) => j.map))].join(', ')}.`)] : []),
   );
   card.hidden = false;
   clearTimeout(state.hideTimer);
@@ -451,9 +454,19 @@ function showError(message) {
 
 function setNextMode(mode) {
   state.nextMode = mode;
-  for (const b of document.querySelectorAll('#dice-panel [data-mode]')) b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
+  for (const b of document.querySelectorAll('.dice-modes [data-mode]')) b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
   $('#dice-open').classList.toggle('has-mode', mode !== 'normal');
   $('#dice-open').title = mode === 'normal' ? 'Roll dice' : `Roll dice (next d20 with ${mode})`;
+}
+
+/**
+ * Normal / Advantage / Disadvantage for the next d20 roll, kept in step with
+ * every other such group (the tray's, the sheet's): on a phone there's no
+ * Shift- or Alt-click.
+ */
+export function modeButtons(names = MODE_NAMES) {
+  return h('div', { class: 'dice-modes', role: 'group', 'aria-label': 'Next d20 roll' },
+    Object.keys(MODE_NAMES).map((mode) => h('button', { type: 'button', 'data-mode': mode, 'aria-pressed': String(mode === state.nextMode), title: `Next d20: ${MODE_NAMES[mode].toLowerCase()}`, onclick: () => setNextMode(mode) }, names[mode])));
 }
 
 /** Clicking a die adds one to what's typed: "1d20" then d6 → "1d20+1d6", d6 again → "1d20+2d6". */
@@ -561,15 +574,14 @@ export function initDice() {
       h('button', { type: 'submit', class: 'primary' }, 'Roll')),
     h('p', { id: 'dice-error', class: 'error small', hidden: true, role: 'alert' }),
   );
-  const modes = h('div', { class: 'dice-modes', role: 'group', 'aria-label': 'Next d20 roll' },
-    Object.entries(MODE_NAMES).map(([mode, name]) => h('button', { type: 'button', 'data-mode': mode, 'aria-pressed': String(mode === 'normal'), onclick: () => setNextMode(mode) }, name)));
+  const modes = modeButtons();
   const panel = h('section', { id: 'dice-panel', class: 'dice-panel', hidden: true, 'aria-label': 'Dice' },
     h('header', { class: 'dice-panel-head' }, h('h2', {}, 'Dice'), h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Close', onclick: () => toggle(false) }, '×')),
     form,
     h('div', { class: 'dice-mode-row' }, h('span', { class: 'muted small' }, 'Next d20:'), modes),
     h('label', { class: 'dice-share small' }, 'Who sees my rolls',
       h('select', { id: 'dice-share', onchange: (e) => { state.settings.share = e.target.value; saveSettings(); drawSettings(); } })),
-    h('p', { class: 'muted small dice-hint' }, 'On your sheet, click a save, skill, ability or the dice by an attack to roll it. Shift-click for advantage, Alt-click for disadvantage.'),
+    h('p', { class: 'muted small dice-hint' }, 'On your sheet, click a save, skill, ability, initiative or the dice by an attack to roll it. Shift-click for advantage, Alt-click for disadvantage (or pick it above, or on the sheet). Initiative from the sheet goes into a fight on the map that is waiting for you.'),
     h('h3', { class: 'dice-history-title' }, 'Dice style'),
     stylePicker(),
     h('div', { class: 'dice-settings' },

@@ -3,14 +3,15 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { ROLL_MODES, parseRoll, rollDice } from '@dndapp/shared/dice.js';
+import { ROLL_MODES, d20Plus, parseRoll, rollDice } from '@dndapp/shared/dice.js';
 import { z } from 'zod';
 import { BadRequestError, NotFoundError } from '../store.js';
 import { MAX_HANDOUT_TEXT, canSeeHandout } from '../handouts.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
+import { sheetInitiative } from './combat.js';
 
 export function registerTable(app, r) {
-  const { access, auth, db, handouts, openLiveStream } = r;
+  const { access, auth, db, handouts, maps, sheets, openLiveStream } = r;
 
   // ---------- dice ----------
 
@@ -32,38 +33,68 @@ export function registerTable(app, r) {
   };
 
   /**
+   * Your character's turn order in every fight waiting for it: the player
+   * character tokens of yours, on maps you can see, that are in a fight and
+   * haven't rolled initiative yet, get this total. Returns where it went.
+   */
+  function joinFights(cid, a, total, mod, by) {
+    const joined = [];
+    for (const map of maps.list(cid)) {
+      if (!map.combat) continue;
+      const view = maps.view(map, a);
+      if (!view) continue;
+      const waiting = (e) => e.init == null && view.tokens.some((t) => t.id === e.id && t.kind === 'pc' && t.user_id === a.userId);
+      const ids = map.combat.entries.filter(waiting).map((e) => e.id);
+      if (!ids.length) continue;
+      maps.change(cid, map.id, (m) => {
+        for (const e of m.combat?.entries ?? []) if (ids.includes(e.id)) Object.assign(e, { init: total, mod });
+      }, { by, reason: 'initiative' });
+      for (const id of ids) joined.push({ map_id: map.id, map: view.name, token_id: id, name: view.tokens.find((t) => t.id === id).name });
+    }
+    return joined;
+  }
+
+  /**
    * Roll dice: { notation: "1d20+5", mode: normal | advantage | disadvantage,
-   * label?: "Stealth", visibility?: party | dm | self }. The server decides
-   * every roll (a secure random number); the page only animates the dice
-   * landing on these numbers. The roll is kept in the campaign's roll log and
-   * sent live to whoever may see it: the party (default), only the DM (a
-   * secret roll, when the DM makes it), or only you.
+   * label?: "Stealth", visibility?: party | dm | self, initiative?: true }.
+   * The server decides every roll (a secure random number); the page only
+   * animates the dice landing on these numbers. The roll is kept in the
+   * campaign's roll log and sent live to whoever may see it: the party
+   * (default), only the DM (a secret roll, when the DM makes it), or only you.
+   * An initiative roll (notation may be left out: d20 + the initiative on
+   * your sheet) also goes into every fight on a map waiting for your
+   * character to roll (`initiative: [{ map_id, map, token_id, name }]`).
    */
   app.post('/campaigns/:cid/roll', async (request) => {
     const a = access(request);
-    const { notation, mode, label, visibility } = z
+    const { notation, mode, label, visibility, initiative } = z
       .object({
-        notation: z.string().max(100),
+        notation: z.string().max(100).optional(),
         mode: z.enum(ROLL_MODES).default('normal'),
         label: z.string().max(120).default(''),
         visibility: z.enum(ROLL_VISIBILITY).default('party'),
+        initiative: z.boolean().default(false),
       })
       .parse(request.body);
+    if (notation === undefined && !initiative) throw new BadRequestError('Type some dice, like 1d20+5 or 2d6.');
     let parsed;
     try {
-      parsed = parseRoll(notation);
+      parsed = parseRoll(notation ?? d20Plus(sheetInitiative(sheets, a.cid, a.userId)));
     } catch (err) {
       throw new BadRequestError(err.message);
     }
     const result = rollDice(parsed, { mode, random: (sides) => crypto.randomInt(1, sides + 1) });
     const rolled_at = new Date().toISOString();
+    const text = label.trim() || (initiative ? 'Initiative' : '');
     const id = Number(
       db.prepare('INSERT INTO rolls (campaign_id, user_id, visibility, label, result, rolled_at) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(a.cid, request.user.id, visibility, label.trim(), JSON.stringify(result), rolled_at).lastInsertRowid,
+        .run(a.cid, request.user.id, visibility, text, JSON.stringify(result), rolled_at).lastInsertRowid,
     );
-    const roll = { id, campaign_id: a.cid, user_id: request.user.id, visibility, label: label.trim(), result, rolled_at };
+    const roll = { id, campaign_id: a.cid, user_id: request.user.id, visibility, label: text, result, rolled_at };
     rollEvents.emit('roll', roll);
-    return { ...result, roll: rollView(a.cid, roll) };
+    // Only a plain d20 roll counts as initiative (the modifier is what's added to the die).
+    const joined = initiative && result.natural != null && result.terms.length <= 2 ? joinFights(a.cid, a, result.total, result.total - result.natural, request.user.id) : undefined;
+    return { ...result, roll: rollView(a.cid, roll), ...(joined && { initiative: joined }) };
   });
 
   /** The latest rolls you may see in this campaign (newest first). */

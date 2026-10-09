@@ -554,6 +554,8 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 .sheet-bar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .sheet-bar #sheet-status { flex: 1; min-width: 12rem; }
 .sheet-bar button { padding: 0.35rem 0.8rem; font-size: 0.9rem; }
+.sheet-bar .sheet-modes { display: flex; align-items: center; gap: 0.35rem; }
+.sheet-bar .dice-modes button { padding: 0.25rem 0.55rem; font-size: 0.8rem; }
 
 /* ---------- a panel beside the map, or the sheet in its own window (sheet-place.js) ---------- */
 
@@ -668,7 +670,9 @@ input.num, .sheet .num { text-align: center; }
   display: block; width: fit-content; max-width: 100%; height: auto; padding: 0;
   border: none; border-radius: 3px; background: none; text-align: left; cursor: pointer;
 }
-.sheet button.roll-name:hover { color: var(--accent); text-decoration: underline dotted; text-underline-offset: 0.2em; }
+.sheet button.roll-name { text-decoration: underline dotted color-mix(in srgb, currentColor 45%, transparent); text-underline-offset: 0.2em; }
+.sheet button.roll-name:hover { color: var(--accent); text-decoration-color: currentColor; }
+@media print { .sheet button.roll-name { text-decoration: none; } }
 .stat > button.roll-name, .ability > button.roll-name { margin-inline: auto; text-align: center; }
 .sheet button.icon-roll { display: grid; place-items: center; width: var(--ctl); height: var(--ctl); padding: 0; color: var(--accent); background: transparent; }
 .sheet button.icon-roll:hover { border-color: var(--accent); }

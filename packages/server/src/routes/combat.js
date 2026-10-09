@@ -9,6 +9,12 @@ import { AuthError } from '../auth.js';
 import { BadRequestError, NotFoundError } from '../store.js';
 import { newTokenId } from '../maps/store.js';
 
+/** A player character's initiative from their sheet (their own number if they typed one); 0 without a sheet. */
+export function sheetInitiative(sheets, cid, userId) {
+  const { sheet, version } = sheets.get(cid, userId);
+  return version ? (Number(computeSheet(sheet).values.initiative) || 0) : 0;
+}
+
 export function registerCombat(app, r) {
   const { access, maps, sheets, viewableMap } = r;
 
@@ -20,10 +26,7 @@ export function registerCombat(app, r) {
    * modifier from their stat block (0 without one).
    */
   const initiativeMod = (cid, token) => {
-    if (token.kind === 'pc' && token.user_id != null) {
-      const { sheet, version } = sheets.get(cid, token.user_id);
-      return version ? (Number(computeSheet(sheet).values.initiative) || 0) : 0;
-    }
+    if (token.kind === 'pc' && token.user_id != null) return sheetInitiative(sheets, cid, token.user_id);
     return dexModifier(token.stats?.text) ?? 0;
   };
   const d20 = () => crypto.randomInt(1, 21);

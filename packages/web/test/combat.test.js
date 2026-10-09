@@ -42,7 +42,7 @@ test('initiative: the DM starts a fight from the panel; the player rolls, takes 
       const lurker = await addToken(t, map, { kind: 'enemy', name: 'Lurker', x: 192.5, y: 52.5, hidden: true });
       return { map, thorin, goblin, lurker, dana: await addDm(t) };
     },
-    page: (t) => ({ as: t.sam }),
+    page: (t) => ({ as: t.sam, storage: { 'dndapp.dice': JSON.stringify({ threeD: false, sound: false }) } }),
   }, async (page, t, { map, thorin, goblin, lurker }) => {
     await openMapTab(page);
     const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
@@ -60,11 +60,15 @@ test('initiative: the DM starts a fight from the panel; the player rolls, takes 
     assert.match(page.text('#map-combat'), /Round 1.*not started yet/);
     assert.equal(page.$('#map-combat [aria-label="Initiative for Goblin"]'), null, "not Sam's to change");
 
-    // Sam rolls for Thorin.
+    // Sam rolls for Thorin: with the dice (shown and shared like any roll), straight into the fight.
     page.click('#map-combat [aria-label="Roll initiative for Thorin"]');
     await page.settle();
-    assert.match(page.text('#map-status'), /^Thorin rolled \d+ for initiative \(d20 \d+ \+ 0\)\.$/);
-    assert.equal(page.$('#map-combat [aria-label="Roll initiative for Thorin"]'), null, 'players roll once');
+    const sent = page.requests.filter((r) => r.path.endsWith('/roll')).at(-1).body;
+    assert.deepEqual(sent, { mode: 'normal', label: 'Initiative', visibility: 'party', initiative: true });
+    assert.equal(page.text('#dice-result .dr-label'), 'Initiative');
+    assert.match(page.text('#dice-result .dr-note'), /^In the turn order on .+\.$/);
+    await page.waitFor(() => !page.$('#map-combat [aria-label="Roll initiative for Thorin"]'), { what: 'the roll to reach the fight' });
+    assert.ok(t.maps.get(t.campaign.id, map.id).combat.entries.find((e) => e.id === thorin.id).init != null);
     // He types what he rolled at the table instead.
     page.type('#map-combat [aria-label="Initiative for Thorin"]', '25');
     await page.settle();
