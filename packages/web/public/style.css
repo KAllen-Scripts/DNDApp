@@ -1102,6 +1102,18 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .map-dialog .stat-text { max-height: 55vh; overflow-y: auto; box-shadow: none; }
 .map-dialog .stat-text table { border-collapse: collapse; }
 .map-dialog .stat-text th, .map-dialog .stat-text td { border: 1px solid var(--border); padding: 0.2rem 0.45rem; text-align: center; }
+.map-dialog .stat-text table { margin: 0.4rem auto; }
+/* A stat block that looks like one: the creature's name in red, red rules between sections, the scores centred. */
+.stat-block { border-top: 3px solid var(--accent); border-bottom: 3px solid var(--accent); background: color-mix(in srgb, var(--surface-2) 55%, var(--surface)); line-height: 1.45; }
+.stat-block h1, .stat-block h2, .stat-block h3 { color: var(--accent); font-size: 1.35rem; font-variant: small-caps; letter-spacing: 0.02em; margin: 0 0 0.1rem; }
+.stat-block h4, .stat-block h5, .stat-block h6 { color: var(--accent); font-variant: small-caps; font-size: 1.05rem; border-bottom: 1px solid var(--accent); padding-bottom: 0.1rem; margin: 0.8rem 0 0.35rem; }
+.stat-block hr { border: none; height: 2px; background: var(--accent); opacity: 0.7; margin: 0.5rem 0; }
+.stat-block strong { color: color-mix(in srgb, var(--accent) 75%, var(--text)); }
+.stat-block table { border-top: 1px solid var(--accent); border-bottom: 1px solid var(--accent); }
+.map-dialog .stat-block th, .map-dialog .stat-block td { border: none; padding: 0.15rem 0.55rem; }
+.stat-block th { color: var(--accent); }
+.stat-block-head { display: flex; align-items: center; gap: 0.5rem; }
+.stat-block-head button { margin-left: auto; padding: 0.15rem 0.6rem; font-size: 0.85rem; }
 .map-dialog-actions input { flex: 1; min-width: 10rem; }
 
 /* Private pins: a teardrop marker that stays the same size on screen at any zoom. */

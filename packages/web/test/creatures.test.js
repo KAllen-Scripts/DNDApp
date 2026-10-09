@@ -5,7 +5,9 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { withPage, addDm, importMap, addToken, terrain, createFakeLLM, mapReading } from './helpers.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { withPage, addDm, importMap, addToken, terrain, createFakeLLM, makePdf, mapReading } from './helpers.js';
 
 const ogreBlock = {
   found: true, name: 'Goblin', size: 'small', ac: 15, hp_average: 7, hp_formula: '2d6', speed: '30 ft.', challenge: '1/4 (50 XP)',
@@ -155,5 +157,77 @@ test('creatures tab: Find online shows a searching card, then the creature the A
     const map = await importMap(t);
     const placed = await t.request('POST', `/campaigns/${t.campaign.id}/maps/${map.id}/creatures/${creature.id}`, { body: {} });
     assert.equal(placed.json().tokens[0].stats.source, 'web');
+  });
+});
+
+test('creatures tab: Edit shows the stat block formatted, and "Edit text" opens the Markdown to change it', async () => {
+  await withPage({
+    before: async (t) => {
+      const dana = await addDm(t);
+      await t.request('POST', `/campaigns/${t.campaign.id}/creatures`, { body: { name: 'Morvath', kind: 'enemy', stats: { text: '### Morvath\n*Medium undead*\n\n**Armor Class** 20\n\n| STR | DEX |\n|:-:|:-:|\n| 20 (+5) | 14 (+2) |', ac: 20 } } });
+      return { dana };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t) => {
+    page.click('[data-tab=creatures]');
+    await page.waitFor(() => page.text('#creatures').includes('Morvath'));
+    page.click(button(page, '#creatures .creature', 'Edit'));
+    const form = page.$('#creature-dialog form');
+    const preview = form.querySelector('.stat-block');
+    const text = form.querySelector('[name=stats]');
+    assert.ok(text.hidden, 'no raw Markdown at first');
+    assert.ok(!preview.hidden);
+    assert.equal(preview.querySelector('h3').textContent, 'Morvath');
+    assert.equal(preview.querySelector('strong').textContent, 'Armor Class');
+    assert.equal(preview.querySelectorAll('td').length, 2, 'the ability scores are a table');
+    assert.doesNotMatch(page.text(preview), /###|\*\*|\|/);
+
+    page.click(button(page, '#creature-dialog', 'Edit text'));
+    assert.ok(!text.hidden);
+    assert.ok(preview.hidden);
+    page.type(text, `${text.value}\n\n**Languages** Common`);
+    page.click(button(page, '#creature-dialog', 'Show stat block'));
+    assert.match(page.text(preview), /Languages Common/);
+    page.submit(form);
+    await page.settle();
+    const [c] = (await t.request('GET', `/campaigns/${t.campaign.id}/creatures`)).json().creatures;
+    assert.match(c.stats.text, /\*\*Languages\*\* Common$/);
+  });
+});
+
+test('creatures tab: a new creature starts with the empty stat block box to type in', async () => {
+  await withPage({
+    before: async (t) => ({ dana: await addDm(t) }),
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page) => {
+    page.click('[data-tab=creatures]');
+    page.click('#creature-new');
+    const form = page.$('#creature-dialog form');
+    assert.ok(!form.querySelector('[name=stats]').hidden);
+    assert.ok(form.querySelector('.stat-block').hidden);
+    assert.ok(!button(page, '#creature-dialog', 'Edit text') || button(page, '#creature-dialog', 'Edit text').hidden);
+  });
+});
+
+test('creatures tab: "Stat block (AI)" takes it from the group\'s books and says which book and page', async () => {
+  await withPage({
+    setup: { llm: createFakeLLM({ structured: (opts) => (opts.purpose === 'map:stats-book' ? ogreBlock : mapReading()) }) },
+    before: async (t) => {
+      fs.mkdirSync(t.config.booksDir, { recursive: true });
+      fs.writeFileSync(path.join(t.config.booksDir, 'Monster Manual.pdf'), makePdf([['GOBLIN', 'Small humanoid (goblinoid), neutral evil', 'Armor Class 15', 'Hit Points 7 (2d6)']]));
+      const dana = await addDm(t);
+      await t.request('POST', `/campaigns/${t.campaign.id}/creatures`, { body: { name: 'Goblin', kind: 'enemy' } });
+      return { dana };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page) => {
+    page.click('[data-tab=creatures]');
+    await page.waitFor(() => button(page, '#creatures .creature', 'Stat block (AI)'));
+    page.click(button(page, '#creatures .creature', 'Stat block (AI)'));
+    await page.waitFor(() => page.text('#creatures').includes('From your books'));
+    assert.match(page.text('#creatures .creature-source'), /From your books · Monster Manual, page 1/);
+    assert.match(page.text('#creatures-status'), /Stat block for Goblin: Goblin, from Monster Manual, page 1/);
+    page.click(button(page, '#creatures .creature', 'Stat block'));
+    assert.match(page.text('#creature-dialog'), /From your books: Monster Manual, page 1\./);
   });
 });

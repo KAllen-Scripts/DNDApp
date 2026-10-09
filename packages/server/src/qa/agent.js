@@ -18,6 +18,9 @@ import { handbookEditions } from '../sheets/books.js';
 
 export class RateLimitError extends Error {}
 
+/** For the DM only, after the list of their creatures (owner's request, 2026-10-09). */
+const DM_CREATURES = `How to use the DM's creatures: when the DM asks about a creature or NPC (its stats, attacks, AC, hit points, tactics), check their creatures first. A saved one with that name ("Goblin 3" or "the goblins" mean "Goblin") is the DM's own version: its stat block and notes take priority over the books, the campaign records and your own knowledge, even where they differ from the official creature. Get it with get_my_creatures (creatures named in the question are already included below), answer from it, and say it's from their Creatures tab. Use the books or your knowledge only when none matches or it has no stat block, and then say so.`;
+
 const SYSTEM = `You answer a player's questions during their Dungeons & Dragons campaign. The sessions were recorded and transcribed by speech-to-text, and an archivist AI maintains a knowledge base from them (its guide to how it's organised is below). Players also keep private notes. You can search all of it with your tools; everything you can see has already been filtered to what this player's character may know.
 
 First, decide what kind of question it is:
@@ -83,7 +86,7 @@ export function groupEdition(shelf) {
   return "The group's edition: unknown. Use the edition the archivist's guide or pinned records say they play; if nothing says, say which edition your answer is from.";
 }
 
-export function createQA({ db, store, kb, search, books, llm, config }) {
+export function createQA({ db, store, kb, search, books, creatures = null, llm, config }) {
   const Q = config.qa;
 
   function checkRate(userId) {
@@ -148,6 +151,8 @@ export function createQA({ db, store, kb, search, books, llm, config }) {
     const member = store.roster(campaignId).find((m) => m.user_id === userId);
     const viewer = { userId, seesAll: member?.role === 'dm' };
     const pinned = kb.pinned(campaignId, viewer);
+    // The DM's saved creatures: only when the DM asks.
+    const dmCreatures = viewer.seesAll && creatures ? creatures.list(campaignId).filter((c) => !c.finding) : [];
     await books?.load();
     const shelf = books?.status().books ?? [];
     const who = member
@@ -162,15 +167,22 @@ export function createQA({ db, store, kb, search, books, llm, config }) {
             .map((b) => `- ${b.title} (${b.year ? `first printed ${b.year}, ` : ''}pages ${b.range})`)
             .join('\n')}\n</books>\n${groupEdition(shelf)}`
         : '',
+      dmCreatures.length
+        ? `<dm_creatures note="The DM's own enemies and NPCs, saved on their Creatures tab. Only the DM sees them; you're answering the DM.">\n${dmCreatures
+            .map((c) => `- ${c.name} (${c.kind === 'npc' ? 'NPC' : 'enemy'}${c.stats ? '' : ', no stat block'})`)
+            .join('\n')}\n</dm_creatures>\n${DM_CREATURES}`
+        : '',
       pinned.length ? `<pinned_records>\n${pinned.map(renderRecord).join('\n\n---\n\n')}\n</pinned_records>` : '',
     ]
       .filter(Boolean)
       .join('\n\n');
 
-    const tools = createTools({ db, store, kb, search, books, config, campaignId, viewer });
+    const tools = createTools({ db, store, kb, search, books, config, campaignId, viewer, dmCreatures });
     const found = await tools.preSearch(question);
+    const mine = tools.myCreaturesIn(question);
     const prompt =
       `${historyBlock(conversationId)}Question: ${question}` +
+      (mine ? `\n\n${mine}` : '') +
       (found
         ? `\n\n<automatic_search_results note="Found by searching for the question. May or may not be relevant.">\n${found}\n</automatic_search_results>`
         : '');
