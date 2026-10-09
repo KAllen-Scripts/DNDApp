@@ -25,7 +25,7 @@ export function showStatBlock(dialog, { title, stats: st, onLookup }) {
     } },
       h('h2', {}, `${title}: ${st.name || 'stat block'}`),
       h('p', { class: 'muted small' }, [st.ac != null ? `AC ${st.ac}` : '', st.hp_formula ? `HP ${st.hp_formula}` : '', st.speed, st.challenge ? `CR ${st.challenge}` : ''].filter(Boolean).join(' · ')),
-      markdownBox(st.text, { class: 'a stat-text' }),
+      markdownBox(st.text, { class: 'a stat-text stat-block' }),
       h('p', { class: 'muted small' }, SOURCES[st.source] ?? 'Only you see this.'),
       h('div', { class: 'map-dialog-actions' }, other, h('button', { class: 'ghost' }, 'Look up instead'), h('span', { class: 'spacer' }), h('button', { type: 'button', class: 'primary', onclick: () => dialog.close() }, 'Close')),
     ),

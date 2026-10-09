@@ -157,3 +157,52 @@ test('creatures tab: Find online shows a searching card, then the creature the A
     assert.equal(placed.json().tokens[0].stats.source, 'web');
   });
 });
+
+test('creatures tab: Edit shows the stat block formatted, and "Edit text" opens the Markdown to change it', async () => {
+  await withPage({
+    before: async (t) => {
+      const dana = await addDm(t);
+      await t.request('POST', `/campaigns/${t.campaign.id}/creatures`, { body: { name: 'Morvath', kind: 'enemy', stats: { text: '### Morvath\n*Medium undead*\n\n**Armor Class** 20\n\n| STR | DEX |\n|:-:|:-:|\n| 20 (+5) | 14 (+2) |', ac: 20 } } });
+      return { dana };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t) => {
+    page.click('[data-tab=creatures]');
+    await page.waitFor(() => page.text('#creatures').includes('Morvath'));
+    page.click(button(page, '#creatures .creature', 'Edit'));
+    const form = page.$('#creature-dialog form');
+    const preview = form.querySelector('.stat-block');
+    const text = form.querySelector('[name=stats]');
+    assert.ok(text.hidden, 'no raw Markdown at first');
+    assert.ok(!preview.hidden);
+    assert.equal(preview.querySelector('h3').textContent, 'Morvath');
+    assert.equal(preview.querySelector('strong').textContent, 'Armor Class');
+    assert.equal(preview.querySelectorAll('td').length, 2, 'the ability scores are a table');
+    assert.doesNotMatch(page.text(preview), /###|\*\*|\|/);
+
+    page.click(button(page, '#creature-dialog', 'Edit text'));
+    assert.ok(!text.hidden);
+    assert.ok(preview.hidden);
+    page.type(text, `${text.value}\n\n**Languages** Common`);
+    page.click(button(page, '#creature-dialog', 'Show stat block'));
+    assert.match(page.text(preview), /Languages Common/);
+    page.submit(form);
+    await page.settle();
+    const [c] = (await t.request('GET', `/campaigns/${t.campaign.id}/creatures`)).json().creatures;
+    assert.match(c.stats.text, /\*\*Languages\*\* Common$/);
+  });
+});
+
+test('creatures tab: a new creature starts with the empty stat block box to type in', async () => {
+  await withPage({
+    before: async (t) => ({ dana: await addDm(t) }),
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page) => {
+    page.click('[data-tab=creatures]');
+    page.click('#creature-new');
+    const form = page.$('#creature-dialog form');
+    assert.ok(!form.querySelector('[name=stats]').hidden);
+    assert.ok(form.querySelector('.stat-block').hidden);
+    assert.ok(!button(page, '#creature-dialog', 'Edit text') || button(page, '#creature-dialog', 'Edit text').hidden);
+  });
+});

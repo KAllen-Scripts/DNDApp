@@ -6,6 +6,7 @@
  */
 import { api, fileUrl, h, readBase64, LoggedOut } from './api.js';
 import { showStatBlock, statsFound } from './stat-block.js';
+import { markdownFragment } from './markdown.js';
 import { TOKEN_SIZES, TOKEN_SIZE_NAMES, TOKEN_COLORS } from './shared/map.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -230,7 +231,24 @@ function editDialog(c = null) {
   const hp = h('input', { name: 'hp_max', type: 'number', min: '1', step: '1', value: c?.hp_max ?? '', placeholder: 'unknown' });
   const speed = h('input', { name: 'speed', type: 'number', min: '0', step: '5', value: c?.speed ?? '', placeholder: 'from stat block' });
   const darkvision = h('input', { name: 'darkvision', type: 'number', min: '0', step: '5', value: c?.darkvision || '', placeholder: 'none' });
-  const stats = h('textarea', { name: 'stats', rows: 6, maxLength: 8000, placeholder: 'Paste or type its stat block (Markdown is fine), or leave it empty and use "Stat block (AI)".' }, c?.stats?.text ?? '');
+  const stats = h('textarea', { name: 'stats', rows: c?.stats?.text ? 14 : 6, maxLength: 8000, placeholder: 'Paste or type its stat block (Markdown is fine), or leave it empty and use "Stat block (AI)".' }, c?.stats?.text ?? '');
+  // Shown as a formatted stat block; "Edit text" swaps in the Markdown to change it.
+  const preview = h('div', { class: 'a stat-text stat-block' });
+  const editText = h('button', { type: 'button', class: 'ghost small' });
+  const showStats = (editing) => {
+    const empty = !stats.value.trim();
+    stats.hidden = !editing && !empty;
+    preview.hidden = !stats.hidden;
+    editText.hidden = empty;
+    editText.textContent = stats.hidden ? 'Edit text' : 'Show stat block';
+    if (stats.hidden) preview.replaceChildren(markdownFragment(stats.value));
+  };
+  editText.addEventListener('click', () => {
+    showStats(stats.hidden);
+    if (!stats.hidden) stats.focus();
+  });
+  stats.addEventListener('input', () => { editText.hidden = !stats.value.trim(); });
+  showStats(false);
   const ac = h('input', { name: 'ac', type: 'number', step: '1', value: c?.stats?.ac ?? '', placeholder: '–' });
   const notes = h('textarea', { name: 'notes', rows: 3, maxLength: 4000, placeholder: 'Only you see these: tactics, what they know, what they want.' }, c?.notes ?? '');
   const file = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', 'aria-label': 'Picture' });
@@ -276,7 +294,7 @@ function editDialog(c = null) {
       field('Name', name),
       h('div', { class: 'map-row' }, field('Kind', kind), field('Size', size), field('Colour', color)),
       h('div', { class: 'map-row' }, field('Max HP', hp), field('AC', ac), field('Speed (ft)', speed), field('Darkvision (ft)', darkvision)),
-      field('Stat block', stats),
+      h('div', { class: 'map-field' }, h('span', { class: 'stat-block-head' }, 'Stat block', editText), preview, stats),
       field('Notes', notes),
       c ? null : field('Picture (optional)', file),
       c ? null : h('label', { class: 'map-check' }, lookUp, ' No stat block? Fill it in with the AI from its name'),
