@@ -1,7 +1,7 @@
 /**
  * Character sheet rules (D&D 5e, 2014 Player's Handbook).
  *
- * Plain JS with no imports: the server uses it, and the web page loads the
+ * Plain JS (it imports only gear.js, the weapon and armour tables): the server uses it, and the web page loads the
  * same file from /shared/sheet.js so automatic values update as the player
  * types. The server stays the authority on what is saved.
  *
@@ -10,6 +10,10 @@
  * the automatic value is shown unless the player typed their own. A typed
  * value is kept in sheet.overrides[key] and always wins until they reset it.
  */
+
+import { WEAPONS, armorClass, normalizeInventory } from './gear.js';
+
+export { WEAPONS };
 
 export const SHEET_FORMAT = 'dndapp-sheet';
 
@@ -120,23 +124,6 @@ const COINS = ['cp', 'sp', 'ep', 'gp', 'pp'];
 export const ATTACK_ABILITIES = ['', ...ABILITIES, 'finesse', 'spell'];
 export const DAMAGE_TYPES = ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder'];
 
-/** The PHB weapons (SRD): typing one as an attack's name fills in its damage and ability. */
-export const WEAPONS = Object.fromEntries([
-  ['Club', '1d4 bludgeoning', 'str'], ['Dagger', '1d4 piercing', 'finesse'], ['Greatclub', '1d8 bludgeoning', 'str'],
-  ['Handaxe', '1d6 slashing', 'str'], ['Javelin', '1d6 piercing', 'str'], ['Light hammer', '1d4 bludgeoning', 'str'],
-  ['Mace', '1d6 bludgeoning', 'str'], ['Quarterstaff', '1d6 bludgeoning', 'str'], ['Sickle', '1d4 slashing', 'str'],
-  ['Spear', '1d6 piercing', 'str'], ['Light crossbow', '1d8 piercing', 'dex'], ['Dart', '1d4 piercing', 'finesse'],
-  ['Shortbow', '1d6 piercing', 'dex'], ['Sling', '1d4 bludgeoning', 'dex'], ['Battleaxe', '1d8 slashing', 'str'],
-  ['Flail', '1d8 bludgeoning', 'str'], ['Glaive', '1d10 slashing', 'str'], ['Greataxe', '1d12 slashing', 'str'],
-  ['Greatsword', '2d6 slashing', 'str'], ['Halberd', '1d10 slashing', 'str'], ['Lance', '1d12 piercing', 'str'],
-  ['Longsword', '1d8 slashing', 'str'], ['Maul', '2d6 bludgeoning', 'str'], ['Morningstar', '1d8 piercing', 'str'],
-  ['Pike', '1d10 piercing', 'str'], ['Rapier', '1d8 piercing', 'finesse'], ['Scimitar', '1d6 slashing', 'finesse'],
-  ['Shortsword', '1d6 piercing', 'finesse'], ['Trident', '1d6 piercing', 'str'], ['War pick', '1d8 piercing', 'str'],
-  ['Warhammer', '1d8 bludgeoning', 'str'], ['Whip', '1d4 slashing', 'finesse'], ['Blowgun', '1 piercing', 'dex'],
-  ['Hand crossbow', '1d6 piercing', 'dex'], ['Heavy crossbow', '1d10 piercing', 'dex'], ['Longbow', '1d8 piercing', 'dex'],
-  ['Unarmed strike', '1 bludgeoning', 'str'],
-].map(([name, damage, ability]) => [name.toLowerCase(), { name, damage, ability }]));
-
 /** A new attack: proficient, Strength, nothing written yet. */
 export const newAttack = () => ({ name: '', kind: 'attack', ability: 'str', proficient: true, magic: 0, bonus: '', save: '', dc: '', damage: '', notes: '' });
 const SPELL_SOURCES = ['srd', 'book', 'ai', 'import', 'manual'];
@@ -183,6 +170,7 @@ export function emptySheet({ name = '', player_name = '' } = {}) {
     hit_dice_spent: {}, // die size -> how many of those hit dice are spent, e.g. { 10: 2, 6: 1 }
     death_saves: { successes: 0, failures: 0 },
     attacks: [], // see newAttack() and normalizeAttack()
+    inventory: [], // gear carried and equipped (gear.js)
     coins: Object.fromEntries(COINS.map((c) => [c, 0])),
     spellcasting: { class: '', slots_used: {}, pact_used: 0 },
     spells: [],
@@ -310,6 +298,7 @@ export function normalizeSheet(input = {}) {
     failures: int(s.death_saves?.failures, { min: 0, max: 3, fallback: 0 }),
   };
   out.attacks = (Array.isArray(s.attacks) ? s.attacks : []).slice(0, 50).map((a) => normalizeAttack(a ?? {}));
+  out.inventory = normalizeInventory(s.inventory);
   for (const c of COINS) out.coins[c] = int(s.coins?.[c], { min: 0, max: 99_999_999, fallback: 0 });
   out.spellcasting.class = str(s.spellcasting?.class, 60);
   for (let n = 1; n <= 9; n++) {
@@ -493,10 +482,13 @@ export function computeSheet(sheet) {
   set('passive_perception', 10 + values['skill.perception']);
   set('initiative', mod('dex') + half);
 
-  // Unarmoured AC. Armour, shields and magic items are typed in by the player.
-  const ac = [10 + mod('dex')];
-  if (levelIn('monk')) ac.push(10 + mod('dex') + mod('wis'));
-  if (levelIn('barbarian')) ac.push(10 + mod('dex') + mod('con'));
+  // AC from the armour and shield equipped in the inventory, else unarmoured (monk and barbarian
+  // Unarmored Defense). Other magic items and features are typed in by the player.
+  const worn = armorClass(sheet.inventory, mod('dex'));
+  const shieldAc = worn?.shield ? worn.shield.armor.base + worn.shield.magic : 0;
+  const ac = [worn?.armor ? worn.ac : 10 + mod('dex') + shieldAc];
+  if (levelIn('monk') && !worn) ac.push(10 + mod('dex') + mod('wis'));
+  if (levelIn('barbarian') && !worn?.armor) ac.push(10 + mod('dex') + mod('con') + shieldAc);
   set('ac', Math.max(...ac));
 
   const monk = levelIn('monk');

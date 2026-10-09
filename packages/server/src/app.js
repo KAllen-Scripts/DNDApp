@@ -106,6 +106,7 @@ function serveWebPage(app, dir) {
     '/shared/citations.js': '@dndapp/shared/citations.js',
     '/shared/dice.js': '@dndapp/shared/dice.js',
     '/shared/rolls.js': '@dndapp/shared/rolls.js',
+    '/shared/gear.js': '@dndapp/shared/gear.js',
     '/shared/map.js': '@dndapp/shared/map.js',
     '/shared/coins.js': '@dndapp/shared/coins.js',
     '/vendor/marked.js': 'marked',

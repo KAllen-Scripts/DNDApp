@@ -1,11 +1,13 @@
 /**
  * Merchants: shops the DM sets up with items, prices and stock, puts on maps as tokens, and restocks
  * (by hand, or every so many long rests). Players open a merchant's token on the map and buy on their own:
- * the coins come off their sheet and the item goes into its equipment.
+ * the coins come off their sheet and the item goes into its inventory (gear.js), ready to equip.
  */
 import fs from 'node:fs';
 import { MAX_TOKENS, snapToken } from '@dndapp/shared/map.js';
-import { payCoins, totalCp, formatPrice, addToEquipment } from '@dndapp/shared/coins.js';
+import { payCoins, totalCp, formatPrice } from '@dndapp/shared/coins.js';
+import { addToInventory } from '@dndapp/shared/gear.js';
+import { classKey } from '@dndapp/shared/sheet.js';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
 import { BadRequestError, NotFoundError } from '../store.js';
@@ -230,7 +232,7 @@ export function registerMerchants(app, r) {
   /**
    * Buy (players): { line (a stock line's id), qty? (default 1) }. The price
    * comes off the coins on your sheet (big coins first, with change) and the
-   * item goes into its equipment; the merchant's stock goes down. Returns
+   * item goes into its inventory; the merchant's stock goes down. Returns
    * { shop, sheet_version, bought: { name, qty, paid } }.
    */
   app.post('/campaigns/:cid/merchants/:mid/buy', async (request) => {
@@ -248,7 +250,7 @@ export function registerMerchants(app, r) {
     if (!purse) throw new BadRequestError(`You can't afford that: it costs ${formatPrice(cost)} and you have ${formatPrice(totalCp(current.sheet.coins))}.`);
     // Both changes happen together (no waiting in between), so two buyers can't take the last one.
     const who = db.prepare('SELECT u.name, m.character_name FROM users u LEFT JOIN memberships m ON m.user_id = u.id AND m.campaign_id = ? WHERE u.id = ?').get(a.cid, a.userId);
-    const saved = sheets.save(a.cid, a.userId, { ...current.sheet, coins: purse, equipment: addToEquipment(current.sheet.equipment, x.name, qty) }, {
+    const saved = sheets.save(a.cid, a.userId, { ...current.sheet, coins: purse, inventory: addToInventory(current.sheet.inventory, x, qty, { classKey: classKey(current.sheet.classes.find((c) => c.name.trim())?.name) }) }, {
       by: a.userId, reason: `bought ${qty > 1 ? `${qty} × ` : ''}${x.name} from ${m.name} for ${formatPrice(cost)}`,
     });
     const sale = { at: new Date().toISOString(), user_id: a.userId, who: current.sheet.name || who?.character_name || who?.name || '', item: x.id, name: x.name, qty, paid: cost };

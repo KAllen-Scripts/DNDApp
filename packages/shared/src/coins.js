@@ -72,23 +72,3 @@ export function payCoins(coins, cost) {
   return purse;
 }
 
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/**
- * Add something bought to a sheet's equipment text: a line "Rope (50 feet)",
- * or "Potion of Healing x3". If a line for it is already there ("Potion of
- * Healing", "- Potion of Healing x2", "Potion of Healing (2)") its count goes up.
- */
-export function addToEquipment(text, name, qty = 1) {
-  const lines = String(text ?? '').replace(/\s+$/, '').split('\n');
-  const re = new RegExp(`^(\\s*(?:[-*•]\\s*)?)${escapeRe(name)}(?:\\s*(?:[x×]\\s*(\\d+)|\\((\\d+)\\)))?\\s*$`, 'i');
-  for (let i = 0; i < lines.length; i++) {
-    const m = re.exec(lines[i]);
-    if (!m) continue;
-    const had = Number(m[2] ?? m[3] ?? 1);
-    lines[i] = `${m[1]}${name} x${had + qty}`;
-    return lines.join('\n');
-  }
-  const line = qty > 1 ? `${name} x${qty}` : name;
-  return lines.length === 1 && !lines[0] ? line : `${lines.join('\n')}\n${line}`;
-}

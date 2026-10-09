@@ -12,10 +12,11 @@
 import { api, fileUrl, h, storage } from './api.js';
 import {
   ABILITIES, ABILITY_NAMES, SKILLS, CLASSES, RACES, BACKGROUNDS, ALIGNMENTS, SCHOOLS,
-  WEAPONS, computeSheet, coerceDerived, formatBonus, newAttack, normalizeSheet, normalizeSpell, hitDice as hitDiceOf,
+  WEAPONS, classKey, computeSheet, coerceDerived, formatBonus, newAttack, normalizeSheet, normalizeSpell, hitDice as hitDiceOf,
 } from './shared/sheet.js';
 import { d20Plus } from './shared/dice.js';
-import { attackRolls, spellRolls } from './shared/rolls.js';
+import { attackRolls, gearRolls, spellRolls } from './shared/rolls.js';
+import { GEAR_NAMES, classProficient, normalizeGear, normalizeInventory } from './shared/gear.js';
 import { roll, rollModeFromEvent, modeButtons, D20_ICON } from './dice.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -35,6 +36,8 @@ const state = {
   calc: null,
   layout: null, // the layout the sheet was last drawn in
   renders: [], // functions that refresh automatic values
+  gearDraws: [], // functions that redraw what shows the inventory (the Inventory tab, equipped weapons in Attacks)
+  attackDraws: [], // the Attacks boxes (equipped weapons show there)
   dirty: false,
   saving: false,
   timer: null,
@@ -579,12 +582,15 @@ function attacks() {
   const list = h('div', { class: 'sh-table attacks' });
   const draw = () => {
     list.replaceChildren(
-      ...(state.sheet.attacks.length ? [h('div', { class: 'tr th' }, lbl('Name'), lbl('To hit / DC'), lbl('Damage / type'), h('span'), h('span'), h('span'))] : []),
+      ...(state.sheet.attacks.length || equippedWeapons().length ? [h('div', { class: 'tr th' }, lbl('Name'), lbl('To hit / DC'), lbl('Damage / type'), h('span'), h('span'), h('span'))] : []),
+      ...equippedWeapons().map(gearAttackRow),
       ...state.sheet.attacks.map((_, i) => attackRow(i, draw)),
       addButton('Add an attack', () => { state.sheet.attacks.push(newAttack()); draw(); changed(); }),
     );
   };
   draw();
+  state.gearDraws.push(draw);
+  state.attackDraws.push(draw);
   return box('Attacks & spellcasting', 'attacks-box', list, datalist('dl-weapons', Object.values(WEAPONS).map((w) => w.name)));
 }
 
@@ -625,7 +631,7 @@ function attackRow(i, draw) {
     labelled('Adds', select('ability', 'Ability added', ATTACK_ABILITY_NAMES), 'inline'),
     save
       ? labelled('Save', select('save', 'Saving throw ability', { '': '–', ...ABILITY_NAMES }), 'inline')
-      : h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: a.proficient, 'aria-label': 'Proficient', onchange: (e) => { a.proficient = e.target.checked; changed(); } }), 'Proficient'),
+      : null,
     labelled('Magic', field(`${p}.magic`, { label: 'Magic bonus', kind: 'int', cls: 'num' }), 'inline'),
     sum,
   );
@@ -664,6 +670,153 @@ function attackRow(i, draw) {
     opts,
   );
   if (state.calc) paint();
+  return row;
+}
+
+const equippedWeapons = () => state.sheet.inventory.filter((g) => g.equipped && g.weapon);
+
+/** An equipped weapon from the inventory, as an attack: to hit, damage (and with both hands, if versatile). */
+function gearAttackRow(g) {
+  const title = g.name;
+  const r = gearRolls(g, state.calc);
+  const hit = h('button', { type: 'button', class: 'icon-roll', title: 'Roll to hit (Shift: advantage, Alt: disadvantage)', 'aria-label': `Roll ${title} to hit` });
+  hit.innerHTML = D20_ICON;
+  hit.addEventListener('click', (e) => {
+    const now = gearRolls(g, state.calc);
+    roll(now.hit, { label: `${title}: to hit`, mode: rollModeFromEvent(e), then: now.damage && { label: `${title}: damage`, notation: now.damage } });
+  });
+  const damage = (two) => h('button', { type: 'button', class: 'icon-roll dmg-roll', title: two ? 'Roll damage with both hands (versatile)' : 'Roll damage', 'aria-label': `Roll ${title} damage${two ? ' with both hands' : ''}`, onclick: () => {
+    const now = gearRolls(g, state.calc);
+    const n = two ? now.damage2 : now.damage;
+    if (n) roll(n, { label: `${title}: damage${two ? ' (both hands)' : ''}` });
+    else alert(now.flat != null ? `${title}: ${now.flat} damage (no dice to roll).` : `${title} has no damage set. Set it in your Inventory.`);
+  } }, two ? '2H' : 'Dmg');
+  return h('div', { class: 'tr gear-attack', title: 'From your Inventory: change it there' },
+    h('span', { class: 'gear-name' }, title, g.equipped > 1 ? h('span', { class: 'muted small' }, ` ×${g.equipped}`) : null, g.proficient ? null : h('span', { class: 'muted small' }, ' (not proficient)')),
+    h('span', { class: 'num gear-num' }, formatBonus(r.bonus)),
+    h('span', { class: 'gear-dmg' }, r.damage ? `${r.damage}${r.type ? ` ${r.type}` : ''}` : r.flat != null ? `${r.flat}${r.type ? ` ${r.type}` : ''}` : '–'),
+    hit,
+    r.damage2 ? h('span', { class: 'gear-dmg-pair' }, damage(false), damage(true)) : damage(false),
+    h('span'),
+  );
+}
+
+// ---------- the Inventory tab (players): items carried, looked up by name, equipped ----------
+
+const GEAR_KINDS = { weapon: 'Weapon', armor: 'Armour', gear: 'Gear', tool: 'Tool', potion: 'Potion', scroll: 'Scroll', magic: 'Magic item', other: 'Other' };
+const firstClassKey = () => classKey(state.sheet.classes.find((c) => c.name.trim())?.name);
+
+/** The inventory changed: clean it (one armour, one shield), update the sheet and save soon. */
+function gearChanged(latest = null) {
+  const before = new Map(state.sheet.inventory.map((g) => [g.id, g.equipped]));
+  state.sheet.inventory = normalizeInventory(state.sheet.inventory, { latest });
+  const off = state.sheet.inventory.filter((g) => before.get(g.id) && !g.equipped).map((g) => g.name);
+  changed();
+  for (const d of state.gearDraws) d();
+  if (off.length) gearStatus(`Took off ${off.join(' and ')}: you can wear one armour and one shield.`);
+}
+
+function gearStatus(text, error = false) {
+  const el = $('#gear-status');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle('error', error);
+}
+
+/** A new line in the inventory, with Proficient ticked if the character's class is (they can change it). */
+function addGear(item) {
+  const g = normalizeGear(item);
+  g.proficient = classProficient(firstClassKey(), g) ?? true;
+  state.sheet.inventory.push(g);
+  gearChanged();
+  return g;
+}
+
+function inventoryTab() {
+  const list = $('#inventory');
+  if (!list) return;
+  const draw = () => {
+    const gear = state.sheet.inventory;
+    list.replaceChildren(gear.length
+      ? h('div', { class: 'gear-list' }, gear.map(gearRow))
+      : h('p', { class: 'muted' }, 'Nothing here yet. Add what your character carries above: weapons and armour fill in their numbers, and anything bought from a merchant shows up here. Equip weapons to attack with them from your sheet; equip armour and a shield to set your AC.'));
+  };
+  draw();
+  state.gearDraws.push(draw);
+  state.renders.push(() => list.querySelectorAll('.gear-sum').forEach((el) => el.__paint?.()));
+}
+
+function gearRow(g) {
+  const at = () => state.sheet.inventory.indexOf(g);
+  const p = () => `inventory.${at()}`;
+  const tick = (label, checked, onchange, title = '') => h('label', { class: 'check', title }, h('input', { type: 'checkbox', checked, 'aria-label': `${label}: ${g.name}`, onchange: (e) => onchange(e.target.checked) }), label);
+  const wearable = !!(g.weapon || g.armor || g.attunement || g.kind === 'magic' || g.kind === 'other' || g.kind === 'gear');
+  // Weapons: as many equipped as you have (two daggers); armour and the rest: on or off.
+  const equip = !wearable ? null : g.weapon && g.qty > 1
+    ? labelled('Equipped', (() => {
+      const el = h('input', { type: 'number', min: '0', max: String(g.qty), value: String(g.equipped), class: 'num', 'aria-label': `How many equipped: ${g.name}` });
+      el.addEventListener('change', () => { g.equipped = Math.max(0, Math.min(g.qty, parseInt(el.value, 10) || 0)); gearChanged(g.id); });
+      return el;
+    })(), 'inline')
+    : tick('Equipped', !!g.equipped, (on) => { g.equipped = on ? 1 : 0; gearChanged(g.id); });
+  const sum = h('span', { class: 'muted small gear-sum' });
+  sum.__paint = () => {
+    if (g.weapon && state.calc) {
+      const r = gearRolls(g, state.calc);
+      sum.textContent = `${formatBonus(r.bonus)} to hit · ${r.damage ?? r.flat ?? '–'}${r.type ? ` ${r.type}` : ''}${r.damage2 ? ` (${r.damage2} with both hands)` : ''}`;
+    } else if (g.armor) {
+      sum.textContent = g.armor.type === 'shield' ? `+${g.armor.base + g.magic} AC` : `AC ${g.armor.base + g.magic}${g.armor.type === 'light' ? ' + Dex' : g.armor.type === 'medium' ? ' + Dex (max 2)' : ''}`;
+    } else sum.textContent = '';
+  };
+  sum.__paint();
+  const details = h('details', { class: 'gear-details' }, h('summary', {}, 'Details'));
+  details.addEventListener('toggle', () => {
+    if (!details.open || details.childElementCount > 1) return;
+    const select = (label, value, options, set) => {
+      const el = h('select', { 'aria-label': `${label}: ${g.name}` }, Object.entries(options).map(([v, n]) => new Option(n, v)));
+      el.value = value;
+      el.addEventListener('change', () => { set(el.value); gearChanged(); });
+      return el;
+    };
+    details.append(h('div', { class: 'spell-fields' },
+      labelled('Name', field(`${p()}.name`, { label: 'Item name', onChange: () => (row.querySelector('.gear-title').textContent = g.name) })),
+      labelled('Kind', select('Kind', g.kind, GEAR_KINDS, (v) => {
+        g.kind = v;
+        if (v === 'weapon' && !g.weapon) g.weapon = { damage: '', ability: 'str', category: 'simple', properties: [] };
+        if (v === 'armor' && !g.armor) g.armor = { base: 11, type: 'light' };
+        if (v !== 'weapon') g.weapon = null;
+        if (v !== 'armor') g.armor = null;
+        for (const d of state.gearDraws) d();
+      })),
+      g.weapon ? labelled('Damage', field(`${p()}.weapon.damage`, { label: 'Weapon damage', placeholder: 'e.g. 1d8 slashing', onChange: () => { sum.__paint(); for (const d of state.attackDraws) d(); } })) : null,
+      g.weapon ? labelled('Uses', select('Ability', g.weapon.ability, { str: 'Strength', dex: 'Dexterity', finesse: 'Finesse (Str or Dex)' }, (v) => (g.weapon.ability = v))) : null,
+      g.armor ? labelled('Type', select('Armour type', g.armor.type, { light: 'Light (+ Dex)', medium: 'Medium (+ Dex, max 2)', heavy: 'Heavy', shield: 'Shield' }, (v) => (g.armor.type = v))) : null,
+      g.armor ? labelled(g.armor.type === 'shield' ? 'AC bonus' : 'Base AC', field(`${p()}.armor.base`, { label: 'Armour class', kind: 'int', onChange: () => sum.__paint() })) : null,
+      labelled('Magic bonus', field(`${p()}.magic`, { label: 'Magic bonus', kind: 'int', onChange: () => { sum.__paint(); for (const d of state.attackDraws) d(); } })),
+      h('div', { class: 'flags' }, tick('Needs attunement', g.attunement, (on) => { g.attunement = on; gearChanged(); })),
+    ),
+    labelled('Description', field(`${p()}.text`, { label: 'Item description', kind: 'longtext', rows: 5 }), 'wide'),
+    g.source ? h('p', { class: 'muted small' }, `Source: ${g.source}`) : null);
+  });
+  const qty = field(`${p()}.qty`, { label: `How many: ${g.name}`, kind: 'int', cls: 'num' });
+  qty.addEventListener('change', () => gearChanged()); // more than one weapon: choose how many are equipped
+  const row = h('div', { class: `gear-row${g.equipped ? ' equipped' : ''}` },
+    h('div', { class: 'gear-head' },
+      h('strong', { class: 'gear-title' }, g.name),
+      h('span', { class: 'tag' }, g.armor?.type === 'shield' ? 'Shield' : GEAR_KINDS[g.kind] ?? 'Other'),
+      labelled('Qty', qty, 'inline'),
+      equip,
+      g.weapon || g.armor ? tick('Proficient', g.proficient, (on) => { g.proficient = on; gearChanged(); }, 'Are you proficient with it? Ticked for you when your class is; change it if not.') : null,
+      g.attunement ? tick('Attuned', g.attuned, (on) => { g.attuned = on; gearChanged(); }) : null,
+      sum,
+      removeButton(`Remove ${g.name}`, () => {
+        if (!confirm(`Remove ${g.name} from your inventory?`)) return;
+        state.sheet.inventory.splice(at(), 1);
+        gearChanged();
+      }),
+    ),
+    details,
+  );
   return row;
 }
 
@@ -951,6 +1104,8 @@ function tabbed(tabs) {
 
 function render() {
   state.renders = [];
+  state.gearDraws = [];
+  state.attackDraws = [];
   state.calc = computeSheet(state.sheet);
   state.layout = currentLayout();
   $('#sheet').replaceChildren(
@@ -962,6 +1117,7 @@ function render() {
     header(),
     ...LAYOUTS[state.layout](),
   );
+  inventoryTab();
   refresh();
 }
 
@@ -1302,6 +1458,32 @@ export function initSheetActions() {
   });
 
   $('#sheet-print').addEventListener('click', () => window.print());
+
+  // The Inventory tab's add form: weapons and armour from the PHB tables at once, anything else from the books or the AI.
+  $('#dl-gear').replaceChildren(...GEAR_NAMES.map((n) => h('option', { value: n })));
+  $('#gear-add').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = $('#gear-name').value.trim();
+    if (!name || !state.sheet) return;
+    gearStatus(`Looking up ${name}…`);
+    try {
+      const res = await state.guarded(() => api('GET', `${base()}/gear/lookup?name=${encodeURIComponent(name)}`));
+      if (!res) return;
+      const g = addGear(res.item);
+      $('#gear-name').value = '';
+      gearStatus(`Added ${g.name}${res.from === 'ai' ? " (from the AI's memory: check it)" : res.from === 'book' ? ` (${g.source})` : ''}.`);
+    } catch (err) {
+      gearStatus(err.status === 404 ? `${err.message}` : `Couldn't look up ${name}: ${err.message}`, true);
+    }
+  });
+  $('#gear-own').addEventListener('click', () => {
+    if (!state.sheet) return;
+    const name = $('#gear-name').value.trim() || prompt('What is it called?')?.trim();
+    if (!name) return;
+    const g = addGear({ name, kind: 'other' });
+    $('#gear-name').value = '';
+    gearStatus(`Added ${g.name}. Open its details to fill it in.`);
+  });
   // Advantage and disadvantage without Shift or Alt (phones).
   $('#sheet-status').after(h('div', { class: 'sheet-modes' }, h('span', { class: 'muted small' }, 'Next d20:'), modeButtons({ normal: 'Normal', advantage: 'Adv.', disadvantage: 'Disadv.' })));
 }

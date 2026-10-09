@@ -6,7 +6,7 @@
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { withPage, createFakeLLM } from './helpers.js';
+import { withPage, addDm, createFakeLLM } from './helpers.js';
 import { emptySheet, SHEET_FORMAT } from '@dndapp/shared/sheet.js';
 
 const NO_3D = { 'dndapp.dice': JSON.stringify({ threeD: false, sound: false }) };
@@ -233,7 +233,7 @@ test('sheet: clicking a save, skill, ability or initiative rolls it (advantage f
   }
 });
 
-test('sheet: an attack that is a saving throw rolls damage only, with its DC; an unproficient Strength attack', async () => {
+test('sheet: an attack that is a saving throw rolls damage only, with its DC; a Strength attack with Strength 8', async () => {
   await withPage(sheetPage(), async (page) => {
     page.click('[data-tab=sheet]');
     page.type(byLabel(page, 'Constitution score'), '14');
@@ -254,11 +254,10 @@ test('sheet: an attack that is a saving throw rolls damage only, with its DC; an
     page.click(page.$$('#sheet .add-row').find((b) => b.textContent.includes('Add an attack')));
     page.type(page.$$('#sheet [aria-label="Attack name"]')[1], 'Rock');
     page.type(page.$$('#sheet [aria-label="Damage and type"]')[1], '1d4 bludgeoning');
-    page.type(page.$$('#sheet [aria-label="Strength score"]')[0] ?? byLabel(page, 'Strength score'), '8');
-    page.type(page.$$('#sheet [aria-label="Proficient"]')[0], false);
+    page.type(byLabel(page, 'Strength score'), '8');
     page.click(page.$$('#sheet [aria-label="Roll this attack"]')[0]); // the breath has none
     await page.settle();
-    assert.equal(last().notation, '1d20-1');
+    assert.equal(last().notation, '1d20+1'); // proficient (+2), Strength 8 (−1)
     assert.match(page.text('#dice-result .dr-actions'), /Damage \(1d4-1\)/);
   });
 });
@@ -521,5 +520,103 @@ test('sheet: "Fill in missing details" and "Look up details" ask the server agai
     card().open = true;
     card().dispatchEvent(new page.window.Event('toggle'));
     assert.match(card().querySelector('[aria-label="Description"]').value, /You brandish/);
+  });
+});
+
+test('inventory: items looked up and added, weapons equipped (two daggers), one armour at a time, proficiency from the class; equipped weapons attack from the sheet and armour sets AC', async () => {
+  const dice = [15, 4];
+  mock.method(crypto, 'randomInt', (min) => dice.shift() ?? min);
+  try {
+    await withPage(sheetPage(), async (page, t) => {
+      page.click('[data-tab=sheet]');
+      page.type(byLabel(page, 'Class'), 'Wizard');
+      page.type(byLabel(page, 'Dexterity score'), '14');
+      page.type(byLabel(page, 'Strength score'), '12');
+      assert.equal(byLabel(page, 'Armour class').value, '12');
+
+      page.click('[data-tab=inventory]');
+      assert.match(page.text('#inventory'), /Nothing here yet/);
+      const add = async (name) => {
+        page.el('#gear-name').value = name;
+        page.submit('#gear-add');
+        await page.waitFor(() => /^Added|Couldn|know/.test(page.text('#gear-status')), { what: `${name} to be added` });
+      };
+      const row = (name) => page.$$('#inventory .gear-row').find((r) => r.querySelector('.gear-title').textContent === name);
+      const inv = (label) => page.el(`#inventory [aria-label="${label}"]`);
+
+      await add('Dagger');
+      await add('Longsword');
+      await add('Chain mail');
+      await add('Leather armor');
+      assert.deepEqual(page.$$('#inventory .gear-title').map((e) => e.textContent), ['Dagger', 'Longsword', 'Chain mail', 'Leather armor']);
+      // A wizard: proficient with daggers, not longswords or armour (they can change it).
+      assert.equal(inv('Proficient: Dagger').checked, true);
+      assert.equal(inv('Proficient: Longsword').checked, false);
+      assert.equal(inv('Proficient: Chain mail').checked, false);
+      assert.match(row('Dagger').querySelector('.gear-sum').textContent, /^\+4 to hit · 1d4\+2 piercing/);
+
+      // Two daggers: equip both.
+      page.type(inv('How many: Dagger'), '2');
+      page.type(inv('How many equipped: Dagger'), '2');
+      page.click(inv('Equipped: Longsword'));
+      page.click(inv('Proficient: Longsword'));
+
+      // One suit of armour: putting on the second takes off the first. AC follows.
+      page.click(inv('Equipped: Chain mail'));
+      page.click(inv('Equipped: Leather armor'));
+      assert.equal(inv('Equipped: Chain mail').checked, false);
+      assert.equal(inv('Equipped: Leather armor').checked, true);
+      assert.match(page.text('#gear-status'), /Took off Chain mail/);
+      page.click('[data-tab=sheet]');
+      assert.equal(byLabel(page, 'Armour class').value, '13');
+
+      // Equipped weapons show in Attacks, worked out, with to hit and damage rolls (versatile: both hands too).
+      const attacks = page.$$('#sheet .gear-attack');
+      assert.deepEqual(attacks.map((a) => a.querySelector('.gear-name').textContent), ['Dagger ×2', 'Longsword']);
+      assert.deepEqual(attacks.map((a) => a.querySelector('.gear-num').textContent), ['+4', '+3']);
+      page.click(byLabel(page, 'Roll Longsword to hit'));
+      await page.settle();
+      const rolls = () => page.requests.filter((r) => r.path.endsWith('/roll')).map((r) => r.body);
+      assert.deepEqual(rolls().at(-1), { notation: '1d20+3', mode: 'normal', label: 'Longsword: to hit', visibility: 'party' });
+      page.click(byLabel(page, 'Roll Longsword damage with both hands'));
+      await page.settle();
+      assert.equal(rolls().at(-1).notation, '1d10+1');
+
+      await saved(page);
+      const { sheet } = await serverSheet(t);
+      assert.deepEqual(sheet.inventory.map((g) => [g.name, g.qty, g.equipped, g.proficient]), [['Dagger', 2, 2, true], ['Longsword', 1, 1, true], ['Chain mail', 1, 0, false], ['Leather armor', 1, 1, false]]);
+
+      // The DM sees what's equipped, and nothing else on the sheet.
+      const dm = (await t.request('GET', `/campaigns/${t.campaign.id}/gear/equipped`)).json();
+      assert.deepEqual(dm.players.find((p) => p.name === 'Sam').gear.map((g) => g.name), ['Dagger', 'Longsword', 'Leather armor']);
+    });
+  } finally {
+    mock.restoreAll();
+  }
+});
+
+test('inventory: the DM sees what each player has equipped in the Items tab, and refreshes it', async () => {
+  const thorin = (inventory) => ({ ...emptySheet({ name: 'Thorin' }), inventory });
+  await withPage({
+    before: async (t) => {
+      t.sheets.save(t.campaign.id, t.sam.id, thorin([{ name: 'Shield', kind: 'armor', equipped: 1, proficient: false, armor: { base: 2, type: 'shield' } }, { name: 'Rope', kind: 'gear' }]));
+      return { dana: await addDm(t) };
+    },
+    page: (t, { dana }) => ({ as: dana, storage: NO_3D }),
+  }, async (page, t) => {
+    page.click('[data-tab=items]');
+    await page.waitFor(() => page.$$('#items-equipped .equipped-player').length === 2, { what: 'the players\u2019 gear' });
+    const card = (name) => page.$$('#items-equipped .equipped-player').find((p) => p.textContent.includes(name));
+    assert.match(card('Thorin').textContent, /AC 12/);
+    assert.match(card('Thorin').textContent, /Shield · \+2 AC · not proficient/);
+    assert.doesNotMatch(card('Thorin').textContent, /Rope/);
+    assert.match(card('Alex').textContent, /Nothing equipped/);
+    assert.ok(!page.visible('[data-tab=inventory]'), 'the DM has no inventory');
+
+    const v = t.sheets.get(t.campaign.id, t.sam.id).version;
+    t.sheets.save(t.campaign.id, t.sam.id, thorin([{ name: 'Greataxe', kind: 'weapon', equipped: 1, proficient: true, weapon: { damage: '1d12 slashing', ability: 'str', category: 'martial', properties: ['heavy', 'two-handed'] } }]), { version: v });
+    page.click('#equipped-refresh');
+    await page.waitFor(() => /Greataxe/.test(card('Thorin').textContent), { what: 'the new gear' });
+    assert.match(card('Thorin').textContent, /Greataxe · \+2 to hit, 1d12 slashing/);
   });
 });

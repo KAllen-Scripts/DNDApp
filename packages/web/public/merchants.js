@@ -7,7 +7,7 @@
  *
  * For everyone, the shop (openShop): players open it from a merchant's
  * token on the map and buy on their own. The coins come off their sheet and
- * the item goes into its equipment (the server does both).
+ * the item goes into its inventory (the server does both).
  */
 import { api, h, readBase64, LoggedOut } from './api.js';
 import { formatPrice, totalCp } from './shared/coins.js';
@@ -111,7 +111,7 @@ function draw() {
   const q = state.filter.trim().toLowerCase();
   const shown = state.list.filter((m) => !q || m.name.toLowerCase().includes(q) || m.notes.toLowerCase().includes(q) || m.stock.some((l) => l.item.name.toLowerCase().includes(q)));
   if (!state.list.length) {
-    return box.replaceChildren(h('p', { class: 'muted' }, 'No merchants yet. Set one up, stock it with items from the Items tab at your prices, then put it on a map. Players open its shop from the token and buy on their own: the coins come off their sheet and the item goes into their equipment.'));
+    return box.replaceChildren(h('p', { class: 'muted' }, 'No merchants yet. Set one up, stock it with items from the Items tab at your prices, then put it on a map. Players open its shop from the token and buy on their own: the coins come off their sheet and the item goes into their inventory, ready to equip.'));
   }
   if (!shown.length) return box.replaceChildren(h('p', { class: 'muted' }, 'None match.'));
   box.replaceChildren(...shown.map((m) => h('article', { class: 'creature merchant card', 'data-id': m.id },
@@ -351,7 +351,7 @@ async function buyLine(l, qty) {
     const res = await state.guarded(() => api('POST', `${base()}/${s.id}/buy`, { line: l.id, qty }));
     if (!res) return;
     state.shop.data = res.shop;
-    drawShop(`You bought ${res.bought.qty > 1 ? `${res.bought.qty} × ` : ''}${res.bought.name} for ${formatPrice(res.bought.paid)}. It's in your equipment.`);
+    drawShop(`You bought ${res.bought.qty > 1 ? `${res.bought.qty} × ` : ''}${res.bought.name} for ${formatPrice(res.bought.paid)}. It's in your Inventory.`);
     await reloadSheet();
   } catch (err) {
     if (err instanceof LoggedOut) return state.guarded(() => { throw err; });

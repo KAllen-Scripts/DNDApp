@@ -8,6 +8,7 @@
     "./sheet.js": "./src/sheet.js",
     "./dice.js": "./src/dice.js",
     "./rolls.js": "./src/rolls.js",
+    "./gear.js": "./src/gear.js",
     "./map.js": "./src/map.js",
     "./citations.js": "./src/citations.js",
     "./coins.js": "./src/coins.js"

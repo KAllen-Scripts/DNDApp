@@ -698,6 +698,29 @@ input.num, .sheet .num { text-align: center; }
 .spell-rolls { display: inline-flex; align-items: center; gap: 0.3rem; }
 .spell-rolls:empty { display: none; }
 .spell-rolls select { width: auto; height: auto; padding: 0.1rem 0.25rem; font-size: 0.8rem; }
+/* Equipped weapons from the Inventory, shown in Attacks: worked out, not typed. */
+.attacks .gear-attack { padding: 0.15rem 0; border-bottom: 1px dashed var(--border); }
+.gear-attack .gear-name { font-weight: 600; overflow-wrap: anywhere; }
+.gear-attack .gear-dmg-pair { display: inline-flex; gap: 0.25rem; }
+
+/* The Inventory tab (players): one row per item, details folded away. */
+.inventory .gear-list { display: grid; gap: 0.4rem; }
+.gear-row { border: 1px solid var(--border); border-radius: 8px; padding: 0.4rem 0.6rem; }
+.gear-row.equipped { border-color: var(--accent); }
+.gear-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.8rem; }
+.gear-head .gear-title { flex: 1 1 8rem; overflow-wrap: anywhere; }
+.gear-head input.num { width: 3.5rem; }
+.gear-head .fld.inline { flex-direction: row-reverse; align-items: center; gap: 0.3rem; }
+.gear-head label.check { flex: none; }
+.gear-head .gear-sum { flex: 1 1 10rem; }
+.gear-head .gear-sum:empty { display: none; }
+.gear-details > summary { cursor: pointer; font-size: 0.85rem; margin-top: 0.2rem; }
+
+/* The DM's check on what players have equipped (Items tab). */
+.equipped-gear { margin-top: 1.2rem; }
+.equipped-player { margin: 0.6rem 0; }
+.equipped-player h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem; margin: 0 0 0.2rem; font-size: 1rem; }
+.equipped-list { margin: 0; padding-left: 1.2rem; }
 .spell-roll-fields { margin-top: 0.3rem; }
 .classes .th > :nth-child(3), .attacks .th > :nth-child(2) { text-align: center; padding: 0; white-space: nowrap; }
 .sheet button.icon-x {

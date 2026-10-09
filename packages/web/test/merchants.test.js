@@ -2,7 +2,7 @@
  * Items and merchants on the page: the DM has Items and Merchants tabs
  * (players don't), makes and looks up items, sets up a merchant with stock
  * and puts it on the map; a player opens the shop from the token and buys,
- * and their sheet shows the coins gone and the item in their equipment.
+ * and their sheet shows the coins gone and the item in their inventory.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -91,7 +91,7 @@ test('items and merchants: a player opens the shop from the token and buys; the 
       const m = (await t.request('POST', base, { body: { name: 'Mira', notes: 'Fences goods.' } })).json();
       await t.request('POST', `${base}/${m.id}/stock`, { body: { item: potion.id, qty: 2 } });
       await t.request('POST', `/campaigns/${t.campaign.id}/maps/${map.id}/merchants/${m.id}`, { body: {} });
-      t.sheets.save(t.campaign.id, t.sam.id, { ...emptySheet({ name: 'Thorin' }), coins: { cp: 0, sp: 0, ep: 0, gp: 70, pp: 0 }, equipment: 'Backpack' });
+      t.sheets.save(t.campaign.id, t.sam.id, { ...emptySheet({ name: 'Thorin' }), coins: { cp: 0, sp: 0, ep: 0, gp: 70, pp: 0 }, inventory: [{ name: 'Backpack' }] });
       return { m };
     },
     page: (t) => ({ as: t.sam }),
@@ -119,7 +119,7 @@ test('items and merchants: a player opens the shop from the token and buys; the 
 
     const { sheet } = t.sheets.get(t.campaign.id, t.sam.id);
     assert.equal(sheet.coins.gp, 20);
-    assert.equal(sheet.equipment, 'Backpack\nPotion of Healing');
+    assert.deepEqual(sheet.inventory.map((g) => g.name), ['Backpack', 'Potion of Healing']);
     page.click('[data-tab=sheet]');
     await page.settle();
     assert.equal(page.$('#sheet [aria-label="Gold pieces"]').value, '20', 'the sheet on screen shows it');

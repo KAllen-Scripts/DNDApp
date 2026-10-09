@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { payCoins, totalCp, formatPrice, parsePrice, splitPrice, addToEquipment } from '../src/coins.js';
+import { payCoins, totalCp, formatPrice, parsePrice, splitPrice } from '../src/coins.js';
 
 const purse = (c) => ({ cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, ...c });
 
@@ -31,14 +31,4 @@ test('payCoins: big coins first, breaking a coin with change when needed; null w
   assert.deepEqual(payCoins(purse({ pp: 1 }), 250), purse({ gp: 7, sp: 5 }));
   assert.equal(payCoins(purse({ sp: 5 }), 100), null);
   assert.deepEqual(payCoins(purse({ gp: 1 }), 0), purse({ gp: 1 }), 'free');
-});
-
-test('addToEquipment: a new line, or a higher count on the line already there', () => {
-  assert.equal(addToEquipment('', 'Rope'), 'Rope');
-  assert.equal(addToEquipment('Backpack\n', 'Rope', 2), 'Backpack\nRope x2');
-  assert.equal(addToEquipment('Backpack\nPotion of Healing', 'Potion of Healing', 2), 'Backpack\nPotion of Healing x3');
-  assert.equal(addToEquipment('- potion of healing x2', 'Potion of Healing'), '- Potion of Healing x3');
-  assert.equal(addToEquipment('Potion of Healing (2)', 'Potion of Healing'), 'Potion of Healing x3');
-  assert.equal(addToEquipment('Potion of Healing, greater', 'Potion of Healing'), 'Potion of Healing, greater\nPotion of Healing', 'only the same item');
-  assert.equal(addToEquipment('Rope (50 feet)', 'Rope (50 feet)'), 'Rope (50 feet) x2', 'brackets in a name are fine');
 });

@@ -114,6 +114,7 @@
         <button role="tab" data-tab="ask" aria-selected="true"><span class="tab-icon" aria-hidden="true">✦</span><span>Ask</span></button>
         <button role="tab" data-tab="notes" aria-selected="false"><span class="tab-icon" aria-hidden="true">✎</span><span>Notes</span></button>
         <button role="tab" data-tab="sheet" aria-selected="false"><span class="tab-icon" aria-hidden="true">⚔</span><span>Sheet</span></button>
+        <button role="tab" data-tab="inventory" aria-selected="false"><span class="tab-icon" aria-hidden="true">⛨</span><span>Inventory</span></button>
         <button role="tab" data-tab="creatures" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">☠</span><span>Creatures</span></button>
         <button role="tab" data-tab="items" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">✧</span><span>Items</span></button>
         <button role="tab" data-tab="merchants" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">⚖</span><span>Merchants</span></button>
@@ -209,6 +210,18 @@
       <div id="sheet" class="sheet"></div>
     </section>
 
+    <!-- A player's inventory (sheet.js): items carried, looked up by name, equipped. Part of the sheet. -->
+    <section id="tab-inventory" class="panel sheet-panel" hidden>
+      <form id="gear-add" class="creatures-bar">
+        <input id="gear-name" type="search" list="dl-gear" placeholder="Add an item: Longsword, Chain mail, +1 Dagger, Bag of Holding…" aria-label="Item to add" autocomplete="off">
+        <datalist id="dl-gear"></datalist>
+        <button type="submit" class="primary">Look up and add</button>
+        <button type="button" id="gear-own" class="ghost" title="Add an item by hand, without looking it up">Add by hand</button>
+        <span id="gear-status" class="muted small" role="status"></span>
+      </form>
+      <div id="inventory" class="inventory"></div>
+    </section>
+
     <!-- The DM's creatures (creatures.js): enemies and NPCs saved once, placed on any map. -->
     <section id="tab-creatures" class="panel creatures-panel" hidden>
       <div class="creatures-bar">
@@ -231,6 +244,13 @@
         <span id="items-status" class="muted small" role="status"></span>
       </div>
       <div id="items" class="creatures"></div>
+      <section class="equipped-gear" aria-labelledby="equipped-title">
+        <div class="creatures-bar">
+          <h2 id="equipped-title">What the players have equipped</h2>
+          <button id="equipped-refresh" type="button" class="ghost">Refresh</button>
+        </div>
+        <div id="items-equipped"></div>
+      </section>
       <dialog id="item-dialog" class="map-dialog"></dialog>
     </section>
 
@@ -268,6 +288,7 @@
         <select id="map-beside" aria-label="Beside the map" title="Show your sheet, chats, notes or handouts beside the map">
           <option value="">Nothing beside</option>
           <option value="sheet">Sheet beside</option>
+          <option value="inventory">Inventory beside</option>
           <option value="creatures">Creatures beside</option>
           <option value="items">Items beside</option>
           <option value="merchants">Merchants beside</option>

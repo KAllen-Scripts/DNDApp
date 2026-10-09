@@ -121,3 +121,18 @@ export function spellRolls(spell, { values, level }, slot = spell.level) {
     type,
   };
 }
+
+/** One die size up, for a versatile weapon used with two hands: "1d8 slashing" → "1d10 slashing". */
+const biggerDie = (damage) => String(damage ?? '').replace(/d(4|6|8|10)\b/, (_, n) => `d${{ 4: 6, 6: 8, 8: 10, 10: 12 }[n]}`);
+
+/**
+ * An equipped weapon's rolls (an inventory line, gear.js): as an attack with
+ * its ability, the proficiency set on the line and its magic bonus.
+ * Versatile weapons also give damage2, with both hands.
+ */
+export function gearRolls(g, calc) {
+  const attack = { kind: 'attack', ability: g.weapon.ability, proficient: g.proficient, magic: g.magic, bonus: '', save: '', dc: '', damage: g.weapon.damage };
+  const r = attackRolls(attack, calc);
+  const damage2 = g.weapon.properties.includes('versatile') ? attackRolls({ ...attack, damage: biggerDie(g.weapon.damage) }, calc).damage : null;
+  return { ...r, damage2 };
+}

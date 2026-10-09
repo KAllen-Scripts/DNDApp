@@ -184,6 +184,7 @@ async function enterCampaign(campaign) {
   $('[data-tab=archivist]').hidden = !isDm;
   // The DM gets Creatures (enemies and NPCs to put on maps) instead of a character sheet.
   $('[data-tab=sheet]').hidden = isDm;
+  $('[data-tab=inventory]').hidden = isDm;
   $('[data-tab=creatures]').hidden = !isDm;
   // ...and Items and Merchants, to set up shops players buy from.
   $('[data-tab=items]').hidden = !isDm;
@@ -191,7 +192,7 @@ async function enterCampaign(campaign) {
   $('#map-sheet-window').hidden = isDm;
   // A tab this person doesn't have (now) goes to Creatures for the DM's sheet, else the first tab.
   const here = $(`[data-tab="${currentTab}"]`);
-  if (isDm && currentTab === 'sheet') showTab('creatures');
+  if (isDm && (currentTab === 'sheet' || currentTab === 'inventory')) showTab('creatures');
   else showTab(here.hidden || here.classList.contains('user-hidden') ? firstTab() : currentTab);
   setSheetCampaign(campaign.id);
   setRestsCampaign({ campaignId: campaign.id, guarded, isDm, userId: state.me.user.id });
@@ -277,7 +278,7 @@ function showTab(name) {
   if (beside === 'handouts') handoutsOpened();
   if (name === 'merchants' || beside === 'merchants') merchantsOpened();
   // The sheet and maps need more room than Ask and Notes.
-  $('#app-view').classList.toggle('wide', name === 'sheet' || name === 'map' || name === 'creatures' || name === 'items' || name === 'merchants');
+  $('#app-view').classList.toggle('wide', name === 'sheet' || name === 'inventory' || name === 'map' || name === 'creatures' || name === 'items' || name === 'merchants');
 }
 
 /** The first tab along the bar that's shown (tabs can be reordered and hidden under Look). */
