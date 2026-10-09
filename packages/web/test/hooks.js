@@ -27,6 +27,7 @@ const MODULES = {
   'shared/dice.js': '@dndapp/shared/dice.js',
   'shared/rolls.js': '@dndapp/shared/rolls.js',
   'shared/gear.js': '@dndapp/shared/gear.js',
+  'shared/settings.js': '@dndapp/shared/settings.js',
   'shared/map.js': '@dndapp/shared/map.js',
   'shared/coins.js': '@dndapp/shared/coins.js',
   'shared/citations.js': '@dndapp/shared/citations.js',

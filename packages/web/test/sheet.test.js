@@ -6,7 +6,7 @@
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { withPage, addDm, createFakeLLM } from './helpers.js';
+import { withPage, addDm, createFakeLLM, openPage } from './helpers.js';
 import { emptySheet, SHEET_FORMAT } from '@dndapp/shared/sheet.js';
 
 const NO_3D = { 'dndapp.dice': JSON.stringify({ threeD: false, sound: false }) };
@@ -618,5 +618,102 @@ test('inventory: the DM sees what each player has equipped in the Items tab, and
     page.click('#equipped-refresh');
     await page.waitFor(() => /Greataxe/.test(card('Thorin').textContent), { what: 'the new gear' });
     assert.match(card('Thorin').textContent, /Greataxe · \+2 to hit, 1d12 slashing/);
+  });
+});
+
+test('inventory: weight against the campaign rule, charges used and rolled back, three attunements, magic items on the sheet, noisy armour on Stealth', async () => {
+  const dice = [5, 3, 12];
+  mock.method(crypto, 'randomInt', (min) => dice.shift() ?? min);
+  const magic = (name, text, extra = {}) => ({ name, kind: 'magic', text, attunement: true, ...extra });
+  try {
+    await withPage(sheetPage({
+      before: async (t) => {
+        t.sheets.save(t.campaign.id, t.sam.id, {
+          ...emptySheet({ name: 'Thorin' }), race: 'Human', classes: [{ name: 'Fighter', level: 1 }],
+          abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+          inventory: [
+            magic('Wand of Magic Missiles', 'x', { attunement: false, charges: { max: 7, used: 0, recharge: '1d6+1', when: 'dawn' } }),
+            magic('Gauntlets of Ogre Power', 'g', { effects: [{ target: 'score.str', value: 19 }], equipped: 1 }),
+            magic('Ring of Protection', 'r', { effects: [{ target: 'ac', value: 1 }, { target: 'saves', value: 1 }], equipped: 1, attuned: true }),
+            magic('Cloak of Elvenkind', 'c', { attuned: true }),
+            magic('Amulet', 'a', { attuned: true }),
+            { name: 'Chain mail', kind: 'armor', weight: 55, armor: { base: 16, type: 'heavy', strength: 13, stealth: true } },
+            { name: 'Anvil', weight: 100 },
+          ],
+        });
+      },
+    }), async (page) => {
+      page.click('[data-tab=inventory]');
+      const inv = (label) => page.el(`#inventory [aria-label="${label}"]`);
+      const top = () => page.text('#tab-inventory .gear-summary');
+      assert.match(top(), /Carrying 155 lb of 150 lb\. Attuned to 3 of 3\./);
+      assert.match(page.text('#tab-inventory .gear-warn'), /Over your carrying capacity \(155 of 150 lb\): speed 5 ft/);
+
+      // A fourth attunement is refused.
+      page.click(inv('Attuned: Gauntlets of Ogre Power'));
+      assert.equal(inv('Attuned: Gauntlets of Ogre Power').checked, false);
+      assert.match(page.text('#gear-status'), /attuned to 3 items at most/);
+      page.click(inv('Attuned: Amulet'));
+      page.click(inv('Attuned: Gauntlets of Ogre Power'));
+      assert.equal(inv('Attuned: Gauntlets of Ogre Power').checked, true);
+      // Strength 19 now: capacity 285, so not over any more.
+      assert.match(top(), /of 285 lb/);
+      assert.ok(page.$('#tab-inventory .gear-warn').hidden);
+
+      // Charges: use two, then recharge with the wand's 1d6+1 (rolled: 3 + 1).
+      page.click(inv('Use a charge: Wand of Magic Missiles'));
+      page.click(inv('Use a charge: Wand of Magic Missiles'));
+      assert.match(page.text('#inventory .charges'), /5 of 7 charges/);
+      page.click(inv('Recharge: Wand of Magic Missiles'));
+      await page.settle();
+      assert.equal(page.requests.filter((r) => r.path.endsWith('/roll')).at(-1).body.notation, '1d6+1');
+      await page.waitFor(() => /7 of 7 charges/.test(page.text('#inventory .charges')), { what: 'the charges back' });
+
+      // The sheet: Strength from the gauntlets, AC and saves from the ring, Stealth with disadvantage in chain mail.
+      page.click('[data-tab=sheet]');
+      assert.equal(byLabel(page, 'Strength modifier').value, '+4');
+      assert.match(page.text('#sheet .item-score'), /19 with items/);
+      assert.equal(byLabel(page, 'Armour class').value, '11');
+      assert.equal(byLabel(page, 'Wisdom save').value, '+1');
+      page.click('[data-tab=inventory]');
+      page.click(inv('Equipped: Chain mail'));
+      page.click('[data-tab=sheet]');
+      assert.equal(byLabel(page, 'Armour class').value, '17');
+      assert.match(page.text('#sheet .sheet-warn'), /Chain mail: disadvantage on Stealth/);
+      page.click(page.$$('#sheet .roll-name').find((b) => b.textContent.startsWith('Stealth')));
+      await page.settle();
+      const last = page.requests.filter((r) => r.path.endsWith('/roll')).at(-1).body;
+      assert.equal(last.mode, 'disadvantage');
+      assert.equal(last.label, 'Stealth (disadvantage: Chain mail)');
+    });
+  } finally {
+    mock.restoreAll();
+  }
+});
+
+test('campaign settings: the DM ignores weight limits from Settings', async () => {
+  await withPage({ before: async (t) => ({ dana: await addDm(t) }), page: (t, { dana }) => ({ as: dana, storage: NO_3D }) }, async (page, t) => {
+    page.click('#settings-open');
+    assert.equal(page.el('#setting-weight').value, 'capacity');
+    page.type('#setting-weight', 'ignore');
+    await page.waitFor(() => /Saved/.test(page.text('#settings-dialog')), { what: 'the setting to save' });
+    assert.deepEqual(t.store.getSettings(t.campaign.id), { weight: 'ignore' });
+  });
+});
+
+test('campaign settings: a player\u2019s sheet follows the DM\u2019s weight rule live; players have no Settings', async () => {
+  await withPage(sheetPage({
+    before: async (t) => { t.sheets.save(t.campaign.id, t.sam.id, { ...emptySheet({ name: 'Thorin' }), race: 'Human', inventory: [{ name: 'Anvil', weight: 200 }] }); },
+  }), async (page, t) => {
+    assert.ok(!page.visible('#settings-open'));
+    page.click('[data-tab=inventory]');
+    assert.match(page.text('#tab-inventory .gear-warn'), /Over your carrying capacity/);
+    page.click('[data-tab=sheet]');
+    assert.equal(byLabel(page, 'Speed (feet)').value, '5');
+    await t.request('PATCH', `/campaigns/${t.campaign.id}/settings`, { body: { weight: 'ignore' } });
+    await page.waitFor(() => byLabel(page, 'Speed (feet)').value === '30', { what: 'the sheet to hear the new rule' });
+    page.click('[data-tab=inventory]');
+    assert.match(page.text('#tab-inventory .gear-summary'), /Carrying 200 lb \(ignore weight limits: this campaign has none\)/);
+    assert.ok(page.$('#tab-inventory .gear-warn').hidden);
   });
 });

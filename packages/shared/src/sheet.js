@@ -1,7 +1,7 @@
 /**
  * Character sheet rules (D&D 5e, 2014 Player's Handbook).
  *
- * Plain JS (it imports only gear.js, the weapon and armour tables): the server uses it, and the web page loads the
+ * Plain JS (it imports only gear.js, the inventory rules): the server uses it, and the web page loads the
  * same file from /shared/sheet.js so automatic values update as the player
  * types. The server stays the authority on what is saved.
  *
@@ -11,7 +11,7 @@
  * value is kept in sheet.overrides[key] and always wins until they reset it.
  */
 
-import { WEAPONS, armorClass, normalizeInventory } from './gear.js';
+import { WEAPONS, activeEffects, armorClass, attunementLimit, carriedWeight, encumbrance, normalizeInventory } from './gear.js';
 
 export { WEAPONS };
 
@@ -298,7 +298,8 @@ export function normalizeSheet(input = {}) {
     failures: int(s.death_saves?.failures, { min: 0, max: 3, fallback: 0 }),
   };
   out.attacks = (Array.isArray(s.attacks) ? s.attacks : []).slice(0, 50).map((a) => normalizeAttack(a ?? {}));
-  out.inventory = normalizeInventory(s.inventory);
+  const artificer = (out.classes ?? []).filter((c) => classKey(c.name) === 'artificer').reduce((n, c) => n + (c.level || 0), 0);
+  out.inventory = normalizeInventory(s.inventory, { attuneMax: attunementLimit(artificer) });
   for (const c of COINS) out.coins[c] = int(s.coins?.[c], { min: 0, max: 99_999_999, fallback: 0 });
   out.spellcasting.class = str(s.spellcasting?.class, 60);
   for (let n = 1; n <= 9; n++) {
@@ -447,7 +448,14 @@ function slotsFor(casters) {
  * @returns {{ auto: Record<string, any>, values: Record<string, any>, overridden: Set<string>, level: number, casters: object[] }}
  *   auto: what the rules give; values: what to show and use (the player's override if there is one).
  */
-export function computeSheet(sheet) {
+/** Races with Powerful Build (count as one size larger for carrying). */
+const POWERFUL_BUILD = /goliath|firbolg|bugbear|loxodon|centaur|\borc\b/i;
+
+/**
+ * Everything worked out from the sheet. opts.weight is the campaign's weight
+ * rule (settings.js: 'capacity', 'variant' or 'ignore').
+ */
+export function computeSheet(sheet, { weight = 'capacity' } = {}) {
   const overrides = sheet.overrides ?? {};
   const auto = {};
   const values = {};
@@ -461,14 +469,23 @@ export function computeSheet(sheet) {
   const level = Math.min(20, Math.max(1, classes.reduce((sum, c) => sum + c.level, 0)));
 
   const pb = set('proficiency_bonus', 2 + Math.floor((level - 1) / 4));
-  for (const a of ABILITIES) set(`mod.${a}`, abilityMod(sheet.abilities?.[a] ?? 10));
+  // Magic items equipped (and attuned) change the sheet: a score set (Gauntlets of Ogre Power) or raised, AC, saves...
+  const effects = activeEffects(sheet.inventory);
+  const sum = (target) => effects.filter((e) => e.target === target).reduce((n, e) => n + e.value, 0);
+  const scores = {};
+  for (const a of ABILITIES) {
+    const own = Number(sheet.abilities?.[a] ?? 10);
+    const setTo = Math.max(own, ...effects.filter((e) => e.target === `score.${a}`).map((e) => e.value));
+    scores[a] = Math.min(30, setTo + sum(`bonus.${a}`));
+    set(`mod.${a}`, abilityMod(scores[a]));
+  }
   const mod = (a) => values[`mod.${a}`];
 
   // Saving throw proficiencies come from your first class.
   const first = classes[0]?.rules;
   for (const a of ABILITIES) {
     const prof = set(`save_prof.${a}`, !!first?.saves.includes(a));
-    set(`save.${a}`, mod(a) + (prof ? pb : 0));
+    set(`save.${a}`, mod(a) + (prof ? pb : 0) + sum('saves') + sum(`save.${a}`));
   }
 
   // Bards from 2nd level add half their proficiency bonus to checks they aren't proficient in.
@@ -480,20 +497,32 @@ export function computeSheet(sheet) {
     set(`skill.${k}`, mod(ability) + (mult ? mult * pb : half));
   }
   set('passive_perception', 10 + values['skill.perception']);
-  set('initiative', mod('dex') + half);
+  set('initiative', mod('dex') + half + sum('initiative'));
 
   // AC from the armour and shield equipped in the inventory, else unarmoured (monk and barbarian
-  // Unarmored Defense). Other magic items and features are typed in by the player.
+  // Unarmored Defense), plus magic items (a Ring of Protection; Bracers of Defense only with neither).
+  // Features that change AC some other way are typed in by the player.
   const worn = armorClass(sheet.inventory, mod('dex'));
   const shieldAc = worn?.shield ? worn.shield.armor.base + worn.shield.magic : 0;
   const ac = [worn?.armor ? worn.ac : 10 + mod('dex') + shieldAc];
   if (levelIn('monk') && !worn) ac.push(10 + mod('dex') + mod('wis'));
   if (levelIn('barbarian') && !worn?.armor) ac.push(10 + mod('dex') + mod('con') + shieldAc);
-  set('ac', Math.max(...ac));
+  set('ac', Math.max(...ac) + sum('ac') + (worn ? 0 : sum('ac_unarmored')));
 
+  // Speed: race and monk, magic items, then heavy armour without the Strength for it (−10 ft) and weight.
   const monk = levelIn('monk');
   const monkSpeed = monk >= 18 ? 30 : monk >= 14 ? 25 : monk >= 10 ? 20 : monk >= 6 ? 15 : monk >= 2 ? 10 : 0;
-  set('speed', raceSpeed(sheet.race) + monkSpeed);
+  const tooHeavy = worn?.armor && worn.armor.armor.strength > scores.str ? worn.armor : null;
+  const load = encumbrance(carriedWeight(sheet.inventory, sheet.coins), scores.str, weight, { bigger: POWERFUL_BUILD.test(sheet.race ?? '') });
+  let speed = raceSpeed(sheet.race) + monkSpeed + sum('speed') - (tooHeavy ? 10 : 0);
+  if (load) speed = load.speed == null ? 5 : speed + load.speed;
+  set('speed', Math.max(0, speed));
+
+  // Rolls made with disadvantage: Stealth in noisy armour; Strength, Dexterity and Constitution when heavily encumbered.
+  const disadvantage = [];
+  const noisy = (sheet.inventory ?? []).find((g) => g.equipped && g.armor?.stealth);
+  if (noisy) disadvantage.push({ why: noisy.name, skills: ['stealth'], abilities: [] });
+  if (load?.disadvantage) disadvantage.push({ why: load.level === 'over' ? 'over your carrying capacity' : 'heavily encumbered', skills: [], abilities: ['str', 'dex', 'con'] });
 
   // HP: max hit die at 1st level, then the fixed average per level; Constitution each level.
   const hillDwarf = /hill\s*dwarf/i.test(sheet.race ?? '') ? 1 : 0;
@@ -516,13 +545,22 @@ export function computeSheet(sheet) {
   const chosen = classKey(sheet.spellcasting?.class);
   const primary = casters.find((c) => c.key === chosen) ?? casters[0];
   const ability = set('spell_ability', primary?.ability ?? '');
-  set('spell_dc', ability ? 8 + pb + mod(ability) : null);
-  set('spell_attack', ability ? pb + mod(ability) : null);
+  set('spell_dc', ability ? 8 + pb + mod(ability) + sum('spell_dc') : null);
+  set('spell_attack', ability ? pb + mod(ability) + sum('spell_attack') : null);
   const slots = slotsFor(casters);
   for (let n = 1; n <= 9; n++) set(`slots.${n}`, slots[n - 1] ?? 0);
   const [pactSlots, pactLevel] = PACT[Math.min(20, levelIn('warlock'))];
   set('pact_slots', pactSlots);
   set('pact_level', pactLevel);
 
-  return { auto, values, overridden: new Set(Object.keys(overrides).filter((k) => k in auto)), level, casters };
+  return { auto, values, overridden: new Set(Object.keys(overrides).filter((k) => k in auto)), level, casters, scores, effects, load, tooHeavy, disadvantage };
+}
+
+/**
+ * Why a roll has disadvantage from the sheet ('' if it doesn't): pass the
+ * ability it uses (str, dex... for checks, saves and attacks) and the skill, if any.
+ */
+export function rollDisadvantage(calc, { ability = '', skill = '' } = {}) {
+  const hit = (calc?.disadvantage ?? []).find((d) => d.skills.includes(skill) || d.abilities.includes(ability));
+  return hit ? hit.why : '';
 }

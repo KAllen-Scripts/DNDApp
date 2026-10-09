@@ -1,6 +1,7 @@
 # DNDApp — Project Spec
 
-> Status: v0.22 (2026-10-09). Inventory: players look up any item and add it to a structured inventory (bought items land there too); weapons equipped (several of one, like two daggers) become attacks on the sheet with their bonuses worked out, Proficient ticked from the class; one armour and one shield set the AC; the DM sees what each player has equipped (§6.4, §6.9, §5.5).
+> Status: v0.23 (2026-10-09). Campaign settings (the DM's Settings button) with a weight rule: carrying capacity, variant encumbrance, or ignore weight limits; inventory weights, charges on magic items (used, and rolled back when they recharge), at most three attuned items (artificers more), and magic items changing the sheet (AC, saves, ability scores, speed, initiative, spell attack and DC); heavy armour's Strength and Stealth rules; disadvantage applied to sheet rolls (§6.4, §6.10).
+> Previously v0.22 (2026-10-09). Inventory: players look up any item and add it to a structured inventory (bought items land there too); weapons equipped (several of one, like two daggers) become attacks on the sheet with their bonuses worked out, Proficient ticked from the class; one armour and one shield set the AC; the DM sees what each player has equipped (§6.4, §6.9, §5.5).
 > Previously v0.21 (2026-10-09). Rolling from the sheet: attacks and spells roll to hit and damage with the sheet's modifiers (attack bonuses worked out from ability, proficiency and magic; saving-throw attacks and spells give their DC and roll damage only; spells do more when cast higher); initiative goes into a fight waiting for the character; Next d20 (advantage/disadvantage) on the sheet for phones; rollable names marked (§6.4, §6.5).
 > Previously v0.20 (2026-10-09). Merchants and items: the DM's Items and Merchants tabs, merchant tokens players buy from on their own (coins off the sheet, the item into its equipment), restocking every so many long rests (§6.9).
 > Previously v0.19 (2026-10-09). Rests and hit dice: players spend hit dice and take short rests from the sheet; the DM calls short and long rests for the party, by the group's edition; rests are archived and counted, the hook for things that happen every N long rests (§6.8).
@@ -77,7 +78,9 @@ DNDApp/
                   map.js (map documents, snapping, distances, line of sight, templates, lights),
                   coins.js (prices in copper, paying from a purse with change),
                   rolls.js (what the sheet rolls: attacks, spells and equipped weapons with their modifiers),
-                  gear.js (the inventory: PHB weapons and armour, what an item does when equipped, the equip rules, AC from armour)
+                  gear.js (the inventory: PHB weapons and armour, what an item does when equipped, the equip rules, AC from armour,
+                           weight and encumbrance, charges, attunement, magic item effects),
+                  settings.js (a campaign's settings: the weight rule)
     server/
       src/
         index.js          start-up
@@ -226,6 +229,7 @@ Also accepted: `[MM:SS]`, fractional seconds, no brackets, `0:01:30 - Name: text
 |---|---|---|
 | `campaigns`, `users`, `memberships` | source | Campaigns (unique name), accounts (unique name, scrypt password hash, `must_change_password`), role + character per campaign. |
 | `speakers`, `glossary` | source | As above. |
+| `campaign_settings` | source | The DM's settings per campaign (JSON, §6.10); no row means the defaults. Schema v15. |
 | `sessions` | source | Number, date played, checksum, processing status, when it was last processed (`processed_at`, schema v11). |
 | `player_notes` | source | Private notes with author and session date; `edited_at`, `deleted_at` (schema v11). |
 | `character_sheets` | source | One sheet per player per campaign (JSON), with a version that goes up on each save. Players only (the server refuses the `dm` role; sheets a DM saved before 2026-10-08 stay but are ignored). Schema v5. |
@@ -257,6 +261,7 @@ data/archive/
   <campaign>/
     campaign.json, members.json
     speakers.json, glossary.json      (+ history/)
+    settings.json                     the DM's campaign settings, with when they changed (+ history/)
     corrections.jsonl                 append-only
     player-notes/<YYYY-MM-DD>.jsonl   append-only; an edit or delete is a later line with the same id
     character-sheets/<user id>.jsonl  append-only: each save's changes (first line = whole sheet)
@@ -285,7 +290,7 @@ data/archive/
 
 - **Deleting a campaign** removes it and everything derived or mirrored from it from the database (foreign-key cascades), but never touches the archive: the folder gets `deleted.json` and restore skips it. New campaigns never reuse an existing archive folder's slug. Undo by hand: remove the marker, restart, rebuild.
 - A transcript can never be replaced (different bytes for an existing session number → 409).
-- **Restore:** on start-up, accounts, campaigns, members, sessions, speakers, glossary, corrections, notes (with their edits and deletes), character sheets and maps (both replayed from their change lines), character pictures, handouts, the DM's creatures, rests the DM called, items and merchants, and private map pins missing from the database are restored from the archive, and notes are re-indexed. Then run a rebuild to regenerate the knowledge base.
+- **Restore:** on start-up, accounts, campaigns, members, campaign settings, sessions, speakers, glossary, corrections, notes (with their edits and deletes), character sheets and maps (both replayed from their change lines), character pictures, handouts, the DM's creatures, rests the DM called, items and merchants, and private map pins missing from the database are restored from the archive, and notes are re-indexed. Then run a rebuild to regenerate the knowledge base.
 - **Rebuild:** `npm run rebuild -- --campaign <id> --yes` (or `POST /rebuild`) wipes all derived data, re-indexes notes, then replays every session in order, each correction right after the session it was made against. Sheet changes and handouts are read in time order between the sessions (those from before a session's day, before it; the rest at the end). The archivist is non-deterministic, so a rebuild gives an equivalent knowledge base, not an identical one.
 - Bump `PIPELINE_VERSION` (now 13) when prompts, tools or the memory design change.
 
@@ -353,7 +358,7 @@ Who-knows-what is decided by the archivist and enforced by the server:
 | Handout | The DM, and the players it was given to (`to`: everyone, or chosen players). Its picture is served only to them. Players aren't told who else got it. |
 | Map | The DM: everything except players' private pins. Players: only maps the DM has shown, without the AI's description and reading notes, stat blocks, record links, hidden tokens, or anything under the fog (the image itself is blacked out there on the server); NPCs' and enemies' hit points only as how hurt they look; they can change only their own token. Private pins: only their owner. The archivist gets what happened on maps players could see, without hidden tokens (§6.6 "Map events"); Q&A doesn't read maps. |
 | Creatures | Only the DM (the Creatures tab and its API, and Ask when the DM asks: §5.3 step 3b). A token placed from one is an ordinary token: players see it like any other. |
-| Inventory (equipped gear) | Like the sheet (it is part of it), except that the DM sees what each player has **equipped**: its name, how many, proficient or not, attuned, magic bonus, armour, the to-hit and damage it gives, and the AC worked out (and whether the player typed their own AC). Not what's only carried, nor the rest of the sheet (`GET /gear/equipped`, DM only). A player's item lookup never uses the DM's own items (they may hold secrets); it goes to the PHB tables, the books and the AI. |
+| Inventory (equipped gear) | Like the sheet (it is part of it), except that the DM sees what each player has **equipped**: its name, how many, proficient or not, attuned, magic bonus, armour, the to-hit and damage it gives, what magic items do to the sheet, and the AC worked out (and whether the player typed their own AC); also the total weight carried against the campaign's limit (and whether they're encumbered) and how many items they're attuned to. Not what's only carried, nor the rest of the sheet (`GET /gear/equipped`, DM only). A player's item lookup never uses the DM's own items (they may hold secrets); it goes to the PHB tables, the books and the AI. |
 | Items, merchants | The lists, notes and sales: only the DM. A player sees a merchant's shop (name, description, picture, what it sells, prices, how many are left, and each item's description and picture) only while one of its tokens is on a map they can see (shown, not hidden, in their sight); otherwise 404. Buying changes only the buyer's own sheet. |
 | Archivist | Sees everything, including all notes; decides `known_by`. |
 
@@ -433,6 +438,12 @@ Owner's requirements (2026-10-06): structured like a normal 5e sheet; autofill w
   - **Proficient** is ticked when a line is added if the character's first class is proficient with it (`CLASS_GEAR`, PHB: weapon categories or named weapons, armour types); unknown classes and non-weapons get it ticked. The player can change it; it's never changed for them again.
   - **Equipping:** weapons: as many as you carry (a number box when you have more than one: two daggers). Armour: one body armour and one shield at a time; equipping another takes the first off, with a message saying so (`normalizeInventory`, which the server applies too). Anything else can be marked equipped (a ring, a cloak) so the DM sees it.
   - **AC** is worked out from what's equipped (`armorClass`): light armour + Dex, medium + Dex up to 2, heavy flat, + shield, + magic bonuses; with nothing worn, 10 + Dex (+ shield). Unarmored Defense still applies when better: a monk's with no armour or shield, a barbarian's with no armour (a shield adds). A typed AC still wins.
+  - **Weight** (owner, 2026-10-09: "Build all those. But the campaign setting should have an option to ignore weight limits"): each line has a weight (each; PHB weights come from the tables, the DM's items and the AI give theirs), and coins weigh 1 lb per 50. The Inventory tab shows what's carried against the campaign's weight rule (§6.10, `encumbrance` in `gear.js`): **carrying capacity** (default; Str × 15 lb, doubled for Powerful Build races; over it, speed 5 ft), **variant encumbrance** (over Str × 5: speed −10 ft; over Str × 10: speed −20 ft and disadvantage on Strength, Dexterity and Constitution checks, saves and attacks; over Str × 15: speed 5 ft) or **ignore weight limits** (weights are still added up). The Strength used is the one magic items give.
+  - **Heavy armour:** the tables carry each armour's Strength requirement and Stealth disadvantage; without the Strength, speed −10 ft; in noisy armour, Stealth rolls have disadvantage. Both are shown under the sheet's Speed and on the Inventory tab.
+  - **Disadvantage from the sheet** (`rollDisadvantage`): rolls the sheet says have disadvantage (Stealth in noisy armour; Strength, Dexterity and Constitution checks, saves, initiative and attacks when heavily encumbered) are sent with disadvantage, or normally if they also had advantage (Shift or Next d20), labelled with why ("Stealth (disadvantage: Chain mail)").
+  - **Charges:** a line can have charges (read from the description: "has 7 charges… regains 1d6 + 1 expended charges daily at dawn"; or typed under Details). The row shows how many are left with **Use 1** and **Recharge**: dice are rolled as a shared roll and that many come back; a number or "all" comes back without a roll. Nothing recharges by itself (the DM's long rest doesn't touch them).
+  - **Attunement:** at most three attuned items (an artificer four at 10th level, five at 14th, six at 18th; `attunementLimit`); ticking a fourth is refused with a message, and the server keeps only that many. Only items that need attunement can be attuned. The Inventory tab shows "Attuned to 2 of 3".
+  - **Magic item effects** (`itemEffects`, `activeEffects`): a line can change the sheet while it's equipped (and attuned, if it needs attunement): +AC; +AC with no armour or shield (Bracers of Defense); + all saves or one ability's saves; an ability score set to at least a number (Gauntlets of Ogre Power: Strength 19; the sheet shows "19 with items" under the score) or raised; speed; initiative; spell attack and spell save DC. Read from the description's usual wording ("+1 bonus to AC and saving throws", "Your Strength score is 19", "+2 bonus to spell attack rolls and to the saving throw DCs", "walking speed increases by 10 feet"), and listed and editable under Details (at most 8). Everything else a magic item does (spells, resistances, flying) stays in its description. Typed values still win.
   - The free-text **Equipment** box stays for anything else the player wants to write.
 - **Layouts:** each part of the sheet is a block built by one function; a layout (chosen under Look, §3.3) arranges the same blocks into rows of columns: three columns (the official 2014 sheet), combat first, by ability (each ability holds its save and skills, like the 2024 sheet), tabs (abilities and vitals across the top, saves and skills, then Actions / Spells / Inventory / Features & traits / Background tabs, like the sheet apps; the open tab is remembered per browser) and one column. Changing layout redraws the sheet; nothing about the saved sheet changes. One set of measurements for every box (control height, number width, list row, tick size), every group is a card with its label underneath (or a heading on top), and every column stretches to the tallest in its row with its last box growing, so the bottoms line up. Widths come from container queries (the sheet's and each column's own width), so the same rules work in every page layout and on phones; printing shows every tab.
 - **Rules** (`shared/src/sheet.js`, 2014 PHB): modifiers; proficiency bonus by total level; save proficiencies from the first class; skills (expertise doubles; bard Jack of All Trades from 2nd level); passive Perception; initiative; AC from equipped armour and shield, or unarmoured (monk and barbarian Unarmored Defense); speed by race (+ monk); HP (max die at 1st level, then the fixed average, + Con, + hill dwarf); hit dice by die size; spellcasting ability, DC, attack; spell slots for full, half (paladin/ranger from 2nd, artificer rounded up) and third casters (Eldritch Knight, Arcane Trickster), the multiclass table, and warlock Pact Magic. Checked against the PHB tables.
@@ -529,6 +540,14 @@ Owner's request (2026-10-09): "merchant tokens… the DM can set up and add item
 - **Live:** any change to a merchant (a sale, a restock, the DM's edits) sends `merchant {id}` on the campaign's live stream; an open shop and the DM's list look again.
 - **Archive:** like creatures: `items/<id>/` and `merchants/<id>/`, the whole entry after each change, pictures as uploaded; restored on start-up. The archivist doesn't read them; purchases reach it through the sheet changes.
 - **Later:** selling items to merchants; haggling or prices per player; the archivist hearing about sales directly.
+### 6.10 Campaign settings
+
+Owner (2026-10-09): "the campaign setting should have an option to ignore weight limits."
+
+- The DM's **Settings** button in the top bar (players don't have it) opens Campaign settings. Today it holds one setting, **Weight limits**: carrying capacity (default), variant encumbrance, or ignore weight limits (§6.4).
+- Kept per campaign (`campaign_settings`, `shared/src/settings.js` `normalizeSettings`), archived as `settings.json` with history, restored on start-up. `PATCH /campaigns/:cid/settings` (DM); everyone gets them with their campaigns (`GET /me`, `GET /campaigns/:cid`) and hears changes live (`settings` on the campaign's live stream), so sheets work themselves out again at once. The server uses them wherever it works a sheet out (token speed on maps, the DM's equipped view, the archivist's sheet text).
+- This is where the planned rules edition (2014/2024) setting goes (§6.2, §9).
+
 ## 7. Security & cost controls
 
 - **Accounts:** no self sign-up. The server admin creates accounts, sets passwords and assigns roles on the admin screen (`/admin/*` routes, admin login only); the DM role can't. The console only does `init` (create the admin login), `set-password` (recovery) and `list`. Accounts with history can only be blocked, not deleted (the archive refers to them by id). Names are unique (ignoring case). Passwords: at least 6 characters, stored as scrypt hashes, never in plain text, including the archive.
@@ -550,7 +569,7 @@ Owner's request (2026-10-09): "merchant tokens… the DM can set up and add item
 
 ## 9. Open questions
 
-- **Ruleset per campaign (owner, 2026-10-09: "We WILL want to have a setting to toggle this, per campaign"):** where it lives (campaign settings on the admin screen, or the DM's), whether Q&A's edition and the sheet rules follow it too, and what happens to sheets when it changes. Rests use it once built (§6.8).
+- **Ruleset per campaign (owner, 2026-10-09: "We WILL want to have a setting to toggle this, per campaign"):** where it lives (now probably the DM's campaign settings, §6.10), whether Q&A's edition and the sheet rules follow it too, and what happens to sheets when it changes. Rests use it once built (§6.8).
 - Should the DM see players' character sheets, and should Q&A use them? (Currently only the player can.)
 - Should dice rolls go into the archive for the archivist? (They're shared live and logged in the database, but not archived.)
 - Should the archivist see handout pictures (described by the AI when given)? Now it only knows there is one.

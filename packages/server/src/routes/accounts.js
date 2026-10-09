@@ -4,6 +4,7 @@
  */
 import { z } from 'zod';
 import { BadRequestError, NotFoundError, sessionDateFor } from '../store.js';
+import { WEIGHT_RULES } from '@dndapp/shared/settings.js';
 
 export function registerAccounts(app, r) {
   const { access, auth, config, db, requireAdmin, search, store } = r;
@@ -38,12 +39,20 @@ export function registerAccounts(app, r) {
         `SELECT c.id, c.name, m.role, m.character_name FROM memberships m JOIN campaigns c ON c.id = m.campaign_id
          WHERE m.user_id = ? ORDER BY c.name`,
       )
-      .all(request.user.id),
+      .all(request.user.id)
+      .map((c) => ({ ...c, settings: store.getSettings(c.id) })),
   }));
 
   app.get('/campaigns/:cid', async (request) => {
     const { campaign, role, membership } = access(request);
-    return { campaign, role, character_name: membership?.character_name ?? null };
+    return { campaign, role, character_name: membership?.character_name ?? null, settings: store.getSettings(campaign.id) };
+  });
+
+  /** Change the campaign's settings (DM): { weight?: 'capacity' | 'variant' | 'ignore' }. Everyone in it hears `settings` live. */
+  app.patch('/campaigns/:cid/settings', async (request) => {
+    const a = access(request, { dm: true });
+    const body = z.object({ weight: z.enum(Object.keys(WEIGHT_RULES)).optional() }).strict().parse(request.body ?? {});
+    return store.setSettings(a.cid, body);
   });
 
   // ---------- admin (accounts, campaigns, who's in which campaign) ----------

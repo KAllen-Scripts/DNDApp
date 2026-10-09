@@ -3,7 +3,7 @@
  * their characters (the token is seen by the campaign; the full picture is private).
  */
 import { SHEET_FORMAT, computeSheet } from '@dndapp/shared/sheet.js';
-import { ARMOR, WEAPONS, itemStats, magicName } from '@dndapp/shared/gear.js';
+import { ARMOR, WEAPONS, carriedWeight, itemStats, magicName } from '@dndapp/shared/gear.js';
 import { gearRolls } from '@dndapp/shared/rolls.js';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
@@ -15,7 +15,7 @@ import { SheetConflictError } from '../sheets/store.js';
 import { SpendingCapError } from '../llm/index.js';
 
 export function registerCharacters(app, r) {
-  const { access, archive, auth, config, db, itemFinder, maps, pictureDescriber, pictures, publicMessage, sheetImport, sheets, spells, upload } = r;
+  const { access, archive, auth, config, db, itemFinder, maps, pictureDescriber, pictures, publicMessage, sheetImport, sheets, spells, store, upload } = r;
 
   // ---------- character sheets (private to their player) ----------
 
@@ -135,7 +135,7 @@ export function registerCharacters(app, r) {
     const f = found.fields;
     const stats = itemStats({ name: f.name || name, kind: f.kind, text: f.text });
     return {
-      item: { name: f.name || name, kind: stats.kind, qty: 1, attunement: !!f.attunement, weight: f.weight, text: f.text, weapon: stats.weapon, armor: stats.armor, magic: stats.magic, source: f.source?.from || (found.from === 'ai' ? "the AI's memory: check it" : '') },
+      item: { name: f.name || name, kind: stats.kind, qty: 1, attunement: !!f.attunement, weight: f.weight ?? stats.weight, text: f.text, weapon: stats.weapon, armor: stats.armor, magic: stats.magic, charges: stats.charges, effects: stats.effects, source: f.source?.from || (found.from === 'ai' ? "the AI's memory: check it" : '') },
       from: found.from,
     };
   });
@@ -143,9 +143,11 @@ export function registerCharacters(app, r) {
   /**
    * What each player has equipped (DM), so the DM can check it: { players:
    * [{ user_id, name, character, ac, gear: [{ name, kind, equipped, qty,
-   * proficient, magic, attuned, to_hit, damage }] }] }. Only equipped gear,
-   * the AC worked out from it and the attacks it makes; the rest of the
-   * sheet stays private.
+   * proficient, magic, attuned, attunement, armor, effects, to_hit, damage }],
+   * carried, capacity, load, attuned }] }. Only equipped gear, the AC worked
+   * out from it, the attacks it makes, the total weight carried against the
+   * campaign's limit and how many items they're attuned to; the rest of the
+   * sheet (and what's only carried) stays private.
    */
   app.get('/campaigns/:cid/gear/equipped', async (request) => {
     const a = access(request, { dm: true });
@@ -154,16 +156,20 @@ export function registerCharacters(app, r) {
       players: members.map((m) => {
         const { sheet, version } = sheets.get(a.cid, m.id);
         if (!version) return { user_id: m.id, name: m.name, character: m.character_name ?? '', ac: null, gear: [] };
-        const calc = computeSheet(sheet);
+        const calc = computeSheet(sheet, store.getSettings(a.cid));
         return {
           user_id: m.id,
           name: m.name,
           character: sheet.name || m.character_name || '',
           ac: calc.values.ac,
           ac_own: 'ac' in sheet.overrides,
+          carried: carriedWeight(sheet.inventory, sheet.coins),
+          capacity: calc.load?.capacity ?? null,
+          load: calc.load?.level ?? null,
+          attuned: sheet.inventory.filter((g) => g.attuned).length,
           gear: sheet.inventory.filter((g) => g.equipped).map((g) => {
             const rolls = g.weapon ? gearRolls(g, calc) : null;
-            return { name: g.name, kind: g.kind, equipped: g.equipped, qty: g.qty, proficient: g.proficient, magic: g.magic, attuned: g.attuned, attunement: g.attunement, armor: g.armor, to_hit: rolls?.bonus ?? null, damage: rolls?.damage ? `${rolls.damage}${rolls.type ? ` ${rolls.type}` : ''}` : null };
+            return { name: g.name, kind: g.kind, equipped: g.equipped, qty: g.qty, proficient: g.proficient, magic: g.magic, attuned: g.attuned, attunement: g.attunement, armor: g.armor, effects: g.effects, to_hit: rolls?.bonus ?? null, damage: rolls?.damage ? `${rolls.damage}${rolls.type ? ` ${rolls.type}` : ''}` : null };
           }),
         };
       }),

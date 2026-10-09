@@ -12,7 +12,7 @@ import { canHearRest } from '../rests.js';
 import { sheetInitiative } from './combat.js';
 
 export function registerTable(app, r) {
-  const { access, auth, db, handouts, maps, merchants, sheets, openLiveStream, rolls, rests } = r;
+  const { access, auth, db, handouts, maps, merchants, sheets, openLiveStream, rolls, rests, store } = r;
 
   // ---------- dice ----------
 
@@ -154,7 +154,8 @@ export function registerTable(app, r) {
    * when one is taken back or no longer for you; rest {rest} when the DM calls
    * a short or long rest that includes you (the DM hears every one); merchant
    * {id} when a merchant's stock, prices or shop changed (the page looks again
-   * if it has that shop open; the shop itself checks who may see it).
+   * if it has that shop open; the shop itself checks who may see it);
+   * settings {settings} when the DM changes the campaign's settings.
    */
   app.get('/campaigns/:cid/live', async (request, reply) => {
     const { cid } = access(request);
@@ -183,7 +184,13 @@ export function registerTable(app, r) {
       if (!current()) return sse.end();
       sse.send('merchant', { id: merchant.id });
     };
+    const onSettings = ({ campaign_id, settings }) => {
+      if (campaign_id !== cid) return;
+      if (!current()) return sse.end();
+      sse.send('settings', settings);
+    };
     rolls.events.on('roll', onRoll);
+    store.events.on('settings', onSettings);
     handouts.events.on('update', onHandout);
     rests.events.on('rest', onRest);
     merchants.events.on('update', onMerchant);
@@ -192,6 +199,7 @@ export function registerTable(app, r) {
       handouts.events.off('update', onHandout);
       merchants.events.off('update', onMerchant);
       rests.events.off('rest', onRest);
+      store.events.off('settings', onSettings);
     });
   });
 }

@@ -4,8 +4,9 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addToInventory, armorClass, classProficient, itemStats, magicName, normalizeGear, normalizeInventory } from '../src/gear.js';
-import { computeSheet, emptySheet, normalizeSheet } from '../src/sheet.js';
+import { addToInventory, armorClass, attunementLimit, carriedWeight, classProficient, encumbrance, itemCharges, itemEffects, itemStats, magicName, normalizeGear, normalizeInventory } from '../src/gear.js';
+import { computeSheet, emptySheet, normalizeSheet, rollDisadvantage } from '../src/sheet.js';
+import { normalizeSettings } from '../src/settings.js';
 import { gearRolls } from '../src/rolls.js';
 
 const sheetWith = (inventory, extra = {}) => {
@@ -23,15 +24,17 @@ test('gear: magic names and what an item does, from the tables or its descriptio
   assert.equal(sword.magic, 1);
   assert.equal(sword.weapon.category, 'martial');
   assert.ok(sword.weapon.properties.includes('versatile'));
-  assert.deepEqual(itemStats({ name: 'Chain mail' }).armor, { base: 16, type: 'heavy' });
-  assert.deepEqual(itemStats({ name: 'Leather' }).armor, { base: 11, type: 'light' });
-  assert.deepEqual(itemStats({ name: 'Shield' }).armor, { base: 2, type: 'shield' });
+  assert.deepEqual(itemStats({ name: 'Chain mail' }).armor, { base: 16, type: 'heavy', strength: 13, stealth: true });
+  assert.equal(itemStats({ name: 'Chain mail' }).weight, 55);
+  assert.equal(itemStats({ name: 'Dagger' }).weight, 1);
+  assert.deepEqual(itemStats({ name: 'Leather' }).armor, { base: 11, type: 'light', strength: 0, stealth: false });
+  assert.deepEqual(itemStats({ name: 'Shield' }).armor, { base: 2, type: 'shield', strength: 0, stealth: false });
 
   // Not in the tables: read from the description.
   const blade = itemStats({ name: 'Sun Blade', kind: 'weapon', text: 'Martial melee weapon (finesse, versatile). 2d6 radiant damage.' });
   assert.deepEqual(blade.weapon, { damage: '2d6 radiant', ability: 'finesse', category: 'martial', properties: ['finesse', 'versatile'] });
   assert.equal(itemStats({ name: 'Elven Mail', kind: 'armor', text: 'Medium armour. AC 14 + Dex modifier (max 2).' }).armor.type, 'medium');
-  assert.deepEqual(itemStats({ name: 'Bag of Holding', kind: 'magic', text: 'A bag.' }), { kind: 'magic', weapon: null, armor: null, magic: 0 });
+  assert.deepEqual(itemStats({ name: 'Bag of Holding', kind: 'magic', text: 'A bag.' }), { kind: 'magic', weapon: null, armor: null, magic: 0, weight: null, charges: null, effects: [] });
 });
 
 test('gear: class proficiency from the PHB, unknown classes left to the player', () => {
@@ -106,4 +109,92 @@ test('gear: bought items join the inventory, stacking with the same item', () =>
   inv = addToInventory(inv, { id: 'i2', name: 'Potion of Healing', kind: 'potion', text: 'Regain 2d4+2 hit points.' }, 2, { classKey: 'wizard' });
   assert.deepEqual(inv.map((g) => [g.name, g.kind, g.qty, g.equipped]), [['Longsword', 'weapon', 3, 0], ['Potion of Healing', 'potion', 2, 0]]);
   assert.equal(inv[1].proficient, true, 'not a weapon or armour: nothing to be proficient with');
+});
+
+test('gear: charges and what magic items do, read from their descriptions', () => {
+  assert.deepEqual(itemCharges('This wand has 7 charges. … The wand regains 1d6 + 1 expended charges daily at dawn.'), { max: 7, used: 0, recharge: '1d6+1', when: 'dawn' });
+  assert.deepEqual(itemCharges('The staff has 10 charges and regains all expended charges daily at dawn.'), { max: 10, used: 0, recharge: 'all', when: 'dawn' });
+  assert.equal(itemCharges('A plain rope.'), null);
+
+  assert.deepEqual(itemEffects('You gain a +1 bonus to AC and saving throws while you wear this ring.'), [{ target: 'ac', value: 1 }, { target: 'saves', value: 1 }]);
+  assert.deepEqual(itemEffects('Your Strength score is 19 while you wear these gauntlets.'), [{ target: 'score.str', value: 19 }]);
+  assert.deepEqual(itemEffects('You gain a +2 bonus to AC if you are wearing no armor and using no shield.'), [{ target: 'ac_unarmored', value: 2 }]);
+  assert.deepEqual(itemEffects('You gain a +2 bonus to spell attack rolls and to the saving throw DCs of your warlock spells.'), [{ target: 'spell_attack', value: 2 }, { target: 'spell_dc', value: 2 }]);
+  assert.deepEqual(itemEffects('While you wear these boots, your walking speed increases by 10 feet.'), [{ target: 'speed', value: 10 }]);
+  assert.deepEqual(itemEffects('A bag that holds things.'), []);
+  // Kept clean: unknown targets and zero values dropped.
+  assert.deepEqual(normalizeGear({ name: 'X', effects: [{ target: 'ac', value: '2' }, { target: 'flying', value: 1 }, { target: 'saves', value: 0 }] }).effects, [{ target: 'ac', value: 2 }]);
+});
+
+test('gear: three attuned items at most (artificers more), only items that need it, the newest winning', () => {
+  const ring = (id) => ({ id, name: `Ring ${id}`, attunement: true, attuned: true });
+  const list = [ring('a'), ring('b'), ring('c'), ring('d'), { id: 'e', name: 'Rope', attuned: true }];
+  assert.deepEqual(normalizeInventory(list).map((g) => g.attuned), [true, true, true, false, false]);
+  assert.deepEqual(normalizeInventory(list, { latest: 'd' }).map((g) => g.attuned), [true, true, false, true, false]);
+  assert.deepEqual(normalizeInventory(list, { attuneMax: 4 }).map((g) => g.attuned), [true, true, true, true, false]);
+  assert.deepEqual([0, 10, 14, 18].map(attunementLimit), [3, 4, 5, 6]);
+  // The sheet works out an artificer's limit itself.
+  const sheet = (classes) => normalizeSheet({ ...emptySheet(), classes, inventory: list }).inventory.filter((g) => g.attuned).length;
+  assert.equal(sheet([{ name: 'Wizard', level: 12 }]), 3);
+  assert.equal(sheet([{ name: 'Artificer', level: 10 }]), 4);
+});
+
+test('gear: weight carried and the campaign\'s weight rule', () => {
+  const inv = [normalizeGear({ name: 'Plate armor', ...itemStats({ name: 'Plate armor' }) }), normalizeGear({ name: 'Dagger', qty: 4, ...itemStats({ name: 'Dagger' }) }), normalizeGear({ name: 'Rope' })];
+  assert.equal(carriedWeight(inv, { gp: 100 }), 65 + 4 + 2);
+  assert.equal(encumbrance(100, 10, 'ignore'), null);
+  assert.deepEqual(encumbrance(100, 10, 'capacity'), { rule: 'capacity', carried: 100, capacity: 150, level: 'none', speed: 0, disadvantage: false });
+  assert.equal(encumbrance(151, 10, 'capacity').level, 'over');
+  assert.equal(encumbrance(151, 10, 'capacity', { bigger: true }).level, 'none', 'Powerful Build doubles it');
+  assert.deepEqual(['none', 'encumbered', 'heavy', 'over'].map((l, i) => encumbrance([50, 51, 101, 151][i], 10, 'variant').level), ['none', 'encumbered', 'heavy', 'over']);
+  assert.equal(encumbrance(101, 10, 'variant').speed, -20);
+  assert.equal(encumbrance(101, 10, 'variant').disadvantage, true);
+  assert.deepEqual(normalizeSettings({ weight: 'nonsense', other: 1 }), { weight: 'capacity' });
+  assert.deepEqual(normalizeSettings({ weight: 'ignore' }), { weight: 'ignore' });
+
+  // On the sheet: Str 10, 30 ft. Plate armour (65 lb) without Strength 15: −10 ft and Stealth disadvantage.
+  const plate = { ...normalizeGear({ name: 'Plate armor', ...itemStats({ name: 'Plate armor' }) }), equipped: 1 };
+  const s = normalizeSheet({ ...emptySheet(), race: 'Human', abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, inventory: [plate, normalizeGear({ name: 'Anvil', weight: 90 })] });
+  assert.equal(computeSheet(s, { weight: 'ignore' }).values.speed, 20);
+  assert.equal(computeSheet(s, { weight: 'variant' }).values.speed, 5, '155 lb with Str 10: over 150');
+  assert.equal(computeSheet(s).values.speed, 5, 'over carrying capacity');
+  s.inventory[1].weight = 40; // 105 lb: heavily encumbered under the variant rule, fine otherwise
+  assert.equal(computeSheet(s).values.speed, 20);
+  const heavy = computeSheet(s, { weight: 'variant' });
+  assert.equal(heavy.values.speed, 0);
+  assert.equal(rollDisadvantage(heavy, { ability: 'str' }), 'heavily encumbered');
+  assert.equal(rollDisadvantage(heavy, { ability: 'wis', skill: 'stealth' }), 'Plate armor');
+  assert.equal(rollDisadvantage(computeSheet(s), { ability: 'str' }), '');
+});
+
+test('gear: magic items change the sheet while equipped, and attuned when they need it; typed values still win', () => {
+  const item = (name, text, extra = {}) => normalizeGear({ name, kind: 'magic', equipped: 1, ...itemStats({ name, kind: 'magic', text }), ...extra });
+  const s = normalizeSheet({
+    ...emptySheet(), race: 'Human', classes: [{ name: 'Warlock', level: 1 }],
+    abilities: { str: 8, dex: 14, con: 10, int: 10, wis: 10, cha: 16 },
+    inventory: [
+      item('Ring of Protection', 'You gain a +1 bonus to AC and saving throws while you wear this ring.', { attunement: true, attuned: true }),
+      item('Gauntlets of Ogre Power', 'Your Strength score is 19 while you wear these gauntlets.', { attunement: true, attuned: false }),
+      item('Bracers of Defense', 'You gain a +2 bonus to AC if you are wearing no armor and using no shield.', { attunement: true, attuned: true }),
+      item('Rod of the Pact Keeper, +1', 'You gain a +1 bonus to spell attack rolls and to the saving throw DCs of your warlock spells.', { attunement: true, attuned: true }),
+    ],
+  });
+  let c = computeSheet(s);
+  assert.equal(c.values.ac, 10 + 2 + 1 + 2);
+  assert.equal(c.values['save.int'], 1);
+  assert.equal(c.values['save.cha'], 3 + 2 + 1, 'proficient (warlock) + ring');
+  assert.equal(c.values['mod.str'], -1, 'gauntlets not attuned: no effect');
+  assert.equal(c.values.spell_attack, 2 + 3 + 1);
+  assert.equal(c.values.spell_dc, 8 + 2 + 3 + 1);
+  s.inventory[1].attuned = true;
+  s.inventory = normalizeInventory(s.inventory, { latest: s.inventory[1].id });
+  c = computeSheet(s);
+  assert.equal(s.inventory.filter((g) => g.attuned).length, 3, 'a fourth attunement pushes one off');
+  assert.equal(c.scores.str, 19);
+  assert.equal(c.values['mod.str'], 4);
+  // Armour on: the bracers stop working.
+  s.inventory.push({ ...normalizeGear({ name: 'Leather armor', ...itemStats({ name: 'Leather armor' }) }), equipped: 1 });
+  assert.equal(computeSheet(s).values.ac, 11 + 2 + (s.inventory[0].attuned ? 1 : 0));
+  s.overrides.ac = 12;
+  assert.equal(computeSheet(s).values.ac, 12);
 });

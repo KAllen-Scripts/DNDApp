@@ -172,9 +172,15 @@ export const rollModeFromEvent = (e) => (e?.shiftKey ? 'advantage' : e?.altKey ?
  * else (body is sent to it with the share setting; it answers like POST
  * /roll plus its own fields), with onServer(answer) called as soon as it
  * answers, before the dice land (spending a hit die: the sheet's new hit points).
+ * disadvantage: why the sheet says this d20 has disadvantage (heavy armour on
+ * Stealth): it's rolled with disadvantage, or normally if it also had advantage.
  */
-export async function roll(notation, { label = '', mode = null, then = null, initiative = false, path = null, body = {}, onServer = null } = {}) {
+export async function roll(notation, { label = '', mode = null, then = null, initiative = false, path = null, body = {}, onServer = null, disadvantage = '' } = {}) {
   if (!state.campaignId) return;
+  if (disadvantage) {
+    mode = (mode ?? state.nextMode) === 'advantage' ? 'normal' : 'disadvantage';
+    label = `${label} (disadvantage: ${disadvantage})`;
+  }
   const id = ++state.seq;
   let result;
   try {

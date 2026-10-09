@@ -12,11 +12,12 @@
 import { api, fileUrl, h, storage } from './api.js';
 import {
   ABILITIES, ABILITY_NAMES, SKILLS, CLASSES, RACES, BACKGROUNDS, ALIGNMENTS, SCHOOLS,
-  WEAPONS, classKey, computeSheet, coerceDerived, formatBonus, newAttack, normalizeSheet, normalizeSpell, hitDice as hitDiceOf,
+  WEAPONS, classKey, computeSheet, coerceDerived, formatBonus, newAttack, normalizeSheet, normalizeSpell, hitDice as hitDiceOf, rollDisadvantage,
 } from './shared/sheet.js';
 import { d20Plus } from './shared/dice.js';
 import { attackRolls, gearRolls, spellRolls } from './shared/rolls.js';
-import { GEAR_NAMES, classProficient, normalizeGear, normalizeInventory } from './shared/gear.js';
+import { EFFECT_TARGETS, GEAR_NAMES, MAX_EFFECTS, attunementLimit, carriedWeight, classProficient, normalizeGear, normalizeInventory } from './shared/gear.js';
+import { WEIGHT_RULES } from './shared/settings.js';
 import { roll, rollModeFromEvent, modeButtons, D20_ICON } from './dice.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -34,6 +35,7 @@ const state = {
   sheet: null,
   version: 0,
   calc: null,
+  settings: { weight: 'capacity' }, // the campaign's (campaign-settings.js)
   layout: null, // the layout the sheet was last drawn in
   renders: [], // functions that refresh automatic values
   gearDraws: [], // functions that redraw what shows the inventory (the Inventory tab, equipped weapons in Attacks)
@@ -78,6 +80,12 @@ channel?.addEventListener('message', async (e) => {
   const res = await state.guarded(() => api('GET', `${base()}/sheet`)).catch(() => null);
   if (res && newer() && !state.dirty && !state.saving) useSheet(res.sheet, res.version);
 });
+
+/** The campaign's settings changed (or a campaign was entered): work the sheet out again. */
+export function setSheetSettings(settings) {
+  state.settings = settings;
+  if (state.sheet && $('#sheet').childElementCount) render();
+}
 
 function useSheet(sheet, version) {
   state.sheet = normalizeSheet(sheet);
@@ -162,7 +170,7 @@ window.addEventListener('beforeunload', (e) => {
 // ---------- automatic values ----------
 
 function refresh() {
-  state.calc = computeSheet(state.sheet);
+  state.calc = computeSheet(state.sheet, state.settings);
   for (const r of state.renders) r();
 }
 
@@ -235,31 +243,31 @@ function autoCheck(key, label) {
 
 // ---------- plain fields ----------
 
-/** An input bound to a path in the sheet. kind: text | int | longtext */
+/** An input bound to a path in the sheet. kind: text | int | number (decimals) | longtext */
 function field(path, { label, kind = 'text', placeholder = '', list, cls = '', nullable = false, rows = 4, onChange } = {}) {
   const value = getPath(state.sheet, path);
   const el =
     kind === 'longtext'
       ? h('textarea', { rows, placeholder, 'aria-label': label })
-      : h('input', { type: 'text', placeholder, 'aria-label': label, inputMode: kind === 'int' ? 'numeric' : 'text', list, autocomplete: 'off' });
+      : h('input', { type: 'text', placeholder, 'aria-label': label, inputMode: kind === 'int' ? 'numeric' : kind === 'number' ? 'decimal' : 'text', list, autocomplete: 'off' });
   el.value = value ?? '';
   el.className = cls;
   el.addEventListener('input', () => {
     let v = el.value;
-    if (kind === 'int') {
+    if (kind === 'int' || kind === 'number') {
       if (v.trim() === '') {
         if (!nullable) return;
         v = null;
       } else {
-        v = parseInt(v.replace(/^\s*\+/, ''), 10);
-        if (!Number.isFinite(v)) return;
+        v = kind === 'int' ? parseInt(v.replace(/^\s*\+/, ''), 10) : Number(v.trim());
+        if (!Number.isFinite(v) || (kind === 'number' && v < 0)) return;
       }
     }
     setPath(state.sheet, path, v);
     onChange?.();
     changed();
   });
-  if (kind === 'int') el.addEventListener('blur', () => (el.value = getPath(state.sheet, path) ?? ''));
+  if (kind === 'int' || kind === 'number') el.addEventListener('blur', () => (el.value = getPath(state.sheet, path) ?? ''));
   return el;
 }
 
@@ -319,12 +327,12 @@ function rollButton(content, get, cls = '') {
   const b = h('button', { type: 'button', class: `roll-name ${cls}`, title: 'Click to roll (Shift: advantage, Alt: disadvantage)' }, content);
   b.addEventListener('click', (e) => {
     const r = get();
-    roll(r.notation, { label: r.label, mode: rollModeFromEvent(e), then: r.then, initiative: r.initiative });
+    roll(r.notation, { label: r.label, mode: rollModeFromEvent(e), then: r.then, initiative: r.initiative, disadvantage: r.disadvantage });
   });
   return b;
 }
-/** A d20 plus an automatic value: "Stealth" → 1d20+2. */
-const check = (key, label) => () => ({ notation: d20Plus(state.calc.values[key]), label });
+/** A d20 plus an automatic value: "Stealth" → 1d20+2. why: { ability, skill } it uses, for disadvantage from the sheet (heavy armour, weight). */
+const check = (key, label, why = {}) => () => ({ notation: d20Plus(state.calc.values[key]), label, disadvantage: rollDisadvantage(state.calc, why) });
 
 function datalist(id, options) {
   return h('datalist', { id }, options.map((o) => h('option', { value: o })));
@@ -389,9 +397,10 @@ function abilityTiles() {
   return h('div', { class: 'abilities' },
     ABILITIES.map((a) =>
       h('div', { class: 'ability' },
-        rollButton(ABILITY_NAMES[a], check(`mod.${a}`, `${ABILITY_NAMES[a]} check`), 'lbl'),
+        rollButton(ABILITY_NAMES[a], check(`mod.${a}`, `${ABILITY_NAMES[a]} check`, { ability: a }), 'lbl'),
         auto(`mod.${a}`, { kind: 'bonus', label: `${ABILITY_NAMES[a]} modifier`, cls: 'mod' }),
         field(`abilities.${a}`, { label: `${ABILITY_NAMES[a]} score`, kind: 'int', cls: 'score' }),
+        itemScore(a),
       ),
     ),
   );
@@ -403,9 +412,10 @@ function abilityGroup(a) {
   score.title = 'Score';
   return h('section', { class: 'sh-box ability-group' },
     h('div', { class: 'ability-head' },
-      h('h3', {}, rollButton(ABILITY_NAMES[a], check(`mod.${a}`, `${ABILITY_NAMES[a]} check`))),
+      h('h3', {}, rollButton(ABILITY_NAMES[a], check(`mod.${a}`, `${ABILITY_NAMES[a]} check`, { ability: a }))),
       auto(`mod.${a}`, { kind: 'bonus', label: `${ABILITY_NAMES[a]} modifier`, cls: 'mod' }),
       score,
+      itemScore(a),
     ),
     h('ul', { class: 'checklist' }, saveRow(a, 'Saving throw'), SKILLS_BY_ABILITY[a].map((k) => skillRow(k, false))),
   );
@@ -415,8 +425,23 @@ function saveRow(a, name = ABILITY_NAMES[a]) {
   return h('li', {},
     autoCheck(`save_prof.${a}`, `Proficient in ${ABILITY_NAMES[a]} saves`),
     auto(`save.${a}`, { kind: 'bonus', label: `${ABILITY_NAMES[a]} save` }),
-    rollButton(name, check(`save.${a}`, `${ABILITY_NAMES[a]} save`), 'row-name'),
+    rollButton(name, check(`save.${a}`, `${ABILITY_NAMES[a]} save`, { ability: a }), 'row-name'),
   );
+}
+
+/** The score a magic item gives (Gauntlets of Ogre Power: 19), when it's not the one typed. */
+function itemScore(a) {
+  const el = h('span', { class: 'item-score muted small' });
+  const paint = () => {
+    const own = Number(state.sheet.abilities[a]);
+    const now = state.calc.scores?.[a] ?? own;
+    const from = (state.calc.effects ?? []).filter((e) => e.target === `score.${a}` || e.target === `bonus.${a}`).map((e) => e.from);
+    el.textContent = now !== own ? `${now} with items` : '';
+    el.title = now !== own ? `From ${[...new Set(from)].join(', ')} (Inventory)` : '';
+  };
+  paint();
+  state.renders.push(paint);
+  return el;
 }
 
 function skillRow(k, withAbility = true) {
@@ -439,7 +464,7 @@ function skillRow(k, withAbility = true) {
   return h('li', {},
     mark,
     auto(`skill.${k}`, { kind: 'bonus', label: name }),
-    rollButton([name, withAbility && h('span', { class: 'muted small' }, ` (${cap(ability)})`)], check(`skill.${k}`, name), 'row-name'),
+    rollButton([name, withAbility && h('span', { class: 'muted small' }, ` (${cap(ability)})`)], check(`skill.${k}`, name, { ability, skill: k }), 'row-name'),
   );
 }
 
@@ -468,9 +493,30 @@ const core = () => h('div', { class: 'core' }, abilityTiles(), h('div', { class:
 const vitals = () =>
   h('div', { class: 'vitals' },
     stat(auto('ac', { label: 'Armour class' }), 'Armour class', 'big'),
-    stat(auto('initiative', { kind: 'bonus', label: 'Initiative' }), 'Initiative', 'big', () => ({ ...check('initiative', 'Initiative')(), initiative: true })),
+    stat(auto('initiative', { kind: 'bonus', label: 'Initiative' }), 'Initiative', 'big', () => ({ ...check('initiative', 'Initiative', { ability: 'dex' })(), initiative: true })),
     stat(auto('speed', { label: 'Speed (feet)' }), 'Speed', 'big'),
+    loadNote('sheet-warn'),
   );
+
+/** What the gear does to speed and rolls: too heavy, armour without the Strength for it, noisy armour. */
+function loadNote(cls) {
+  const el = h('p', { class: `${cls} small`, role: 'note' });
+  const paint = () => {
+    const { load, tooHeavy, disadvantage } = state.calc;
+    const notes = [];
+    if (load?.level === 'over') notes.push(`Over your carrying capacity (${load.carried} of ${load.capacity} lb): speed 5 ft${load.disadvantage ? ', disadvantage on Strength, Dexterity and Constitution rolls' : ''}.`);
+    else if (load?.level === 'heavy') notes.push(`Heavily encumbered (${load.carried} lb): speed −20 ft, disadvantage on Strength, Dexterity and Constitution rolls.`);
+    else if (load?.level === 'encumbered') notes.push(`Encumbered (${load.carried} lb): speed −10 ft.`);
+    if (tooHeavy) notes.push(`${tooHeavy.name} needs Strength ${tooHeavy.armor.strength}: speed −10 ft.`);
+    const noisy = disadvantage?.find((d) => d.skills.includes('stealth'));
+    if (noisy) notes.push(`${noisy.why}: disadvantage on Stealth.`);
+    el.textContent = notes.join(' ');
+    el.hidden = !notes.length;
+  };
+  paint();
+  state.renders.push(paint);
+  return el;
+}
 
 const hp = () =>
   box('Hit points', 'hp',
@@ -650,7 +696,7 @@ function attackRow(i, draw) {
   hit.addEventListener('click', (e) => {
     const r = attackRolls(a, state.calc);
     const title = a.name.trim() || 'Attack';
-    roll(r.hit, { label: `${title}: to hit`, mode: rollModeFromEvent(e), then: r.damage && { label: `${title}: damage`, notation: r.damage } });
+    roll(r.hit, { label: `${title}: to hit`, mode: rollModeFromEvent(e), then: r.damage && { label: `${title}: damage`, notation: r.damage }, disadvantage: rollDisadvantage(state.calc, { ability: a.ability === 'finesse' ? 'dex' : a.ability }) });
   });
   const damage = h('button', { type: 'button', class: 'icon-roll dmg-roll', title: 'Roll damage', 'aria-label': 'Roll damage' }, 'Dmg');
   damage.addEventListener('click', () => {
@@ -683,7 +729,7 @@ function gearAttackRow(g) {
   hit.innerHTML = D20_ICON;
   hit.addEventListener('click', (e) => {
     const now = gearRolls(g, state.calc);
-    roll(now.hit, { label: `${title}: to hit`, mode: rollModeFromEvent(e), then: now.damage && { label: `${title}: damage`, notation: now.damage } });
+    roll(now.hit, { label: `${title}: to hit`, mode: rollModeFromEvent(e), then: now.damage && { label: `${title}: damage`, notation: now.damage }, disadvantage: rollDisadvantage(state.calc, { ability: g.weapon.ability === 'finesse' ? 'dex' : g.weapon.ability }) });
   });
   const damage = (two) => h('button', { type: 'button', class: 'icon-roll dmg-roll', title: two ? 'Roll damage with both hands (versatile)' : 'Roll damage', 'aria-label': `Roll ${title} damage${two ? ' with both hands' : ''}`, onclick: () => {
     const now = gearRolls(g, state.calc);
@@ -705,11 +751,14 @@ function gearAttackRow(g) {
 
 const GEAR_KINDS = { weapon: 'Weapon', armor: 'Armour', gear: 'Gear', tool: 'Tool', potion: 'Potion', scroll: 'Scroll', magic: 'Magic item', other: 'Other' };
 const firstClassKey = () => classKey(state.sheet.classes.find((c) => c.name.trim())?.name);
+/** How many items this character can be attuned to (3; artificers more). */
+const attuneLimit = () => attunementLimit(state.sheet.classes.filter((c) => classKey(c.name) === 'artificer').reduce((n, c) => n + (Number(c.level) || 0), 0));
+const lb = (n) => `${Math.round(n * 100) / 100} lb`;
 
 /** The inventory changed: clean it (one armour, one shield), update the sheet and save soon. */
 function gearChanged(latest = null) {
   const before = new Map(state.sheet.inventory.map((g) => [g.id, g.equipped]));
-  state.sheet.inventory = normalizeInventory(state.sheet.inventory, { latest });
+  state.sheet.inventory = normalizeInventory(state.sheet.inventory, { latest, attuneMax: attuneLimit() });
   const off = state.sheet.inventory.filter((g) => before.get(g.id) && !g.equipped).map((g) => g.name);
   changed();
   for (const d of state.gearDraws) d();
@@ -744,12 +793,33 @@ function inventoryTab() {
   draw();
   state.gearDraws.push(draw);
   state.renders.push(() => list.querySelectorAll('.gear-sum').forEach((el) => el.__paint?.()));
+  // Above the list: weight carried against the campaign's limit, and attunement.
+  const summary = h('p', { class: 'gear-summary small' });
+  const paint = () => {
+    const carried = carriedWeight(state.sheet.inventory, state.sheet.coins);
+    const load = state.calc.load;
+    const rule = state.settings.weight;
+    const weight = !load
+      ? `Carrying ${lb(carried)} (${WEIGHT_RULES.ignore.toLowerCase()}: this campaign has none).`
+      : rule === 'variant'
+        ? `Carrying ${lb(carried)}: encumbered over ${load.encumbered} lb, heavily over ${load.heavy} lb, at most ${load.capacity} lb.`
+        : `Carrying ${lb(carried)} of ${load.capacity} lb.`;
+    const attuned = state.sheet.inventory.filter((g) => g.attuned).length;
+    summary.replaceChildren(h('span', {}, weight), ' ', h('span', {}, `Attuned to ${attuned} of ${attuneLimit()}.`), ' ', h('span', { class: 'muted' }, 'Coins weigh 1 lb per 50.'));
+  };
+  paint();
+  state.renders.push(paint);
+  const note = loadNote('gear-warn');
+  const old = $('#tab-inventory .gear-top');
+  const top = h('div', { class: 'gear-top' }, summary, note);
+  if (old) old.replaceWith(top);
+  else list.before(top);
 }
 
 function gearRow(g) {
   const at = () => state.sheet.inventory.indexOf(g);
   const p = () => `inventory.${at()}`;
-  const tick = (label, checked, onchange, title = '') => h('label', { class: 'check', title }, h('input', { type: 'checkbox', checked, 'aria-label': `${label}: ${g.name}`, onchange: (e) => onchange(e.target.checked) }), label);
+  const tick = (label, checked, onchange, title = '') => h('label', { class: 'check', title }, h('input', { type: 'checkbox', checked, 'aria-label': `${label}: ${g.name}`, onchange: (e) => onchange(e.target.checked, e.target) }), label);
   const wearable = !!(g.weapon || g.armor || g.attunement || g.kind === 'magic' || g.kind === 'other' || g.kind === 'gear');
   // Weapons: as many equipped as you have (two daggers); armour and the rest: on or off.
   const equip = !wearable ? null : g.weapon && g.qty > 1
@@ -765,8 +835,11 @@ function gearRow(g) {
       const r = gearRolls(g, state.calc);
       sum.textContent = `${formatBonus(r.bonus)} to hit · ${r.damage ?? r.flat ?? '–'}${r.type ? ` ${r.type}` : ''}${r.damage2 ? ` (${r.damage2} with both hands)` : ''}`;
     } else if (g.armor) {
-      sum.textContent = g.armor.type === 'shield' ? `+${g.armor.base + g.magic} AC` : `AC ${g.armor.base + g.magic}${g.armor.type === 'light' ? ' + Dex' : g.armor.type === 'medium' ? ' + Dex (max 2)' : ''}`;
+      sum.textContent = g.armor.type === 'shield' ? `+${g.armor.base + g.magic} AC` : `AC ${g.armor.base + g.magic}${g.armor.type === 'light' ? ' + Dex' : g.armor.type === 'medium' ? ' + Dex (max 2)' : ''}${g.armor.strength ? ` · Str ${g.armor.strength}` : ''}${g.armor.stealth ? ' · Stealth disadvantage' : ''}`;
     } else sum.textContent = '';
+    const effects = g.effects.map(effectText).join(', ');
+    if (effects) sum.textContent += `${sum.textContent ? ' · ' : ''}${effects}${g.attunement && !g.attuned ? ' (when attuned)' : !g.equipped ? ' (when equipped)' : ''}`;
+    if (g.weight != null) sum.textContent += `${sum.textContent ? ' · ' : ''}${lb(g.weight * g.qty)}`;
   };
   sum.__paint();
   const details = h('details', { class: 'gear-details' }, h('summary', {}, 'Details'));
@@ -793,8 +866,20 @@ function gearRow(g) {
       g.armor ? labelled('Type', select('Armour type', g.armor.type, { light: 'Light (+ Dex)', medium: 'Medium (+ Dex, max 2)', heavy: 'Heavy', shield: 'Shield' }, (v) => (g.armor.type = v))) : null,
       g.armor ? labelled(g.armor.type === 'shield' ? 'AC bonus' : 'Base AC', field(`${p()}.armor.base`, { label: 'Armour class', kind: 'int', onChange: () => sum.__paint() })) : null,
       labelled('Magic bonus', field(`${p()}.magic`, { label: 'Magic bonus', kind: 'int', onChange: () => { sum.__paint(); for (const d of state.attackDraws) d(); } })),
+      labelled('Weight (lb, each)', field(`${p()}.weight`, { label: 'Weight in pounds', kind: 'number', nullable: true, onChange: () => { sum.__paint(); refresh(); } })),
+      labelled('Charges', (() => {
+        const el = h('input', { type: 'number', min: '0', max: '999', class: 'num', value: g.charges ? String(g.charges.max) : '', 'aria-label': `Charges: ${g.name}`, placeholder: 'none' });
+        el.addEventListener('change', () => {
+          const max = parseInt(el.value, 10);
+          g.charges = max > 0 ? { max, used: Math.min(g.charges?.used ?? 0, max), recharge: g.charges?.recharge ?? '', when: g.charges?.when ?? 'dawn' } : null;
+          gearChanged();
+        });
+        return el;
+      })()),
+      g.charges ? labelled('They come back', field(`${p()}.charges.recharge`, { label: 'Charges regained', placeholder: '1d6+1, 3 or all', onChange: () => gearChanged() })) : null,
       h('div', { class: 'flags' }, tick('Needs attunement', g.attunement, (on) => { g.attunement = on; gearChanged(); })),
     ),
+    effectsEditor(g),
     labelled('Description', field(`${p()}.text`, { label: 'Item description', kind: 'longtext', rows: 5 }), 'wide'),
     g.source ? h('p', { class: 'muted small' }, `Source: ${g.source}`) : null);
   });
@@ -807,7 +892,15 @@ function gearRow(g) {
       labelled('Qty', qty, 'inline'),
       equip,
       g.weapon || g.armor ? tick('Proficient', g.proficient, (on) => { g.proficient = on; gearChanged(); }, 'Are you proficient with it? Ticked for you when your class is; change it if not.') : null,
-      g.attunement ? tick('Attuned', g.attuned, (on) => { g.attuned = on; gearChanged(); }) : null,
+      g.attunement ? tick('Attuned', g.attuned, (on, box) => {
+        if (on && state.sheet.inventory.filter((x) => x.attuned).length >= attuneLimit()) {
+          box.checked = false;
+          return gearStatus(`You can be attuned to ${attuneLimit()} items at most. Stop being attuned to one first.`, true);
+        }
+        g.attuned = on;
+        gearChanged(g.id);
+      }, 'Needs attunement: its magic only works while you are attuned (at most three items, more for an artificer).') : null,
+      g.charges ? chargesControl(g) : null,
       sum,
       removeButton(`Remove ${g.name}`, () => {
         if (!confirm(`Remove ${g.name} from your inventory?`)) return;
@@ -818,6 +911,72 @@ function gearRow(g) {
     details,
   );
   return row;
+}
+
+/** "+1 AC", "Strength becomes 19". */
+function effectText(e) {
+  if (e.target.startsWith('score.')) return `${ABILITY_NAMES[e.target.slice(6)]} ${e.value}`;
+  if (e.target.startsWith('bonus.')) return `${ABILITY_NAMES[e.target.slice(6)]} ${formatBonus(e.value)}`;
+  if (e.target === 'speed') return `speed ${formatBonus(e.value)} ft`;
+  return `${formatBonus(e.value)} ${EFFECT_TARGETS[e.target].replace(/^All s/, 's').replace(/^AC \(no armour or shield\)/, 'AC without armour or shield')}`;
+}
+
+/** What a magic item does to the sheet while equipped (and attuned): read from its description, changeable here. */
+function effectsEditor(g) {
+  const list = h('div', { class: 'effects' });
+  const draw = () => {
+    list.replaceChildren(
+      h('span', { class: 'lbl' }, 'What it does to your sheet (while equipped, and attuned if it needs it)'),
+      ...g.effects.map((e, i) => {
+        const target = h('select', { 'aria-label': `Effect ${i + 1}: ${g.name}` }, Object.entries(EFFECT_TARGETS).map(([v, n]) => new Option(n, v)));
+        target.value = e.target;
+        target.addEventListener('change', () => { e.target = target.value; gearChanged(); draw(); });
+        const value = h('input', { type: 'number', class: 'num', value: String(e.value), 'aria-label': `Effect ${i + 1} amount: ${g.name}` });
+        value.addEventListener('change', () => {
+          e.value = parseInt(value.value, 10) || 0;
+          if (!e.value) g.effects.splice(i, 1);
+          gearChanged();
+          draw();
+        });
+        return h('div', { class: 'effect' }, target, value, removeButton(`Remove this effect of ${g.name}`, () => { g.effects.splice(i, 1); gearChanged(); draw(); }));
+      }),
+      g.effects.length < MAX_EFFECTS ? addButton('Add an effect', () => { g.effects.push({ target: 'ac', value: 1 }); gearChanged(); draw(); }) : null,
+    );
+  };
+  draw();
+  return list;
+}
+
+/** Charges left, with Use and Recharge (rolled when it's dice, like a wand's 1d6+1). */
+function chargesControl(g) {
+  const left = () => g.charges.max - g.charges.used;
+  const text = h('span', { class: 'charges-left' });
+  const paint = () => (text.textContent = `${left()} of ${g.charges.max} charges`);
+  paint();
+  const use = h('button', { type: 'button', class: 'ghost small', 'aria-label': `Use a charge: ${g.name}`, onclick: () => {
+    if (!left()) return gearStatus(`${g.name} has no charges left.`, true);
+    g.charges.used += 1;
+    gearChanged();
+  } }, 'Use 1');
+  const back = h('button', { type: 'button', class: 'ghost small', 'aria-label': `Recharge: ${g.name}`, title: g.charges.recharge ? `Regains ${g.charges.recharge}${g.charges.when ? ` at ${g.charges.when}` : ''}` : 'All charges back', onclick: async () => {
+    const r = g.charges.recharge;
+    if (!r || r === 'all') {
+      g.charges.used = 0;
+      gearChanged();
+      return gearStatus(`${g.name}: all ${g.charges.max} charges back.`);
+    }
+    if (/^\d+$/.test(r)) {
+      g.charges.used = Math.max(0, g.charges.used - Number(r));
+      gearChanged();
+      return gearStatus(`${g.name}: ${r} charges back.`);
+    }
+    await roll(r, { label: `${g.name}: charges regained`, onServer: (res) => {
+      g.charges.used = Math.max(0, g.charges.used - (Number(res.total) || 0));
+      gearChanged();
+      gearStatus(`${g.name}: ${res.total} charges back.`);
+    } });
+  } }, 'Recharge');
+  return h('span', { class: 'charges' }, text, use, back);
 }
 
 // Everything else.
@@ -1106,7 +1265,7 @@ function render() {
   state.renders = [];
   state.gearDraws = [];
   state.attackDraws = [];
-  state.calc = computeSheet(state.sheet);
+  state.calc = computeSheet(state.sheet, state.settings);
   state.layout = currentLayout();
   $('#sheet').replaceChildren(
     datalist('dl-races', RACES),

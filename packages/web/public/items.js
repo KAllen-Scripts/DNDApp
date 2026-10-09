@@ -9,6 +9,7 @@
 import { api, fileUrl, h, readBase64, LoggedOut } from './api.js';
 import { markdownBox } from './markdown.js';
 import { formatPrice, splitPrice, COIN_VALUES } from './shared/coins.js';
+import { EFFECT_TARGETS } from './shared/gear.js';
 
 const $ = (sel) => document.querySelector(sel);
 export const ITEM_KIND_NAMES = { weapon: 'Weapon', armor: 'Armour', gear: 'Adventuring gear', tool: 'Tool', potion: 'Potion', scroll: 'Scroll', magic: 'Magic item', other: 'Other' };
@@ -50,6 +51,8 @@ export async function loadItems({ campaignId, guarded }) {
   draw();
 }
 
+const LOAD = { encumbered: 'encumbered', heavy: 'heavily encumbered', over: 'over their carrying capacity' };
+
 /** What each player has equipped, with the AC and attacks it gives them (the rest of their sheet stays private). */
 async function loadEquipped() {
   const box = $('#items-equipped');
@@ -60,11 +63,16 @@ async function loadEquipped() {
     box.replaceChildren(...(res.players.length ? res.players.map((p) => h('article', { class: 'equipped-player' },
       h('h3', {}, p.character || p.name, p.character ? h('span', { class: 'muted small' }, ` (${p.name})`) : null,
         p.ac != null ? h('span', { class: 'tag', title: p.ac_own ? 'The player typed this AC themselves' : 'Worked out from what they have equipped' }, `AC ${p.ac}${p.ac_own ? ' (typed)' : ''}`) : null),
+      p.carried != null ? h('p', { class: 'muted small' },
+        `Carrying ${p.carried} lb${p.capacity ? ` of ${p.capacity}` : ''}`,
+        LOAD[p.load] ? h('strong', {}, ` (${LOAD[p.load]})`) : '',
+        ` · attuned to ${p.attuned} item${p.attuned === 1 ? '' : 's'}`) : null,
       p.gear.length
         ? h('ul', { class: 'equipped-list' }, p.gear.map((g) => h('li', {},
           h('strong', {}, g.name), g.equipped > 1 ? ` ×${g.equipped}` : '',
           g.to_hit != null ? ` · ${sign(g.to_hit)} to hit, ${g.damage ?? 'no damage'}` : '',
           g.armor ? (g.armor.type === 'shield' ? ` · +${g.armor.base + g.magic} AC` : ` · ${g.armor.type} armour, AC ${g.armor.base + g.magic}`) : '',
+          g.effects?.length ? ` · ${g.effects.map((e) => `${EFFECT_TARGETS[e.target] ?? e.target} ${e.value > 0 && !e.target.startsWith('score.') ? '+' : ''}${e.value}`).join(', ')}` : '',
           (g.weapon || g.armor || g.to_hit != null) && !g.proficient ? h('span', { class: 'muted' }, ' · not proficient') : '',
           g.attunement ? h('span', { class: 'muted' }, g.attuned ? ' · attuned' : ' · not attuned') : '')))
         : h('p', { class: 'muted small' }, 'Nothing equipped.'),

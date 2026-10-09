@@ -1245,3 +1245,18 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .map-terrain .difficult.ai { stroke: #b388ff; }
 .map-terrain.players .difficult { stroke-opacity: 0.6; }
 .map-terrain .hatch { stroke: rgb(201 162 39 / 0.55); stroke-width: 2px; }
+
+/* Inventory: weight and attunement above the list; charges and magic item effects on a row. */
+.gear-top { margin: 0.4rem 0; }
+.gear-summary { margin: 0; display: flex; flex-wrap: wrap; gap: 0.2rem 0.6rem; }
+.gear-warn, .sheet-warn { margin: 0.2rem 0; color: var(--error); }
+.sheet-warn { grid-column: 1 / -1; }
+.gear-warn[hidden], .sheet-warn[hidden] { display: none; }
+.charges { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; }
+.charges button { padding: 0.1rem 0.45rem; }
+.effects { display: grid; gap: 0.3rem; margin: 0.4rem 0; }
+.effects .effect { display: flex; gap: 0.4rem; align-items: center; }
+.effects .effect select { width: auto; }
+.effects .effect input.num { width: 4rem; }
+.item-score { display: block; text-align: center; font-size: 0.7rem; }
+.item-score:empty { display: none; }

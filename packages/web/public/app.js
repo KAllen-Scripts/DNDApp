@@ -16,6 +16,7 @@ import { loadMaps, initMapActions, stopMaps } from './map.js';
 import { placeCreature, placeMerchant } from './map-dm.js';
 import { loadTable, stopTable, handoutsOpened } from './table.js';
 import { setRestsCampaign, initRests } from './rests.js';
+import { setSettingsCampaign, initSettings } from './campaign-settings.js';
 import { loadArchivist, initArchivistActions } from './archivist.js';
 import { loadCreatures, initCreatureActions } from './creatures.js';
 import { loadItems, initItemActions } from './items.js';
@@ -196,6 +197,7 @@ async function enterCampaign(campaign) {
   else showTab(here.hidden || here.classList.contains('user-hidden') ? firstTab() : currentTab);
   setSheetCampaign(campaign.id);
   setRestsCampaign({ campaignId: campaign.id, guarded, isDm, userId: state.me.user.id });
+  setSettingsCampaign({ campaignId: campaign.id, guarded, isDm, settings: campaign.settings });
   if (SHEET_WINDOW && isDm) {
     // A sheet window left open from before someone became the DM: there's no sheet to show.
     $('#tab-sheet').hidden = false;
@@ -748,5 +750,6 @@ initItemActions();
 initMerchantActions({ place: placeMerchant });
 initDice();
 initRests();
+initSettings();
 initLook();
 start().catch((err) => showLogin(err.message));

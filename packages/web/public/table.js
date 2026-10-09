@@ -11,6 +11,7 @@ import { api, listen, fileUrl, h, readBase64, LoggedOut } from './api.js';
 import { tableRoll } from './dice.js';
 import { merchantChanged } from './merchants.js';
 import { restHeard } from './rests.js';
+import { settingsHeard } from './campaign-settings.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -65,6 +66,7 @@ function startLive() {
           else if (event === 'handout-gone') onGone(data.id);
           else if (event === 'merchant') merchantChanged(data.id);
           else if (event === 'rest') restHeard(data);
+          else if (event === 'settings') settingsHeard(data);
         }, { signal: controller.signal });
       } catch (err) {
         if (controller.signal.aborted) return;
