@@ -28,6 +28,7 @@
  *     items/<id>/changes.jsonl         the whole item after each change, append-only
  *     merchants/<id>/<picture file>    a merchant's picture, as uploaded
  *     merchants/<id>/changes.jsonl     the whole merchant (stock, prices, sales) after each change, append-only
+ *     rests.jsonl                      short and long rests the DM called, append-only
  *     sessions/0001/
  *       transcript.txt                 byte-for-byte as uploaded, read-only
  *       meta.json                      number, title, played_on, sha256
@@ -255,6 +256,7 @@ export function createArchive(root) {
 
     /** The whole item or merchant after a change. */
     appendLibrary: (slug, folder, id, entry) => appendLine(path.join(campaignDir(slug), libraryDir(folder), mapDir(id), 'changes.jsonl'), entry),
+    appendRest: (slug, entry) => appendLine(path.join(campaignDir(slug), 'rests.jsonl'), entry),
 
     /** Knowledge-base snapshot and journal after an archivist run. */
     saveRunOutput(slug, runLabel, files) {
@@ -351,6 +353,7 @@ export function createArchive(root) {
           creatures,
           items: lastOfEach('items'),
           merchants: lastOfEach('merchants'),
+          rests: readLines(path.join(campaignDir(slug), 'rests.jsonl')),
         };
       }
     },

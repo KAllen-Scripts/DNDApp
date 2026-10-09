@@ -151,7 +151,7 @@ export function emptySheet({ name = '', player_name = '' } = {}) {
     inspiration: false,
     skills: {}, // skill key -> 'proficient' | 'expertise'
     hp: { current: null, temp: null },
-    hit_dice_used: 0,
+    hit_dice_spent: {}, // die size -> how many of those hit dice are spent, e.g. { 10: 2, 6: 1 }
     death_saves: { successes: 0, failures: 0 },
     attacks: [], // { name, bonus, damage, notes }
     coins: Object.fromEntries(COINS.map((c) => [c, 0])),
@@ -214,7 +214,10 @@ export function normalizeSheet(input = {}) {
     if (SKILLS[k] && (v === 'proficient' || v === 'expertise')) out.skills[k] = v;
   }
   out.hp = { current: int(s.hp?.current, { min: -999, max: 9999 }), temp: int(s.hp?.temp, { min: 0, max: 9999 }) };
-  out.hit_dice_used = int(s.hit_dice_used, { min: 0, max: 40, fallback: 0 });
+  for (const [die, n] of Object.entries(s.hit_dice_spent ?? {})) {
+    const used = int(n, { min: 0, max: 40, fallback: 0 });
+    if (HIT_DIE_SIZES.includes(Number(die)) && used) out.hit_dice_spent[die] = used;
+  }
   out.death_saves = {
     successes: int(s.death_saves?.successes, { min: 0, max: 3, fallback: 0 }),
     failures: int(s.death_saves?.failures, { min: 0, max: 3, fallback: 0 }),
@@ -234,7 +237,106 @@ export function normalizeSheet(input = {}) {
     const c = coerceDerived(k, v);
     if (c !== undefined) out.overrides[k] = c;
   }
+  // Sheets from before hit dice were kept per die size had one number: count those from the biggest die down.
+  const legacy = int(s.hit_dice_used, { min: 0, max: 40, fallback: 0 });
+  if (legacy && s.hit_dice_spent == null) out.hit_dice_spent = spendFromBiggest(hitDicePool(computeSheet(out).values.hit_dice), {}, legacy);
   return out;
+}
+
+// ---------- hit dice and rests ----------
+
+/** Hit dice come in these sizes (a typed-in "3d20" is ignored). */
+export const HIT_DIE_SIZES = [4, 6, 8, 10, 12, 20];
+
+/** "4d10 + 3d6" -> { 10: 4, 6: 3 }. Reads whatever is in the Hit dice box, typed or automatic. */
+export function hitDicePool(text) {
+  const pool = {};
+  for (const [, n, die] of String(text ?? '').matchAll(/(\d+)\s*d\s*(\d+)/gi)) {
+    if (HIT_DIE_SIZES.includes(Number(die))) pool[die] = Math.min(40, (pool[die] ?? 0) + Number(n));
+  }
+  return pool;
+}
+
+/** Spend `n` more hit dice, the biggest first, as far as the pool goes. */
+function spendFromBiggest(pool, spent, n) {
+  const out = { ...spent };
+  const sizes = Object.keys(pool).map(Number).sort((a, b) => b - a);
+  for (const die of sizes) {
+    const take = Math.min(n, pool[die] - (out[die] ?? 0));
+    if (take > 0) {
+      out[die] = (out[die] ?? 0) + take;
+      n -= take;
+    }
+  }
+  return out;
+}
+
+/** Per die size: { die, total, spent, left }, biggest first. */
+export function hitDice(sheet, values = computeSheet(sheet).values) {
+  const pool = hitDicePool(values.hit_dice);
+  return Object.keys(pool).map(Number).sort((a, b) => b - a)
+    .map((die) => {
+      const spent = Math.min(pool[die], sheet.hit_dice_spent?.[die] ?? 0);
+      return { die, total: pool[die], spent, left: pool[die] - spent };
+    });
+}
+
+/**
+ * Spend one hit die: `total` is what was rolled (the die plus the Constitution modifier).
+ * You regain that many hit points (never fewer than none), up to your maximum.
+ * @returns {{ sheet, healed }} a new sheet; healed is how many hit points it gave back.
+ */
+export function spendHitDie(sheet, die, total) {
+  const { values } = computeSheet(sheet);
+  const row = hitDice(sheet, values).find((d) => d.die === die);
+  if (!row?.left) throw new Error(row ? `You have no d${die} hit dice left.` : `Your hit dice have no d${die}.`);
+  const out = structuredClone(sheet);
+  out.hit_dice_spent[die] = row.spent + 1;
+  const max = values.hp_max;
+  const now = out.hp.current ?? max ?? 0;
+  const after = max == null ? now + Math.max(0, total) : Math.max(now, Math.min(max, now + Math.max(0, total)));
+  out.hp.current = after;
+  return { sheet: out, healed: after - now };
+}
+
+/** A short rest: warlocks get their Pact Magic slots back. (Hit dice are spent one at a time, with spendHitDie.) */
+export function shortRest(sheet) {
+  const out = structuredClone(sheet);
+  out.spellcasting.pact_used = 0;
+  return out;
+}
+
+/**
+ * A long rest. Both editions: all hit points back, temporary hit points gone,
+ * every spell slot back, death saves cleared. Spent hit dice: the 2014 rules
+ * give back up to half your total (at least one), the biggest first; the 2024
+ * rules give them all back. In 2014 a character at 0 hit points gets nothing
+ * from it (you need at least 1 hit point when it starts).
+ * @returns {{ sheet, rested: boolean, regained: { hp, hit_dice } }}
+ */
+export function longRest(sheet, { edition = '2014' } = {}) {
+  const { values } = computeSheet(sheet);
+  if (edition !== '2024' && sheet.hp.current != null && sheet.hp.current <= 0) return { sheet, rested: false, regained: { hp: 0, hit_dice: 0 } };
+  const out = structuredClone(sheet);
+  const before = out.hp.current ?? values.hp_max ?? 0;
+  if (values.hp_max != null) out.hp.current = values.hp_max;
+  out.hp.temp = null;
+  out.death_saves = { successes: 0, failures: 0 };
+  out.spellcasting.slots_used = {};
+  out.spellcasting.pact_used = 0;
+  const dice = hitDice(sheet, values);
+  const all = dice.reduce((sum, d) => sum + d.total, 0);
+  let back = edition === '2024' ? all : Math.max(1, Math.floor(all / 2));
+  const spent = {};
+  let regained = 0;
+  for (const d of dice) {
+    const take = Math.min(back, d.spent);
+    back -= take;
+    regained += take;
+    if (d.spent - take) spent[d.die] = d.spent - take;
+  }
+  out.hit_dice_spent = spent;
+  return { sheet: out, rested: true, regained: { hp: (out.hp.current ?? before) - before, hit_dice: regained } };
 }
 
 /** The sheet's classes with their rules (null rules for classes outside the PHB). */

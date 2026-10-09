@@ -12,7 +12,7 @@ import path from 'node:path';
 import { setup, createFakeLLM, fakeEmbedder, terrain, makePdf } from './helpers.js';
 import { createContext } from '../src/context.js';
 import { normalizeItem } from '../src/items.js';
-import { normalizeMerchant, afterLongRest, SAME_REST_MS } from '../src/merchants.js';
+import { normalizeMerchant, afterLongRest } from '../src/merchants.js';
 import { emptySheet } from '@dndapp/shared/sheet.js';
 
 const readOut = { readable: true, kind: 'battle', name: 'Market', description: '', grid: { visible: false, columns: null, rows: null }, scale: { distance: null, unit: null, per: null }, notes: '' };
@@ -74,15 +74,14 @@ test('normalizeItem and normalizeMerchant: defaults, and anything unknown droppe
   assert.equal(m.restock.every, 1);
 });
 
-test('afterLongRest: counts rests, restocks on the Nth, and rests close together are one', () => {
+test('afterLongRest: counts rests and restocks on the Nth, back up to each level', () => {
   const m = normalizeMerchant({ id: 'x', stock: [{ item: 'aaaaaaaaaa', qty: 0, full: 3 }, { item: 'bbbbbbbbbb', qty: 5, full: 2 }, { item: 'cccccccccc', qty: null, full: null }], restock: { every: 2 } });
   const t0 = Date.parse('2026-10-09T10:00:00Z');
   const at = (ms) => new Date(t0 + ms).toISOString();
   const one = afterLongRest(m, at(0));
   assert.equal(one.restock.rests, 1);
   assert.equal(one.stock[0].qty, 0, 'not yet');
-  assert.equal(afterLongRest(one, at(SAME_REST_MS - 1000)), null, 'another player resting soon after is the same rest');
-  const two = afterLongRest(one, at(SAME_REST_MS + 1000));
+  const two = afterLongRest(one, at(3600_000));
   assert.equal(two.restock.rests, 0);
   assert.equal(two.stock[0].qty, 3, 'back up to its level');
   assert.equal(two.stock[1].qty, 5, 'never down');
@@ -262,19 +261,22 @@ test('merchants: a player buys; coins come off their sheet (with change), the it
   }
 });
 
-test('merchants: restock every N long rests (one party rest however many rest), or by hand', async () => {
+test('merchants: restock every N long rests the DM calls (short rests do not count), or by hand', async () => {
   const t = await setup({ llm: llm() });
   try {
     const { m, base } = await shop(t, { restock_every: 2 });
     giveCoins(t, t.sam, { gp: 200 });
     await t.request('POST', `${base}/buy`, { as: t.sam.token, body: { line: m.stock[0].id, qty: 2 } });
     const stock = async () => (await t.request('GET', `/campaigns/${t.campaign.id}/merchants`)).json().merchants[0];
-    const rest = (at, userIds) => t.events.emit('long-rest', { campaignId: t.campaign.id, userIds, by: userIds[0], at });
-    rest('2026-10-09T10:00:00Z', [t.sam.id]);
-    rest('2026-10-09T10:05:00Z', [t.alex.id]);
-    assert.equal((await stock()).restock.rests, 1, 'two players resting together is one rest');
+    const rest = async (kind) => {
+      const res = await t.request('POST', `/campaigns/${t.campaign.id}/rests`, { body: { kind } });
+      assert.ok(res.statusCode < 300, res.body);
+    };
+    await rest('long');
+    await rest('short');
+    assert.equal((await stock()).restock.rests, 1, 'one long rest; the short one does not count');
     assert.equal((await stock()).stock[0].qty, 0);
-    rest('2026-10-09T20:00:00Z', [t.sam.id, t.alex.id]);
+    await rest('long');
     const after = await stock();
     assert.equal(after.stock[0].qty, 2, 'restocked');
     assert.equal(after.restock.rests, 0);

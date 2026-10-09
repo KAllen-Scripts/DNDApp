@@ -11,12 +11,13 @@ import { createKB } from './kb/store.js';
 import { createArchivist } from './kb/archivist.js';
 import { createUpdates } from './kb/updates.js';
 import { createHandouts } from './handouts.js';
+import { createRolls } from './rolls.js';
+import { createRests } from './rests.js';
 import { createCreatures } from './creatures.js';
 import { createCreatureFinder } from './creatures-find.js';
 import { createItems } from './items.js';
 import { createItemFinder } from './items-find.js';
 import { createMerchants } from './merchants.js';
-import { createCampaignEvents } from './campaign-events.js';
 import { createPipeline } from './pipeline/ingest.js';
 import { createJobs } from './jobs.js';
 import { createQA } from './qa/agent.js';
@@ -50,9 +51,6 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const creatures = createCreatures({ db, archive, store });
   const items = createItems({ db, archive, store });
   const merchants = createMerchants({ db, archive, store });
-  // A long rest (the rests on the character sheet) counts towards merchants restocking.
-  const events = createCampaignEvents({ log });
-  events.on('long-rest', ({ campaignId, at }) => merchants.longRest(campaignId, { at }));
   handouts.events.on('update', ({ campaign_id }) => jobs.scheduleUpdates(campaign_id));
   // Sheet changes, late note edits and handouts reach the archivist between sessions.
   const updates = createUpdates({ db, store, archive, handoutsBetween: handouts.forArchivist });
@@ -60,6 +58,17 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const jobs = createJobs({ db, store, search, pipeline, config, log });
   const books = createBooks({ dir: config.booksDir, log });
   const qa = createQA({ db, store, kb, search, books, llm, config });
+  const rolls = createRolls({ db });
+  const rests = createRests({ db, archive, store, sheets, rolls, books, config });
+  // Each long rest the DM calls counts towards merchants restocking.
+  rests.events.on('rest', (rest) => {
+    if (rest.kind !== 'long') return;
+    try {
+      merchants.longRest(rest.campaign_id, { at: rest.at });
+    } catch (err) {
+      log?.error?.(err);
+    }
+  });
   const spells = createSpells({ books, llm });
   const sheetImport = createSheetImport({ llm });
   const pictureDescriber = createPictureDescriber({ llm });
@@ -80,5 +89,5 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   // Changes made while the server was off (or before its last run finished) still reach the archivist.
   for (const { id } of db.prepare('SELECT id FROM campaigns').all()) if (updates.pendingSince(id)) jobs.scheduleUpdates(id);
 
-  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, creatures, items, itemFinder, merchants, events, pipeline, jobs, qa, books, spells, sheets, sheetImport, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, restored };
+  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, creatures, rolls, rests, items, itemFinder, merchants, pipeline, jobs, qa, books, spells, sheets, sheetImport, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, restored };
 }

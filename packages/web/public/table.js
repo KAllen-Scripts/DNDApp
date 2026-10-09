@@ -5,10 +5,12 @@
  *   - Handouts: pictures and text the DM gives to everyone or chosen players.
  *     The Handouts tab lists the ones given to you; the DM gives, changes who
  *     gets them, and takes them back. A new one marks the tab until it's opened.
+ *   - Rests: a short or long rest the DM called that includes you (rests.js).
  */
 import { api, listen, fileUrl, h, readBase64, LoggedOut } from './api.js';
 import { tableRoll } from './dice.js';
 import { merchantChanged } from './merchants.js';
+import { restHeard } from './rests.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -62,6 +64,7 @@ function startLive() {
           else if (event === 'handout') onHandout(data);
           else if (event === 'handout-gone') onGone(data.id);
           else if (event === 'merchant') merchantChanged(data.id);
+          else if (event === 'rest') restHeard(data);
         }, { signal: controller.signal });
       } catch (err) {
         if (controller.signal.aborted) return;

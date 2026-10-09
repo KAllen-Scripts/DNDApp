@@ -138,10 +138,15 @@ export function tableRoll(r) {
   state.history.unshift(entry);
   state.history.length = Math.min(state.history.length, 50);
   drawHistory();
+  const secret = entry.visibility !== 'party' ? ` (${visibilityNote(entry)})` : '';
+  showToast(h('strong', {}, entry.name), ` rolled ${entry.label}: `, h('strong', { class: 'dt-total' }, String(r.result.total)), r.result.natural === 20 ? ' (natural 20!)' : r.result.natural === 1 ? ' (natural 1)' : '', secret);
+}
+
+/** A short note at the top right for a few seconds (someone's roll, a rest the DM called). */
+export function showToast(...content) {
   const toast = $('#dice-toast');
   if (!toast) return;
-  const secret = entry.visibility !== 'party' ? ` (${visibilityNote(entry)})` : '';
-  toast.replaceChildren(h('strong', {}, entry.name), ` rolled ${entry.label}: `, h('strong', { class: 'dt-total' }, String(r.result.total)), r.result.natural === 20 ? ' (natural 20!)' : r.result.natural === 1 ? ' (natural 1)' : '', secret);
+  toast.replaceChildren(...content);
   toast.hidden = false;
   clearTimeout(state.toastTimer);
   state.toastTimer = setTimeout(() => (toast.hidden = true), 6000);
@@ -161,18 +166,24 @@ export const rollModeFromEvent = (e) => (e?.shiftKey ? 'advantage' : e?.altKey ?
  * Roll some dice and show them. label names the roll ("Stealth"); mode is
  * advantage/disadvantage (default: whatever the tray says for the next d20);
  * then is a follow-up offered with the result ({ label, notation }: damage
- * after an attack).
+ * after an attack). path: a server route that rolls for something else (body
+ * is sent to it with the share setting; it answers like POST /roll plus its
+ * own fields), with onServer(answer) called as soon as it answers, before
+ * the dice land (spending a hit die: the sheet's new hit points).
  */
-export async function roll(notation, { label = '', mode = null, then = null } = {}) {
+export async function roll(notation, { label = '', mode = null, then = null, path = null, body = {}, onServer = null } = {}) {
   if (!state.campaignId) return;
   const id = ++state.seq;
   let result;
   try {
-    result = await state.guarded(() => api('POST', `/campaigns/${state.campaignId}/roll`, { notation, mode: mode ?? state.nextMode, label, visibility: share() }));
+    result = path
+      ? await state.guarded(() => api('POST', path, { ...body, visibility: share() }))
+      : await state.guarded(() => api('POST', `/campaigns/${state.campaignId}/roll`, { notation, mode: mode ?? state.nextMode, label, visibility: share() }));
   } catch (err) {
     return showError(err.message);
   }
   if (!result) return; // logged out
+  onServer?.(result);
   if (result.natural != null && state.nextMode !== 'normal') setNextMode('normal');
   const entry = { ...(result.roll ? fromServer(result.roll) : { label: label || result.notation, at: new Date(), mine: true, visibility: share() }), result, then };
   entry.label = label || result.notation;

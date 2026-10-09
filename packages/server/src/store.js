@@ -9,6 +9,7 @@ import { replayMap } from './maps/store.js';
 import { normalizePins } from '@dndapp/shared/map.js';
 import { normalizePictures } from './characters/pictures.js';
 import { normalizeHandout } from './handouts.js';
+import { normalizeRest } from './rests.js';
 import { normalizeCreature } from './creatures.js';
 import { normalizeItem } from './items.js';
 import { normalizeMerchant } from './merchants.js';
@@ -314,7 +315,7 @@ export function createStore({ db, archive, config }) {
           }
         }
         for (const entry of archive.readAll()) {
-          const { campaign, sessions, members, speakers, glossary, corrections, playerNotes, sheets = [], maps = [], characters = [], handouts = [], creatures = [], items = [], merchants = [] } = entry;
+          const { campaign, sessions, members, speakers, glossary, corrections, playerNotes, sheets = [], maps = [], characters = [], handouts = [], creatures = [], rests = [], items = [], merchants = [] } = entry;
           if (db.prepare('SELECT 1 FROM campaigns WHERE slug = ?').get(campaign.slug)) continue;
           const cid = Number(
             db
@@ -381,6 +382,8 @@ export function createStore({ db, archive, config }) {
           for (const x of items.map(normalizeItem)) insItem.run(x.id, cid, JSON.stringify(x), x.created_at, x.updated_at);
           const insMerchant = db.prepare('INSERT OR IGNORE INTO merchants (id, campaign_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)');
           for (const m of merchants.map(normalizeMerchant)) insMerchant.run(m.id, cid, JSON.stringify(m), m.created_at, m.updated_at);
+          const insRest = db.prepare('INSERT OR IGNORE INTO rests (id, campaign_id, kind, at, data) VALUES (?, ?, ?, ?, ?)');
+          for (const r of rests.map(normalizeRest)) insRest.run(r.id, cid, r.kind, r.at, JSON.stringify(r));
           restored.push(campaign.slug);
         }
       })();

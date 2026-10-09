@@ -178,7 +178,7 @@ CREATE INDEX IF NOT EXISTS creatures_campaign ON creatures(campaign_id);
 
 -- The DM's items (weapons, potions, gear...), stocked by merchants. Archived
 -- as items/<id>/changes.jsonl (the whole item each time) plus its picture.
--- Schema v13.
+-- Schema v14.
 CREATE TABLE IF NOT EXISTS items (
   id           TEXT PRIMARY KEY,  -- random, also the archive folder name
   campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
@@ -191,7 +191,7 @@ CREATE INDEX IF NOT EXISTS items_campaign ON items(campaign_id);
 -- Merchants: a shop the DM puts on maps as a token, with items in stock at
 -- a price that players buy themselves. Archived as merchants/<id>/changes.jsonl
 -- (the whole merchant, stock and recent sales each time) plus its picture.
--- Schema v13.
+-- Schema v14.
 CREATE TABLE IF NOT EXISTS merchants (
   id           TEXT PRIMARY KEY,  -- random, also the archive folder name
   campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
@@ -315,6 +315,17 @@ CREATE TABLE IF NOT EXISTS rolls (
   rolled_at    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS rolls_campaign ON rolls(campaign_id, id);
+
+-- Short and long rests the DM called for the party. Archived as rests.jsonl.
+-- Things that happen "every N long rests" count these. Schema v13.
+CREATE TABLE IF NOT EXISTS rests (
+  id           TEXT PRIMARY KEY,  -- random
+  campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  kind         TEXT NOT NULL,     -- short | long
+  at           TEXT NOT NULL,
+  data         TEXT NOT NULL      -- JSON; see normalizeRest in src/rests.js
+);
+CREATE INDEX IF NOT EXISTS rests_campaign ON rests(campaign_id, kind, at);
 
 CREATE TABLE IF NOT EXISTS jobs (
   id           INTEGER PRIMARY KEY,

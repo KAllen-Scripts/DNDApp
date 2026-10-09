@@ -4,7 +4,7 @@
  * level (or no limit). Players buy on their own: the price comes out of the
  * coins on their character sheet and the item goes into its equipment, and
  * the stock goes down. A merchant can restock (back up to each item's
- * "restock to" level) every so many long rests.
+ * "restock to" level) every so many long rests the DM calls (rests.js).
  *
  * Players see a merchant only while one of its tokens is on a map they can
  * see, and never the DM's notes. Archived like creatures (library.js); the
@@ -19,8 +19,6 @@ export const MAX_STOCK = 200;
 export const MAX_SALES = 50;
 export const MAX_MERCHANT_NOTES = 4000;
 export const MERCHANT_COLOR = '#c9a227';
-/** Long rests closer together than this (by different players, say) count as one. */
-export const SAME_REST_MS = 2 * 3600_000;
 
 const str = (v, max) => String(v ?? '').slice(0, max);
 const whole = (v, { min = 0, max = 1e9, fallback = null } = {}) => (v == null || v === '' || !Number.isFinite(Number(v)) ? fallback : Math.min(max, Math.max(min, Math.round(Number(v)))));
@@ -81,14 +79,12 @@ export function restocked(m, at) {
 }
 
 /**
- * A long rest happened at `at`: count it, and restock if it's time. Rests
- * within SAME_REST_MS of the last one counted are the same rest. Returns the
- * changed merchant, or null if nothing changed.
+ * The DM called a long rest at `at` (one for the party, rests.js): count it,
+ * and restock if it's time. Returns the changed merchant, or null if it
+ * doesn't restock on rests.
  */
 export function afterLongRest(m, at) {
   if (!m.restock.every || m.removed) return null;
-  const last = m.restock.last_rest_at ? Date.parse(m.restock.last_rest_at) : NaN;
-  if (Number.isFinite(last) && Math.abs(Date.parse(at) - last) < SAME_REST_MS) return null;
   const counted = { ...m, restock: { ...m.restock, rests: m.restock.rests + 1, last_rest_at: at } };
   return counted.restock.rests >= m.restock.every ? restocked(counted, at) : counted;
 }
@@ -103,7 +99,7 @@ export function createMerchants({ db, archive, store }) {
     ...lib,
     events,
 
-    /** A long rest in a campaign: each merchant that restocks counts it. Returns the merchants that restocked. */
+    /** The DM called a long rest: each merchant that restocks counts it. Returns the merchants that restocked. */
     longRest(cid, { at = new Date().toISOString() } = {}) {
       const out = [];
       for (const m of lib.list(cid)) {
