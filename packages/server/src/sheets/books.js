@@ -4,9 +4,11 @@
  * (about 1.5 seconds for the Player's Handbook). Scanned books work if the PDF
  * has an OCR text layer.
  *
- * Two uses:
+ * Three uses:
  *   - spells, found by their printed heading: a name line followed by
  *     "1st-level evocation" or "Evocation cantrip";
+ *   - creatures' stat blocks, found the same way: a name line followed by
+ *     "Small humanoid (goblinoid), neutral evil" and then its Armor Class;
  *   - the Q&A agent's book tools: keyword search over pages (the agent picks
  *     the words), reading pages, and a table of contents (the PDF's bookmarks,
  *     else the capitalised headings on each page).
@@ -22,6 +24,10 @@ import { readPdf } from './pdf.js';
 // "1st-level evocation", "Evocation cantrip", OCR mangles like "3rd~evelevoeaUon",
 // and the 2024 books' "Level 1 Evocation (Wizard)".
 const LEVEL_LINE = /^\s*(?:[0-9IlOo]{1,2}\s*(?:st|nd|rd|th)\s*[-–~.]?\s*[lI|]?\s*ev|[a-z]+\s*cantrip|[lI|]eve[lI|]\s*[0-9IlOo]\s+[a-z])/i;
+// A stat block's second line, "Small humanoid (goblinoid), neutral evil" or the 2024 books'
+// "Small Fey (Goblinoid), Chaotic Neutral", then "Armor Class 15" or "AC 15" a few lines on.
+const SIZE_LINE = /^\s*(?:tiny|small|medium|large|huge|gargantuan)\b(?:\s+or\s+\w+)?\s+[a-z]+/i;
+const AC_LINE = /^\s*(?:armo[u]?r\s*c[l1I]ass|AC)\s*\d/i;
 const SMALL_WORDS = new Set(['of', 'from', 'and', 'the', 'to', 'a', 'an', 'in', 'on', 'with', 'for', 'or']);
 
 /** Compare names despite OCR mix-ups (l/1/I, 0/O) and punctuation. */
@@ -110,17 +116,47 @@ export function createBooks({ dir, log = console }) {
   let books = [];
   /** @type {{ name: string, norm: string, book: number, line: number }[]} */
   let spells = [];
+  /** @type {{ name: string, norm: string, book: number, line: number }[]} */
+  let creatures = [];
 
   function index() {
     spells = [];
+    creatures = [];
     books.forEach((b, bi) => {
       for (let j = 0; j < b.lines.length - 1; j++) {
         if (isHeading(b.lines[j].text) && LEVEL_LINE.test(b.lines[j + 1].text) && castingTimeAfter(b.lines, j)) {
           const name = titleCase(b.lines[j].text);
           spells.push({ name, norm: normName(name), book: bi, line: j });
+        } else if (isNameLine(b.lines[j].text) && SIZE_LINE.test(b.lines[j + 1].text) && acAfter(b.lines, j)) {
+          const name = titleCase(b.lines[j].text);
+          creatures.push({ name, norm: normName(name), book: bi, line: j });
         }
       }
     });
+  }
+
+  /** The closest heading to `name` in `list` (exact, else a few OCR-sized differences), or null. */
+  function closest(list, name) {
+    const want = normName(name);
+    if (!want) return null;
+    let hit = list.find((s) => s.norm === want);
+    if (!hit) {
+      const allowed = Math.max(1, Math.floor(want.length / 8));
+      let best = Infinity;
+      for (const s of list) {
+        const d = distance(want, s.norm);
+        if (d < best && d <= allowed) [best, hit] = [d, s];
+      }
+    }
+    return hit ?? null;
+  }
+
+  /** The printed text from a heading to the next heading of the same kind (at most `max` lines). */
+  function textFrom(list, hit, max) {
+    const { lines, title } = books[hit.book];
+    const next = list.find((s) => s.book === hit.book && s.line > hit.line);
+    const end = Math.min(next ? next.line : lines.length, hit.line + max);
+    return { name: hit.name, book: title, page: lines[hit.line].page, text: lines.slice(hit.line, end).map((l) => l.text.trimEnd()).join('\n') };
   }
 
   /** Read every PDF in the folder (once). Safe to call repeatedly. */
@@ -172,27 +208,20 @@ export function createBooks({ dir, log = console }) {
      */
     async findSpell(name) {
       await load();
-      const want = normName(name);
-      if (!want) return null;
-      let hit = spells.find((s) => s.norm === want);
-      if (!hit) {
-        const allowed = Math.max(1, Math.floor(want.length / 8));
-        let best = Infinity;
-        for (const s of spells) {
-          const d = distance(want, s.norm);
-          if (d < best && d <= allowed) [best, hit] = [d, s];
-        }
-      }
-      if (!hit) return null;
-      const { lines, title } = books[hit.book];
-      const next = spells.find((s) => s.book === hit.book && s.line > hit.line);
-      const end = Math.min(next?.book === hit.book ? next.line : lines.length, hit.line + 150);
-      return {
-        name: hit.name,
-        book: title,
-        page: lines[hit.line].page,
-        text: lines.slice(hit.line, end).map((l) => l.text.trimEnd()).join('\n'),
-      };
+      const hit = closest(spells, name);
+      return hit && textFrom(spells, hit, 150);
+    },
+
+    /**
+     * A creature's printed stat block, from its name to the next creature's.
+     * "Goblin 3" and "a goblin" find the Goblin.
+     * @returns {Promise<{ name: string, book: string, page: number, text: string } | null>}
+     */
+    async findCreature(name) {
+      await load();
+      const plain = String(name ?? '').replace(/\s+\d+$/, '').replace(/^\s*(?:an?|the)\s+/i, '');
+      const hit = closest(creatures, plain);
+      return hit && textFrom(creatures, hit, 120);
     },
 
     /**
@@ -311,6 +340,17 @@ export function createBooks({ dir, log = console }) {
     return { error: loose.length ? `"${name}" could be ${loose.map((b) => b.title).join(' or ')}. Give the full title.` : `No book called "${name}". ${all}` };
   }
 }
+
+/** A creature's name: a short line without sentence punctuation, mostly letters (any case). */
+function isNameLine(line) {
+  const t = line.trim();
+  if (t.length < 2 || t.length > 45 || /[:.;,]/.test(t) || SIZE_LINE.test(t) || AC_LINE.test(t)) return false;
+  const chars = t.replace(/\s/g, '');
+  return ((chars.match(/[A-Za-z'()-]/g) ?? []).length) / chars.length >= 0.8;
+}
+
+/** A creature's size line is followed within a few lines by its Armor Class. */
+const acAfter = (lines, j) => lines.slice(j + 2, j + 7).some((l) => AC_LINE.test(l.text));
 
 /** A spell's heading is followed within a few lines by its casting time (not a class's "Spellcasting" or "Cantrips"). */
 const castingTimeAfter = (lines, j) => lines.slice(j + 1, j + 7).some((l) => /casting\s*t[il1]me/i.test(l.text));
