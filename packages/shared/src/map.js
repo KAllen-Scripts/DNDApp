@@ -210,7 +210,7 @@ export function normalizeRecordLink(r) {
 /** Record kinds that sound like someone you could put on a map (the archivist names kinds freely). */
 export const PERSON_KIND = /npc|person|people|character|creature|monster|villain|ally|allies|enem|faction member|figure|beast|foe/i;
 
-/** A creature's stat block (the DM's; players never get it). source: ai (the AI's memory), web (found online) or manual. */
+/** A creature's stat block (the DM's; players never get it). source: book (the group's books; `from` says which and the page), ai (the AI's memory), web (found online) or manual. */
 export function normalizeStats(st) {
   if (!st || typeof st !== 'object') return null;
   const text = longStr(st.text, 8000);
@@ -222,7 +222,8 @@ export function normalizeStats(st) {
     speed: str(st.speed, 120),
     challenge: str(st.challenge, 40),
     text,
-    source: pick(st.source, ['ai', 'web', 'manual'], 'manual'),
+    source: pick(st.source, ['book', 'ai', 'web', 'manual'], 'manual'),
+    ...(st.from && { from: str(st.from, 200) }),
   };
 }
 
