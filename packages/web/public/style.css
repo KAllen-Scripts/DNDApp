@@ -658,7 +658,19 @@ input.num, .sheet .num { text-align: center; }
 .sh-table .th { margin-bottom: -0.15rem; }
 .sh-table .th .lbl { padding-left: 0.1rem; }
 .classes .tr { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) var(--num) var(--ctl); }
-.attacks .tr { grid-template-columns: minmax(0, 1.25fr) 4.2rem minmax(0, 1.4fr) var(--ctl) var(--ctl); }
+.attacks .tr { grid-template-columns: minmax(0, 1.25fr) 4.2rem minmax(0, 1.4fr) var(--ctl) auto var(--ctl); }
+/* Under each attack: what it adds (ability, proficiency, magic) or the save it calls for, and what it rolls. */
+.attacks .atk-opts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.7rem; font-size: 0.8rem; padding-bottom: 0.3rem; border-bottom: 1px dashed var(--border); }
+.atk-opts select, .atk-opts input { height: auto; min-height: 0; padding: 0.15rem 0.3rem; font-size: 0.8rem; width: auto; }
+.atk-opts input.num { width: 3rem; }
+.atk-opts .fld.inline { flex-direction: row-reverse; align-items: center; gap: 0.3rem; }
+.atk-opts label.check { flex: none; font-size: 0.8rem; }
+.atk-sum { flex: 1 1 10rem; text-align: right; }
+.sheet button.dmg-roll { width: auto; padding: 0 0.45rem; font-size: 0.75rem; font-weight: 700; }
+.spell-rolls { display: inline-flex; align-items: center; gap: 0.3rem; }
+.spell-rolls:empty { display: none; }
+.spell-rolls select { width: auto; height: auto; padding: 0.1rem 0.25rem; font-size: 0.8rem; }
+.spell-roll-fields { margin-top: 0.3rem; }
 .classes .th > :nth-child(3), .attacks .th > :nth-child(2) { text-align: center; padding: 0; white-space: nowrap; }
 .sheet button.icon-x {
   display: grid; place-items: center; width: var(--ctl); height: var(--ctl); padding: 0;
@@ -684,8 +696,9 @@ input.num, .sheet .num { text-align: center; }
 .sheet button.add-row:hover { border-style: solid; border-color: var(--accent); }
 /* Narrow boxes: damage goes on its own line, so names and damage aren't cut off. */
 @container (max-width: 400px) {
-  .attacks .tr { grid-template-columns: minmax(0, 1fr) var(--num) var(--ctl) var(--ctl); padding-bottom: 0.35rem; border-bottom: 1px dashed var(--border); }
+  .attacks .tr { grid-template-columns: minmax(0, 1fr) var(--num) var(--ctl) auto var(--ctl); }
   .attacks .tr > :nth-child(3) { grid-column: 1 / -1; grid-row: 2; }
+  .atk-sum { text-align: left; }
   .attacks .th { display: none; }
 }
 
@@ -906,7 +919,7 @@ details.spell > summary::-webkit-details-marker { display: none; }
 
 @media print {
   body { background: #fff; color: #000; }
-  .topbar, .sheet-bar, .add-spell, .spell-actions, .slot-help, .reset, .add-row, .icon-x, .sh-tabbar, button.link { display: none !important; }
+  .topbar, .sheet-bar, .add-spell, .spell-actions, .slot-help, .reset, .add-row, .icon-x, .icon-roll, .spell-rolls select, .sh-tabbar, button.link { display: none !important; }
   #app-view, #app-view.wide { max-width: none; height: auto; display: block; }
   .panel { display: block; overflow: visible; padding: 0; }
   .panel:not(#tab-sheet) { display: none !important; }

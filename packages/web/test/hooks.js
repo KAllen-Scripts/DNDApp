@@ -25,6 +25,7 @@ const VENDOR_FILES = {
 const MODULES = {
   'shared/sheet.js': '@dndapp/shared/sheet.js',
   'shared/dice.js': '@dndapp/shared/dice.js',
+  'shared/rolls.js': '@dndapp/shared/rolls.js',
   'shared/map.js': '@dndapp/shared/map.js',
   'shared/citations.js': '@dndapp/shared/citations.js',
   'vendor/marked.js': 'marked',

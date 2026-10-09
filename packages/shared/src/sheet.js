@@ -110,6 +110,35 @@ export const TEXT_FIELDS = {
 };
 
 const COINS = ['cp', 'sp', 'ep', 'gp', 'pp'];
+
+/**
+ * What an attack adds to hit and to damage: '' = nothing (the bonus and
+ * damage are as written, as on sheets from before 2026-10-09 and uploads),
+ * an ability, finesse (the better of Strength and Dexterity) or spell (the
+ * spellcasting ability).
+ */
+export const ATTACK_ABILITIES = ['', ...ABILITIES, 'finesse', 'spell'];
+export const DAMAGE_TYPES = ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder'];
+
+/** The PHB weapons (SRD): typing one as an attack's name fills in its damage and ability. */
+export const WEAPONS = Object.fromEntries([
+  ['Club', '1d4 bludgeoning', 'str'], ['Dagger', '1d4 piercing', 'finesse'], ['Greatclub', '1d8 bludgeoning', 'str'],
+  ['Handaxe', '1d6 slashing', 'str'], ['Javelin', '1d6 piercing', 'str'], ['Light hammer', '1d4 bludgeoning', 'str'],
+  ['Mace', '1d6 bludgeoning', 'str'], ['Quarterstaff', '1d6 bludgeoning', 'str'], ['Sickle', '1d4 slashing', 'str'],
+  ['Spear', '1d6 piercing', 'str'], ['Light crossbow', '1d8 piercing', 'dex'], ['Dart', '1d4 piercing', 'finesse'],
+  ['Shortbow', '1d6 piercing', 'dex'], ['Sling', '1d4 bludgeoning', 'dex'], ['Battleaxe', '1d8 slashing', 'str'],
+  ['Flail', '1d8 bludgeoning', 'str'], ['Glaive', '1d10 slashing', 'str'], ['Greataxe', '1d12 slashing', 'str'],
+  ['Greatsword', '2d6 slashing', 'str'], ['Halberd', '1d10 slashing', 'str'], ['Lance', '1d12 piercing', 'str'],
+  ['Longsword', '1d8 slashing', 'str'], ['Maul', '2d6 bludgeoning', 'str'], ['Morningstar', '1d8 piercing', 'str'],
+  ['Pike', '1d10 piercing', 'str'], ['Rapier', '1d8 piercing', 'finesse'], ['Scimitar', '1d6 slashing', 'finesse'],
+  ['Shortsword', '1d6 piercing', 'finesse'], ['Trident', '1d6 piercing', 'str'], ['War pick', '1d8 piercing', 'str'],
+  ['Warhammer', '1d8 bludgeoning', 'str'], ['Whip', '1d4 slashing', 'finesse'], ['Blowgun', '1 piercing', 'dex'],
+  ['Hand crossbow', '1d6 piercing', 'dex'], ['Heavy crossbow', '1d10 piercing', 'dex'], ['Longbow', '1d8 piercing', 'dex'],
+  ['Unarmed strike', '1 bludgeoning', 'str'],
+].map(([name, damage, ability]) => [name.toLowerCase(), { name, damage, ability }]));
+
+/** A new attack: proficient, Strength, nothing written yet. */
+export const newAttack = () => ({ name: '', kind: 'attack', ability: 'str', proficient: true, magic: 0, bonus: '', save: '', dc: '', damage: '', notes: '' });
 const SPELL_SOURCES = ['srd', 'book', 'ai', 'import', 'manual'];
 
 // ---------- helpers ----------
@@ -153,7 +182,7 @@ export function emptySheet({ name = '', player_name = '' } = {}) {
     hp: { current: null, temp: null },
     hit_dice_used: 0,
     death_saves: { successes: 0, failures: 0 },
-    attacks: [], // { name, bonus, damage, notes }
+    attacks: [], // see newAttack() and normalizeAttack()
     coins: Object.fromEntries(COINS.map((c) => [c, 0])),
     spellcasting: { class: '', slots_used: {}, pact_used: 0 },
     spells: [],
@@ -172,7 +201,60 @@ export function coerceDerived(key, v) {
   }
 }
 
+/**
+ * An attack or other action on the sheet. kind: attack (a d20 to hit, then
+ * damage) or save (the target saves against a DC; damage only). bonus and dc
+ * are the player's own numbers (blank: worked out); damage is dice and a
+ * type, "1d8 slashing", plus anything extra the player adds ("1d8+1d6 slashing").
+ */
+export function normalizeAttack(a = {}) {
+  return {
+    name: str(a.name, 100),
+    kind: a.kind === 'save' ? 'save' : 'attack',
+    // Attacks saved before abilities existed keep their numbers exactly as written.
+    ability: ATTACK_ABILITIES.includes(a.ability) ? a.ability : '',
+    proficient: a.proficient === undefined ? true : bool(a.proficient),
+    magic: int(a.magic, { min: -10, max: 10, fallback: 0 }),
+    bonus: str(a.bonus, 20),
+    save: ABILITIES.includes(a.save) ? a.save : '',
+    dc: str(a.dc, 20),
+    damage: str(a.damage, 100),
+    notes: str(a.notes, 500),
+  };
+}
+
+const ABILITY_WORDS = Object.fromEntries(ABILITIES.map((a) => [ABILITY_NAMES[a].toLowerCase(), a]));
+const DICE = String.raw`\d+\s*d\s*\d+(?:\s*\+\s*\d+(?!\s*d))?`;
+
+/**
+ * How a spell rolls, read from its description: { attack: '' | 'attack' |
+ * 'save', save: ability, damage: "8d6 fire" | "1d8 healing", damage_mod: add
+ * the spellcasting modifier, higher_damage: dice added per slot level above
+ * the spell's (a cantrip: at 5th, 11th and 17th level) }. A guess the player
+ * can change on the sheet.
+ */
+export function guessSpellRolls({ description = '', higher_levels = '', level = null } = {}) {
+  const text = String(description);
+  const out = { attack: '', save: '', damage: '', damage_mod: false, higher_damage: '' };
+  const attack = /\bmake (?:a|an|one) (?:melee|ranged) spell attack/i.exec(text);
+  const save = /\b(strength|dexterity|constitution|intelligence|wisdom|charisma) saving throw/i.exec(text);
+  if (attack && (!save || attack.index < save.index)) out.attack = 'attack';
+  else if (save) Object.assign(out, { attack: 'save', save: ABILITY_WORDS[save[1].toLowerCase()] });
+  const damage = new RegExp(`(${DICE})\\s+(${DAMAGE_TYPES.join('|')})\\s+damage`, 'i').exec(text);
+  const heal = new RegExp(`regains?\\s+(?:a\\s+number\\s+of\\s+)?hit\\s+points\\s+equal\\s+to\\s+(${DICE})`, 'i').exec(text);
+  const first = [damage, heal].filter(Boolean).sort((x, y) => x.index - y.index)[0];
+  if (first) {
+    out.damage = `${first[1].replace(/\s+/g, '')} ${first === damage ? damage[2].toLowerCase() : 'healing'}`;
+    out.damage_mod = /^\s*\+\s*your spellcasting ability modifier/i.test(text.slice(first.index + first[0].length));
+  }
+  const more = /\b(?:damage|healing)\s+increases\s+by\s+(\d+d\d+)/i.exec(level === 0 ? text : higher_levels);
+  if (more && out.damage) out.higher_damage = more[1];
+  return out;
+}
+
 export function normalizeSpell(s = {}) {
+  // A spell from before rolls existed (or a new one): read how it rolls from its text.
+  const rolls = s.attack === undefined ? guessSpellRolls({ description: str(s.description, 20_000), higher_levels: str(s.higher_levels, 5000), level: int(s.level, { min: 0, max: 9 }) }) : s;
   return {
     id: str(s.id, 64) || newId(),
     name: str(s.name, 120).trim(),
@@ -187,6 +269,11 @@ export function normalizeSpell(s = {}) {
     ritual: bool(s.ritual),
     description: str(s.description, 20_000),
     higher_levels: str(s.higher_levels, 5000),
+    attack: ['attack', 'save'].includes(rolls.attack) ? rolls.attack : '',
+    save: ABILITIES.includes(rolls.save) ? rolls.save : '',
+    damage: str(rolls.damage, 100),
+    damage_mod: bool(rolls.damage_mod),
+    higher_damage: str(rolls.higher_damage, 40),
     prepared: bool(s.prepared),
     source: SPELL_SOURCES.includes(s.source) ? s.source : 'manual',
     source_note: str(s.source_note, 300),
@@ -219,9 +306,7 @@ export function normalizeSheet(input = {}) {
     successes: int(s.death_saves?.successes, { min: 0, max: 3, fallback: 0 }),
     failures: int(s.death_saves?.failures, { min: 0, max: 3, fallback: 0 }),
   };
-  out.attacks = (Array.isArray(s.attacks) ? s.attacks : []).slice(0, 50).map((a) => ({
-    name: str(a?.name, 100), bonus: str(a?.bonus, 20), damage: str(a?.damage, 100), notes: str(a?.notes, 500),
-  }));
+  out.attacks = (Array.isArray(s.attacks) ? s.attacks : []).slice(0, 50).map((a) => normalizeAttack(a ?? {}));
   for (const c of COINS) out.coins[c] = int(s.coins?.[c], { min: 0, max: 99_999_999, fallback: 0 });
   out.spellcasting.class = str(s.spellcasting?.class, 60);
   for (let n = 1; n <= 9; n++) {

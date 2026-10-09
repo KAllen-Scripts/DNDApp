@@ -155,7 +155,8 @@ test('sheet: classes, attacks, coins, hit points, death saves and spell slots us
     await saved(page);
     const { sheet } = await serverSheet(t);
     assert.equal(sheet.classes.length, 1);
-    assert.deepEqual(sheet.attacks, [{ name: 'Longbow', bonus: '+5', damage: '1d8+3 piercing', notes: '' }]);
+    // Longbow is a weapon from the book: Dexterity, proficient (the damage was typed over).
+    assert.deepEqual(sheet.attacks, [{ name: 'Longbow', kind: 'attack', ability: 'dex', proficient: true, magic: 0, bonus: '+5', save: '', dc: '', damage: '1d8+3 piercing', notes: '' }]);
     assert.equal(sheet.coins.gp, 37);
     assert.deepEqual(sheet.hp, { current: 20, temp: null });
     assert.deepEqual(sheet.death_saves, { successes: 1, failures: 1 });
@@ -174,9 +175,12 @@ test('sheet: clicking a save, skill, ability or initiative rolls it (advantage f
       page.click('[data-tab=sheet]');
       page.type(byLabel(page, 'Dexterity score'), '16');
       page.click(page.$$('#sheet .add-row').find((b) => b.textContent.includes('Add an attack')));
+      // A weapon from the book fills in its damage and ability (finesse: Dex +3); to hit and damage are worked out.
       page.type(byLabel(page, 'Attack name'), 'Shortsword');
-      page.type(byLabel(page, 'Attack bonus'), '+5');
-      page.type(byLabel(page, 'Damage and type'), '1d6+3 piercing');
+      assert.equal(byLabel(page, 'Damage and type').value, '1d6 piercing');
+      assert.equal(byLabel(page, 'Ability added').value, 'finesse');
+      assert.equal(byLabel(page, 'Attack bonus').placeholder, '+5');
+      assert.equal(page.text('#sheet .atk-sum'), '1d20+5 to hit · 1d6+3 piercing');
 
       page.click(byLabel(page, 'Roll this attack'), { shiftKey: true });
       await page.settle();
@@ -190,6 +194,14 @@ test('sheet: clicking a save, skill, ability or initiative rolls it (advantage f
       await page.settle();
       assert.deepEqual(rolls().at(-1), { notation: '2d6+3', mode: 'normal' });
       assert.equal(page.text('#dice-result .dr-label'), 'Shortsword: damage (critical)');
+
+      // Damage on its own, with a +1 weapon.
+      page.type(byLabel(page, 'Magic bonus'), '1');
+      page.click(byLabel(page, 'Roll damage'));
+      await page.settle();
+      assert.deepEqual(rolls().at(-1), { notation: '1d6+4', mode: 'normal' });
+      assert.equal(page.text('#dice-result .dr-label'), 'Shortsword: damage');
+      page.type(byLabel(page, 'Magic bonus'), '0');
 
       const dexSave = page.$$('#sheet .saves .roll-name').find((b) => b.textContent === 'Dexterity');
       page.click(dexSave, { altKey: true });
@@ -219,6 +231,86 @@ test('sheet: clicking a save, skill, ability or initiative rolls it (advantage f
   } finally {
     mock.restoreAll();
   }
+});
+
+test('sheet: an attack that is a saving throw rolls damage only, with its DC; an unproficient Strength attack', async () => {
+  await withPage(sheetPage(), async (page) => {
+    page.click('[data-tab=sheet]');
+    page.type(byLabel(page, 'Constitution score'), '14');
+    page.click(page.$$('#sheet .add-row').find((b) => b.textContent.includes('Add an attack')));
+    page.type(byLabel(page, 'Attack name'), 'Fire breath');
+    page.type(byLabel(page, 'Damage and type'), '2d6 fire');
+    page.type(byLabel(page, 'Attack or save'), 'save');
+    page.type(byLabel(page, 'Ability added'), 'con');
+    page.type(byLabel(page, 'Saving throw ability'), 'dex');
+    assert.equal(page.$('#sheet [aria-label="Roll this attack"]'), null, 'no roll to hit');
+    assert.equal(byLabel(page, 'Save DC').placeholder, 'DC 12'); // 8 + 2 + 2
+    page.click(byLabel(page, 'Roll damage'));
+    await page.settle();
+    const last = () => page.requests.filter((r) => r.path.endsWith('/roll')).at(-1).body;
+    assert.equal(last().notation, '2d6');
+    assert.equal(last().label, 'Fire breath: damage (DC 12 Dex save)');
+
+    page.click(page.$$('#sheet .add-row').find((b) => b.textContent.includes('Add an attack')));
+    page.type(page.$$('#sheet [aria-label="Attack name"]')[1], 'Rock');
+    page.type(page.$$('#sheet [aria-label="Damage and type"]')[1], '1d4 bludgeoning');
+    page.type(page.$$('#sheet [aria-label="Strength score"]')[0] ?? byLabel(page, 'Strength score'), '8');
+    page.type(page.$$('#sheet [aria-label="Proficient"]')[0], false);
+    page.click(page.$$('#sheet [aria-label="Roll this attack"]')[0]); // the breath has none
+    await page.settle();
+    assert.equal(last().notation, '1d20-1');
+    assert.match(page.text('#dice-result .dr-actions'), /Damage \(1d4-1\)/);
+  });
+});
+
+test('sheet: spells roll to hit with the spell attack bonus, or show their DC, and roll damage cast higher or healing with the modifier', async () => {
+  await withPage(sheetPage(), async (page) => {
+    page.click('[data-tab=sheet]');
+    page.type(byLabel(page, 'Intelligence score'), '18');
+    page.type(byLabel(page, 'Class'), 'Wizard');
+    page.type(byLabel(page, 'Level'), '5');
+    const add = async (name) => {
+      page.type('#sheet .add-spell input', name);
+      page.submit('#sheet .add-spell');
+      // Looked up (from the SRD) and drawn again.
+      return page.waitFor(() => page.$$('#sheet .spell').find((c) => c.querySelector('strong').textContent === name && c.querySelector('.source-srd')), { what: name });
+    };
+    const last = () => page.requests.filter((r) => r.path.endsWith('/roll')).at(-1).body;
+
+    // Fireball (SRD): a Dex save against the spell DC; 8d6, more with a higher slot.
+    let card = await add('Fireball');
+    assert.equal(page.text(card.querySelector('.spell-dc')), 'DC 15 Dex');
+    page.type(card.querySelector('[aria-label="Fireball slot level"]'), '5');
+    page.click(card.querySelector('[aria-label="Roll Fireball damage"]'));
+    await page.settle();
+    assert.equal(last().notation, '10d6');
+    assert.equal(last().label, 'Fireball: damage at 5th level (DC 15 Dex save)');
+
+    // Fire Bolt: a spell attack (+7), damage offered after; at 5th level it's 2d10.
+    card = await add('Fire Bolt');
+    page.click(card.querySelector('[aria-label="Roll Fire Bolt to hit"]'));
+    await page.settle();
+    assert.equal(last().notation, '1d20+7');
+    assert.equal(page.$$('#dice-result .dr-actions button')[0].textContent, 'Damage (2d10)');
+
+    // Cure Wounds heals 1d8 + Int; the details show how it rolls, and can be changed.
+    card = await add('Cure Wounds');
+    page.click(card.querySelector('[aria-label="Roll Cure Wounds healing"]'));
+    await page.settle();
+    assert.equal(last().notation, '1d8+4');
+    card.open = true;
+    card.dispatchEvent(new page.window.Event('toggle'));
+    assert.equal(card.querySelector('[aria-label="Spell damage"]').value, '1d8 healing');
+    assert.equal(card.querySelector('[aria-label="Add spellcasting modifier"]').checked, true);
+    page.type(card.querySelector('[aria-label="Add spellcasting modifier"]'), false);
+    page.click(card.querySelector('[aria-label="Roll Cure Wounds healing"]'));
+    await page.settle();
+    assert.equal(last().notation, '1d8');
+
+    // Shield has nothing to roll.
+    card = await add('Shield');
+    assert.equal(card.querySelector('.spell-rolls').childElementCount, 0);
+  });
 });
 
 test('sheet: changed elsewhere meanwhile: keep mine (OK) or load the other version (Cancel)', async () => {

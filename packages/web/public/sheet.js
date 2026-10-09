@@ -12,14 +12,15 @@
 import { api, fileUrl, h, storage } from './api.js';
 import {
   ABILITIES, ABILITY_NAMES, SKILLS, CLASSES, RACES, BACKGROUNDS, ALIGNMENTS, SCHOOLS,
-  computeSheet, coerceDerived, formatBonus, normalizeSheet, normalizeSpell,
+  WEAPONS, computeSheet, coerceDerived, formatBonus, newAttack, normalizeSheet, normalizeSpell,
 } from './shared/sheet.js';
-import { d20Plus, findRoll } from './shared/dice.js';
+import { d20Plus } from './shared/dice.js';
+import { attackRolls, spellRolls } from './shared/rolls.js';
 import { roll, rollModeFromEvent, modeButtons, D20_ICON } from './dice.js';
 
 const $ = (sel) => document.querySelector(sel);
 const LEVEL_NAMES = ['Cantrips', '1st level', '2nd level', '3rd level', '4th level', '5th level', '6th level', '7th level', '8th level', '9th level'];
-const SPELL_DETAILS = ['name', 'level', 'school', 'casting_time', 'range', 'components', 'material', 'duration', 'concentration', 'ritual', 'description', 'higher_levels', 'source', 'source_note'];
+const SPELL_DETAILS = ['name', 'level', 'school', 'casting_time', 'range', 'components', 'material', 'duration', 'concentration', 'ritual', 'description', 'higher_levels', 'attack', 'save', 'damage', 'damage_mod', 'higher_damage', 'source', 'source_note'];
 const SOURCE_LABELS = { srd: 'SRD', book: 'Your book', ai: 'AI memory', import: 'Your sheet', manual: 'Typed in' };
 
 const state = {
@@ -490,34 +491,92 @@ function attacks() {
   const list = h('div', { class: 'sh-table attacks' });
   const draw = () => {
     list.replaceChildren(
-      ...(state.sheet.attacks.length ? [h('div', { class: 'tr th' }, lbl('Name'), lbl('Atk bonus'), lbl('Damage / type'), h('span'), h('span'))] : []),
-      ...state.sheet.attacks.map((_, i) =>
-        h('div', { class: 'tr' },
-          field(`attacks.${i}.name`, { label: 'Attack name', placeholder: 'Name' }),
-          field(`attacks.${i}.bonus`, { label: 'Attack bonus', placeholder: '+0', cls: 'num' }),
-          field(`attacks.${i}.damage`, { label: 'Damage and type', placeholder: 'Damage / type' }),
-          attackRoll(i),
-          removeButton('Remove this attack', () => { state.sheet.attacks.splice(i, 1); draw(); changed(); }),
-        ),
-      ),
-      addButton('Add an attack', () => { state.sheet.attacks.push({ name: '', bonus: '', damage: '', notes: '' }); draw(); changed(); }),
+      ...(state.sheet.attacks.length ? [h('div', { class: 'tr th' }, lbl('Name'), lbl('To hit / DC'), lbl('Damage / type'), h('span'), h('span'), h('span'))] : []),
+      ...state.sheet.attacks.map((_, i) => attackRow(i, draw)),
+      addButton('Add an attack', () => { state.sheet.attacks.push(newAttack()); draw(); changed(); }),
     );
   };
   draw();
-  return box('Attacks & spellcasting', 'attacks-box', list);
+  return box('Attacks & spellcasting', 'attacks-box', list, datalist('dl-weapons', Object.values(WEAPONS).map((w) => w.name)));
 }
 
-/** Roll an attack to hit, with its damage (from the damage box) offered afterwards. */
-function attackRoll(i) {
-  const b = h('button', { type: 'button', class: 'icon-roll', title: 'Roll to hit (Shift: advantage, Alt: disadvantage)', 'aria-label': 'Roll this attack' });
-  b.innerHTML = D20_ICON;
-  b.addEventListener('click', (e) => {
-    const a = state.sheet.attacks[i];
-    const name = a.name.trim() || 'Attack';
-    const damage = findRoll(a.damage);
-    roll(d20Plus(parseInt(a.bonus, 10) || 0), { label: `${name}: to hit`, mode: rollModeFromEvent(e), then: damage && { label: `${name}: damage`, notation: damage } });
+const ATTACK_ABILITY_NAMES = { '': 'As written', ...ABILITY_NAMES, finesse: 'Finesse (Str or Dex)', spell: 'Spellcasting ability' };
+const ABBR = (a) => (a ? cap(a) : '');
+
+/**
+ * One attack: its name, to hit (or the save's DC), damage, and buttons to
+ * roll to hit and to roll damage; under it, what's added: the ability,
+ * proficiency, a magic bonus, or a saving throw instead of an attack roll.
+ */
+function attackRow(i, draw) {
+  const a = state.sheet.attacks[i];
+  const p = `attacks.${i}`;
+  const save = a.kind === 'save';
+  const name = field(`${p}.name`, { label: 'Attack name', placeholder: 'Name', list: 'dl-weapons', onChange: () => {
+    // A weapon from the book fills in its damage and ability, when they're still empty.
+    const w = WEAPONS[a.name.trim().toLowerCase()];
+    if (w && !save && !a.damage.trim()) {
+      Object.assign(a, { damage: w.damage, ability: w.ability });
+      row.querySelector('[aria-label="Damage and type"]').value = a.damage;
+      row.querySelector('[aria-label="Ability added"]').value = a.ability;
+      paint();
+    }
+  } });
+  const hitBox = save
+    ? field(`${p}.dc`, { label: 'Save DC', cls: 'num' })
+    : field(`${p}.bonus`, { label: 'Attack bonus', cls: 'num' });
+  const sum = h('span', { class: 'muted small atk-sum' });
+  const select = (key, label, options, after) => {
+    const el = h('select', { 'aria-label': label }, Object.entries(options).map(([v, n]) => new Option(n, v)));
+    el.value = a[key];
+    el.addEventListener('change', () => { a[key] = el.value; changed(); after?.(); });
+    return el;
+  };
+  const opts = h('div', { class: 'atk-opts' },
+    select('kind', 'Attack or save', { attack: 'Attack roll', save: 'Saving throw' }, draw),
+    labelled('Adds', select('ability', 'Ability added', ATTACK_ABILITY_NAMES), 'inline'),
+    save
+      ? labelled('Save', select('save', 'Saving throw ability', { '': '–', ...ABILITY_NAMES }), 'inline')
+      : h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: a.proficient, 'aria-label': 'Proficient', onchange: (e) => { a.proficient = e.target.checked; changed(); } }), 'Proficient'),
+    labelled('Magic', field(`${p}.magic`, { label: 'Magic bonus', kind: 'int', cls: 'num' }), 'inline'),
+    sum,
+  );
+  const paint = () => {
+    const r = attackRolls(a, state.calc);
+    hitBox.placeholder = save ? `DC ${r.autoDc}` : formatBonus(r.autoBonus);
+    const dmg = r.damage ?? (r.flat != null ? String(r.flat) : '');
+    sum.textContent = [
+      save ? `DC ${r.dc}${r.save ? ` ${ABBR(r.save)}` : ''} save` : `${r.hit} to hit`,
+      dmg && `${dmg}${r.type ? ` ${r.type}` : ''}`,
+    ].filter(Boolean).join(' · ');
+  };
+  state.renders.push(paint);
+  const hit = h('button', { type: 'button', class: 'icon-roll', title: 'Roll to hit (Shift: advantage, Alt: disadvantage)', 'aria-label': 'Roll this attack', hidden: save });
+  hit.innerHTML = D20_ICON;
+  hit.addEventListener('click', (e) => {
+    const r = attackRolls(a, state.calc);
+    const title = a.name.trim() || 'Attack';
+    roll(r.hit, { label: `${title}: to hit`, mode: rollModeFromEvent(e), then: r.damage && { label: `${title}: damage`, notation: r.damage } });
   });
-  return b;
+  const damage = h('button', { type: 'button', class: 'icon-roll dmg-roll', title: 'Roll damage', 'aria-label': 'Roll damage' }, 'Dmg');
+  damage.addEventListener('click', () => {
+    const r = attackRolls(a, state.calc);
+    const title = a.name.trim() || 'Attack';
+    if (r.damage) roll(r.damage, { label: `${title}: damage${save ? ` (DC ${r.dc}${r.save ? ` ${ABBR(r.save)}` : ''} save)` : ''}` });
+    else if (r.flat != null) alert(`${title}: ${r.flat} damage (no dice to roll).`);
+    else alert(`Type the damage for ${title} first, like 1d8 slashing.`);
+  });
+  const row = h('div', { class: `tr${save ? ' save' : ''}` },
+    name,
+    hitBox,
+    field(`${p}.damage`, { label: 'Damage and type', placeholder: 'e.g. 1d8 slashing' }),
+    save ? h('span') : hit,
+    damage,
+    removeButton('Remove this attack', () => { state.sheet.attacks.splice(i, 1); draw(); changed(); }),
+    opts,
+  );
+  if (state.calc) paint();
+  return row;
 }
 
 // Everything else.
@@ -977,10 +1036,12 @@ function spellCard(spell, drawList) {
       h('strong', {}, spell.name),
       tags.length ? h('span', { class: 'tags' }, tags.map((t) => h('span', { class: 'tag', title: t === 'C' ? 'Concentration' : 'Ritual' }, t))) : null,
       h('span', { class: 'muted small spell-meta' }, meta),
+      spellRollButtons(spell),
       h('span', { class: `source source-${spell.source}`, title: spell.source_note }, SOURCE_LABELS[spell.source] ?? ''),
     ),
     body,
   );
+  card.__spell = spell;
   // Fields are built when opened, so a long list stays light.
   card.addEventListener('toggle', () => {
     if (!card.open || body.childElementCount) return;
@@ -1003,6 +1064,7 @@ function spellCard(spell, drawList) {
       ),
       labelled('Description', field(`${p}.description`, { label: 'Description', kind: 'longtext', rows: 8 }), 'wide'),
       labelled('At higher levels', field(`${p}.higher_levels`, { label: 'At higher levels', kind: 'longtext', rows: 2 }), 'wide'),
+      spellRollFields(spell, p),
       h('p', { class: 'muted small' }, spell.source_note ? `Source: ${spell.source_note}` : ''),
       h('div', { class: 'spell-actions' },
         h('button', { type: 'button', class: 'ghost', onclick: async (e) => {
@@ -1024,6 +1086,78 @@ function spellCard(spell, drawList) {
     body.addEventListener('focusout', () => setTimeout(() => !card.contains(document.activeElement) && refreshSummary(card, spell)));
   });
   return card;
+}
+
+/**
+ * A spell's roll buttons in its row: to hit (a spell attack, then its damage
+ * offered) and damage (or healing), with the slot it's cast with for spells
+ * that do more when cast higher.
+ */
+function spellRollButtons(spell) {
+  const wrap = h('span', { class: 'spell-rolls' });
+  const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+  const draw = () => {
+    wrap.replaceChildren();
+    if (!spell.attack && !spell.damage.trim()) return;
+    const upcast = spell.level >= 1 && spell.higher_damage.trim();
+    const slot = upcast ? h('select', { 'aria-label': `${spell.name} slot level`, title: 'Cast with a slot of this level', onclick: (e) => e.stopPropagation() }, Array.from({ length: 10 - spell.level }, (_, k) => new Option(ORDINALS[spell.level + k], spell.level + k))) : null;
+    const rolls = () => spellRolls(spell, state.calc, slot ? Number(slot.value) : spell.level);
+    const at = () => (slot && Number(slot.value) > spell.level ? ` at ${ORDINALS[slot.value]} level` : '');
+    const heal = /heal/i.test(spell.damage);
+    if (spell.attack === 'attack') {
+      const hit = h('button', { type: 'button', class: 'icon-roll', title: 'Spell attack (Shift: advantage, Alt: disadvantage)', 'aria-label': `Roll ${spell.name} to hit` });
+      hit.innerHTML = D20_ICON;
+      hit.addEventListener('click', (e) => {
+        stop(e);
+        const r = rolls();
+        roll(r.hit, { label: `${spell.name}: to hit`, mode: rollModeFromEvent(e), then: r.damage && { label: `${spell.name}: damage${at()}`, notation: r.damage } });
+      });
+      wrap.append(hit);
+    } else if (spell.attack === 'save') {
+      const r = rolls();
+      wrap.append(h('span', { class: 'muted small spell-dc', title: 'Targets make this saving throw' }, `DC ${r.dc ?? '?'}${r.save ? ` ${cap(r.save)}` : ''}`));
+    }
+    if (spell.damage.trim()) {
+      if (slot) wrap.append(slot);
+      wrap.append(h('button', { type: 'button', class: 'icon-roll dmg-roll', title: heal ? 'Roll healing' : 'Roll damage', 'aria-label': `Roll ${spell.name} ${heal ? 'healing' : 'damage'}`, onclick: (e) => {
+        stop(e);
+        const r = rolls();
+        if (!r.damage) return alert(`Type the dice for ${spell.name} first, like 8d6 fire.`);
+        const dc = r.kind === 'save' ? ` (DC ${r.dc}${r.save ? ` ${cap(r.save)}` : ''} save)` : '';
+        roll(r.damage, { label: `${spell.name}: ${heal ? 'healing' : 'damage'}${at()}${dc}` });
+      } }, heal ? 'Heal' : 'Dmg'));
+    }
+  };
+  draw();
+  wrap.redraw = draw;
+  return wrap;
+}
+
+/** How a spell rolls, in its details: read from its description, and the player can change it. */
+function spellRollFields(spell, p) {
+  const select = (key, label, options) => {
+    const el = h('select', { 'aria-label': label }, Object.entries(options).map(([v, n]) => new Option(n, v)));
+    el.value = spell[key];
+    el.addEventListener('change', () => { spell[key] = el.value; changed(); paintSave(); redrawRolls(spell); });
+    return el;
+  };
+  const saveBox = labelled('Save', select('save', 'Spell saving throw', { '': '–', ...ABILITY_NAMES }));
+  const paintSave = () => (saveBox.hidden = spell.attack !== 'save');
+  paintSave();
+  return h('div', { class: 'spell-fields spell-roll-fields' },
+    labelled('Roll', select('attack', 'Spell roll', { '': 'No attack or save', attack: 'Spell attack', save: 'Saving throw' })),
+    saveBox,
+    labelled('Damage / healing', field(`${p}.damage`, { label: 'Spell damage', placeholder: 'e.g. 8d6 fire', onChange: () => redrawRolls(spell) })),
+    labelled(spell.level === 0 ? 'More at 5th/11th/17th' : 'More per slot level', field(`${p}.higher_damage`, { label: 'More damage when cast higher', placeholder: 'e.g. 1d6', onChange: () => redrawRolls(spell) })),
+    h('div', { class: 'flags' }, h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: spell.damage_mod, 'aria-label': 'Add spellcasting modifier', onchange: (e) => { spell.damage_mod = e.target.checked; changed(); } }), `+ spellcasting modifier`)),
+  );
+}
+
+/** Redraw a spell's roll buttons after its damage changed (without closing its details). */
+function redrawRolls(spell) {
+  for (const card of document.querySelectorAll('#sheet details.spell')) {
+    if (card.__spell === spell) card.querySelector('.spell-rolls')?.redraw();
+  }
 }
 
 function refreshSummary(card, spell) {

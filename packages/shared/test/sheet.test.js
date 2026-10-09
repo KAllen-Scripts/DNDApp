@@ -142,8 +142,10 @@ test('normalizeSheet: attacks keep what was typed (spaces too, as it\'s typed li
     attacks: [{ name: '  Long   sword ', bonus: 5, damage: '1d8+3', notes: 'versatile', extra: true }, null, ...Array.from({ length: 60 }, () => ({}))],
     death_saves: { successes: 7, failures: -2 },
   });
-  assert.deepEqual(s.attacks[0], { name: '  Long   sword ', bonus: '5', damage: '1d8+3', notes: 'versatile' });
-  assert.deepEqual(s.attacks[1], { name: '', bonus: '', damage: '', notes: '' });
+  // An attack from before abilities: no ability, so its numbers stay as written.
+  const asWritten = { kind: 'attack', ability: '', proficient: true, magic: 0, save: '', dc: '' };
+  assert.deepEqual(s.attacks[0], { ...asWritten, name: '  Long   sword ', bonus: '5', damage: '1d8+3', notes: 'versatile' });
+  assert.deepEqual(s.attacks[1], { ...asWritten, name: '', bonus: '', damage: '', notes: '' });
   assert.equal(s.attacks.length, 50);
   assert.deepEqual(s.death_saves, { successes: 3, failures: 0 });
 });
