@@ -436,3 +436,35 @@ test("stat blocks: the DM's own creature of that name beats the books and the AI
     await t.cleanup();
   }
 });
+
+test("Ask: the DM's saved creatures come first when the DM asks about one; players never get them", async () => {
+  const llm = createFakeLLM({
+    qaScript: [
+      [{ tool: 'get_my_creatures', input: { names: ['goblin boss', 'Nobody'] } }, { answer: 'Your Goblin Boss has AC 17.' }],
+      [{ answer: 'Goblins usually have AC 15.' }],
+    ],
+  });
+  const t = await setup({ llm });
+  try {
+    const base = `/campaigns/${t.campaign.id}/creatures`;
+    await t.request('POST', base, { body: { name: 'Goblin Boss', kind: 'enemy', hp_max: 30, stats: { text: '**Goblin Boss**\n\n**Armor Class** 17 (the DM\'s own)', ac: 17 }, notes: 'Hides behind his wolves.' } });
+    await t.request('POST', base, { body: { name: 'Mira', kind: 'npc' } });
+
+    const dm = await t.request('POST', `/campaigns/${t.campaign.id}/ask`, { body: { question: "What's the Goblin Boss's AC?" } });
+    assert.equal(dm.statusCode, 200, dm.body);
+    const call = llm.calls.find((c) => c.purpose === 'qa');
+    assert.match(call.system, /<dm_creatures [^>]*>\n- Goblin Boss \(enemy\)\n- Mira \(NPC, no stat block\)\n<\/dm_creatures>/);
+    assert.match(call.system, /take priority over the books/);
+    assert.ok(call.tools.includes('get_my_creatures'));
+    assert.match(call.prompt, /<my_creatures [^>]*>\n--- Goblin Boss \(the DM's Creatures tab\)\nEnemy, Small or Medium, max HP 30\nStat block:\n\*\*Goblin Boss\*\*[\s\S]*the DM's own\)\nDM's notes: Hides behind his wolves\.\n<\/my_creatures>/);
+    assert.match(call.toolResults[0].result, /--- Goblin Boss[\s\S]*--- Nobody: not one of the DM's creatures\./);
+
+    await t.request('POST', `/campaigns/${t.campaign.id}/ask`, { as: t.sam.token, body: { question: "What's the Goblin Boss's AC?" } });
+    const sam = llm.calls.filter((c) => c.purpose === 'qa').at(-1);
+    assert.doesNotMatch(sam.system, /dm_creatures|Goblin Boss/);
+    assert.doesNotMatch(sam.prompt, /my_creatures|Hides behind/);
+    assert.ok(!sam.tools.includes('get_my_creatures'));
+  } finally {
+    await t.cleanup();
+  }
+});

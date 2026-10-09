@@ -50,7 +50,7 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const pipeline = createPipeline({ db, store, archive, search, kb, archivist, updates, config });
   const jobs = createJobs({ db, store, search, pipeline, config, log });
   const books = createBooks({ dir: config.booksDir, log });
-  const qa = createQA({ db, store, kb, search, books, llm, config });
+  const qa = createQA({ db, store, kb, search, books, creatures, llm, config });
   const spells = createSpells({ books, llm });
   const sheetImport = createSheetImport({ llm });
   const pictureDescriber = createPictureDescriber({ llm });

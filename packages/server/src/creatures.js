@@ -77,7 +77,7 @@ export function tokenNames(name, count, existing = []) {
 }
 
 /** A creature's name for matching: no number on the end, no "a"/"the", case and punctuation ignored. */
-const creatureKey = (name) => String(name ?? '').trim().replace(/\s+\d+$/, '').replace(/^(?:an?|the)\s+/i, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+export const creatureKey = (name) => String(name ?? '').trim().replace(/\s+\d+$/, '').replace(/^(?:an?|the)\s+/i, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 export function createCreatures({ db, archive, store }) {
   const rows = (cid) => db.prepare('SELECT data FROM creatures WHERE campaign_id = ? ORDER BY created_at, id').all(cid).map((r) => normalizeCreature(JSON.parse(r.data)));
