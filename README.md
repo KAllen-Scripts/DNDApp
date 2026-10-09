@@ -8,7 +8,7 @@ The design is in [SPEC.md](SPEC.md). Project status, change log and next steps a
 
 ```
 packages/
-  shared/   plain JS both sides use: transcript parser, citation format, character sheet rules, dice, map geometry
+  shared/   plain JS both sides use: transcript parser, citation format, character sheet rules, dice, map geometry, coins
   server/   Node.js server: API (src/routes/), archive, processing pipeline, Q&A agent; also serves the web page
   web/      the web page (plain HTML/CSS/JS in public/, no build step)
 ```
@@ -65,6 +65,10 @@ Each player has a **Sheet** tab (the DM has Creatures instead, and no sheet), la
 - **Spells**: type a name to add one, and its details are filled in from (1) the SRD 5.1 spell list built into the server, (2) the PDFs in the books folder, or (3) the AI's own knowledge, labelled as such. Every detail can be edited. Details are only replaced when the player asks.
 - **Books**: drop PDFs into `DND books` next to this repo (`BOOKS_DIR` in `.env` to change it). Scanned books need an OCR text layer (if a scan has none, run it through `ocrmypdf` once). The server reads them into memory at start-up (a few seconds; nothing is stored). EPUBs aren't read. The books are used for spell lookups and by Q&A, which can search them, read pages and browse their contents to quote a rule, citing the page ("Player's Handbook p. 195"). Use each book's name and year as the file name ("Player's Handbook (2014).pdf"); that's how Q&A refers to it. Q&A checks every rules question in the books, and uses the rules of the group's Player's Handbook edition.
 
+### Rests and hit dice
+
+The Hit dice box on a player's sheet has a row per die size (a Fighter 3 / Wizard 2 has d10s and d6s) with a tick per spent die. **Spend** rolls that die plus the Constitution modifier (on the server, shown with the dice and shared like any roll) and adds the hit points, up to the maximum. **Short rest** gives back what a short rest does on the sheet (Pact Magic slots). The DM gets a **Rest** button in the header: tick who rests (everyone by default) and choose Short rest or Long rest. A long rest gives back all hit points, every spell slot, and spent hit dice (up to half the character's total under the 2014 rules, all of them under 2024), and clears temporary hit points and death saves; under the 2014 rules a character at 0 hit points gets nothing from it. Each player's sheet changes at once and they get a note. The rules follow the edition of the Player's Handbook in your books folder (2014 if there's none, or both); `REST_RULES=2014` or `2024` in `.env` sets it. Map token hit points are separate (the DM's) and aren't changed by rests.
+
 ### Dice
 
 The **Dice** button in the player's header opens a dice tray: click dice to build a roll (or type one, like `2d6+3` or `d%`), choose advantage or disadvantage for the next d20, choose **who sees your rolls** (everyone, only the DM, or only you; the DM's "only me" is a secret roll), and see the table's recent rolls, yours and everyone else's you may see. Someone else's roll pops up briefly at the top right. On the Sheet tab, clicking a save, skill, ability name, initiative or spell attack rolls it, and the dice button next to an attack rolls to hit, then offers its damage (doubled dice on a natural 20). Shift-click rolls with advantage, Alt-click with disadvantage.
@@ -107,7 +111,7 @@ For running a fight, the DM has:
 - **Fog & walls**: turn on fog of war and drag rectangles to reveal or cover parts of the map (turning fog on starts in Reveal, since everything begins covered). Draw walls and doors (or let the AI draft them from the picture, then correct them) and tick **Line of sight**: each player then also sees whatever their own token has a clear line to, and places they've seen before stay dimmed. Draw **obstacles** for things players see over but can't cross (a building's roof, a cliff edge). Anyone clicks a door to open or close it: players only doors next to their token, and not ones the DM has locked (Lock mode). **Unseen parts** sets what players get outside their sight: dark, greyed out, or the map shown (tokens there are hidden either way); **Remember explored** keeps a dim view of where they've been. Players can't move their token through walls, obstacles or closed doors. Players' copy of the image is blacked out on the server, and tokens they can't see are hidden from them.
 - **Hit points and conditions** on each token (type `-7`, `+5` or `12` in the selection bar). Players see enemies' and NPCs' health only as unhurt, hurt, bloodied or down.
 - **Hidden** tokens that players don't see at all.
-- **Stat block (AI)**: the AI fills in an enemy's 5e stat block, hit points and size. Only the DM sees it.
+- **Stat block (AI)**: fills in an enemy's 5e stat block, hit points and size, copied from the DM's own creature of that name if there is one, else from the group's books (it says which book and page), else from the AI's memory. Only the DM sees it.
 - **From the campaign's records**: put someone the archivist knows about on the map and read their record from there.
 - **Token pictures** for NPCs and enemies (optionally every token with the same name).
 - **Initiative**: start a fight; NPCs roll with their stat block's Dex, players roll their own (or type it); turns and rounds, a ring on whose turn it is.
@@ -121,6 +125,10 @@ Everyone can **Measure** distances, place **spell templates** (sphere, cone, lin
 In place of a character sheet, the DM keeps enemies and friendly NPCs: name, size, colour, hit points, AC, speed, darkvision, a stat block (typed, or filled in by the AI), a picture and private notes. **Place on map** (or **From your creatures** in Add token) puts one or a numbered group on the map; **Save to creatures** keeps a token from a map. **Find online** has the AI search the web (official or homebrew) for a creature and bring back its stat block, a link to where it found it, and a picture if it can download one. The server only downloads from the public internet, never from your PC or home network.
 
 Everyone can drop **pins** with a note on a map; only the person who placed them sees them, not even the DM.
+
+### Items and merchants (the DM)
+
+**Items** keeps what merchants sell: make one, **Look up** one by name (your items first, then the books in `DND books`, then the AI), or **Find online**. **Merchants** sets up shops: add items with a price, how many are in stock (or no limit) and what restocking brings them back up to; restock every so many long rests the DM calls with **Rest**, or with **Restock now**; **Place on map** puts the merchant down as a token with a gold badge. Players pick the token, press **Shop** and buy on their own: the coins come off their sheet (with change) and the item goes into their equipment. **Sales** shows who bought what.
 
 ### The public address
 
@@ -142,7 +150,7 @@ The first time a transcript is processed, the server downloads a small search mo
 
 Everything lives in `data/` (git-ignored):
 
-- `data/archive/` is the permanent record: accounts, original transcripts, player notes (every version), character sheets (every change, plus uploaded files), character pictures, maps (the images or PDFs as imported, other pictures of them, token pictures, every change, and everyone's private pins), handouts, the DM's creatures, speaker map, glossary, DM corrections, and a snapshot of the knowledge base after every archivist run. **Back this folder up.**
+- `data/archive/` is the permanent record: accounts, original transcripts, player notes (every version), character sheets (every change, plus uploaded files), character pictures, maps (the images or PDFs as imported, other pictures of them, token pictures, every change, and everyone's private pins), handouts, the DM's creatures, items and merchants (with recent sales), speaker map, glossary, DM corrections, and a snapshot of the knowledge base after every archivist run. **Back this folder up.**
 - `data/dndapp.sqlite` is the working database. It can be rebuilt from the archive.
 
 ### Rebuilding
@@ -227,7 +235,10 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/spells/lookup?name=` | A spell's details: SRD, else your books (tidied by the AI), else the AI's memory. 404 if not found; 429 past `SHEET_AI_PER_HOUR` AI calls |
 | POST | `/campaigns/:cid/roll` | Roll dice: `{notation: "1d20+5", mode?: normal \| advantage \| disadvantage, label?, visibility?: party \| dm \| self, initiative?: true}` → `{notation, mode, terms, total, natural, roll, initiative?}`. d2–d20 and d100, up to 50 dice. Logged and sent live to whoever may see it (`party`: everyone, the default; `dm`: the DM and you, a secret roll for the DM; `self`: only you). With `initiative` the notation may be left out (d20 + the initiative on your sheet), and the total goes into every fight on a map waiting for one of your player character tokens: `initiative: [{map_id, map, token_id, name}]` |
 | GET | `/campaigns/:cid/rolls` | The last 50 rolls you may see `{rolls: [{id, user_id, name, from_dm, visibility, label, result, rolled_at}]}` |
-| GET | `/campaigns/:cid/live` | Live news for the campaign (SSE): `roll` (a roll you may see), `handout` (one given to you, or changed), `handout-gone` `{id}` |
+| GET | `/campaigns/:cid/live` | Live news for the campaign (SSE): `roll` (a roll you may see), `handout` (one given to you, or changed), `handout-gone` `{id}`, `rest` (a rest the DM called that includes you; the DM hears all), `merchant` `{id}` (a merchant's stock, prices or shop changed) |
+| POST | `/campaigns/:cid/sheet/hit-dice` | Spend one of your hit dice `{die: 8, visibility?}`: the server rolls it plus your Constitution modifier (logged and shared like `/roll`) and adds the hit points. Replies like `/roll` plus `{healed, sheet, version, updated_at}`. 400 if you have none of that size left |
+| POST | `/campaigns/:cid/sheet/short-rest` | A short rest on your own sheet (Pact Magic slots back) → `{sheet, version, updated_at}` |
+| GET / POST | `/campaigns/:cid/rests` | The rests the DM called, newest first, and the rules used `{edition: "2014" \| "2024", rests: [{id, kind, at, by, edition, user_ids, skipped}]}` / call one (DM) `{kind: short \| long, to?: "everyone" \| [player ids]}`: every sheet in it changes, players hear it live (`skipped`: at 0 hit points, so a 2014 long rest did nothing) |
 | GET / POST | `/campaigns/:cid/handouts` | Handouts given to you (DM: all) `{can_edit, handouts}` / give one (DM) `{title, text?, to: "everyone" \| [user ids], picture?: {filename, data (base64)}}` (text or a picture) |
 | PATCH / DELETE | `/campaigns/:cid/handouts/:hid` | Change one (DM) `{title?, text?, to?}` / take it back (DM; kept in the archive) |
 | GET | `/campaigns/:cid/handouts/:hid/image` | A handout's picture (only for those it was given to, and the DM) |
@@ -258,6 +269,22 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | PATCH / DELETE | `/campaigns/:cid/creatures/:crid` | Change one (DM; placed tokens keep what they had) / remove it (DM; kept in the archive) |
 | GET / PUT / DELETE | `/campaigns/:cid/creatures/:crid/picture` | Its picture, cut to a square (DM) / give it one `{filename, data}` / back to initials |
 | POST | `/campaigns/:cid/creatures/:crid/stats` | Fill its stat block with the AI (DM) `{name?}`; 404 if the AI doesn't know the creature |
+| GET / POST | `/campaigns/:cid/items` | The DM's items (DM only) `{items}` / save one `{name, kind?, rarity?, attunement?, price? (copper), weight?, text?, notes?, picture?: {filename, data}}` |
+| PATCH / DELETE | `/campaigns/:cid/items/:iid` | Change one (DM) / take it off the list (DM; merchants keep selling it; kept in the archive) |
+| GET / PUT / DELETE | `/campaigns/:cid/items/:iid/picture` | Its picture, square (DM) / give it one `{filename, data}` / none |
+| POST | `/campaigns/:cid/items/lookup` | Look an item up and save it (DM) `{name}`: your items, then the books, then the AI → `{item, from: yours \| book \| ai}`; 404 if no one knows it |
+| POST | `/campaigns/:cid/items/:iid/fill` | Fill in a saved item the same way (DM) `{name?}`; a price you set stays |
+| POST | `/campaigns/:cid/items/find` | Have the AI find an item on the web with a picture (DM) `{query}`; 202, fills in in the background like creatures |
+| GET / POST | `/campaigns/:cid/merchants` | The DM's merchants with stock, sales and where their tokens are (DM only) / set one up `{name, description?, notes?, color?, open?, restock_every? (long rests), picture?}` |
+| PATCH / DELETE | `/campaigns/:cid/merchants/:mid` | Change one (DM) / close it down (DM; its tokens stay as NPCs) |
+| GET / PUT / DELETE | `/campaigns/:cid/merchants/:mid/picture` | Its picture (the DM, or a player who can see it) / give it one (DM) / none (DM) |
+| POST | `/campaigns/:cid/merchants/:mid/stock` | Sell an item (DM) `{item, price? (copper; default its usual price), qty? (null: no limit; default 1), full? (restock to; default qty)}` |
+| PATCH / DELETE | `/campaigns/:cid/merchants/:mid/stock/:lid` | Change a line `{price?, qty?, full?}` / stop selling it (DM) |
+| POST | `/campaigns/:cid/merchants/:mid/restock` | Everything back up to its restock level now (DM) |
+| POST | `/campaigns/:cid/maps/:mid/merchants/:mrid` | Put a merchant on a map as a token (DM) `{x?, y?, hidden?}` → `{map, token}` |
+| GET | `/campaigns/:cid/merchants/:mid/shop` | The shop: what it sells, prices, how many are left, and (players) the coins on your sheet. Players: only while they can see one of its tokens (else 404) |
+| GET | `/campaigns/:cid/merchants/:mid/items/:iid/picture` | The picture of an item it sells (as the shop) |
+| POST | `/campaigns/:cid/merchants/:mid/buy` | Buy (players) `{line, qty?}`: the coins come off your sheet (with change), the item goes into its equipment, the stock goes down → `{shop, sheet_version, bought}`; 400 if closed, sold out or you can't afford it |
 | POST | `/campaigns/:cid/creatures/find` | Have the AI find a creature on the web, official or not, with a picture (DM) `{query}`. 202 with the creature as `finding: {status: pending}`; it fills in (or `failed`, with `error`) in the background. 429 past `MAP_AI_PER_HOUR` |
 | POST | `/campaigns/:cid/maps/:mid/combat` | The fight on a map `{action: start \| end \| next \| prev \| add \| remove \| roll \| set, ids?, id?, init?}` (entries count `moved` this turn) → `{map, rolls: [{id, name, d20, mod, total}]}`. DM: everything (`start` with `ids` or every token; NPCs and enemies roll at once; `roll` without `id` rolls every NPC not rolled yet). A player: `roll` (once) or `set` for their own token, and `next` on their own turn |
 | POST | `/campaigns/:cid/maps/:mid/templates` | Place an area of effect (anyone who can see the map) `{shape: circle \| cone \| line \| cube, x, y, angle?, size, width?, label?, color?}` (size and width in the map's unit) |

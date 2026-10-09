@@ -12,7 +12,7 @@
 import { api, fileUrl, h, storage } from './api.js';
 import {
   ABILITIES, ABILITY_NAMES, SKILLS, CLASSES, RACES, BACKGROUNDS, ALIGNMENTS, SCHOOLS,
-  WEAPONS, computeSheet, coerceDerived, formatBonus, newAttack, normalizeSheet, normalizeSpell,
+  WEAPONS, computeSheet, coerceDerived, formatBonus, newAttack, normalizeSheet, normalizeSpell, hitDice as hitDiceOf,
 } from './shared/sheet.js';
 import { d20Plus } from './shared/dice.js';
 import { attackRolls, spellRolls } from './shared/rolls.js';
@@ -137,6 +137,15 @@ async function save() {
 /** Save straight away if anything is waiting (leaving the page, switching campaign). */
 export async function flush() {
   if (state.dirty && !state.saving) await save();
+}
+
+/** The server changed the sheet (something bought from a merchant): show the new version, here and in other windows. */
+export async function reloadSheet() {
+  if (!state.campaignId || state.dirty || state.saving) return;
+  const res = await state.guarded(() => api('GET', `${base()}/sheet`)).catch(() => null);
+  if (!res || state.dirty || state.saving) return;
+  useSheet(res.sheet, res.version);
+  announce();
 }
 
 document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flush());
@@ -469,13 +478,92 @@ const hp = () =>
     ),
   );
 
-const hitDice = () =>
-  box('Hit dice', 'hd',
-    h('div', { class: 'tiles' },
-      stat(auto('hit_dice', { kind: 'text', label: 'Hit dice' }), 'Total'),
-      stat(field('hit_dice_used', { label: 'Hit dice used', kind: 'int' }), 'Used'),
-    ),
+/**
+ * Hit dice: the total (automatic, or typed), then a row per die size with a
+ * tick per spent die and Spend, which has the server roll it and add the hit
+ * points. Short rest gives back what a short rest does (Pact Magic slots).
+ */
+function hitDice() {
+  const rows = h('div', { class: 'hd-rows' });
+  let drawn = '';
+  state.renders.push(() => {
+    const dice = hitDiceOf(state.sheet, state.calc.values);
+    const shape = dice.map((d) => `${d.die}:${d.total}`).join();
+    if (shape !== drawn) {
+      drawn = shape;
+      rows.replaceChildren(...dice.map(({ die, total }) =>
+        h('div', { class: 'hd-row', 'data-die': die },
+          h('span', { class: 'hd-die' }, `d${die}`),
+          h('span', { class: 'pips' }, Array.from({ length: total }, (_, i) => {
+            const b = h('input', { type: 'checkbox', 'aria-label': `d${die} hit die spent ${i + 1}` });
+            b.addEventListener('change', () => {
+              const n = b.checked ? i + 1 : i;
+              if (n) state.sheet.hit_dice_spent[die] = n;
+              else delete state.sheet.hit_dice_spent[die];
+              changed();
+            });
+            return b;
+          })),
+          h('span', { class: 'hd-left muted' }),
+          h('button', { type: 'button', class: 'ghost hd-spend', title: `Roll a d${die} plus your Constitution modifier and regain that many hit points`, onclick: () => spendHitDie(die) }, 'Spend'),
+        )));
+    }
+    for (const { die, spent, left } of dice) {
+      const row = rows.querySelector(`[data-die="${die}"]`);
+      row.querySelectorAll('input').forEach((b, i) => (b.checked = i < spent));
+      row.querySelector('.hd-left').textContent = `${left} left`;
+      row.querySelector('.hd-spend').disabled = !left;
+    }
+  });
+  return box('Hit dice', 'hd',
+    h('div', { class: 'tiles' }, stat(auto('hit_dice', { kind: 'text', label: 'Hit dice' }), 'Total')),
+    rows,
+    h('button', { type: 'button', class: 'ghost hd-short-rest', title: 'Warlocks get their Pact Magic slots back; spend hit dice to heal', onclick: takeShortRest }, 'Short rest'),
   );
+}
+
+/** Spend a hit die: the server rolls it (the dice show it like any roll) and the sheet gets the hit points. */
+async function spendHitDie(die) {
+  await flush();
+  await roll('', {
+    label: `Hit die (d${die})`,
+    path: `${base()}/sheet/hit-dice`,
+    body: { die },
+    onServer: (res) => {
+      useSheet(res.sheet, res.version);
+      announce();
+      status(`Spent a d${die} hit die: ${res.healed ? `regained ${res.healed} hit point${res.healed === 1 ? '' : 's'}` : 'no hit points regained'}.`);
+    },
+  });
+}
+
+async function takeShortRest() {
+  await flush();
+  try {
+    const res = await state.guarded(() => api('POST', `${base()}/sheet/short-rest`));
+    if (!res) return;
+    useSheet(res.sheet, res.version);
+    announce();
+    status(`Short rest taken${state.calc.values.pact_slots ? ': Pact Magic slots are back' : ''}. Spend hit dice to heal.`);
+  } catch (err) {
+    status(`Couldn't take a short rest: ${err.message}`, true);
+  }
+}
+
+/**
+ * The DM called a rest that includes this player (live, from table.js): load
+ * the changed sheet. With changes waiting here, saving them first meets the
+ * newer version and asks which to keep, as with another device.
+ */
+export async function restCalled(rest) {
+  if (!state.sheet || state.saving) return;
+  if (state.dirty) return save();
+  const res = await state.guarded(() => api('GET', `${base()}/sheet`)).catch(() => null);
+  if (!res || state.dirty || res.version <= state.version) return;
+  useSheet(res.sheet, res.version);
+  announce();
+  status(rest.kind === 'long' ? 'The DM called a long rest: your sheet is updated.' : 'The DM called a short rest: spend hit dice to heal.');
+}
 
 const deathSaves = () =>
   box('Death saves', 'death',

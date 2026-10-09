@@ -34,6 +34,7 @@ function normalizeStats(s) {
   if (s.ac != null && Number.isInteger(Number(s.ac))) out.ac = Number(s.ac);
   for (const [k, max] of [['hp_formula', 40], ['speed', 120], ['challenge', 40]]) if (s[k]) out[k] = str(s[k], max);
   if (s.source) out.source = str(s.source, 10);
+  if (s.from) out.from = str(s.from, 200); // the book and page, for a stat block read from the books
   return out;
 }
 
@@ -75,6 +76,9 @@ export function tokenNames(name, count, existing = []) {
   return Array.from({ length: count }, () => `${name} ${next++}`.slice(0, 80));
 }
 
+/** A creature's name for matching: no number on the end, no "a"/"the", case and punctuation ignored. */
+export const creatureKey = (name) => String(name ?? '').trim().replace(/\s+\d+$/, '').replace(/^(?:an?|the)\s+/i, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
 export function createCreatures({ db, archive, store }) {
   const rows = (cid) => db.prepare('SELECT data FROM creatures WHERE campaign_id = ? ORDER BY created_at, id').all(cid).map((r) => normalizeCreature(JSON.parse(r.data)));
 
@@ -98,6 +102,17 @@ export function createCreatures({ db, archive, store }) {
 
     /** The DM's creatures, by name. */
     list: (cid) => rows(cid).filter((c) => !c.removed).sort((a, b) => a.name.localeCompare(b.name)),
+
+    /**
+     * The DM's own creature called `name` that has a stat block ("Goblin 3"
+     * and "a goblin" find "Goblin"), or null. The DM's stats beat the books
+     * and the AI's (maps/stats.js).
+     */
+    withStats(cid, name, { exclude = null } = {}) {
+      const key = creatureKey(name);
+      if (!key) return null;
+      return creatures.list(cid).find((c) => c.id !== exclude && c.stats && !c.finding && creatureKey(c.name) === key) ?? null;
+    },
 
     /** What the page gets: the picture as a key, never its file name. */
     view: ({ art, created_by: _by, removed: _removed, ...c }) => ({ ...c, picture: art ? art.file.replace(/\.[^.]*$/, '') : null }),

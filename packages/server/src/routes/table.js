@@ -1,36 +1,22 @@
 /**
- * At the table: dice rolls shared live (party, the DM, or only you) and handouts the DM gives players.
+ * At the table: dice rolls shared live (party, the DM, or only you), handouts the DM gives players, and the
+ * live stream that carries them (and the rests the DM calls, routes/rests.js).
  */
-import crypto from 'node:crypto';
-import { EventEmitter } from 'node:events';
-import { ROLL_MODES, d20Plus, parseRoll, rollDice } from '@dndapp/shared/dice.js';
+import { ROLL_MODES, d20Plus } from '@dndapp/shared/dice.js';
 import { z } from 'zod';
 import { BadRequestError, NotFoundError } from '../store.js';
 import { MAX_HANDOUT_TEXT, canSeeHandout } from '../handouts.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
+import { ROLL_VISIBILITY, canSeeRoll } from '../rolls.js';
+import { canHearRest } from '../rests.js';
 import { sheetInitiative } from './combat.js';
 
 export function registerTable(app, r) {
-  const { access, auth, db, handouts, maps, sheets, openLiveStream } = r;
+  const { access, auth, db, handouts, maps, merchants, sheets, openLiveStream, rolls, rests } = r;
 
   // ---------- dice ----------
 
-  // Shared rolls go out live (GET /campaigns/:cid/live).
-  const rollEvents = new EventEmitter();
-  rollEvents.setMaxListeners(0);
-  const ROLL_VISIBILITY = ['party', 'dm', 'self'];
   const ROLL_LOG = 50;
-
-  /** Who sees a roll: party = everyone in the campaign; dm = the DM (and whoever rolled); self = only whoever rolled. */
-  const canSeeRoll = (r, a) => r.user_id === a.userId || r.visibility === 'party' || (r.visibility === 'dm' && a.role === 'dm');
-
-  const rollName = (cid, userId) =>
-    db.prepare('SELECT COALESCE(m.character_name, u.name) AS name, m.role FROM users u LEFT JOIN memberships m ON m.user_id = u.id AND m.campaign_id = ? WHERE u.id = ?').get(cid, userId) ?? {};
-
-  const rollView = (cid, r) => {
-    const who = rollName(cid, r.user_id);
-    return { id: r.id, user_id: r.user_id, name: who.name ?? '?', from_dm: who.role === 'dm', visibility: r.visibility, label: r.label, result: typeof r.result === 'string' ? JSON.parse(r.result) : r.result, rolled_at: r.rolled_at };
-  };
 
   /**
    * Your character's turn order in every fight waiting for it: the player
@@ -77,24 +63,15 @@ export function registerTable(app, r) {
       })
       .parse(request.body);
     if (notation === undefined && !initiative) throw new BadRequestError('Type some dice, like 1d20+5 or 2d6.');
-    let parsed;
-    try {
-      parsed = parseRoll(notation ?? d20Plus(sheetInitiative(sheets, a.cid, a.userId)));
-    } catch (err) {
-      throw new BadRequestError(err.message);
-    }
-    const result = rollDice(parsed, { mode, random: (sides) => crypto.randomInt(1, sides + 1) });
-    const rolled_at = new Date().toISOString();
-    const text = label.trim() || (initiative ? 'Initiative' : '');
-    const id = Number(
-      db.prepare('INSERT INTO rolls (campaign_id, user_id, visibility, label, result, rolled_at) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(a.cid, request.user.id, visibility, text, JSON.stringify(result), rolled_at).lastInsertRowid,
-    );
-    const roll = { id, campaign_id: a.cid, user_id: request.user.id, visibility, label: text, result, rolled_at };
-    rollEvents.emit('roll', roll);
+    const result = rolls.roll(a.cid, request.user.id, {
+      notation: notation ?? d20Plus(sheetInitiative(sheets, a.cid, a.userId)),
+      mode,
+      label: label.trim() || (initiative ? 'Initiative' : ''),
+      visibility,
+    });
     // Only a plain d20 roll counts as initiative (the modifier is what's added to the die).
     const joined = initiative && result.natural != null && result.terms.length <= 2 ? joinFights(a.cid, a, result.total, result.total - result.natural, request.user.id) : undefined;
-    return { ...result, roll: rollView(a.cid, roll), ...(joined && { initiative: joined }) };
+    return { ...result, ...(joined && { initiative: joined }) };
   });
 
   /** The latest rolls you may see in this campaign (newest first). */
@@ -106,7 +83,7 @@ export function registerTable(app, r) {
          ORDER BY id DESC LIMIT ${ROLL_LOG}`,
       )
       .all({ cid: a.cid, uid: a.userId, dm: a.role === 'dm' ? 1 : 0 });
-    return { rolls: recent.map((r) => rollView(a.cid, r)) };
+    return { rolls: recent.map((r) => rolls.view(a.cid, r)) };
   });
 
   // ---------- handouts (the DM gives pictures and text to everyone or chosen players) ----------
@@ -174,7 +151,10 @@ export function registerTable(app, r) {
   /**
    * Live news for the whole campaign (SSE): roll {roll} for rolls you may see;
    * handout {handout} when one is given to you or changed; handout-gone {id}
-   * when one is taken back or no longer for you.
+   * when one is taken back or no longer for you; rest {rest} when the DM calls
+   * a short or long rest that includes you (the DM hears every one); merchant
+   * {id} when a merchant's stock, prices or shop changed (the page looks again
+   * if it has that shop open; the shop itself checks who may see it).
    */
   app.get('/campaigns/:cid/live', async (request, reply) => {
     const { cid } = access(request);
@@ -183,7 +163,7 @@ export function registerTable(app, r) {
       if (r.campaign_id !== cid) return;
       const a = current();
       if (!a) return sse.end();
-      if (canSeeRoll(r, a)) sse.send('roll', rollView(cid, r));
+      if (canSeeRoll(r, a)) sse.send('roll', rolls.view(cid, r));
     };
     const onHandout = ({ campaign_id, handout }) => {
       if (campaign_id !== cid) return;
@@ -192,11 +172,26 @@ export function registerTable(app, r) {
       if (canSeeHandout(handout, a)) sse.send('handout', handouts.view(handout, a));
       else sse.send('handout-gone', { id: handout.id });
     };
-    rollEvents.on('roll', onRoll);
+    const onRest = (rest) => {
+      if (rest.campaign_id !== cid) return;
+      const a = current();
+      if (!a) return sse.end();
+      if (canHearRest(rest, a)) sse.send('rest', rests.view(rest, a));
+    };
+    const onMerchant = ({ campaign_id, merchant }) => {
+      if (campaign_id !== cid) return;
+      if (!current()) return sse.end();
+      sse.send('merchant', { id: merchant.id });
+    };
+    rolls.events.on('roll', onRoll);
     handouts.events.on('update', onHandout);
+    rests.events.on('rest', onRest);
+    merchants.events.on('update', onMerchant);
     sse.onClose(() => {
-      rollEvents.off('roll', onRoll);
+      rolls.events.off('roll', onRoll);
       handouts.events.off('update', onHandout);
+      merchants.events.off('update', onMerchant);
+      rests.events.off('rest', onRest);
     });
   });
 }

@@ -220,3 +220,33 @@ test("Q&A: the books' editions and a long contents trimmed to its chapters", asy
     await t.cleanup();
   }
 });
+
+test('books: creatures\' stat blocks are found in the 2014 and 2024 layouts, by name, "Goblin 3" or "a goblin"', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dndapp-books-'));
+  fs.writeFileSync(
+    path.join(dir, 'Monster Manual.pdf'),
+    makePdf([
+      ['GOBLINS', 'Goblins are small, black-hearted humanoids.', 'Small humanoids that lair in caves.'],
+      ['GOBLIN', 'Small humanoid (goblinoid), neutral evil', 'Armor Class 15 (leather armor, shield)', 'Hit Points 7 (2d6)', 'Speed 30 ft.', 'Nimble Escape.', 'HOBGOBLIN', 'Medium humanoid (goblinoid), lawful evil', 'Armor Class 18 (chain mail, shield)', 'Hit Points 11 (2d8 + 2)'],
+    ]),
+  );
+  fs.writeFileSync(
+    path.join(dir, 'Monster Manual (2025).pdf'),
+    makePdf([['Owlbear', 'Large Monstrosity, Unaligned', 'AC 13 Initiative +1 (11)', 'HP 59 (7d10 + 21)', 'Speed 40 ft., Climb 40 ft.']]),
+  );
+  const books = createBooks({ dir, log: {} });
+  try {
+    const goblin = await books.findCreature('Goblin 3');
+    assert.equal(goblin.name, 'Goblin');
+    assert.equal(goblin.book, 'Monster Manual');
+    assert.match(goblin.text, /Armor Class 15[\s\S]*Nimble Escape/);
+    assert.doesNotMatch(goblin.text, /HOBGOBLIN/, 'stops at the next creature');
+    assert.equal((await books.findCreature('a hobgoblin')).name, 'Hobgoblin');
+    assert.match((await books.findCreature('owlbear')).text, /AC 13[\s\S]*7d10/);
+    assert.equal((await books.findCreature('Goblins')).page, 2, 'the stat block, not the lore page before it');
+    assert.equal(await books.findCreature('Ember Wyrmling'), null);
+    assert.equal(await books.findSpell('Goblin'), null, 'creatures are not spells');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

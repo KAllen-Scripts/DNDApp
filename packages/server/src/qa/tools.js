@@ -8,11 +8,13 @@
  *     (records' known_by; transcripts of sessions they attended). DMs see all.
  *   - player notes: only their own. Not even the DM sees other players' notes.
  * The group's rulebooks (BOOK_DEFS) aren't campaign data, so everyone sees them.
+ * The DM's saved creatures (CREATURE_DEFS) are only ever passed in when the DM asks.
  */
 import { z } from 'zod';
 import { formatTimestamp, formatUtterance, parseTimestamp, CITATION_RE } from '@dndapp/shared';
 import { renderRecord } from '../kb/store.js';
 import { preparedTranscript } from '../pipeline/prepare.js';
+import { creatureKey } from '../creatures.js';
 
 const SessionRange = {
   from_session: z.number().int().nullable().describe('Only from this session number, or null'),
@@ -77,12 +79,39 @@ const BOOK_DEFS = {
   },
 };
 
+const CREATURE_DEFS = {
+  get_my_creatures: {
+    description: "The DM's own saved creatures in full: stat block, hit points, size, speed, darkvision and the DM's notes. These beat the books and your own knowledge.",
+    schema: z.object({ names: z.array(z.string()).min(1).max(6).describe('Names as listed in dm_creatures') }),
+  },
+};
+
+const SIZE_NAMES = { 0.5: 'Tiny', 1: 'Small or Medium', 2: 'Large', 3: 'Huge', 4: 'Gargantuan' };
+
+/** One of the DM's creatures, for the model. */
+function renderCreature(c) {
+  const facts = [
+    `${c.kind === 'npc' ? 'NPC' : 'Enemy'}, ${SIZE_NAMES[c.size] ?? 'Medium'}`,
+    c.hp_max ? `max HP ${c.hp_max}` : '',
+    c.speed != null ? `speed ${c.speed} ft.` : '',
+    c.darkvision ? `darkvision ${c.darkvision} ft.` : '',
+  ].filter(Boolean).join(', ');
+  const from = c.stats?.source === 'book' ? ` (copied from ${c.stats.from})` : c.stats?.source === 'web' ? ' (found on the web)' : c.stats?.source === 'ai' ? " (written by the AI from memory)" : '';
+  return [
+    `--- ${c.name} (the DM's Creatures tab)`,
+    facts,
+    c.stats ? `Stat block${from}:\n${c.stats.text}` : 'No stat block saved.',
+    c.notes ? `DM's notes: ${c.notes}` : '',
+  ].filter(Boolean).join('\n');
+}
+
 /**
  * @param {object} opts
  * @param {{ userId: number, seesAll: boolean }} opts.viewer  who is asking
+ * @param {object[]} [opts.dmCreatures]  the DM's saved creatures; pass them only when the DM is asking
  * @param {object} [opts.books]  the group's rulebooks; the book tools are added only if there are any
  */
-export function createTools({ db, store, kb, search, books, config, campaignId, viewer }) {
+export function createTools({ db, store, kb, search, books, config, campaignId, viewer, dmCreatures = [] }) {
   const maxChars = config.qa.maxToolResultTokens * 4;
   const clip = (s, max = maxChars) => (s.length > max ? `${s.slice(0, max)}\n…(truncated)` : s);
   const ownNotesOnly = { userId: viewer.userId, seesAll: false };
@@ -148,6 +177,10 @@ export function createTools({ db, store, kb, search, books, config, campaignId, 
     },
     search_my_notes: async ({ query }) =>
       clip(formatNotes(await search.search(campaignId, query, { kinds: ['note'], viewer: ownNotesOnly, limit: 6 })) || 'No matching notes.'),
+    get_my_creatures: async ({ names }) => {
+      const found = names.map((n) => dmCreatures.find((c) => creatureKey(c.name) === creatureKey(n)) ?? `--- ${n}: not one of the DM's creatures.`);
+      return clip(found.map((c) => (typeof c === 'string' ? c : renderCreature(c))).join('\n\n'));
+    },
     search_books: async ({ terms, book }) => {
       const hits = await books.search(terms, { book });
       if (hits.error) return hits.error;
@@ -175,11 +208,22 @@ export function createTools({ db, store, kb, search, books, config, campaignId, 
     },
   };
 
-  const defs = { ...DEFS, ...(books?.status().books.length ? BOOK_DEFS : {}) };
+  const defs = { ...DEFS, ...(books?.status().books.length ? BOOK_DEFS : {}), ...(dmCreatures.length ? CREATURE_DEFS : {}) };
 
   return {
     /** Agent tools: { name, description, schema, run(input) -> string }. Providers validate input. */
     list: Object.entries(defs).map(([name, d]) => ({ name, description: d.description, schema: d.schema, run: handlers[name] })),
+
+    /** The DM's creatures named in the question, in full (so it can answer at once), or ''. */
+    myCreaturesIn(question) {
+      const words = ` ${creatureKey(question)} `;
+      const named = dmCreatures.filter((c) => {
+        const key = creatureKey(c.name);
+        return key && (words.includes(` ${key} `) || words.includes(` ${key}s `) || words.includes(` ${key}es `));
+      });
+      if (!named.length) return '';
+      return clip(`<my_creatures note="The DM's own creatures named in the question. These beat the books and your own knowledge.">\n${named.slice(0, 3).map(renderCreature).join('\n\n')}\n</my_creatures>`);
+    },
 
     /**
      * Search on the question before calling the model, so it can often answer

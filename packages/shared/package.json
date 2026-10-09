@@ -9,7 +9,8 @@
     "./dice.js": "./src/dice.js",
     "./rolls.js": "./src/rolls.js",
     "./map.js": "./src/map.js",
-    "./citations.js": "./src/citations.js"
+    "./citations.js": "./src/citations.js",
+    "./coins.js": "./src/coins.js"
   },
   "scripts": {
     "test": "node --test \"test/*.test.js\""

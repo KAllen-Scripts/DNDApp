@@ -115,15 +115,19 @@
         <button role="tab" data-tab="notes" aria-selected="false"><span class="tab-icon" aria-hidden="true">✎</span><span>Notes</span></button>
         <button role="tab" data-tab="sheet" aria-selected="false"><span class="tab-icon" aria-hidden="true">⚔</span><span>Sheet</span></button>
         <button role="tab" data-tab="creatures" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">☠</span><span>Creatures</span></button>
+        <button role="tab" data-tab="items" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">✧</span><span>Items</span></button>
+        <button role="tab" data-tab="merchants" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">⚖</span><span>Merchants</span></button>
         <button role="tab" data-tab="map" aria-selected="false"><span class="tab-icon" aria-hidden="true">⌖</span><span>Map</span></button>
         <button role="tab" data-tab="handouts" aria-selected="false"><span class="tab-icon" aria-hidden="true">✉</span><span>Handouts</span></button>
         <button role="tab" data-tab="archivist" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">☰</span><span>Archivist</span></button>
       </nav>
       <button id="dice-open" class="ghost dice-open" title="Roll dice">Dice</button>
+      <button id="rest-open" class="ghost rest-open" title="Call a short or long rest for the party" hidden>Rest</button>
       <button class="ghost look-open" title="Themes and layouts">Look</button>
       <button class="ghost change-password">Change password</button>
       <button class="ghost logout">Log out</button>
     </header>
+    <dialog id="rest-dialog" class="map-dialog"></dialog>
 
     <!-- Ask -->
     <section id="tab-ask" class="panel ask-panel">
@@ -217,6 +221,34 @@
       <dialog id="creature-dialog" class="map-dialog"></dialog>
     </section>
 
+    <!-- The DM's items (items.js): what merchants sell, kept once. -->
+    <section id="tab-items" class="panel creatures-panel" hidden>
+      <div class="creatures-bar">
+        <button id="item-new" class="primary">New item</button>
+        <button id="item-lookup" class="ghost" title="Fill one in by name: your items first, then the books, then the AI">Look up</button>
+        <button id="item-find" class="ghost" title="Have the AI find an item on the web, official or not, with a picture">Find online</button>
+        <input id="items-filter" type="search" placeholder="Find…" aria-label="Find an item">
+        <span id="items-status" class="muted small" role="status"></span>
+      </div>
+      <div id="items" class="creatures"></div>
+      <dialog id="item-dialog" class="map-dialog"></dialog>
+    </section>
+
+    <!-- The DM's merchants (merchants.js): shops with stock and prices, put on maps as tokens. -->
+    <section id="tab-merchants" class="panel creatures-panel" hidden>
+      <div class="creatures-bar">
+        <button id="merchant-new" class="primary">New merchant</button>
+        <input id="merchants-filter" type="search" placeholder="Find…" aria-label="Find a merchant">
+        <span id="merchants-status" class="muted small" role="status"></span>
+      </div>
+      <div id="merchants" class="creatures merchants"></div>
+      <dialog id="merchant-dialog" class="map-dialog"></dialog>
+    </section>
+
+    <!-- A merchant's shop (merchants.js): players open it from the merchant's token and buy. -->
+    <dialog id="shop-dialog" class="map-dialog shop-dialog"></dialog>
+    <dialog id="shop-item-dialog" class="map-dialog"></dialog>
+
     <!-- Maps (map.js): the DM imports and sets them up; players move their own token. -->
     <section id="tab-map" class="panel map-panel" hidden>
       <!-- The toolbars: above the map, below it or down its left side (Look). -->
@@ -237,6 +269,8 @@
           <option value="">Nothing beside</option>
           <option value="sheet">Sheet beside</option>
           <option value="creatures">Creatures beside</option>
+          <option value="items">Items beside</option>
+          <option value="merchants">Merchants beside</option>
           <option value="ask">Ask beside</option>
           <option value="notes">Notes beside</option>
           <option value="handouts">Handouts beside</option>

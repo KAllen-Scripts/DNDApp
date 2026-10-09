@@ -7,8 +7,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 // v5 only added the character_sheets table, v7 the maps table, v8 map_pins, v9 character_pictures and v10 map_explored (all created by schema.sql), so they need no migration.
 // v11 added handouts, rolls and archivist_marks (created by schema.sql), and edited_at/deleted_at to player_notes.
-// v12 added creatures (created by schema.sql).
-const SCHEMA_VERSION = 12;
+// v12 added creatures, v13 rests, v14 items and merchants (all created by schema.sql).
+const SCHEMA_VERSION = 14;
 
 /**
  * @param {string} file  path to the SQLite file, or ':memory:'

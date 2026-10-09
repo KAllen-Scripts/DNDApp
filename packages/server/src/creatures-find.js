@@ -1,9 +1,11 @@
 /**
  * The DM asks the AI to find a creature online: official or not (homebrew
- * sites, wikis, forums). The AI searches the web, writes up its 5e stat block
- * and gives the page it came from and pictures of it; the server then
- * downloads the first picture that works (public internet only,
- * net/fetch-public.js). Only the DM ever sees the result.
+ * sites, wikis, forums). The group's own books come first: if one prints the
+ * creature's stat block, that is used (labelled with the book and page) and
+ * the web is searched only for pictures. Otherwise the AI searches the web,
+ * writes up its 5e stat block and gives the page it came from and pictures
+ * of it. The server then downloads the first picture that works (public
+ * internet only, net/fetch-public.js). Only the DM ever sees the result.
  */
 import { z } from 'zod';
 import { inspectPicture } from './images.js';
@@ -20,6 +22,15 @@ Open the most useful page or two to read the actual stat block. Then answer with
 - up to four direct addresses of pictures of the creature (the image files themselves, ending in .png, .jpg, .jpeg, .webp or .gif where possible, taken from the pages you opened), best first
 
 If you can't find anything at all for it, say so plainly rather than inventing one.`;
+
+/** When the group's books have it: their stat block wins, and the web is only for pictures. */
+const FROM_BOOK = (printed) => `The group owns this creature's book, so its stat block comes from there, not the web. Here is the page from "${printed.book}" (page ${printed.page}), read from a PDF (fix obvious OCR mistakes and broken lines, but keep the book's wording and numbers):
+
+<book title="${printed.book}" page="${printed.page}">
+${printed.text}
+</book>
+
+Write that stat block out in full in Markdown as your answer's stat block, with the source being that book and page (official). Search the web only for pictures of this creature (direct image addresses, best first).`;
 
 const FoundOut = z.object({
   found: z.boolean().describe('false if the research found nothing for this creature'),
@@ -45,9 +56,10 @@ const TIDY = 'Turn research notes about a D&D 5e creature into the requested fie
 /**
  * @param {object} opts
  * @param {object} opts.llm
+ * @param {object} [opts.books]  the group's books (sheets/books.js); looked in first
  * @param {(url: string) => Promise<{ buf: Buffer }>} [opts.fetchImage]  injectable for tests
  */
-export function createCreatureFinder({ llm, fetchImage = (url) => fetchPublic(url) }) {
+export function createCreatureFinder({ llm, books = null, fetchImage = (url) => fetchPublic(url) }) {
   /** The first of the pictures that downloads and is really a picture, or null. */
   async function firstPicture(urls) {
     for (const url of urls.slice(0, 6)) {
@@ -66,11 +78,15 @@ export function createCreatureFinder({ llm, fetchImage = (url) => fetchPublic(ur
      * or null if nothing was found.
      */
     async find(query, { campaignId, userId }) {
-      const notes = await llm.research({ task: 'maps', purpose: 'creature:find', system: RESEARCH, prompt: `Find this creature: ${query}`, campaignId, userId });
+      const printed = await books?.findCreature(query);
+      const prompt = printed ? `Find this creature: ${query}\n\n${FROM_BOOK(printed)}` : `Find this creature: ${query}`;
+      const notes = await llm.research({ task: 'maps', purpose: printed ? 'creature:find-book' : 'creature:find', system: RESEARCH, prompt, campaignId, userId });
       const out = await llm.structured({ task: 'maps', purpose: 'creature:tidy', system: TIDY, prompt: `<request>${query}</request>\n<notes>\n${notes}\n</notes>`, schema: FoundOut, campaignId, userId });
       if (!out.found || !out.stat_block.trim()) return null;
       const picture = await firstPicture(out.image_urls.filter((u) => /^https?:\/\//i.test(u)));
-      const source = /^https?:\/\//i.test(out.source_url) ? { url: out.source_url.slice(0, 1000), title: out.source_title.slice(0, 200), official: out.official } : null;
+      // From the books: no web page to link; the stat block says which book and page.
+      const source = !printed && /^https?:\/\//i.test(out.source_url) ? { url: out.source_url.slice(0, 1000), title: out.source_title.slice(0, 200), official: out.official } : null;
+      const from = printed ? { source: 'book', from: `${printed.book}, page ${printed.page}` } : { source: 'web' };
       return {
         fields: {
           name: out.name.trim() || query,
@@ -79,7 +95,7 @@ export function createCreatureFinder({ llm, fetchImage = (url) => fetchPublic(ur
           hp_max: out.hp_average && out.hp_average > 0 ? out.hp_average : null,
           speed: out.speed_feet ?? null,
           darkvision: out.darkvision_feet ?? 0,
-          stats: { name: out.name, ac: out.ac, hp_formula: out.hp_formula, speed: out.speed, challenge: out.challenge, text: out.stat_block, source: 'web' },
+          stats: { name: out.name, ac: out.ac, hp_formula: out.hp_formula, speed: out.speed, challenge: out.challenge, text: out.stat_block, ...from },
           source: source && picture ? { ...source, picture: picture.url.slice(0, 1000) } : source,
         },
         picture: picture?.buf ?? null,
