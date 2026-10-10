@@ -106,7 +106,7 @@ export function createPipeline({ db, store, archive, search, kb, archivist, upda
      * read: no AI call. Either way, the mark moves to `until`.
      */
     async applyUpdates(cid, until, onProgress = () => {}) {
-      const u = updates.collect(cid, until);
+      const u = await updates.collect(cid, until);
       if (u.until <= u.since) return { report: null };
       if (!u.sheets.length && !u.notes.length && !u.handouts.length) {
         updates.setMark(cid, u.until);
