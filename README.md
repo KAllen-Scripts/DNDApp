@@ -105,7 +105,7 @@ The **Notes** tab: private notes, grouped by session date. Each can be edited or
 
 ### What the archivist reads between sessions
 
-Besides transcripts and notes, the archivist gets each player's character sheet (in full the first time, then every change with the time it was saved), notes written, edited or deleted after their session was processed, and handouts. This runs once things have been quiet for `ARCHIVIST_UPDATES_DELAY_MINUTES` (default 10), so filling in a sheet is one AI run, not one per keystroke. What's only on a sheet stays known only by that player in the knowledge base, though the DM sees every record (as with notes).
+Besides transcripts and notes, the archivist gets each player's character sheet (in full the first time, then every change with the time it was saved), notes written, edited or deleted after their session was processed, and handouts (their text, and what the AI read in their pictures: any writing word for word, then what it shows). This runs once things have been quiet for `ARCHIVIST_UPDATES_DELAY_MINUTES` (default 10), so filling in a sheet is one AI run, not one per keystroke. What's only on a sheet stays known only by that player in the knowledge base, though the DM sees every record (as with notes).
 
 ### Maps
 
@@ -242,6 +242,8 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/spells?q=` | Spell name suggestions (SRD and your books) |
 | GET | `/campaigns/:cid/spells/lookup?name=` | A spell's details: SRD, else your books (tidied by the AI), else the AI's memory. 404 if not found; 429 past `SHEET_AI_PER_HOUR` AI calls |
 | GET | `/campaigns/:cid/gear/lookup?name=` | An item for your Inventory (players): PHB weapons and armour from the tables (also "+1 Longsword"), else your books, else the AI's memory, never the DM's own items → `{item, from: srd \| book \| ai}` (an unsaved inventory line); 404 if not found; 429 past `SHEET_AI_PER_HOUR` AI calls |
+| GET | `/campaigns/:cid/gear/pictures` | Pictures of the DM's items in your Inventory (players; bought from a merchant) → `{pictures: {item id: key}}`, only those with one |
+| GET | `/campaigns/:cid/gear/items/:iid/picture?v=` | One of them, cut to a square (webp); 404 unless that item is in your own inventory and has a picture |
 | POST | `/campaigns/:cid/roll` | Roll dice: `{notation: "1d20+5", mode?: normal \| advantage \| disadvantage, label?, visibility?: party \| dm \| self, initiative?: true}` → `{notation, mode, terms, total, natural, roll, initiative?}`. d2–d20 and d100, up to 50 dice. Logged and sent live to whoever may see it (`party`: everyone, the default; `dm`: the DM and you, a secret roll for the DM; `self`: only you). With `initiative` the notation may be left out (d20 + the initiative on your sheet), and the total goes into every fight on a map waiting for one of your player character tokens: `initiative: [{map_id, map, token_id, name}]` |
 | GET | `/campaigns/:cid/rolls` | The last 50 rolls you may see `{rolls: [{id, user_id, name, from_dm, visibility, label, result, rolled_at}]}` |
 | GET | `/campaigns/:cid/live` | Live news for the campaign (SSE): `roll` (a roll you may see), `handout` (one given to you, or changed), `handout-gone` `{id}`, `rest` (a rest the DM called that includes you; the DM hears all), `merchant` `{id}` (a merchant's stock, prices or shop changed), `settings` (the DM changed the campaign's settings), `sheet` `{version}` (your own sheet was saved somewhere else: hit points changed on the map, a purchase, a rest) |
@@ -282,7 +284,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | PATCH / DELETE | `/campaigns/:cid/items/:iid` | Change one (DM) / take it off the list (DM; merchants keep selling it; kept in the archive) |
 | GET / PUT / DELETE | `/campaigns/:cid/items/:iid/picture` | Its picture, square (DM) / give it one `{filename, data}` / none |
 | POST | `/campaigns/:cid/items/lookup` | Look an item up and save it (DM) `{name}`: your items, then the books, then the AI → `{item, from: yours \| book \| ai}`; 404 if no one knows it |
-| GET | `/campaigns/:cid/gear/equipped` | What each player has equipped (DM): `{players: [{user_id, name, character, ac, ac_own, gear: [{name, kind, equipped, qty, proficient, magic, attuned, attunement, armor, effects, to_hit, damage}], carried, capacity, load, attuned}]}`; nothing else from the sheets |
+| GET | `/campaigns/:cid/gear/equipped` | What each player has equipped (DM): `{players: [{user_id, name, character, ac, ac_own, gear: [{name, item_id, picture, kind, equipped, qty, proficient, magic, attuned, attunement, armor, effects, to_hit, damage}], carried, capacity, load, attuned}]}`; nothing else from the sheets |
 | POST | `/campaigns/:cid/items/:iid/fill` | Fill in a saved item the same way (DM) `{name?}`; a price you set stays |
 | POST | `/campaigns/:cid/items/find` | Have the AI find an item on the web with a picture (DM) `{query}`; 202, fills in in the background like creatures |
 | GET / POST | `/campaigns/:cid/merchants` | The DM's merchants with stock, sales and where their tokens are (DM only) / set one up `{name, description?, notes?, color?, open?, restock_every? (long rests), picture?}` |

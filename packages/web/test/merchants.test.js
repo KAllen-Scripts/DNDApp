@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { emptySheet } from '@dndapp/shared/sheet.js';
-import { withPage, addDm, importMap, createFakeLLM, mapReading } from './helpers.js';
+import { withPage, addDm, importMap, createFakeLLM, mapReading, terrain } from './helpers.js';
 
 const healing = { found: true, name: 'Potion of Healing', kind: 'potion', rarity: 'common', attunement: false, price: '50 gp', weight_lb: 0.5, description: 'You regain **2d4 + 2** hit points.' };
 const llm = () => createFakeLLM({ structured: (opts) => (opts.purpose === 'item:ai' ? healing : mapReading()) });
@@ -123,5 +123,59 @@ test('items and merchants: a player opens the shop from the token and buys; the 
     page.click('[data-tab=sheet]');
     await page.settle();
     assert.equal(page.$('#sheet [aria-label="Gold pieces"]').value, '20', 'the sheet on screen shows it');
+  });
+});
+
+test('items and merchants: the DM makes a new item by hand right from the merchant, with a picture; the buyer sees the picture in their inventory', async () => {
+  await withPage({
+    before: async (t) => {
+      const map = await importMap(t, { patch: { shown: true } });
+      const m = (await t.request('POST', `/campaigns/${t.campaign.id}/merchants`, { body: { name: 'Mira' } })).json();
+      await t.request('POST', `/campaigns/${t.campaign.id}/maps/${map.id}/merchants/${m.id}`, { body: {} });
+      return { dana: await addDm(t), m };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t, { m }) => {
+    page.click('[data-tab=merchants]');
+    page.click(button(page, '#merchants .merchant', 'Add item'));
+    page.click(button(page, '#merchant-dialog', 'Make a new item'));
+    const form = page.$('#merchant-dialog form');
+    assert.match(page.text(form.querySelector('h2')), /A new item for Mira/);
+    page.type(form.querySelector('[name=name]'), 'Ember Charm');
+    page.$('#merchant-dialog [name=kind]').value = 'magic';
+    page.type(form.querySelector('[name=text]'), 'Warm to the touch.');
+    page.type(form.querySelector('[aria-label=Price]'), '25');
+    page.type(form.querySelectorAll('input[type=number]')[2], '4');
+    page.setFiles('#merchant-dialog input[type=file]', [{ name: 'charm.png', type: 'image/png', content: await terrain(40, 40) }]);
+    page.submit(form);
+    await page.waitFor(() => page.text('#merchants .stock').includes('Ember Charm'), { what: 'the new item on sale' });
+    assert.match(page.text('#merchants .stock'), /Ember Charm ?25 gp ?4 left/);
+
+    const [charm] = (await t.request('GET', `/campaigns/${t.campaign.id}/items`)).json().items;
+    assert.deepEqual([charm.name, charm.kind, charm.price, charm.text, charm.source.kind], ['Ember Charm', 'magic', 2500, 'Warm to the touch.', 'dm']);
+    assert.ok(charm.picture, 'with its picture');
+    assert.equal(t.merchants.get(t.campaign.id, m.id).stock[0].item, charm.id);
+    page.click('[data-tab=items]');
+    assert.match(page.text('#items'), /Ember Charm/, 'it joined the Items tab');
+  });
+
+  // Sam buys it: the inventory line shows its picture.
+  await withPage({
+    before: async (t) => {
+      const map = await importMap(t, { patch: { shown: true } });
+      const items = `/campaigns/${t.campaign.id}/items`;
+      const charm = (await t.request('POST', items, { body: { name: 'Ember Charm', kind: 'magic', price: 100, text: 'Warm.', picture: { filename: 'c.png', data: (await terrain(40, 40)).toString('base64') } } })).json();
+      const base = `/campaigns/${t.campaign.id}/merchants`;
+      const m = (await t.request('POST', base, { body: { name: 'Mira' } })).json();
+      const line = (await t.request('POST', `${base}/${m.id}/stock`, { body: { item: charm.id } })).json().stock[0];
+      await t.request('POST', `/campaigns/${t.campaign.id}/maps/${map.id}/merchants/${m.id}`, { body: {} });
+      t.sheets.save(t.campaign.id, t.sam.id, { ...emptySheet({ name: 'Thorin' }), coins: { cp: 0, sp: 0, ep: 0, gp: 5, pp: 0 }, inventory: [{ name: 'Backpack' }] });
+      await t.request('POST', `${base}/${m.id}/buy`, { as: t.sam.token, body: { line: line.id } });
+    },
+    page: (t) => ({ as: t.sam }),
+  }, async (page) => {
+    page.click('[data-tab=inventory]');
+    await page.waitFor(() => /^blob:/.test(page.$('#inventory img.gear-picture')?.src ?? ''), { what: 'the picture in the inventory' });
+    assert.equal(page.$$('#inventory img.gear-picture').length, 1, 'only the bought item has one');
   });
 });
