@@ -198,8 +198,20 @@ export function createMapReader({ llm }) {
      * the straight walls: nearly level or upright ones are straightened, ends
      * that nearly meet are joined, and on a map with a grid, ends close to a
      * grid corner or line are put on it.
+     *
+     * `onProgress` hears how far it has got, so the DM can see it working:
+     * { step: 'tracing' }, then { step: 'checking', parts, parts_done } as
+     * each part's check comes back, then { step: 'tidying' }.
      */
-    async walls({ buf, width, height, grid = null, campaignId, userId }) {
+    async walls({ buf, width, height, grid = null, campaignId, userId, onProgress = () => {} }) {
+      const progress = (p) => {
+        try {
+          onProgress(p);
+        } catch {
+          // Only news; never stops the drafting.
+        }
+      };
+      progress({ step: 'tracing' });
       const full = await sharp(buf).rotate().flatten({ background: '#ffffff' }).png().toBuffer();
       const overview = await withRuler(full, WHOLE, { width, height });
       const ask = (purpose, system, prompt, image) => llm.structured({
@@ -231,7 +243,14 @@ export function createMapReader({ llm }) {
       }
       const many = tiles.length > 1;
       let failed = 0;
+      let partsDone = 0;
+      progress({ step: 'checking', parts: tiles.length, parts_done: 0 });
       const checked = await Promise.all(tiles.map(async ({ core, view }) => {
+        const out = await checkPart({ core, view });
+        progress({ step: 'checking', parts: tiles.length, parts_done: ++partsDone });
+        return out;
+      }));
+      async function checkPart({ core, view }) {
         try {
           const ruled = many ? await withRuler(full, view, { width, height }) : overview;
           const part = many
@@ -249,10 +268,11 @@ export function createMapReader({ llm }) {
         }
         failed++;
         return { core, out: draft };
-      }));
+      }
       if (failed) notes.push(failed === tiles.length ? "The AI's check of its draft failed, so this is its first draft." : `The AI's check failed for ${failed} of ${tiles.length} parts of the map; those parts are its first draft.`);
       if (failed < tiles.length) notes.splice(0, 1, ...checked.filter((x) => x.out !== draft).map((x) => x.out.notes));
 
+      progress({ step: 'tidying' });
       // Each part keeps what lies in it (by its middle), so overlaps don't double up.
       const keep = (core) => (p) => p.x >= core.x0 && (p.x < core.x1 || core.x1 === 1000) && p.y >= core.y0 && (p.y < core.y1 || core.y1 === 1000);
       const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });

@@ -44,7 +44,17 @@ test('a big map is checked in close-ups: each part keeps what lies in it, and a 
   });
   const reader = createMapReader({ llm });
   const buf = await terrain(4000, 1000);
-  const r = await reader.walls({ buf, width: 4000, height: 1000 });
+  const heard = [];
+  const r = await reader.walls({ buf, width: 4000, height: 1000, onProgress: (p) => heard.push(p) });
+  // It says how far it has got: tracing, each close-up's check as it comes back (the failed one too), tidying.
+  assert.deepEqual(heard, [
+    { step: 'tracing' },
+    { step: 'checking', parts: 3, parts_done: 0 },
+    { step: 'checking', parts: 3, parts_done: 1 },
+    { step: 'checking', parts: 3, parts_done: 2 },
+    { step: 'checking', parts: 3, parts_done: 3 },
+    { step: 'tidying' },
+  ]);
   const checks = llm.calls.filter((c) => c.purpose === 'map:walls-check');
   assert.equal(checks.length, 3, '3 × 1 close-ups');
   assert.ok(checks.every((c) => /close-up of part of the map/.test(c.prompt)));
@@ -64,7 +74,8 @@ test('a big map is checked in close-ups: each part keeps what lies in it, and a 
 
 test('if the check fails on a small map, the first draft stays and the DM is told', async () => {
   const llm = createFakeLLM({ structured: (opts) => (opts.purpose === 'map:walls' ? draftOut() : { nonsense: true }) });
-  const r = await createMapReader({ llm }).walls({ buf: await terrain(600, 400), width: 600, height: 400 });
+  // A listener that throws never stops the drafting.
+  const r = await createMapReader({ llm }).walls({ buf: await terrain(600, 400), width: 600, height: 400, onProgress: () => { throw new Error('gone'); } });
   assert.equal(r.walls.length, 2);
   assert.equal(r.notes, "Draft. The AI's check of its draft failed, so this is its first draft.");
 });

@@ -52,6 +52,8 @@ const num = (v, { min, max, fallback = null }) => {
   return Math.min(max, Math.max(min, n));
 };
 const pick = (v, list, fallback) => (list.includes(v) ? v : fallback);
+/** A date and time as an ISO string, or '' if it isn't one. */
+const isoStr = (v) => (typeof v === 'string' && v.length <= 40 && !Number.isNaN(Date.parse(v)) ? v : '');
 const color = (v, fallback) => (/^#[0-9a-f]{6}$/i.test(String(v)) ? String(v).toLowerCase() : fallback);
 
 /** A token id: short and random enough for one map. */
@@ -265,6 +267,13 @@ export function normalizeScale(s) {
 
 const round = (n, places) => Math.round(n * 10 ** places) / 10 ** places;
 
+/** What the AI's wall draft found: counts, or null. */
+function normalizeFound(f) {
+  if (!f || typeof f !== 'object') return null;
+  const n = (v) => Math.round(num(v, { min: 0, max: 100_000, fallback: 0 }));
+  return { walls: n(f.walls), obstacles: n(f.obstacles), doors: n(f.doors), lights: n(f.lights), terrain: n(f.terrain) };
+}
+
 /** Every map the server saves goes through this: known fields only, types fixed, sizes capped. */
 export function normalizeMap(input = {}) {
   const m = input && typeof input === 'object' ? input : {};
@@ -299,6 +308,14 @@ export function normalizeMap(input = {}) {
       status: pick(m.wall_draft?.status, ['', 'pending', 'done', 'failed'], ''),
       error: str(m.wall_draft?.error, 500),
       notes: longStr(m.wall_draft?.notes, 2000),
+      // How far it has got while pending: tracing, then checking its draft part by part, then tidying.
+      step: pick(m.wall_draft?.step, ['', 'tracing', 'checking', 'tidying'], ''),
+      parts: Math.round(num(m.wall_draft?.parts, { min: 0, max: 9, fallback: 0 })),
+      parts_done: Math.round(num(m.wall_draft?.parts_done, { min: 0, max: 9, fallback: 0 })),
+      started_at: isoStr(m.wall_draft?.started_at),
+      finished_at: isoStr(m.wall_draft?.finished_at),
+      // What the finished draft holds, for the DM's "done" message.
+      found: normalizeFound(m.wall_draft?.found),
     },
     // Where the image came from, when it was a page of a PDF (kept in the archive too).
     source: m.source?.file === 'source.pdf' ? { file: 'source.pdf', page: Math.max(1, Math.round(num(m.source.page, { min: 1, max: 100_000, fallback: 1 }))) } : null,

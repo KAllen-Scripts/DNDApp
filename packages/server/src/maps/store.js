@@ -219,7 +219,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         doors: map.walls
           .filter((w) => w.door && doorSeen(map, seen.polygons, w))
           .map(({ id, x1, y1, x2, y2, open, locked }) => ({ id, x1, y1, x2, y2, open, locked })),
-        wall_draft: { status: '', error: '', notes: '' },
+        wall_draft: { status: '', error: '', notes: '', step: '', parts: 0, parts_done: 0, started_at: '', finished_at: '', found: null },
         fog: { ...map.fog, shapes: [], mask: seen.mask },
         // Areas of effect: their own, and ones whose point of origin they can see.
         templates: map.templates.filter((t) => t.user_id === userId || canSee(map, seen.polygons, t.x, t.y)),
@@ -288,7 +288,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
       }
       for (const r of db.prepare("SELECT * FROM maps WHERE json_extract(data, '$.wall_draft.status') = 'pending' AND json_extract(data, '$.removed') IS NOT 1").all()) {
         maps.change(r.campaign_id, r.id, (m) => {
-          m.wall_draft = { ...m.wall_draft, status: 'failed', error: 'The server restarted while the AI was drafting walls. Try again.' };
+          m.wall_draft = { ...m.wall_draft, status: 'failed', error: 'The server restarted while the AI was drafting walls. Try again.', step: '', finished_at: new Date().toISOString() };
         }, { reason: 'wall draft interrupted' });
       }
     },

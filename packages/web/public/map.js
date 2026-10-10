@@ -168,6 +168,7 @@ export function render() {
     $('#map-ruler-line').replaceChildren();
     renderSelection();
     renderCombat();
+    renderWallDraft();
     $('#map-signals').replaceChildren();
     empty.hidden = false;
     empty.textContent = state.canEdit
@@ -192,14 +193,13 @@ export function render() {
   renderPins();
   renderSelection();
   renderFogTools();
+  renderWallDraft();
   renderCombat();
   renderSignals();
   if (state.images.has(map.id) && state.images.get(map.id).key !== map.image_key) loadImage(map);
   const reading = map.reading.status;
   if (reading === 'pending') status('The AI is reading this map…');
   else if (reading === 'failed' && state.canEdit) status(map.reading.error || "The AI couldn't read this map.", true);
-  else if (state.canEdit && map.wall_draft.status === 'pending') status('The AI is tracing the walls…');
-  else if (state.canEdit && map.wall_draft.status === 'failed') status(map.wall_draft.error || "The AI couldn't draft walls.", true);
   else status([KIND_LABELS[map.kind], scaleText(map), state.canEdit && !map.shown ? 'hidden from players' : ''].filter(Boolean).join(' · '));
 }
 
@@ -307,7 +307,12 @@ function renderFogTools() {
   if (others.some((m) => m.id === chosen)) linkTo.value = chosen;
   linkTo.disabled = !others.length;
   walls.querySelector('[data-wall-mode="link"]').disabled = !others.length;
-  $('#map-walls-draft').disabled = map.wall_draft.status === 'pending';
+  const drafting = map.wall_draft.status === 'pending';
+  const draftButton = $('#map-walls-draft');
+  draftButton.disabled = drafting;
+  draftButton.classList.toggle('busy', drafting);
+  draftButton.setAttribute('aria-busy', String(drafting));
+  draftButton.textContent = drafting ? 'AI walls: working…' : 'AI walls';
   walls.querySelector('[data-wall-action="clear-ai"]').disabled = ![...map.walls, ...(map.lights ?? []), ...(map.terrain ?? [])].some((w) => w.source === 'ai');
   walls.querySelector('[data-wall-action="forget"]').disabled = !map.fog?.enabled || !map.fog.sight || !map.fog.memory;
   const count = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -318,6 +323,73 @@ function renderFogTools() {
     : map.fog.sight
       ? `${count(map.walls.length - doors - low, 'wall')}, ${count(low, 'obstacle')}, ${count(doors, 'door')}, ${count(map.lights?.length ?? 0, 'light')}. Players see what their own token can see${map.fog.dark ? ' where there is light or their darkvision reaches' : ''}, and open doors next to them.`
       : 'Players only see what you reveal. Tick Line of sight to let their tokens see past the walls.';
+}
+
+/** The DM's dismissed AI walls messages: the map's id → the finished_at they closed. */
+const WALL_NOTE_KEY = (mapId) => `dndapp.map.wallNoteSeen.${mapId}`;
+let wallDraftTick = null;
+
+/** What the AI is doing now, in words, from the map's wall_draft. */
+export function wallDraftStep(d) {
+  if (d.step === 'checking') return d.parts > 1 ? `checking its draft, close-up ${Math.min(d.parts_done + 1, d.parts)} of ${d.parts}` : 'checking its draft against the map';
+  if (d.step === 'tidying') return 'tidying up the walls';
+  return 'tracing the walls, doors and lights';
+}
+
+/** How long, in words: "40 s", "3 min". */
+export function sinceText(from, to = Date.now()) {
+  const s = Math.max(0, Math.round((to - Date.parse(from)) / 1000));
+  return s < 60 ? `${s} s` : `${Math.round(s / 60)} min`;
+}
+
+/** What the finished draft holds, in words. */
+export function foundText(f) {
+  if (!f) return '';
+  const count = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const parts = [count(f.walls, 'wall'), count(f.doors, 'door'), count(f.obstacles, 'obstacle'), count(f.lights, 'light'), count(f.terrain, 'area') + (f.terrain ? ' of difficult terrain' : '')]
+    .filter((x, i) => i < 2 || !x.startsWith('0 '));
+  return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0];
+}
+
+/**
+ * The DM's AI walls message, over the map so it shows whatever tools are
+ * open (full screen too): working (with the step and time so far, ticking),
+ * then done (what it found) or failed (why, and Try again), until closed.
+ */
+function renderWallDraft() {
+  const el = $('#map-ai-note');
+  clearTimeout(wallDraftTick);
+  const map = state.current;
+  const d = map?.wall_draft;
+  const seen = map && storage.get(WALL_NOTE_KEY(map.id));
+  const show = state.canEdit && d && (d.status === 'pending' || ((d.status === 'done' || d.status === 'failed') && d.finished_at && seen !== d.finished_at));
+  el.hidden = !show;
+  if (!show) return el.replaceChildren();
+  el.className = `map-ai-note ${d.status}`;
+  const close = () => h('button', { class: 'ghost chip-x', title: 'Close', 'aria-label': 'Close', onclick: () => { storage.set(WALL_NOTE_KEY(map.id), d.finished_at); renderWallDraft(); } }, '✕');
+  if (d.status === 'pending') {
+    el.replaceChildren(
+      h('span', { class: 'spinner', 'aria-hidden': 'true' }),
+      h('span', {}, h('strong', {}, 'AI walls: '), `${wallDraftStep(d)}…`, d.started_at ? ` ${sinceText(d.started_at)} so far.` : '', h('span', { class: 'muted' }, ' It takes a few minutes; carry on meanwhile. The walls appear when it\'s done.')),
+    );
+    const tick = setTimeout(() => state.current?.id === map.id && renderWallDraft(), 1000);
+    tick.unref?.();
+    wallDraftTick = tick;
+  } else if (d.status === 'done') {
+    const took = d.started_at ? ` in ${sinceText(d.started_at, Date.parse(d.finished_at))}` : '';
+    el.replaceChildren(
+      h('span', { class: 'tick', 'aria-hidden': 'true' }, '✓'),
+      h('span', {}, h('strong', {}, 'AI walls done: '), `${foundText(d.found)}${took}. They're drawn in purple; fix anything it got wrong.`, d.notes ? h('span', { class: 'muted' }, ` ${d.notes}`) : ''),
+      close(),
+    );
+  } else {
+    el.replaceChildren(
+      h('span', { class: 'cross', 'aria-hidden': 'true' }, '!'),
+      h('span', {}, d.error || "The AI couldn't draft walls."),
+      h('button', { class: 'ghost', onclick: () => $('#map-walls-draft').click() }, 'Try again'),
+      close(),
+    );
+  }
 }
 
 /**
@@ -1450,14 +1522,20 @@ export function initMapActions() {
   for (const b of document.querySelectorAll('[data-wall-mode]')) {
     b.addEventListener('click', () => setTool({ wallMode: state.wallMode === b.dataset.wallMode ? null : b.dataset.wallMode }));
   }
-  $('#map-walls-draft').addEventListener('click', async () => {
+  $('#map-walls-draft').addEventListener('click', async (e) => {
     const map = state.current;
     if (map.walls.some((w) => w.source === 'ai') && !confirm("Replace the AI's walls with a new draft? Walls you drew stay.")) return;
+    // Show it's started straight away; the server's answer brings the live progress.
+    const button = e.currentTarget;
+    button.disabled = true;
+    button.textContent = 'AI walls: starting…';
     try {
       const saved = await state.guarded(() => api('POST', `${base()}/${map.id}/walls/draft`, {}));
       if (saved) onMap(saved);
     } catch (err) {
       report(err);
+    } finally {
+      if (state.current) renderFogTools();
     }
   });
   $('#map-walls-file').addEventListener('click', () => $('#map-walls-file-input').click());

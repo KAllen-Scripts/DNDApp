@@ -591,13 +591,24 @@ test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and
     await t.request('PATCH', base, { body: { shown: true } });
     await t.request('PATCH', `${base}/walls`, { body: { add: { x1: 10, y1: 10, x2: 100, y2: 10 } } });
     assert.equal((await t.request('POST', `${base}/walls/draft`, { as: t.sam.token })).statusCode, 403);
+    // The DM sees how far it has got, live.
+    const steps = [];
+    const listen = (m) => m.id === map.id && m.wall_draft.status === 'pending' && steps.push(`${m.wall_draft.step} ${m.wall_draft.parts_done}/${m.wall_draft.parts}`);
+    t.maps.events.on('update', listen);
     const started = (await t.request('POST', `${base}/walls/draft`)).json();
     assert.equal(started.wall_draft.status, 'pending');
+    assert.ok(started.wall_draft.started_at, 'when it started, so the DM sees how long it has taken');
     const done = await until(() => {
       const m = t.maps.get(t.campaign.id, map.id);
       return m.wall_draft.status === 'done' && m;
     });
+    t.maps.events.off('update', listen);
+    assert.deepEqual([...new Set(steps)], ['tracing 0/0', 'checking 0/1', 'checking 1/1', 'tidying 0/0']);
     assert.equal(done.wall_draft.notes, 'The tower walls are a guess.');
+    // What it found, for the DM's "done" message: the 36 pieces of the round tower count as walls.
+    assert.deepEqual(done.wall_draft.found, { walls: 38, obstacles: 1, doors: 1, lights: 1, terrain: 1 });
+    assert.equal(done.wall_draft.step, '');
+    assert.ok(Date.parse(done.wall_draft.finished_at) >= Date.parse(done.wall_draft.started_at));
     const ai = done.walls.filter((w) => w.source === 'ai');
     // Positions are thousandths of the image; the map has 35 px squares, so ends near a grid line or corner go onto it
     // (the wall's corner at 244 → 245, the door's foot at 343 → 350) and walls that meet share it.
@@ -628,6 +639,7 @@ test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and
     assert.match(call.prompt, /700 × 490/);
     // Players never get the draft's notes.
     assert.equal((await t.request('GET', base, { as: t.sam.token })).json().wall_draft.notes, '');
+    assert.equal((await t.request('GET', base, { as: t.sam.token })).json().wall_draft.found, null);
 
     await t.request('POST', `${base}/walls/draft`);
     const again = await until(() => {
@@ -638,6 +650,39 @@ test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and
     assert.equal(again.lights.length, 1);
     await t.request('PATCH', `${base}/walls`, { body: { clear: 'ai' } });
     assert.deepEqual(t.maps.get(t.campaign.id, map.id).walls.map((w) => w.source), ['dm']);
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test("when the AI can't draft walls, the DM is told why and when, and can try again", async () => {
+  let fail = true;
+  const t = await setup({
+    llm: mapLLM((opts) => {
+      if (opts.purpose !== 'map:walls') return readOut();
+      if (fail) throw new Error('overloaded');
+      return { walls: [], doors: [], obstacles: [], notes: 'Nothing to trace.' };
+    }),
+  });
+  try {
+    const map = await importMap(t, await terrain(700, 490));
+    const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+    await t.request('POST', `${base}/walls/draft`);
+    const failed = await until(() => {
+      const m = t.maps.get(t.campaign.id, map.id);
+      return m.wall_draft.status === 'failed' && m;
+    });
+    assert.match(failed.wall_draft.error, /^The AI couldn't draft walls/);
+    assert.ok(failed.wall_draft.finished_at);
+    assert.equal(failed.wall_draft.found, null);
+    fail = false;
+    assert.equal((await t.request('POST', `${base}/walls/draft`)).json().wall_draft.finished_at, '', 'a new go starts afresh');
+    const done = await until(() => {
+      const m = t.maps.get(t.campaign.id, map.id);
+      return m.wall_draft.status === 'done' && m;
+    });
+    assert.deepEqual(done.wall_draft.found, { walls: 0, obstacles: 0, doors: 0, lights: 0, terrain: 0 });
+    assert.equal(done.wall_draft.error, '');
   } finally {
     await t.cleanup();
   }
