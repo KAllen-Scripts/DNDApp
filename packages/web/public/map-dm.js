@@ -214,6 +214,8 @@ export async function tokenDialog(token = null) {
   size.value = String(token?.size ?? 1);
   const color = h('input', { type: 'color', value: token?.color ?? TOKEN_COLORS[kind.value] });
   const hpMax = h('input', { type: 'number', min: '1', step: '1', value: token?.hp?.max ?? '', placeholder: 'unknown' });
+  // A player character with a saved sheet has the sheet's hit points.
+  if (token?.hp_sheet) Object.assign(hpMax, { disabled: true, title: 'From the player’s character sheet' });
   const hidden = h('input', { type: 'checkbox', checked: !!token?.hidden });
   const darkvision = h('input', { type: 'number', min: '0', step: '5', value: token?.darkvision || '', placeholder: 'none' });
   // Someone from the campaign's records (what the archivist has written down about them).
@@ -272,7 +274,7 @@ export async function tokenDialog(token = null) {
     };
     if (record.value !== String(token?.record?.id ?? '')) body.record = record.value ? { id: Number(record.value) } : null;
     const max = Number(hpMax.value) > 0 ? Math.round(Number(hpMax.value)) : null;
-    if (max !== (token?.hp?.max ?? null)) {
+    if (!token?.hp_sheet && max !== (token?.hp?.max ?? null)) {
       // A new maximum: keep the damage taken so far, or start at full.
       const taken = token?.hp?.max && token.hp.current != null ? token.hp.max - token.hp.current : 0;
       body.hp = max ? { current: max - taken, max } : null;

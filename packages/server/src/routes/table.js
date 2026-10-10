@@ -155,7 +155,9 @@ export function registerTable(app, r) {
    * a short or long rest that includes you (the DM hears every one); merchant
    * {id} when a merchant's stock, prices or shop changed (the page looks again
    * if it has that shop open; the shop itself checks who may see it);
-   * settings {settings} when the DM changes the campaign's settings.
+   * settings {settings} when the DM changes the campaign's settings; sheet
+   * {version} to a player when their own sheet is saved (from the map's hit
+   * points, a purchase, a rest, another window), so the page can load it.
    */
   app.get('/campaigns/:cid/live', async (request, reply) => {
     const { cid } = access(request);
@@ -189,8 +191,14 @@ export function registerTable(app, r) {
       if (!current()) return sse.end();
       sse.send('settings', settings);
     };
+    const onSheet = ({ campaign_id, user_id, version }) => {
+      if (campaign_id !== cid || user_id !== request.user.id) return;
+      if (!current()) return sse.end();
+      sse.send('sheet', { version });
+    };
     rolls.events.on('roll', onRoll);
     store.events.on('settings', onSettings);
+    sheets.events?.on('save', onSheet);
     handouts.events.on('update', onHandout);
     rests.events.on('rest', onRest);
     merchants.events.on('update', onMerchant);
@@ -200,6 +208,7 @@ export function registerTable(app, r) {
       merchants.events.off('update', onMerchant);
       rests.events.off('rest', onRest);
       store.events.off('settings', onSettings);
+      sheets.events?.off('save', onSheet);
     });
   });
 }

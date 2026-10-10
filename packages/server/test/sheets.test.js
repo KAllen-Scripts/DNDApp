@@ -322,17 +322,17 @@ test('campaign settings: the DM sets the weight rule; everyone gets it; it chang
   try {
     const url = `/campaigns/${t.campaign.id}/settings`;
     const mine = async (as) => (await t.request('GET', '/me', { as })).json().campaigns.find((c) => c.id === t.campaign.id).settings;
-    assert.deepEqual(await mine(t.sam.token), { weight: 'capacity' });
+    assert.deepEqual(await mine(t.sam.token), { weight: 'capacity', edition: null });
     assert.equal((await t.request('PATCH', url, { as: t.sam.token, body: { weight: 'ignore' } })).statusCode, 403);
     assert.equal((await t.request('PATCH', url, { body: { weight: 'heavy' } })).statusCode, 400);
     const heard = [];
     t.store.events.on('settings', (e) => heard.push(e));
     const res = await t.request('PATCH', url, { body: { weight: 'variant' } });
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(res.json(), { weight: 'variant' });
-    assert.deepEqual(heard, [{ campaign_id: t.campaign.id, settings: { weight: 'variant' } }]);
-    assert.deepEqual(await mine(t.sam.token), { weight: 'variant' });
-    assert.deepEqual((await t.request('GET', `/campaigns/${t.campaign.id}`, { as: t.sam.token })).json().settings, { weight: 'variant' });
+    assert.deepEqual(res.json(), { weight: 'variant', edition: null });
+    assert.deepEqual(heard, [{ campaign_id: t.campaign.id, settings: { weight: 'variant', edition: null } }]);
+    assert.deepEqual(await mine(t.sam.token), { weight: 'variant', edition: null });
+    assert.deepEqual((await t.request('GET', `/campaigns/${t.campaign.id}`, { as: t.sam.token })).json().settings, { weight: 'variant', edition: null });
 
     // Str 10 with 120 lb: heavily encumbered under the variant rule (the DM sees it), fine when weight is ignored.
     t.sheets.save(t.campaign.id, t.sam.id, { ...emptySheet({ name: 'Thorin' }), race: 'Human', inventory: [{ name: 'Anvil', weight: 120 }] });
@@ -344,7 +344,7 @@ test('campaign settings: the DM sets the weight rule; everyone gets it; it chang
     const ctx = await createContext({ config: t.config, paths: { ...t.paths, db: path.join(t.dir, 'restored.sqlite') }, llm: createFakeLLM(), embedder: fakeEmbedder, log: { error() {} } });
     try {
       const cid = ctx.db.prepare('SELECT id FROM campaigns WHERE slug = ?').get(t.campaign.slug).id;
-      assert.deepEqual(ctx.store.getSettings(cid), { weight: 'ignore' });
+      assert.deepEqual(ctx.store.getSettings(cid), { weight: 'ignore', edition: null });
     } finally {
       ctx.jobs.stop();
       ctx.db.close();

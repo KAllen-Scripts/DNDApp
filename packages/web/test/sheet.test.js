@@ -792,7 +792,20 @@ test('campaign settings: the DM ignores weight limits from Settings', async () =
     assert.equal(page.el('#setting-weight').value, 'capacity');
     page.type('#setting-weight', 'ignore');
     await page.waitFor(() => /Saved/.test(page.text('#settings-dialog')), { what: 'the setting to save' });
-    assert.deepEqual(t.store.getSettings(t.campaign.id), { weight: 'ignore' });
+    assert.deepEqual(t.store.getSettings(t.campaign.id), { weight: 'ignore', edition: null });
+  });
+});
+
+test('campaign settings: the DM picks the rules edition, and the Rest dialog follows it', async () => {
+  await withPage({ before: async (t) => ({ dana: await addDm(t) }), page: (t, { dana }) => ({ as: dana, storage: NO_3D }) }, async (page, t) => {
+    page.click('#settings-open');
+    assert.equal(page.el('#setting-edition').value, '');
+    await page.waitFor(() => /now 2014/.test(page.text('#setting-edition')), { what: 'the edition in use' });
+    page.type('#setting-edition', '2024');
+    await page.waitFor(() => /Saved/.test(page.text('#settings-dialog')), { what: 'the setting to save' });
+    assert.equal(t.store.getSettings(t.campaign.id).edition, '2024');
+    const rests = await t.request('GET', `/campaigns/${t.campaign.id}/rests`);
+    assert.equal(rests.json().edition, '2024');
   });
 });
 

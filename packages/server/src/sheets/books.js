@@ -93,10 +93,11 @@ export const bookTitle = (file) => file.replace(/\.pdf$/i, '').split(/\s+--\s+/)
  * '2014', '2024', or null for one whose year can't be told, each once.
  */
 export function handbookEditions(shelf) {
-  return [
-    ...new Set(shelf.filter((b) => /player.?s\s*hand\s*book/i.test(b.title)).map((b) => (b.year ? (b.year >= 2024 ? '2024' : '2014') : /2024/.test(b.title) ? '2024' : /2014/.test(b.title) ? '2014' : null))),
-  ];
+  return [...new Set(shelf.filter((b) => /player.?s\s*hand\s*book/i.test(b.title)).map(bookEdition))];
 }
+
+/** A book's rules edition: '2024' if first printed in 2024 or later, '2014' if earlier, else from its title, else null. */
+export const bookEdition = (b) => (b.year ? (b.year >= 2024 ? '2024' : '2014') : /2024/.test(b.title) ? '2024' : /2014/.test(b.title) ? '2014' : null);
 
 /** The year the book was first printed, from its credits page ("First Printing: August 2014"). */
 function printedYear(texts) {
@@ -143,6 +144,16 @@ export function createBooks({ dir, log = console }) {
         }
       }
     });
+  }
+
+  /**
+   * The closest heading to `name`, preferring the books of the campaign's
+   * edition ('2014' or '2024') when there is one: other books only if none of
+   * those has it.
+   */
+  function closestIn(list, name, edition) {
+    const own = edition ? closest(list.filter((x) => bookEdition(books[x.book]) === edition), name) : null;
+    return own ?? closest(list, name);
   }
 
   /** The closest heading to `name` in `list` (exact, else a few OCR-sized differences), or null. */
@@ -214,37 +225,40 @@ export function createBooks({ dir, log = console }) {
 
     /**
      * The printed text of a spell, from its heading to the next spell's.
+     * With an edition, that edition's books are tried first.
      * @returns {Promise<{ name: string, book: string, page: number, text: string } | null>}
      */
-    async findSpell(name) {
+    async findSpell(name, { edition = null } = {}) {
       await load();
-      const hit = closest(spells, name);
+      const hit = closestIn(spells, name, edition);
       return hit && textFrom(spells, hit, 150);
     },
 
     /**
      * A creature's printed stat block, from its name to the next creature's.
-     * "Goblin 3" and "a goblin" find the Goblin.
+     * "Goblin 3" and "a goblin" find the Goblin. With an edition, that
+     * edition's books are tried first.
      * @returns {Promise<{ name: string, book: string, page: number, text: string } | null>}
      */
-    async findCreature(name) {
+    async findCreature(name, { edition = null } = {}) {
       await load();
       const plain = String(name ?? '').replace(/\s+\d+$/, '').replace(/^\s*(?:an?|the)\s+/i, '');
-      const hit = closest(creatures, plain);
+      const hit = closestIn(creatures, plain, edition);
       return hit && textFrom(creatures, hit, 120);
     },
 
     /**
      * Pages matching any of the terms (words or short phrases), best first.
      * Rarer terms count for more, pages matching several terms rank higher,
-     * and a term in a heading counts double.
+     * and a term in a heading counts double. `edition` ('2014' or '2024')
+     * searches only that edition's books.
      * @returns {Promise<{ book: string, page: number, snippet: string }[]>}
      */
-    async search(terms, { book = null, limit = 8 } = {}) {
+    async search(terms, { book = null, limit = 8, edition = null } = {}) {
       await load();
       const found = book ? findBook(book) : null;
       if (found?.error) return found;
-      const shelf = found ? [found] : books;
+      const shelf = found ? [found] : edition ? books.filter((b) => bookEdition(b) === edition) : books;
       const wanted = [...new Set(terms.map(normText).filter((t) => t.trim().length >= 2))].slice(0, MAX_TERMS);
       if (!wanted.length || !shelf.length) return [];
       const all = shelf.flatMap((b) => b.pages.map((p, i) => ({ b, p, i })));

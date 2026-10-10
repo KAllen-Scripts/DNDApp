@@ -6,6 +6,7 @@
  * line holds the whole sheet), so the archive is never rewritten and any
  * earlier version can be rebuilt. The database keeps the current sheet.
  */
+import { EventEmitter } from 'node:events';
 import { normalizeSheet, emptySheet } from '@dndapp/shared/sheet.js';
 
 export class SheetConflictError extends Error {
@@ -62,11 +63,20 @@ export function replaySheet(entries) {
   return { sheet: normalizeSheet(doc), version, saved_at };
 }
 
-/** onSave(campaignId, userId) runs after each save that changed something (the archivist reads sheet changes). */
+/**
+ * onSave(campaignId, userId) runs after each save that changed something (the
+ * archivist reads sheet changes). `events` emits 'save' { campaign_id, user_id,
+ * version, by } too (maps show a character's hit points from the sheet; the
+ * player's page hears saves made elsewhere).
+ */
 export function createSheets({ db, archive, store, onSave = () => {} }) {
+  const events = new EventEmitter();
+  events.setMaxListeners(0);
   const row = (cid, uid) => db.prepare('SELECT data, version, updated_at FROM character_sheets WHERE campaign_id = ? AND user_id = ?').get(cid, uid);
 
   const sheets = {
+    events,
+
     /**
      * The player's sheet. Someone without one gets a blank sheet (version 0)
      * with their character and account name filled in.
@@ -101,6 +111,7 @@ export function createSheets({ db, archive, store, onSave = () => {} }) {
          ON CONFLICT (campaign_id, user_id) DO UPDATE SET data = excluded.data, version = excluded.version, updated_at = excluded.updated_at`,
       ).run(campaignId, userId, JSON.stringify(sheet), version, saved_at);
       onSave(campaignId, userId);
+      events.emit('save', { campaign_id: campaignId, user_id: userId, version, by: by ?? userId });
       return { sheet, version, updated_at: saved_at };
     },
   };
