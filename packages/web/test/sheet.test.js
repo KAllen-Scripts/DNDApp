@@ -139,7 +139,17 @@ test('sheet: classes, attacks, coins, hit points, death saves and spell slots us
     assert.equal(page.text('#sheet .summary'), 'Ranger 4 · Level 4');
 
     page.click(page.$$('#sheet .add-row').find((b) => b.textContent.includes('Add an attack')));
+    // A weapon that isn't in the inventory: no damage filled in, nothing to roll, and the sheet isn't saved until it's fixed.
     page.type(byLabel(page, 'Attack name'), 'Longbow');
+    assert.equal(byLabel(page, 'Damage and type').value, '');
+    assert.equal(byLabel(page, 'Roll this attack').disabled, true);
+    assert.match(page.text('#sheet .atk-warn'), /You don't have a Longbow in your Inventory/);
+    await page.waitFor(() => /Not saved: you don't have a Longbow in your Inventory/.test(page.text('#sheet-status')), { what: 'the save to be held' });
+    assert.equal((await serverSheet(t)).version, 0);
+    // Anything that isn't a weapon is fine (a spell, a feature, claws).
+    page.type(byLabel(page, 'Attack name'), 'Hunter\'s volley');
+    assert.equal(byLabel(page, 'Roll this attack').disabled, false);
+    assert.equal(page.el('#sheet .atk-warn').hidden, true);
     page.type(byLabel(page, 'Attack bonus'), '+5');
     page.type(byLabel(page, 'Damage and type'), '1d8+3 piercing');
     page.type(byLabel(page, 'Gold pieces'), '37');
@@ -155,8 +165,7 @@ test('sheet: classes, attacks, coins, hit points, death saves and spell slots us
     await saved(page);
     const { sheet } = await serverSheet(t);
     assert.equal(sheet.classes.length, 1);
-    // Longbow is a weapon from the book: Dexterity, proficient (the damage was typed over).
-    assert.deepEqual(sheet.attacks, [{ name: 'Longbow', kind: 'attack', ability: 'dex', proficient: true, magic: 0, bonus: '+5', save: '', dc: '', damage: '1d8+3 piercing', notes: '' }]);
+    assert.deepEqual(sheet.attacks, [{ name: "Hunter's volley", kind: 'attack', ability: 'str', proficient: true, magic: 0, bonus: '+5', save: '', dc: '', damage: '1d8+3 piercing', notes: '' }]);
     assert.equal(sheet.coins.gp, 37);
     assert.deepEqual(sheet.hp, { current: 20, temp: null });
     assert.deepEqual(sheet.death_saves, { successes: 1, failures: 1 });
@@ -171,11 +180,13 @@ test('sheet: clicking a save, skill, ability or initiative rolls it (advantage f
   const dice = [20, 6, 4, 11];
   mock.method(crypto, 'randomInt', (min) => dice.shift() ?? min);
   try {
-    await withPage(sheetPage(), async (page) => {
+    // Sam carries a shortsword (not equipped, so it isn't in Attacks by itself).
+    const before = (t) => t.request('PUT', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token, body: { sheet: { ...emptySheet(), inventory: [{ name: 'Shortsword', kind: 'weapon', weapon: { damage: '1d6 piercing', ability: 'finesse' } }] }, version: 0 } });
+    await withPage(sheetPage({ before }), async (page) => {
       page.click('[data-tab=sheet]');
       page.type(byLabel(page, 'Dexterity score'), '16');
       page.click(page.$$('#sheet .add-row').find((b) => b.textContent.includes('Add an attack')));
-      // A weapon from the book fills in its damage and ability (finesse: Dex +3); to hit and damage are worked out.
+      // A weapon from the book they have fills in its damage and ability (finesse: Dex +3); to hit and damage are worked out.
       page.type(byLabel(page, 'Attack name'), 'Shortsword');
       assert.equal(byLabel(page, 'Damage and type').value, '1d6 piercing');
       assert.equal(byLabel(page, 'Ability added').value, 'finesse');
@@ -366,7 +377,7 @@ test('sheet: spells are looked up when added, grouped by level, can be edited, p
     await page.settle();
     assert.match(page.text('#sheet .add-spell'), /Couldn't find details for Zorblax's Whimsy/);
     assert.equal(page.text(page.$$('#sheet .spell-group h4').at(-1)), 'Level not set');
-    assert.match(page.text('#sheet .add-spell button.ghost'), /Fill in missing details \(1\)/);
+    assert.match(page.text('#sheet .add-spell .fill-missing'), /Fill in missing details \(1\)/);
 
     // Open the unknown one, set its level and description.
     const whimsy = page.$$('#sheet .spell').find((c) => c.textContent.includes('Zorblax'));
@@ -393,6 +404,90 @@ test('sheet: spells are looked up when added, grouped by level, can be edited, p
     assert.ok(page.$$('#sheet .spell').some((c) => c.textContent.includes('Fireball')));
     remove();
     assert.ok(!page.$$('#sheet .spell').some((c) => c.textContent.includes('Fireball')));
+  });
+});
+
+test('sheet: a spell of your own is added without a lookup, opened to fill in, and never counted as missing details', async () => {
+  const llm = createFakeLLM({ structured: async () => assert.fail('a custom spell is never looked up') });
+  await withPage(sheetPage({ setup: { llm } }), async (page, t) => {
+    page.click('[data-tab=sheet]');
+    const make = () => page.click(page.$$('#sheet .add-spell button').find((b) => b.textContent === 'Make my own'));
+    make();
+    assert.match(page.text('#sheet .add-spell'), /Type the name of your spell first/);
+    assert.match(page.text('#sheet .spell-list'), /No spells yet/);
+
+    // Even a name the SRD knows: the player's own version, not looked up.
+    page.type('#sheet .add-spell input', 'Fireball');
+    make();
+    const card = page.$$('#sheet .spell').find((c) => c.querySelector('strong').textContent === 'Fireball');
+    assert.ok(card.open, 'opened to fill in');
+    assert.equal(page.text(card.querySelector('.source')), 'Your own');
+    assert.equal(page.el('#sheet .add-spell input').value, '');
+    assert.equal(page.$('#sheet .add-spell .fill-missing').hidden, true, 'not a spell waiting for a lookup');
+    page.type(card.querySelector('[aria-label="Spell level"]'), '2');
+    page.type(card.querySelector('[aria-label="Description"]'), 'A small, cold fireball. Each creature in a 10-foot sphere makes a Dexterity saving throw, taking 3d6 cold damage.');
+    page.type(card.querySelector('[aria-label="Spell damage"]'), '3d6 cold');
+
+    await saved(page);
+    const { sheet } = await serverSheet(t);
+    assert.deepEqual(sheet.spells.map((s) => [s.name, s.level, s.source, s.damage, s.description.slice(0, 7)]), [['Fireball', 2, 'custom', '3d6 cold', 'A small']]);
+    assert.equal(page.requests.filter((r) => r.path.includes('/spells/lookup')).length, 0);
+  });
+});
+
+test('attacks: a typed weapon attack offers to put the weapon in the Inventory, where it attacks from', async () => {
+  await withPage(sheetPage(), async (page, t) => {
+    page.click('[data-tab=sheet]');
+    page.type(byLabel(page, 'Class'), 'Fighter');
+    page.click(page.$$('#sheet .add-row').find((b) => b.textContent.includes('Add an attack')));
+    page.type(byLabel(page, 'Attack name'), 'Greataxe');
+    page.type(byLabel(page, 'Magic bonus'), '1');
+    // Suggested names: an unarmed strike and what's in the inventory (nothing yet).
+    assert.deepEqual(page.$$('#dl-attacks option').map((o) => o.value), ['Unarmed strike']);
+    page.click(page.$$('#sheet .atk-warn button').find((b) => b.textContent === 'Add a +1 Greataxe to my Inventory'));
+    assert.equal(page.$$('#sheet [aria-label="Attack name"]').length, 0, 'the typed row is gone');
+    assert.match(page.text('#sheet .gear-attack'), /\+1 Greataxe/);
+    assert.deepEqual(page.$$('#dl-attacks option').map((o) => o.value), ['Unarmed strike', '+1 Greataxe']);
+
+    // Now a typed Greataxe attack is fine (it's in the inventory); an unarmed strike fills itself in.
+    page.click(page.$$('#sheet .add-row').find((b) => b.textContent.includes('Add an attack')));
+    page.type(byLabel(page, 'Attack name'), 'Unarmed strike');
+    assert.equal(byLabel(page, 'Damage and type').value, '1 bludgeoning');
+    await saved(page);
+    const { sheet } = await serverSheet(t);
+    assert.deepEqual(sheet.inventory.map((g) => [g.name, g.kind, g.equipped, g.magic, g.proficient, g.weapon?.damage]), [['+1 Greataxe', 'weapon', 1, 1, true, '1d12 slashing']]);
+    assert.deepEqual(sheet.attacks.map((a) => a.name), ['Unarmed strike']);
+  });
+});
+
+test('inventory: shown sorted by kind under headings, whatever order things were added in', async () => {
+  const before = (t) => t.request('PUT', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token, body: { version: 0, sheet: { ...emptySheet(), inventory: [
+    { name: 'Rope', kind: 'gear' },
+    { name: 'Potion of Healing', kind: 'potion', qty: 3 },
+    { name: 'Shield', kind: 'armor', armor: { base: 2, type: 'shield' } },
+    { name: 'Longsword', kind: 'weapon', weapon: { damage: '1d8 slashing' } },
+    { name: 'Bag of Holding', kind: 'magic' },
+    { name: 'Dagger', kind: 'weapon', qty: 2, weapon: { damage: '1d4 piercing', ability: 'finesse' } },
+  ] } } });
+  await withPage(sheetPage({ before }), async (page, t) => {
+    page.click('[data-tab=inventory]');
+    const groups = page.$$('#inventory .gear-group').map((g) => [page.text(g.querySelector('h4')), [...g.querySelectorAll('.gear-title')].map((e) => e.textContent)]);
+    assert.deepEqual(groups, [
+      ['Weapons · 3', ['Dagger', 'Longsword']],
+      ['Armour and shields · 1', ['Shield']],
+      ['Magic items · 1', ['Bag of Holding']],
+      ['Potions · 3', ['Potion of Healing']],
+      ['Adventuring gear · 1', ['Rope']],
+    ]);
+    // Changing a line's kind moves it; the saved order stays as it was.
+    const rope = page.$$('#inventory .gear-row').find((r) => r.querySelector('.gear-title').textContent === 'Rope');
+    const details = rope.querySelector('details');
+    details.open = true;
+    details.dispatchEvent(new page.window.Event('toggle'));
+    page.type(page.el('#inventory [aria-label="Kind: Rope"]'), 'tool');
+    assert.equal(page.text(page.$$('#inventory .gear-group').at(-1).querySelector('h4')), 'Tools · 1');
+    await saved(page);
+    assert.deepEqual((await serverSheet(t)).sheet.inventory.map((g) => g.name), ['Rope', 'Potion of Healing', 'Shield', 'Longsword', 'Bag of Holding', 'Dagger']);
   });
 });
 
@@ -503,7 +598,7 @@ test('sheet: "Fill in missing details" and "Look up details" ask the server agai
     const card = () => page.$$('#sheet .spell').find((c) => c.textContent.includes('Booming Blade'));
     assert.equal(page.text(card().closest('.spell-group').querySelector('h4')), 'Cantrips');
     assert.equal(page.text(card().querySelector('.source')), 'AI memory');
-    assert.ok(page.$('#sheet .add-spell button.ghost').hidden, 'nothing left to fill in');
+    assert.ok(page.$('#sheet .add-spell .fill-missing').hidden, 'nothing left to fill in');
 
     // Look up again from the card: it has details now, so it asks first.
     card().open = true;

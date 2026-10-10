@@ -360,3 +360,71 @@ export function addToInventory(inventory, { id = null, name, kind = 'other', tex
   list.push(line);
   return normalizeInventory(list, { attuneMax });
 }
+
+// ---------- attacks come from weapons the character has ----------
+
+const WEAPON_KEYS_LONGEST = Object.keys(WEAPONS).sort((a, b) => b.length - a.length);
+const words = (text) => ` ${String(text ?? '').toLowerCase().replace(/[^a-z]+/g, ' ').trim()} `;
+const hasWeaponWord = (text, key) => words(text).includes(` ${key} `) || words(text).includes(` ${key}s `);
+
+/** The PHB weapon an attack's name is about ("Longsword", "+1 longsword", "Thrown daggers"), or null (Unarmed strike, Fire breath). */
+export function attackWeapon(name) {
+  const key = WEAPON_KEYS_LONGEST.find((k) => hasWeaponWord(name, k));
+  return key ? WEAPONS[key].name : null;
+}
+
+/** Whether the inventory has that weapon (any line naming it: "Dagger", "+1 Longsword", "Dagger of Venom"). */
+export function ownsWeapon(weapon, inventory) {
+  const key = String(weapon ?? '').toLowerCase();
+  return (inventory ?? []).some((g) => hasWeaponWord(g.name, key));
+}
+
+/**
+ * A sheet's typed attacks that use a PHB weapon the character doesn't have in
+ * their inventory: [{ index, name, weapon }]. Weapon attacks come from the
+ * Inventory (equipped weapons show in Attacks by themselves); typed attacks
+ * are for unarmed strikes, spells, features and natural weapons.
+ */
+export function unownedWeaponAttacks(sheet) {
+  return (sheet?.attacks ?? []).flatMap((a, index) => {
+    const weapon = attackWeapon(a.name);
+    return weapon && !ownsWeapon(weapon, sheet.inventory) ? [{ index, name: a.name.trim(), weapon }] : [];
+  });
+}
+
+/**
+ * Typed attacks in `sheet` using weapons the character doesn't have, that
+ * `before` (the saved sheet) didn't already have: sheets from before this
+ * rule and uploaded sheets keep theirs (shown as not in the inventory, and
+ * not rolled), but none can be added.
+ */
+export function newUnownedWeaponAttacks(sheet, before) {
+  const had = new Set(unownedWeaponAttacks(before).map((a) => a.name.toLowerCase()));
+  return unownedWeaponAttacks(sheet).filter((a) => !had.has(a.name.toLowerCase()));
+}
+
+// ---------- the Inventory, by kind ----------
+
+/** The Inventory's groups, in the order it shows them. */
+export const GEAR_GROUPS = [
+  ['weapon', 'Weapons'], ['armor', 'Armour and shields'], ['magic', 'Magic items'], ['potion', 'Potions'],
+  ['scroll', 'Scrolls'], ['gear', 'Adventuring gear'], ['tool', 'Tools'], ['other', 'Other'],
+];
+
+/** The group an inventory line goes in: what it does when equipped first (a weapon, armour), else its kind. */
+export const gearGroup = (g) => (g.weapon ? 'weapon' : g.armor ? 'armor' : GEAR_GROUPS.some(([k]) => k === g.kind) ? g.kind : 'other');
+
+/**
+ * The inventory sorted by kind (weapons, armour and shields, magic items,
+ * potions, scrolls, gear, tools, other), by name within each (a "+1" in front
+ * doesn't count): [{ kind, label, items }], empty groups left out. The lines
+ * are the inventory's own objects; the stored order doesn't change.
+ */
+export function inventoryGroups(inventory) {
+  const sortName = (g) => magicName(g.name).base;
+  return GEAR_GROUPS.map(([kind, label]) => ({
+    kind,
+    label,
+    items: (inventory ?? []).filter((g) => gearGroup(g) === kind).sort((a, b) => sortName(a).localeCompare(sortName(b), undefined, { numeric: true, sensitivity: 'base' }) || a.name.localeCompare(b.name)),
+  })).filter((grp) => grp.items.length);
+}

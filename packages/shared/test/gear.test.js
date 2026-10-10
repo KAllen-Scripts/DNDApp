@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addToInventory, armorClass, attunementLimit, carriedWeight, classProficient, encumbrance, itemCharges, itemEffects, itemStats, magicName, normalizeGear, normalizeInventory } from '../src/gear.js';
+import { addToInventory, armorClass, attackWeapon, attunementLimit, carriedWeight, classProficient, encumbrance, inventoryGroups, itemCharges, itemEffects, itemStats, magicName, newUnownedWeaponAttacks, normalizeGear, normalizeInventory, ownsWeapon, unownedWeaponAttacks } from '../src/gear.js';
 import { computeSheet, emptySheet, normalizeSheet, rollDisadvantage } from '../src/sheet.js';
 import { normalizeSettings } from '../src/settings.js';
 import { gearRolls } from '../src/rolls.js';
@@ -200,4 +200,64 @@ test('gear: magic items change the sheet while equipped, and attuned when they n
   assert.equal(computeSheet(s).values.ac, 11 + 2 + (s.inventory[0].attuned ? 1 : 0));
   s.overrides.ac = 12;
   assert.equal(computeSheet(s).values.ac, 12);
+});
+
+test('attacks: a typed attack naming a PHB weapon needs that weapon in the inventory; unarmed strikes, spells and features don\'t', () => {
+  assert.equal(attackWeapon('Longsword'), 'Longsword');
+  assert.equal(attackWeapon('+1 longsword (two hands)'), 'Longsword');
+  assert.equal(attackWeapon('Thrown daggers'), 'Dagger');
+  assert.equal(attackWeapon('Hand crossbow'), 'Hand crossbow');
+  assert.equal(attackWeapon('Shillelagh (quarterstaff)'), 'Quarterstaff');
+  for (const name of ['Unarmed strike', 'Fire breath', 'Fire Bolt', 'Claws', 'Magnetic pull', 'Sneak attack', '']) assert.equal(attackWeapon(name), null, name);
+
+  const inv = normalizeInventory([{ name: '+1 Longsword' }, { name: 'Dagger of Venom' }, { name: 'Rope' }]);
+  assert.equal(ownsWeapon('Longsword', inv), true);
+  assert.equal(ownsWeapon('Dagger', inv), true);
+  assert.equal(ownsWeapon('Shortsword', inv), false);
+  assert.equal(ownsWeapon('Longbow', []), false);
+
+  const sheet = normalizeSheet({ inventory: inv, attacks: [{ name: 'Longsword' }, { name: 'Shortbow' }, { name: 'Unarmed strike' }, { name: 'Daggers' }] });
+  assert.deepEqual(unownedWeaponAttacks(sheet), [{ index: 1, name: 'Shortbow', weapon: 'Shortbow' }]);
+  // One the saved sheet already had stays (old and uploaded sheets); a new one doesn't.
+  const before = normalizeSheet({ attacks: [{ name: 'Shortbow' }] });
+  assert.deepEqual(newUnownedWeaponAttacks(sheet, before), []);
+  const more = normalizeSheet({ ...sheet, attacks: [...sheet.attacks, { name: 'Greataxe' }] });
+  assert.deepEqual(newUnownedWeaponAttacks(more, before).map((a) => a.weapon), ['Greataxe']);
+  assert.deepEqual(newUnownedWeaponAttacks(more, emptySheet()).map((a) => a.weapon), ['Shortbow', 'Greataxe']);
+});
+
+test('inventory: grouped by kind in a fixed order, by name within each (ignoring a +1 in front)', () => {
+  const inv = normalizeInventory([
+    { name: 'Rope', kind: 'gear' },
+    { name: 'Potion of Healing', kind: 'potion' },
+    { name: 'Shield', armor: { base: 2, type: 'shield' } },
+    { name: 'Longsword', weapon: { damage: '1d8 slashing' } },
+    { name: "Thieves' tools", kind: 'tool' },
+    { name: '+1 Dagger', weapon: { damage: '1d4 piercing' } },
+    { name: 'Chain mail', armor: { base: 16, type: 'heavy' } },
+    { name: 'Bag of Holding', kind: 'magic' },
+    { name: 'Torch', kind: 'gear' },
+    { name: 'Scroll of Fireball', kind: 'scroll' },
+    { name: 'Mystery', kind: 'other' },
+  ]);
+  const groups = inventoryGroups(inv);
+  assert.deepEqual(groups.map((g) => [g.label, g.items.map((i) => i.name)]), [
+    ['Weapons', ['+1 Dagger', 'Longsword']],
+    ['Armour and shields', ['Chain mail', 'Shield']],
+    ['Magic items', ['Bag of Holding']],
+    ['Potions', ['Potion of Healing']],
+    ['Scrolls', ['Scroll of Fireball']],
+    ['Adventuring gear', ['Rope', 'Torch']],
+    ['Tools', ["Thieves' tools"]],
+    ['Other', ['Mystery']],
+  ]);
+  // The same objects, and the stored order is left alone.
+  assert.equal(groups[0].items[1], inv[3]);
+  assert.equal(inv[0].name, 'Rope');
+  assert.deepEqual(inventoryGroups([]), []);
+});
+
+test('spells: a custom spell keeps its source', () => {
+  assert.equal(normalizeSheet({ spells: [{ name: 'Kenny\'s Kettle', source: 'custom' }] }).spells[0].source, 'custom');
+  assert.equal(normalizeSheet({ spells: [{ name: 'X', source: 'nonsense' }] }).spells[0].source, 'manual');
 });
