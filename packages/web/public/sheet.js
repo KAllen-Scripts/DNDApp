@@ -30,6 +30,8 @@ const state = {
   userId: null,
   pictures: { token: null, picture: null }, // this player's token and full picture: { key, width, height } each
   pictureUrls: new Map(), // picture key -> URL to show it
+  itemPictures: new Map(), // the DM's items in the inventory (bought from a merchant): item id -> picture key, or null
+  itemPicturesLoading: null, // while asking for them
   unusedDescription: '', // the AI's description of the picture, when it didn't replace the player's own text
   guarded: (fn) => fn(),
   sheet: null,
@@ -61,7 +63,8 @@ export async function loadSheet({ campaignId, userId, guarded }) {
   await flush();
   for (const url of state.pictureUrls.values()) URL.revokeObjectURL(url);
   state.pictureUrls.clear();
-  Object.assign(state, { campaignId, userId, guarded, dirty: false, unusedDescription: '' });
+  state.itemPictures.clear();
+  Object.assign(state, { campaignId, userId, guarded, dirty: false, unusedDescription: '', itemPicturesLoading: null });
   const [{ sheet, version }, pictures] = await Promise.all([api('GET', `${base()}/sheet`), api('GET', `${base()}/character/pictures`)]);
   state.pictures = pictures;
   useSheet(sheet, version);
@@ -853,6 +856,44 @@ function inventoryTab() {
   else list.before(top);
 }
 
+/** Ask for the pictures of the DM's items in the inventory that haven't been asked for; redraw when there are new ones. */
+function loadItemPictures() {
+  if (state.itemPicturesLoading) return;
+  const cid = state.campaignId;
+  const ids = state.sheet.inventory.map((g) => g.item_id).filter((id) => id && !state.itemPictures.has(id));
+  if (!ids.length) return;
+  state.itemPicturesLoading = state.guarded(() => api('GET', `${base()}/gear/pictures`))
+    .then((res) => {
+      if (!res || state.campaignId !== cid) return;
+      for (const id of ids) state.itemPictures.set(id, res.pictures[id] ?? null);
+      for (const [id, key] of Object.entries(res.pictures)) state.itemPictures.set(id, key);
+      if (ids.some((id) => state.itemPictures.get(id))) for (const d of state.gearDraws) d();
+    })
+    .catch(() => { for (const id of ids) state.itemPictures.set(id, null); })
+    .finally(() => { if (state.campaignId === cid) state.itemPicturesLoading = null; });
+}
+
+/** The picture of one of the DM's items (the merchant's), or nothing. */
+function gearPicture(g) {
+  if (!g.item_id) return null;
+  if (!state.itemPictures.has(g.item_id)) {
+    loadItemPictures();
+    return null;
+  }
+  const key = state.itemPictures.get(g.item_id);
+  if (!key) return null;
+  const img = h('img', { class: 'gear-picture', alt: '' });
+  const cache = `item:${g.item_id}:${key}`;
+  if (state.pictureUrls.has(cache)) img.src = state.pictureUrls.get(cache);
+  else {
+    fileUrl(`${base()}/gear/items/${g.item_id}/picture?v=${encodeURIComponent(key)}`).then((u) => {
+      state.pictureUrls.set(cache, u);
+      img.src = u;
+    }).catch(() => img.remove());
+  }
+  return img;
+}
+
 function gearRow(g) {
   const at = () => state.sheet.inventory.indexOf(g);
   const p = () => `inventory.${at()}`;
@@ -924,6 +965,7 @@ function gearRow(g) {
   qty.addEventListener('change', () => gearChanged()); // more than one weapon: choose how many are equipped
   const row = h('div', { class: `gear-row${g.equipped ? ' equipped' : ''}` },
     h('div', { class: 'gear-head' },
+      gearPicture(g),
       h('strong', { class: 'gear-title' }, g.name),
       h('span', { class: 'tag' }, g.armor?.type === 'shield' ? 'Shield' : GEAR_KINDS[g.kind] ?? 'Other'),
       labelled('Qty', qty, 'inline'),

@@ -10,12 +10,13 @@ import { AuthError } from '../auth.js';
 import { BadRequestError, NotFoundError } from '../store.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 import { PICTURE_KINDS } from '../characters/pictures.js';
+import { pictureKey } from '../library.js';
 import { RateLimitError } from '../qa/agent.js';
 import { SheetConflictError } from '../sheets/store.js';
 import { SpendingCapError } from '../llm/index.js';
 
 export function registerCharacters(app, r) {
-  const { access, archive, auth, config, db, itemFinder, maps, pictureDescriber, pictures, publicMessage, sheetImport, sheets, spells, store, upload } = r;
+  const { access, archive, auth, config, db, itemFinder, items, maps, pictureDescriber, pictures, publicMessage, sheetImport, sheets, spells, store, upload } = r;
 
   // ---------- character sheets (private to their player) ----------
 
@@ -159,6 +160,7 @@ export function registerCharacters(app, r) {
   app.get('/campaigns/:cid/gear/equipped', async (request) => {
     const a = access(request, { dm: true });
     const members = db.prepare("SELECT u.id, u.name, m.character_name FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.campaign_id = ? AND m.role != 'dm' ORDER BY u.name").all(a.cid);
+    const owned = items.many(a.cid, members.flatMap((m) => sheets.get(a.cid, m.id).sheet.inventory.map((g) => g.item_id).filter(Boolean)));
     return {
       players: members.map((m) => {
         const { sheet, version } = sheets.get(a.cid, m.id);
@@ -176,7 +178,9 @@ export function registerCharacters(app, r) {
           attuned: sheet.inventory.filter((g) => g.attuned).length,
           gear: sheet.inventory.filter((g) => g.equipped).map((g) => {
             const rolls = g.weapon ? gearRolls(g, calc) : null;
-            return { name: g.name, kind: g.kind, equipped: g.equipped, qty: g.qty, proficient: g.proficient, magic: g.magic, attuned: g.attuned, attunement: g.attunement, armor: g.armor, effects: g.effects, to_hit: rolls?.bonus ?? null, damage: rolls?.damage ? `${rolls.damage}${rolls.type ? ` ${rolls.type}` : ''}` : null };
+            // One of the DM's items (bought from a merchant): its picture, from the Items tab.
+            const art = g.item_id ? owned.get(g.item_id)?.art : null;
+            return { name: g.name, item_id: g.item_id, picture: art ? pictureKey(art) : null, kind: g.kind, equipped: g.equipped, qty: g.qty, proficient: g.proficient, magic: g.magic, attuned: g.attuned, attunement: g.attunement, armor: g.armor, effects: g.effects, to_hit: rolls?.bonus ?? null, damage: rolls?.damage ? `${rolls.damage}${rolls.type ? ` ${rolls.type}` : ''}` : null };
           }),
         };
       }),
