@@ -8,12 +8,12 @@ Read this first when picking the project up on another machine or with another A
 
 ---
 
-## Current state (2026-10-09)
+## Current state (2026-10-10)
 
 Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept current since. Everything below is on `main` unless it says a PR is open.
 
 **What's built** (SPEC has the design of each; §6.1 is the list):
-- **Server, end to end with real AI calls:** player notes → transcript upload (with date) → attendance → the **archivist** (an AI with full authority over the knowledge base) → per-player Q&A with privacy. Verified with a realistic two-session privacy scenario through Claude Code. Between sessions the archivist also reads character sheets (in full, then each change with its time), late note changes, handouts, and (with each session) what happened on the maps.
+- **Server, end to end with real AI calls:** player notes → transcript upload (with date) → attendance → the **archivist** (an AI with full authority over the knowledge base) → per-player Q&A with privacy. Verified with a realistic two-session privacy scenario through Claude Code. Between sessions the archivist also reads character sheets (in full, then each change with its time), late note changes, handouts (text, and what the AI read in their pictures), and (with each session) what happened on the maps.
 - **Web page** (no Electron; served by the server at `/`): name + password logins set by the admin (who can force a password change), several campaigns per account, Ask (streamed answers, citations with transcript evidence, chats you can pin, rename, delete), Notes (edit and delete keep versions), and an admin screen (accounts, campaigns, roles, session uploads with speaker linking).
 - **Q&A** answers campaign questions from the sources and general D&D questions from the model's own knowledge, except that with book PDFs in `DND books` (no database) every rules question is looked up in them, using the edition of the group's Player's Handbook (checked on the owner's real PHB 2014 and DMG 2024 scans, 2026-10-08).
 - **Character sheets** (players only): laid out like the 5e sheet, automatic values the player can override (always kept), autosave with version checks, AI upload of existing sheets, spell lookup (SRD, then the books, then the AI), a token picture and a private full picture the AI describes. Can sit beside the map or open in its own window.
@@ -30,9 +30,9 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 - **Look:** 12 themes, 4 page layouts, chat and sheet styles and layouts, plus tab order, the map toolbar's place, which panel goes beside the map, token names and an accent colour. All per browser. The owner hasn't decided which to keep (don't prune yet).
 - **Security:** audited 2026-10-07 (headers, strict CSP: scripts only from the server, body limits, login limits, live streams that end with access). Hosting must go through Cloudflare Tunnel with `HOST=127.0.0.1`.
 
-**Numbers:** schema **v15**, `PIPELINE_VERSION` **13**, **367 tests** passing (`npm test`: server 160, shared 70, web 137). Tests are offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools; the page is tested in jsdom against a real test server (`packages/web/test/page.js`). Headless Chromium is only needed for what jsdom can't show (real layout, WebGL dice, touch). There's no CI: `npm test` is the check.
+**Numbers:** schema **v15**, `PIPELINE_VERSION` **14**, **368 tests** passing (`npm test`: server 161, shared 70, web 137). Tests are offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools; the page is tested in jsdom against a real test server (`packages/web/test/page.js`). Headless Chromium is only needed for what jsdom can't show (real layout, WebGL dice, touch). There's no CI: `npm test` is the check.
 
-**Git:** `main` has PRs #1–#25 merged (#16: housekeeping; #17: walls and doors; #18: book lookups; #20: stat blocks from your creatures and books first; #21: rolling from the sheet, the Inventory tab and campaign settings; #22: rests and hit dice; #23: merchants and items, which brought #22 in with it; #24: the ruleset note in SPEC; #25: full screen map and the DM's edit mode). Nothing open. Merges to `main` need the owner's OK.
+**Git:** `main` has PRs #1–#25 merged (#16: housekeeping; #17: walls and doors; #18: book lookups; #20: stat blocks from your creatures and books first; #21: rolling from the sheet, the Inventory tab and campaign settings; #22: rests and hit dice; #23: merchants and items, which brought #22 in with it; #24: the ruleset note in SPEC; #25: full screen map and the DM's edit mode). Open: the archivist reading handout pictures (branch `claude/project-thread-vrgqhu`). Merges to `main` need the owner's OK.
 
 **Installs:**
 - **Owner's PC** (the server): `data/` holds the admin login ("admin") and a player account for Kenny. The database upgrades itself (to v13 with rests, v14 with merchants, v15 with campaign settings) on the next start. Start with `npm start`, open http://127.0.0.1:4400. `.env` is in the repo root (copy of `.env.example`).
@@ -40,7 +40,7 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 
 **Not set up yet:** the domain (`PUBLIC_URL` is the placeholder `https://dnd.example.xyz`) and Cloudflare Tunnel. **No real transcript** has been tried; the parser is built to an assumed format.
 
-**Real AI not yet tried on:** real maps (reading, walls, lights, terrain, stat blocks), Find online, character picture descriptions, sheets reaching the archivist, map events reaching the archivist, the book tools with all the books. Most page features have only been seen in jsdom or headless Chromium, not on a real phone or GPU.
+**Real AI not yet tried on:** handout pictures read for the archivist, real maps (reading, walls, lights, terrain, stat blocks), Find online, character picture descriptions, sheets reaching the archivist, map events reaching the archivist, the book tools with all the books. Most page features have only been seen in jsdom or headless Chromium, not on a real phone or GPU.
 
 ## Next steps
 
@@ -62,10 +62,11 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
    - **A short fight, DM and player windows, on a phone too:** fog, line of sight, Darkness with a torch and darkvision, doors, initiative, a Fireball template, pings, waypoints, a night variant, stairs to another map.
    - **The DM's creatures and Find online:** make a few (one filled by the AI), place a group of goblins, save a token back; search for an official monster, a homebrew one and one from another game (how often does a picture come back?). With the Monster Manual in `DND books`: check that "Stat block (AI)" and Find online say "From your books" with the right page, and that the stat block matches the page (stat blocks are found by their "Small humanoid…" and "Armor Class" lines; a scan whose layout differs may not be found, see `findCreature` in `sheets/books.js`). As the DM, ask Ask about a saved creature whose stats differ from the book and check it answers with the DM's version.
    - **Character sheets and pictures:** a real D&D Beyond PDF and a phone photo; a real portrait (check the description and the token crop); the sheet beside the map and in its own window, on a phone.
+   - **Handout pictures:** give a handout that is only a picture (a letter or wanted poster with writing, and a map scrap), wait 10 minutes, and check the archivist's record has the words and what it shows, known only by those who got it.
    - **Archivist between sessions:** fill in a sheet with real Claude Code running, wait 10 minutes, check what the archivist made of it; again after a level-up. Process a session played with a map and check it used `<map_events>`.
    - **Dice:** Deluxe and Classic on a real GPU and a phone (Safari and Firefox untested). Deluxe is the default now; the owner can change it with `DICE_ROLLER`.
    - **Look:** show the players; see which themes, layouts and layout options they use, then prune (owner's call).
-4. **Decisions waiting on the owner** (SPEC §9): the DM role (what the DM sees, including note- and sheet-derived knowledge through Q&A, currently yes); should the DM see players' sheets, and should Q&A read the asker's sheet; should rolls go into the archive; should the archivist see handout pictures; party-shared sight and dimming light ranges.
+4. **Decisions waiting on the owner** (SPEC §9): the DM role (what the DM sees, including note- and sheet-derived knowledge through Q&A, currently yes); should the DM see players' sheets, and should Q&A read the asker's sheet; should rolls go into the archive; party-shared sight and dimming light ranges.
 5. **Later, planned:** a ready-made creature library from the books once they're all scanned (SPEC §6.6); glossary and speaker-map editing on the page; session notes design (`/mnt/project-files/notes-sessions/notes-only-sessions.md` in the project files).
 6. **Hosting:** buy the domain, set `PUBLIC_URL`, set up Cloudflare Tunnel, write a short player guide. Check whether Claude Code's WebFetch (Find online) can reach addresses on the home network before opening it up (SPEC §3.5).
 7. **Install workaround (owner's call):** keep typing `npm install --ignore-scripts`, or add `ignore-scripts=true` to a project `.npmrc`. Revisit when npm fixes the `gypfile` bug or `better-sqlite3` changes how it ships binaries.
@@ -730,6 +731,10 @@ Then: "The DM should be able to have an edit mode, that hides or shows the edit 
 ### 2026-10-09: PR #25 merged
 
 The owner said "Merge". PR #25 (full screen map with see-through tools and More, the DM's edit mode) is merged into `main`; this file was updated to say so in the PR's last commit.
+
+### 2026-10-10: The archivist sees handout pictures
+
+The owner: "Make sure the archivist can see handouts as well." Handout text already reached it between sessions; pictures didn't ("It has a picture, which you cannot see"). Now, before the archivist's between-sessions run, the AI reads each new or changed handout picture (`handouts.js`, `llm.structured` with purpose `handout:picture` on the `import` task, image shrunk to 1568 px as for character pictures): every word written in it, word for word, then what it shows. That goes into the `<handout>` block with the text and who got it, so privacy is unchanged (the archivist already treats a handout as known by those who got it). Readings are kept in memory per picture (changing who gets a handout doesn't read it again); a failed read fails the run, the mark doesn't move, and it's tried next time. `updates.collect` is now async. Archivist prompt line about handouts updated; `PIPELINE_VERSION` 13 → 14. SPEC §5.2, §6.7, the privacy table and §9 (open question removed). 368 tests.
 
 ## Verified vs. not verified
 

@@ -47,7 +47,7 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const maps = createMaps({ db, archive, store, pictures, sheets });
   // What happened on the maps on a session's day goes to the archivist with the transcript.
   const archivist = createArchivist({ db, store, kb, search, llm, config, mapEvents: (cid, date) => maps.eventsOn(cid, date, config.notes.rolloverHour) });
-  const handouts = createHandouts({ db, archive, store });
+  const handouts = createHandouts({ db, archive, store, llm });
   const creatures = createCreatures({ db, archive, store });
   const items = createItems({ db, archive, store });
   const merchants = createMerchants({ db, archive, store });
