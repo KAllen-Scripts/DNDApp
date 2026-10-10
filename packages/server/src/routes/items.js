@@ -6,9 +6,11 @@ import { z } from 'zod';
 import { NotFoundError } from '../store.js';
 import { ITEM_KINDS, RARITIES, MAX_ITEM_TEXT, MAX_ITEM_NOTES } from '../items.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
+import { AuthError } from '../auth.js';
+import { pictureKey } from '../library.js';
 
 export function registerItems(app, r) {
-  const { access, itemFinder, items, mapAiAllowed, tokenArt } = r;
+  const { access, itemFinder, items, mapAiAllowed, sheets, tokenArt } = r;
 
   const ITEM = z.object({
     name: z.string().trim().min(1).max(80),
@@ -149,5 +151,31 @@ export function registerItems(app, r) {
     })();
     reply.status(202);
     return items.view(x);
+  });
+
+  // ---------- pictures in a player's inventory ----------
+
+  /** The DM's items in your inventory (bought from a merchant, or the like), by id. Only players have one. */
+  const ownItemIds = (request) => {
+    const a = access(request);
+    if (!a.membership || a.membership.role === 'dm') throw new AuthError('Only players have an inventory', 403);
+    return { a, ids: new Set(sheets.get(a.cid, request.user.id).sheet.inventory.map((g) => g.item_id).filter(Boolean)) };
+  };
+
+  /** Pictures of the items in your inventory: { pictures: { item id: key } }, only those that have one. */
+  app.get('/campaigns/:cid/gear/pictures', async (request) => {
+    const { a, ids } = ownItemIds(request);
+    const pictures = {};
+    for (const x of items.many(a.cid, [...ids]).values()) if (x.art) pictures[x.id] = pictureKey(x.art);
+    return { pictures };
+  });
+
+  /** The picture of an item in your inventory, cut to a square. ?v= is its key. Kept even if the DM takes the item off their list. */
+  app.get('/campaigns/:cid/gear/items/:iid/picture', async (request, reply) => {
+    const { a, ids } = ownItemIds(request);
+    if (!ids.has(request.params.iid)) throw new NotFoundError('No such item');
+    const x = items.get(a.cid, request.params.iid, { removed: true });
+    if (!x.art) throw new NotFoundError('No picture');
+    return reply.type('image/webp').header('X-Content-Type-Options', 'nosniff').header('Cache-Control', 'private, max-age=31536000, immutable').send(await tokenArt.square(items.picturePath(a.cid, x)));
   });
 }

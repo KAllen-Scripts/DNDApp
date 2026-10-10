@@ -8,7 +8,7 @@ Read this first when picking the project up on another machine or with another A
 
 ---
 
-## Current state (2026-10-09)
+## Current state (2026-10-10)
 
 Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept current since. Everything below is on `main` unless it says a PR is open.
 
@@ -25,14 +25,14 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 - **Walls and doors** (PR #17, merged 2026-10-08): doors drawn as doors and locked or unlocked with a click; Curve and Circle tools; a Walls tick box hides walls while playing; a thorough AI wall draft (a ruler on the map, a checking pass, close-ups on big maps, arcs and circles, max effort on its own `walls` task, straight walls put on the grid); exact walls, doors and lights from `.dd2vtt`/`.uvtt` files.
 - **Rests and hit dice** (PR #22, merged 2026-10-09): the sheet's Hit dice box has a row per die size; **Spend** has the server roll the die plus Con (shared like any roll) and heal; **Short rest** gives back Pact Magic. The DM's **Rest** button calls a short or long rest for everyone or chosen players, by the group's edition (2014 unless their PHB is 2024, or `REST_RULES`; the owner wants this as a per-campaign setting, next steps); sheets change and players hear it live. Rests are archived (`rests.jsonl`) and counted (`rests.count`, `rests.events`), the hook for merchants restocking every N long rests (SPEC §6.8).
 - **The DM:** a **Creatures** tab instead of a character sheet (saved enemies and NPCs placed on maps, several at a time; "Find online" has the AI find one on the web with a picture; stat blocks shown formatted, with "Edit text" for the Markdown; stat blocks come from the DM's own creatures first, then the group's books, then the AI's memory; Find online checks the books before the web; Ask puts the DM's creatures first when the DM asks), an **Archivist** tab (answer the archivist's questions, send corrections), **Handouts** for everyone or chosen players. The DM has no sheet at all: no Sheet tab or window, and the server refuses it.
-- **Merchants and items** (PR #23, merged 2026-10-09): the DM's **Items** tab (made by hand, looked up in their own items, then the books, then the AI, or found online with a picture) and **Merchants** tab (stock with prices, how many are left and a restock level; restock every N long rests or by hand; recent sales). A merchant goes on a map as a token with a gold badge; players pick it, press Shop and buy on their own: the coins come off their sheet (with change) and the item goes into its inventory (since PR #21; the equipment text before). Each long rest the DM calls counts towards restocking. SPEC §6.9.
+- **Merchants and items** (PR #23, merged 2026-10-09): the DM's **Items** tab (made by hand, looked up in their own items, then the books, then the AI, or found online with a picture) and **Merchants** tab (stock with prices, how many are left and a restock level; restock every N long rests or by hand; recent sales). A merchant goes on a map as a token with a gold badge; players pick it, press Shop and buy on their own: the coins come off their sheet (with change) and the item goes into its inventory (since PR #21; the equipment text before). Each long rest the DM calls counts towards restocking. Since PR #26 (open): a merchant's Add item has **Make a new item** (the full item form with a picture, saved to Items and stocked at once), and a bought item's picture shows in the buyer's Inventory and the DM's equipped list. SPEC §6.9.
 - **Full screen map** (PR #25, merged 2026-10-09): a Full screen button on the map toolbar; the map fills the screen and its tools float over it, see-through (0.55) until pointed at or focused; tools that are on stay solid. Only the main ones (Fit, Measure, Ping, Draw, Template, Initiative, Exit) show; More shows the rest. The DM's **Edit** button (same PR) shows or hides their set-up tools (Walls, Add token, Fog & walls, Map settings, Import map), kept per browser. Falls back to filling the window where the browser can't go full screen (iPhone). SPEC §6.6.
 - **Look:** 12 themes, 4 page layouts, chat and sheet styles and layouts, plus tab order, the map toolbar's place, which panel goes beside the map, token names and an accent colour. All per browser. The owner hasn't decided which to keep (don't prune yet).
 - **Security:** audited 2026-10-07 (headers, strict CSP: scripts only from the server, body limits, login limits, live streams that end with access). Hosting must go through Cloudflare Tunnel with `HOST=127.0.0.1`.
 
 **Numbers:** schema **v15**, `PIPELINE_VERSION` **13**, **367 tests** passing (`npm test`: server 160, shared 70, web 137). Tests are offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools; the page is tested in jsdom against a real test server (`packages/web/test/page.js`). Headless Chromium is only needed for what jsdom can't show (real layout, WebGL dice, touch). There's no CI: `npm test` is the check.
 
-**Git:** `main` has PRs #1–#25 merged (#16: housekeeping; #17: walls and doors; #18: book lookups; #20: stat blocks from your creatures and books first; #21: rolling from the sheet, the Inventory tab and campaign settings; #22: rests and hit dice; #23: merchants and items, which brought #22 in with it; #24: the ruleset note in SPEC; #25: full screen map and the DM's edit mode). Nothing open. Merges to `main` need the owner's OK.
+**Git:** `main` has PRs #1–#25 merged (#16: housekeeping; #17: walls and doors; #18: book lookups; #20: stat blocks from your creatures and books first; #21: rolling from the sheet, the Inventory tab and campaign settings; #22: rests and hit dice; #23: merchants and items, which brought #22 in with it; #24: the ruleset note in SPEC; #25: full screen map and the DM's edit mode). Open: #26 (item pictures in inventories, custom items from a merchant; branch `claude/project-thread-ng3twe`). Merges to `main` need the owner's OK.
 
 **Installs:**
 - **Owner's PC** (the server): `data/` holds the admin login ("admin") and a player account for Kenny. The database upgrades itself (to v13 with rests, v14 with merchants, v15 with campaign settings) on the next start. Start with `npm start`, open http://127.0.0.1:4400. `.env` is in the repo root (copy of `.env.example`).
@@ -43,6 +43,8 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 **Real AI not yet tried on:** real maps (reading, walls, lights, terrain, stat blocks), Find online, character picture descriptions, sheets reaching the archivist, map events reaching the archivist, the book tools with all the books. Most page features have only been seen in jsdom or headless Chromium, not on a real phone or GPU.
 
 ## Next steps
+
+0. **Item pictures and custom merchant items (PR #26, open): review and merge.** Then try it: from a merchant's Add item, Make a new item with a picture; buy it as a player and check the picture in the Inventory tab. Not built: players giving their own inventory lines a picture, and pictures for items found by Look up (only uploads and Find online bring one).
 
 0. **Full screen map and the DM's edit mode (merged): try them for real** in Chrome, Firefox and on a phone (an iPhone only fills the window): check the see-through tools read well over a dark and a light map, and that the turn order and a picked token's bar sit clear of the toolbars in each toolbar place.
 
@@ -730,6 +732,10 @@ Then: "The DM should be able to have an edit mode, that hides or shows the edit 
 ### 2026-10-09: PR #25 merged
 
 The owner said "Merge". PR #25 (full screen map with see-through tools and More, the DM's edit mode) is merged into `main`; this file was updated to say so in the PR's last commit.
+
+### 2026-10-10: Item pictures in inventories; custom items made from a merchant
+
+From the owner's list after the contradictions audit: "Items should have pictures" and "When adding items to the merchants, we should be able to make new custom items there instead of only being able to ask the AI to do it. We still want the AI feature as well, but we also want to be able to do it manually." Items already had pictures on the Items tab and in shops (uploaded, or from Find online). Now a bought item keeps showing its picture in the buyer's Inventory tab (new `GET /campaigns/:cid/gear/pictures` and `GET /campaigns/:cid/gear/items/:iid/picture`, limited to items in the asker's own inventory, kept after the DM removes the item) and in the DM's equipped list (`item_id` and `picture` added to `/gear/equipped`). A merchant's Add item dialog has **Make a new item**: the Items tab's form (`itemForm` in `web/public/items.js`, shared by both) plus In stock and Restock to; the item is saved to Items as the DM's own and stocked at its usual price; Look up by name (books, then the AI) is unchanged. No schema or prompt change, so no `PIPELINE_VERSION` bump. SPEC v0.25 (§6.4, §6.9, §5.5), README API. 369 tests (2 new). PR #26.
 
 ## Verified vs. not verified
 
