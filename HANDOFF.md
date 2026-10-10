@@ -8,7 +8,7 @@ Read this first when picking the project up on another machine or with another A
 
 ---
 
-## Current state (2026-10-09)
+## Current state (2026-10-10)
 
 Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept current since. Everything below is on `main` unless it says a PR is open.
 
@@ -27,12 +27,12 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 - **The DM:** a **Creatures** tab instead of a character sheet (saved enemies and NPCs placed on maps, several at a time; "Find online" has the AI find one on the web with a picture; stat blocks shown formatted, with "Edit text" for the Markdown; stat blocks come from the DM's own creatures first, then the group's books, then the AI's memory; Find online checks the books before the web; Ask puts the DM's creatures first when the DM asks), an **Archivist** tab (answer the archivist's questions, send corrections), **Handouts** for everyone or chosen players. The DM has no sheet at all: no Sheet tab or window, and the server refuses it.
 - **Merchants and items** (PR #23, merged 2026-10-09): the DM's **Items** tab (made by hand, looked up in their own items, then the books, then the AI, or found online with a picture) and **Merchants** tab (stock with prices, how many are left and a restock level; restock every N long rests or by hand; recent sales). A merchant goes on a map as a token with a gold badge; players pick it, press Shop and buy on their own: the coins come off their sheet (with change) and the item goes into its inventory (since PR #21; the equipment text before). Each long rest the DM calls counts towards restocking. SPEC §6.9.
 - **Full screen map** (PR #25, merged 2026-10-09): a Full screen button on the map toolbar; the map fills the screen and its tools float over it, see-through (0.55) until pointed at or focused; tools that are on stay solid. Only the main ones (Fit, Measure, Ping, Draw, Template, Initiative, Exit) show; More shows the rest. The DM's **Edit** button (same PR) shows or hides their set-up tools (Walls, Add token, Fog & walls, Map settings, Import map), kept per browser. Falls back to filling the window where the browser can't go full screen (iPhone). SPEC §6.6.
-- **Look:** 12 themes, 4 page layouts, chat and sheet styles and layouts, plus tab order, the map toolbar's place, which panel goes beside the map, token names and an accent colour. All per browser. The owner hasn't decided which to keep (don't prune yet).
+- **Look:** 12 themes, 4 page layouts, chat and sheet styles and layouts, plus tab order, the map toolbar's place, which panel goes beside the map (the toolbar menu or Look) and on which side, token names and an accent colour. All per browser. The top bar stays put when switching tabs (2026-10-10). The owner hasn't decided which to keep (don't prune yet).
 - **Security:** audited 2026-10-07 (headers, strict CSP: scripts only from the server, body limits, login limits, live streams that end with access). Hosting must go through Cloudflare Tunnel with `HOST=127.0.0.1`.
 
-**Numbers:** schema **v15**, `PIPELINE_VERSION` **13**, **367 tests** passing (`npm test`: server 160, shared 70, web 137). Tests are offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools; the page is tested in jsdom against a real test server (`packages/web/test/page.js`). Headless Chromium is only needed for what jsdom can't show (real layout, WebGL dice, touch). There's no CI: `npm test` is the check.
+**Numbers:** schema **v15**, `PIPELINE_VERSION` **13**, **369 tests** passing (`npm test`: server 160, shared 70, web 139). Tests are offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools; the page is tested in jsdom against a real test server (`packages/web/test/page.js`). Headless Chromium is only needed for what jsdom can't show (real layout, WebGL dice, touch). There's no CI: `npm test` is the check.
 
-**Git:** `main` has PRs #1–#25 merged (#16: housekeeping; #17: walls and doors; #18: book lookups; #20: stat blocks from your creatures and books first; #21: rolling from the sheet, the Inventory tab and campaign settings; #22: rests and hit dice; #23: merchants and items, which brought #22 in with it; #24: the ruleset note in SPEC; #25: full screen map and the DM's edit mode). Nothing open. Merges to `main` need the owner's OK.
+**Git:** `main` has PRs #1–#25 merged (#16: housekeeping; #17: walls and doors; #18: book lookups; #20: stat blocks from your creatures and books first; #21: rolling from the sheet, the Inventory tab and campaign settings; #22: rests and hit dice; #23: merchants and items, which brought #22 in with it; #24: the ruleset note in SPEC; #25: full screen map and the DM's edit mode). Open: the top bar staying put and "Beside the map" in Look (branch `claude/project-thread-sp4liz`). Merges to `main` need the owner's OK.
 
 **Installs:**
 - **Owner's PC** (the server): `data/` holds the admin login ("admin") and a player account for Kenny. The database upgrades itself (to v13 with rests, v14 with merchants, v15 with campaign settings) on the next start. Start with `npm start`, open http://127.0.0.1:4400. `.env` is in the repo root (copy of `.env.example`).
@@ -43,6 +43,8 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 **Real AI not yet tried on:** real maps (reading, walls, lights, terrain, stat blocks), Find online, character picture descriptions, sheets reaching the archivist, map events reaching the archivist, the book tools with all the books. Most page features have only been seen in jsdom or headless Chromium, not on a real phone or GPU.
 
 ## Next steps
+
+0. **Top bar and "Beside the map" (open PR): look at it in your browser** on Ask, then Map, then the Sheet: the tabs and buttons shouldn't move. In Look > Map, pick what goes beside the map; the side cards are greyed out until you do.
 
 0. **Full screen map and the DM's edit mode (merged): try them for real** in Chrome, Firefox and on a phone (an iPhone only fills the window): check the see-through tools read well over a dark and a light map, and that the turn order and a picked token's bar sit clear of the toolbars in each toolbar place.
 
@@ -730,6 +732,15 @@ Then: "The DM should be able to have an edit mode, that hides or shows the edit 
 ### 2026-10-09: PR #25 merged
 
 The owner said "Merge". PR #25 (full screen map with see-through tools and More, the DM's edit mode) is merged into `main`; this file was updated to say so in the PR's last commit.
+
+### 2026-10-10: The top bar stays put; "Beside the map" in Look
+
+The owner: the bar holding the tabs moved as he clicked through Ask, Notes, Creatures and so on, and the Look option "Beside the map" didn't seem to change anything.
+
+- **Top bar:** `#app-view` had a different `max-width` per tab (860px for Ask and Notes, 1280px for the sheet and map, none with a panel beside the map), and the bar sat inside it, so it re-centred on every switch (measured in headless Chromium: the tabs jumped from x=533 to 457, and to 218 with a panel beside the map). Now the page fills the window, each panel is centred at `--page-width`, and the bar's contents are always laid out at `--bar-width` (set per Look layout, never per tab). The selected tab's bold name used to widen it by a pixel or two; each tab label now reserves its bold width (`data-label` and a hidden `::after`). Re-measured: nothing moves across all tabs for a player and the DM, at 1000 and 1600px.
+- **Beside the map:** the Look setting only chose the side, and only does anything once a panel is picked in the map toolbar's menu, which wasn't obvious. Look's Map group now has "What goes there" (the same choice as the toolbar menu, which it drives, so they always agree), and the two side cards are greyed out and can't be picked until something is beside the map, with a line saying so. All Look options are kept.
+
+2 new tests in `packages/web/test/layout.test.js` (Look's beside picker; the bar's width never set per tab, and every tab label reserving its bold width), 369 in all.
 
 ## Verified vs. not verified
 
