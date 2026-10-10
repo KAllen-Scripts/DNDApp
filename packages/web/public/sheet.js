@@ -16,14 +16,14 @@ import {
 } from './shared/sheet.js';
 import { d20Plus } from './shared/dice.js';
 import { attackRolls, gearRolls, spellRolls } from './shared/rolls.js';
-import { EFFECT_TARGETS, GEAR_NAMES, MAX_EFFECTS, attunementLimit, carriedWeight, classProficient, normalizeGear, normalizeInventory } from './shared/gear.js';
+import { EFFECT_TARGETS, GEAR_NAMES, MAX_EFFECTS, attackWeapon, attunementLimit, carriedWeight, classProficient, inventoryGroups, itemStats, newUnownedWeaponAttacks, normalizeGear, normalizeInventory, ownsWeapon } from './shared/gear.js';
 import { WEIGHT_RULES } from './shared/settings.js';
 import { roll, rollModeFromEvent, modeButtons, D20_ICON } from './dice.js';
 
 const $ = (sel) => document.querySelector(sel);
 const LEVEL_NAMES = ['Cantrips', '1st level', '2nd level', '3rd level', '4th level', '5th level', '6th level', '7th level', '8th level', '9th level'];
 const SPELL_DETAILS = ['name', 'level', 'school', 'casting_time', 'range', 'components', 'material', 'duration', 'concentration', 'ritual', 'description', 'higher_levels', 'attack', 'save', 'damage', 'damage_mod', 'higher_damage', 'source', 'source_note'];
-const SOURCE_LABELS = { srd: 'SRD', book: 'Your book', ai: 'AI memory', import: 'Your sheet', manual: 'Typed in' };
+const SOURCE_LABELS = { srd: 'SRD', book: 'Your book', ai: 'AI memory', import: 'Your sheet', manual: 'Typed in', custom: 'Your own' };
 
 const state = {
   campaignId: null,
@@ -36,6 +36,7 @@ const state = {
   guarded: (fn) => fn(),
   sheet: null,
   version: 0,
+  savedSheet: null, // the sheet as the server has it (attacks it already had with weapons not carried may stay)
   calc: null,
   settings: { weight: 'capacity' }, // the campaign's (campaign-settings.js)
   layout: null, // the layout the sheet was last drawn in
@@ -92,6 +93,7 @@ export function setSheetSettings(settings) {
 
 function useSheet(sheet, version) {
   state.sheet = normalizeSheet(sheet);
+  state.savedSheet = structuredClone(state.sheet);
   state.version = version;
   render();
   status(version ? 'Saved' : 'Not saved yet: fill something in to start');
@@ -115,13 +117,18 @@ function changed() {
 async function save() {
   clearTimeout(state.timer);
   if (state.saving || !state.dirty) return;
+  // The server refuses a new attack with a weapon not in the inventory: say so and wait for the player to fix it.
+  const missing = [...new Set(newUnownedWeaponAttacks(state.sheet, state.savedSheet).map((a) => a.weapon))];
+  if (missing.length) return status(`Not saved: you don't have ${missing.length > 1 ? `these weapons: ${missing.join(', ')}` : `a ${missing[0]}`} in your Inventory. Add ${missing.length > 1 ? 'them' : 'it'} there, or rename or remove the attack.`, true);
   state.saving = true;
   state.dirty = false;
   status('Saving…');
   try {
-    const res = await state.guarded(() => api('PUT', `${base()}/sheet`, { sheet: state.sheet, version: state.version }));
+    const sent = structuredClone(state.sheet);
+    const res = await state.guarded(() => api('PUT', `${base()}/sheet`, { sheet: sent, version: state.version }));
     if (!res) return; // logged out: the login screen is showing
     state.version = res.version;
+    state.savedSheet = sent;
     announce();
     status(state.dirty ? 'Saving soon…' : 'Saved');
   } catch (err) {
@@ -629,7 +636,10 @@ const combat = () => h('div', { class: 'combat' }, vitals(), hp(), h('div', { cl
 
 function attacks() {
   const list = h('div', { class: 'sh-table attacks' });
+  // Suggested names: an unarmed strike and the weapons in the inventory (weapon attacks need the weapon).
+  const names = h('datalist', { id: 'dl-attacks' });
   const draw = () => {
+    names.replaceChildren(...['Unarmed strike', ...new Set(state.sheet.inventory.filter((g) => g.weapon).map((g) => g.name))].map((n) => h('option', { value: n })));
     list.replaceChildren(
       ...(state.sheet.attacks.length || equippedWeapons().length ? [h('div', { class: 'tr th' }, lbl('Name'), lbl('To hit / DC'), lbl('Damage / type'), h('span'), h('span'), h('span'))] : []),
       ...equippedWeapons().map(gearAttackRow),
@@ -640,7 +650,7 @@ function attacks() {
   draw();
   state.gearDraws.push(draw);
   state.attackDraws.push(draw);
-  return box('Attacks & spellcasting', 'attacks-box', list, datalist('dl-weapons', Object.values(WEAPONS).map((w) => w.name)));
+  return box('Attacks & spellcasting', 'attacks-box', list, names);
 }
 
 const ATTACK_ABILITY_NAMES = { '': 'As written', ...ABILITY_NAMES, finesse: 'Finesse (Str or Dex)', spell: 'Spellcasting ability' };
@@ -655,10 +665,12 @@ function attackRow(i, draw) {
   const a = state.sheet.attacks[i];
   const p = `attacks.${i}`;
   const save = a.kind === 'save';
-  const name = field(`${p}.name`, { label: 'Attack name', placeholder: 'Name', list: 'dl-weapons', onChange: () => {
-    // A weapon from the book fills in its damage and ability, when they're still empty.
-    const w = WEAPONS[a.name.trim().toLowerCase()];
-    if (w && !save && !a.damage.trim()) {
+  const name = field(`${p}.name`, { label: 'Attack name', placeholder: 'Name', list: 'dl-attacks', onChange: () => {
+    // A weapon from the book (one they have) fills in its damage and ability, when they're still empty; so does an unarmed strike.
+    const typed = a.name.trim().toLowerCase();
+    const unarmed = typed === 'unarmed strike';
+    const w = unarmed ? { damage: '1 bludgeoning', ability: 'str' } : WEAPONS[typed];
+    if (w && !save && !a.damage.trim() && (unarmed || ownsWeapon(w.name, state.sheet.inventory))) {
       Object.assign(a, { damage: w.damage, ability: w.ability });
       row.querySelector('[aria-label="Damage and type"]').value = a.damage;
       row.querySelector('[aria-label="Ability added"]').value = a.ability;
@@ -684,7 +696,28 @@ function attackRow(i, draw) {
     labelled('Magic', field(`${p}.magic`, { label: 'Magic bonus', kind: 'int', cls: 'num' }), 'inline'),
     sum,
   );
+  // A weapon attack needs the weapon in the inventory: without it the attack doesn't roll (and a new one isn't saved).
+  const warn = h('div', { class: 'atk-warn error small', hidden: true });
+  const paintOwned = () => {
+    const weapon = attackWeapon(a.name);
+    const missing = !!weapon && !ownsWeapon(weapon, state.sheet.inventory);
+    row.classList.toggle('unowned', missing);
+    warn.hidden = !missing;
+    hit.disabled = damage.disabled = missing;
+    if (!missing) return;
+    const item = a.magic > 0 ? `+${a.magic} ${weapon}` : weapon;
+    warn.replaceChildren(
+      `You don't have a ${weapon} in your Inventory, so this attack can't be rolled. `,
+      h('button', { type: 'button', class: 'ghost small', onclick: () => {
+        // Into the Inventory, equipped: it shows in Attacks from there, so this typed row goes.
+        state.sheet.attacks.splice(state.sheet.attacks.indexOf(a), 1);
+        const stats = itemStats({ name: item });
+        addGear({ name: item, qty: 1, equipped: 1, kind: stats.kind, weapon: stats.weapon, magic: stats.magic, weight: stats.weight, source: "Player's Handbook (SRD)" });
+      } }, `Add a ${item} to my Inventory`),
+    );
+  };
   const paint = () => {
+    paintOwned();
     const r = attackRolls(a, state.calc);
     hitBox.placeholder = save ? `DC ${r.autoDc}` : formatBonus(r.autoBonus);
     const dmg = r.damage ?? (r.flat != null ? String(r.flat) : '');
@@ -717,6 +750,7 @@ function attackRow(i, draw) {
     damage,
     removeButton('Remove this attack', () => { state.sheet.attacks.splice(i, 1); draw(); changed(); }),
     opts,
+    warn,
   );
   if (state.calc) paint();
   return row;
@@ -789,8 +823,11 @@ function inventoryTab() {
   if (!list) return;
   const draw = () => {
     const gear = state.sheet.inventory;
+    // Sorted by kind (weapons, armour, magic items, potions...), each under its heading; the saved order stays.
     list.replaceChildren(gear.length
-      ? h('div', { class: 'gear-list' }, gear.map(gearRow))
+      ? h('div', { class: 'gear-list' }, inventoryGroups(gear).map((grp) => h('section', { class: 'gear-group', 'data-kind': grp.kind },
+        h('h4', {}, grp.label, h('span', { class: 'muted small' }, ` · ${grp.items.reduce((n, g) => n + g.qty, 0)}`)),
+        grp.items.map(gearRow))))
       : h('p', { class: 'muted' }, 'Nothing here yet. Add what your character carries above: weapons and armour fill in their numbers, and anything bought from a merchant shows up here. Equip weapons to attack with them from your sheet; equip armour and a shield to set your AC.'));
   };
   draw();
@@ -1383,12 +1420,12 @@ function spells() {
     ),
     h('div', { class: 'slots' }, [1, 2, 3, 4, 5, 6, 7, 8, 9].map(slotTile), pact),
     h('p', { class: 'muted small slot-help' }, 'Slots per long rest are worked out for you (type a number to change one). Tick a circle when you use a slot.'),
-    addSpell(drawList),
+    addSpell(drawList, list),
     list,
   );
 }
 
-function addSpell(drawList) {
+function addSpell(drawList, list) {
   const input = h('input', { type: 'text', placeholder: 'Spell name, e.g. Shield', list: 'dl-spells', autocomplete: 'off', 'aria-label': 'Spell to add' });
   const suggestions = h('datalist', { id: 'dl-spells' });
   const note = h('span', { class: 'muted small' });
@@ -1415,8 +1452,29 @@ function addSpell(drawList) {
     note.textContent = (await lookupInto(spell)) ? '' : `Couldn't find details for ${name}. Type them in below.`;
     drawList();
   };
-  const unfilled = () => state.sheet.spells.filter((s) => !s.description.trim());
-  const fill = h('button', { type: 'button', class: 'ghost', onclick: async () => {
+  // A spell of the player's own (homebrew, or one the books and the AI don't know): never looked up, opened to fill in.
+  const custom = () => {
+    const name = input.value.trim();
+    if (!name) {
+      note.textContent = 'Type the name of your spell first, then press Make my own.';
+      return input.focus();
+    }
+    const spell = normalizeSpell({ name, source: 'custom', attack: '' });
+    state.sheet.spells.push(spell);
+    input.value = '';
+    note.textContent = `Added ${name}: fill in its level, details and how it rolls below.`;
+    changed();
+    drawList();
+    const card = [...list.querySelectorAll('details.spell')].find((c) => c.__spell === spell);
+    if (card) {
+      card.open = true;
+      card.dispatchEvent(new Event('toggle'));
+      card.querySelector('[aria-label="Spell level"]')?.focus();
+    }
+  };
+  // Custom spells are never looked up, so they're never "missing details".
+  const unfilled = () => state.sheet.spells.filter((s) => !s.description.trim() && s.source !== 'custom');
+  const fill = h('button', { type: 'button', class: 'ghost fill-missing', onclick: async () => {
     const todo = unfilled();
     for (const [i, s] of todo.entries()) {
       note.textContent = `Looking up ${s.name} (${i + 1} of ${todo.length})…`;
@@ -1430,7 +1488,11 @@ function addSpell(drawList) {
     fill.hidden = !n;
     fill.textContent = `Fill in missing details (${n})`;
   });
-  return h('form', { class: 'add-spell', onsubmit: add }, suggestions, input, h('button', { type: 'submit', class: 'primary' }, 'Add spell'), fill, note);
+  const form = h('form', { class: 'add-spell', onsubmit: add }, suggestions, input,
+    h('button', { type: 'submit', class: 'primary', title: 'Add it with its details from the SRD, your books or the AI' }, 'Add spell'),
+    h('button', { type: 'button', class: 'ghost', title: 'Your own spell (homebrew, or one nobody knows): typed in by you, never looked up', onclick: custom }, 'Make my own'),
+    fill, note);
+  return form;
 }
 
 /**
@@ -1453,7 +1515,7 @@ async function lookupInto(spell) {
 
 function spellGroups(drawList) {
   const spells = state.sheet.spells;
-  if (!spells.length) return [h('p', { class: 'muted' }, 'No spells yet. Add one above: its details are filled in from the SRD, your books, or the AI, and you can change anything.')];
+  if (!spells.length) return [h('p', { class: 'muted' }, 'No spells yet. Add one above: its details are filled in from the SRD, your books, or the AI, and you can change anything. For a spell of your own, type its name and press Make my own.')];
   const groups = new Map();
   for (const s of [...spells].sort((a, b) => (a.level ?? 99) - (b.level ?? 99) || a.name.localeCompare(b.name))) {
     const key = s.level ?? 'unknown';

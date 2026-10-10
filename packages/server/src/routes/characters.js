@@ -2,8 +2,8 @@
  * Players' character sheets (private to their player; the DM has Creatures instead) and pictures of
  * their characters (the token is seen by the campaign; the full picture is private).
  */
-import { SHEET_FORMAT, computeSheet } from '@dndapp/shared/sheet.js';
-import { ARMOR, WEAPONS, carriedWeight, itemStats, magicName } from '@dndapp/shared/gear.js';
+import { SHEET_FORMAT, computeSheet, normalizeSheet } from '@dndapp/shared/sheet.js';
+import { ARMOR, WEAPONS, carriedWeight, itemStats, magicName, newUnownedWeaponAttacks } from '@dndapp/shared/gear.js';
 import { gearRolls } from '@dndapp/shared/rolls.js';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
@@ -53,6 +53,13 @@ export function registerCharacters(app, r) {
   app.put('/campaigns/:cid/sheet', { bodyLimit: 5 * 1024 * 1024 }, async (request) => {
     const { cid } = sheetOwner(request);
     const body = z.object({ sheet: z.record(z.string(), z.unknown()), version: z.number().int().min(0) }).parse(request.body);
+    // Weapon attacks come from the Inventory: a typed attack can't use a weapon the character doesn't have
+    // (one the saved sheet already had stays, so old and uploaded sheets still save).
+    const current = sheets.get(cid, request.user.id);
+    if (current.version === body.version) {
+      const missing = [...new Set(newUnownedWeaponAttacks(normalizeSheet(body.sheet), current.sheet).map((a) => a.weapon))];
+      if (missing.length) throw new BadRequestError(`You don't have ${missing.length > 1 ? `these weapons: ${missing.join(', ')}` : `a ${missing[0]}`} in your Inventory. Add ${missing.length > 1 ? 'them' : 'it'} there (equipped weapons show in Attacks by themselves), or rename or remove the attack.`);
+    }
     return sheets.save(cid, request.user.id, body.sheet, { baseVersion: body.version });
   });
 
