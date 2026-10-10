@@ -11,7 +11,7 @@
  */
 import { api, h, readBase64, LoggedOut } from './api.js';
 import { formatPrice, totalCp } from './shared/coins.js';
-import { itemList, itemFace, itemSummary, detailsDialog, lookUpItem, priceInputs } from './items.js';
+import { itemList, itemFace, itemSummary, detailsDialog, lookUpItem, priceInputs, itemForm, createItem } from './items.js';
 import { flush as flushSheet, reloadSheet } from './sheet.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -215,6 +215,7 @@ function addDialog(m) {
     field('Item', name), options,
     h('div', { class: 'map-row' }, field('Price', price.el), field('In stock', qty), field('Restock to', full)),
     h('p', { class: 'muted small' }, "An item that isn't in your Items tab yet is looked up (the books, then the AI) and added there. Leave the price empty for its usual price, and In stock empty for no limit."),
+    h('p', { class: 'small' }, h('button', { type: 'button', class: 'ghost', onclick: () => newItemDialog(m) }, 'Make a new item'), ' ', h('span', { class: 'muted' }, 'Type it in yourself, with a picture if you like.')),
   ], async () => {
     const want = name.value.trim().toLowerCase();
     let item = itemList().find((x) => !x.finding && x.name.toLowerCase() === want);
@@ -228,6 +229,27 @@ function addDialog(m) {
     if (full.value !== '') body.full = count(full);
     const saved = await state.guarded(() => api('POST', `${base()}/${m.id}/stock`, body));
     if (saved) status(`${m.name} sells ${item.name} now.`);
+    return saved;
+  }, 'Add');
+}
+
+/** Make an item by hand right here (it joins the Items tab too) and sell it at this merchant. */
+function newItemDialog(m) {
+  const form = itemForm();
+  const qty = countInput(1, 'no limit');
+  const full = countInput('', 'same as in stock');
+  let made = null; // kept if stocking it fails, so trying again doesn't make it twice
+  formDialog(`A new item for ${m.name}`, [
+    ...form.fields,
+    h('div', { class: 'map-row' }, field('In stock', qty), field('Restock to', full)),
+    h('p', { class: 'muted small' }, `${m.name} sells it at its usual price (change that here later). It's added to your Items tab too. In stock empty: no limit.`),
+  ], async () => {
+    made ??= await createItem(await form.body());
+    if (!made) return null;
+    const body = { item: made.id, qty: count(qty) };
+    if (full.value !== '') body.full = count(full);
+    const saved = await state.guarded(() => api('POST', `${base()}/${m.id}/stock`, body));
+    if (saved) status(`${m.name} sells ${made.name} now.`);
     return saved;
   }, 'Add');
 }

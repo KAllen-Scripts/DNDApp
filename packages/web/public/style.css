@@ -307,6 +307,7 @@ table.stock .stock-actions button { padding: 0.15rem 0.45rem; font-size: 0.8rem;
 .shop-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; max-height: 55vh; overflow-y: auto; }
 .shop-item { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; padding: 0.4rem 0; border-top: 1px solid var(--border); }
 .shop-item .creature-face { width: 2.4rem; height: 2.4rem; font-size: 0.85rem; }
+.equipped-list .creature-face { display: inline-flex; width: 1.6rem; height: 1.6rem; font-size: 0.6rem; vertical-align: middle; margin-right: 0.4rem; }
 .shop-item-body { display: grid; flex: 1 1 10rem; min-width: 0; }
 .shop-item-name { text-align: left; font-weight: 600; }
 .shop-price { font-weight: 600; white-space: nowrap; }
@@ -718,6 +719,7 @@ input.num, .sheet .num { text-align: center; }
 .gear-row.equipped { border-color: var(--accent); }
 .gear-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.8rem; }
 .gear-head .gear-title { flex: 1 1 8rem; overflow-wrap: anywhere; }
+.gear-head .gear-picture { flex: none; width: 2.2rem; height: 2.2rem; border-radius: 6px; object-fit: cover; }
 .gear-head input.num { width: 3.5rem; }
 .gear-head .fld.inline { flex-direction: row-reverse; align-items: center; gap: 0.3rem; }
 .gear-head label.check { flex: none; }
