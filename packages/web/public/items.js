@@ -69,6 +69,7 @@ async function loadEquipped() {
         ` · attuned to ${p.attuned} item${p.attuned === 1 ? '' : 's'}`) : null,
       p.gear.length
         ? h('ul', { class: 'equipped-list' }, p.gear.map((g) => h('li', {},
+          g.picture ? itemFace({ name: g.name, picture: g.picture }, `${base()}/${g.item_id}/picture`, state.pictures) : null,
           h('strong', {}, g.name), g.equipped > 1 ? ` ×${g.equipped}` : '',
           g.to_hit != null ? ` · ${sign(g.to_hit)} to hit, ${g.damage ?? 'no damage'}` : '',
           g.armor ? (g.armor.type === 'shield' ? ` · +${g.armor.base + g.magic} AC` : ` · ${g.armor.type} armour, AC ${g.armor.base + g.magic}`) : '',
@@ -317,8 +318,11 @@ export function priceInputs(cp, { placeholder = 'unknown' } = {}) {
   };
 }
 
-function editDialog(x = null) {
-  const dialog = $('#item-dialog');
+/**
+ * The fields of an item's form (also the Merchants tab's "Make a new item"): `fields` to show,
+ * `body()` what to send (with the picture, base64, for a new one; throws if it's too big).
+ */
+export function itemForm(x = null) {
   const name = h('input', { name: 'name', value: x?.name ?? '', maxLength: 80, required: true, placeholder: 'Potion of Healing, Longsword…' });
   const kind = h('select', { name: 'kind' }, ...Object.entries(ITEM_KIND_NAMES).map(([k, label]) => new Option(label, k)));
   kind.value = x?.kind ?? 'gear';
@@ -329,27 +333,56 @@ function editDialog(x = null) {
   const weight = h('input', { name: 'weight', type: 'number', min: '0', step: 'any', value: x?.weight ?? '', placeholder: '–' });
   const text = h('textarea', { name: 'text', rows: 6, maxLength: 8000, placeholder: 'What it is and does: damage and properties, AC, effects. Players see this at a merchant. Markdown is fine.' }, x?.text ?? '');
   const notes = h('textarea', { name: 'notes', rows: 2, maxLength: 4000, placeholder: 'Only you see these.' }, x?.notes ?? '');
-  const file = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', 'aria-label': 'Picture' });
+  const file = h('input', { type: 'file', name: 'picture', accept: 'image/png,image/jpeg,image/webp,image/gif', 'aria-label': 'Picture' });
+  return {
+    name,
+    price,
+    fields: [
+      field('Name', name),
+      h('div', { class: 'map-row' }, field('Kind', kind), field('Rarity', rarity)),
+      h('div', { class: 'map-row' }, field('Usual price', price.el), field('Weight (lb)', weight)),
+      h('label', { class: 'map-check' }, attunement, ' Needs attunement'),
+      field('Description', text),
+      field('Notes', notes),
+      x ? null : field('Picture (optional)', file),
+    ],
+    async body() {
+      const body = {
+        name: name.value.trim(),
+        kind: kind.value,
+        rarity: rarity.value,
+        attunement: attunement.checked,
+        price: price.value(),
+        weight: weight.value === '' ? null : Math.max(0, Number(weight.value) || 0),
+        notes: notes.value,
+      };
+      // Only send the description when it changed (one from a book or the web keeps where it came from).
+      if (text.value.trim() !== (x?.text ?? '').trim()) body.text = text.value;
+      const f = file.files[0];
+      if (f && f.size > 10 * 1024 * 1024) throw new Error('That picture is too big (10 MB at most).');
+      if (!x && f) body.picture = { filename: f.name, data: await readBase64(f) };
+      return body;
+    },
+  };
+}
+
+/** Make a new item and keep it with the rest; returns it (null if logged out). */
+export async function createItem(body) {
+  const saved = await state.guarded(() => api('POST', base(), body));
+  if (saved) upsert(saved);
+  return saved;
+}
+
+function editDialog(x = null) {
+  const dialog = $('#item-dialog');
+  const form = itemForm(x);
   const error = h('p', { class: 'error small', hidden: true, role: 'alert' });
 
   const save = async () => {
-    const body = {
-      name: name.value.trim(),
-      kind: kind.value,
-      rarity: rarity.value,
-      attunement: attunement.checked,
-      price: price.value(),
-      weight: weight.value === '' ? null : Math.max(0, Number(weight.value) || 0),
-      notes: notes.value,
-    };
-    // Only send the description when it changed (one from a book or the web keeps where it came from).
-    if (text.value.trim() !== (x?.text ?? '').trim()) body.text = text.value;
-    const f = file.files[0];
-    if (f && f.size > 10 * 1024 * 1024) throw new Error('That picture is too big (10 MB at most).');
-    if (!x && f) body.picture = { filename: f.name, data: await readBase64(f) };
-    const saved = await state.guarded(() => (x ? api('PATCH', `${base()}/${x.id}`, body) : api('POST', base(), body)));
+    const body = await form.body();
+    const saved = x ? await state.guarded(() => api('PATCH', `${base()}/${x.id}`, body)) : await createItem(body);
     if (!saved) return;
-    upsert(saved);
+    if (x) upsert(saved);
     status(x ? `${saved.name} saved.` : `${saved.name} added to your items.`);
   };
 
@@ -363,13 +396,7 @@ function editDialog(x = null) {
       });
     } },
       h('h2', {}, x ? `Change ${x.name}` : 'New item'),
-      field('Name', name),
-      h('div', { class: 'map-row' }, field('Kind', kind), field('Rarity', rarity)),
-      h('div', { class: 'map-row' }, field('Usual price', price.el), field('Weight (lb)', weight)),
-      h('label', { class: 'map-check' }, attunement, ' Needs attunement'),
-      field('Description', text),
-      field('Notes', notes),
-      x ? null : field('Picture (optional)', file),
+      ...form.fields,
       error,
       h('div', { class: 'map-dialog-actions' },
         h('span', { class: 'spacer' }),
@@ -378,7 +405,7 @@ function editDialog(x = null) {
     ),
   );
   dialog.showModal();
-  name.focus();
+  form.name.focus();
 }
 
 function choosePicture(x) {

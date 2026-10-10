@@ -261,6 +261,44 @@ test('merchants: a player buys; coins come off their sheet (with change), the it
   }
 });
 
+test("items: a bought item's picture shows in the buyer's inventory (only theirs) and in the DM's equipped list", async () => {
+  const t = await setup({ llm: llm() });
+  try {
+    const { m, potion, rope, base } = await shop(t);
+    const items = `/campaigns/${t.campaign.id}/items`;
+    await t.request('PUT', `${items}/${potion.id}/picture`, { body: { filename: 'p.png', data: (await terrain(40, 40)).toString('base64') } });
+    giveCoins(t, t.sam, { gp: 100 });
+    giveCoins(t, t.alex, { gp: 100 });
+    assert.equal((await t.request('POST', `${base}/buy`, { as: t.sam.token, body: { line: m.stock[0].id } })).statusCode, 200);
+    assert.equal((await t.request('POST', `${base}/buy`, { as: t.sam.token, body: { line: m.stock[1].id } })).statusCode, 200);
+    const gear = `/campaigns/${t.campaign.id}/gear`;
+
+    const { pictures } = (await t.request('GET', `${gear}/pictures`, { as: t.sam.token })).json();
+    assert.deepEqual(Object.keys(pictures), [potion.id], 'the rope has no picture');
+    const img = await t.request('GET', `${gear}/items/${potion.id}/picture?v=${pictures[potion.id]}`, { as: t.sam.token });
+    assert.equal(img.statusCode, 200);
+    assert.equal(img.headers['content-type'], 'image/webp');
+    assert.equal((await t.request('GET', `${gear}/items/${rope.id}/picture`, { as: t.sam.token })).statusCode, 404, 'no picture');
+
+    // Not someone else's, and not the DM (who has the Items tab).
+    assert.deepEqual((await t.request('GET', `${gear}/pictures`, { as: t.alex.token })).json().pictures, {});
+    assert.equal((await t.request('GET', `${gear}/items/${potion.id}/picture`, { as: t.alex.token })).statusCode, 404);
+    assert.equal((await t.request('GET', `${gear}/pictures`)).statusCode, 403);
+
+    // Still there after the DM takes the item off their list.
+    await t.request('DELETE', `${items}/${potion.id}`);
+    assert.equal((await t.request('GET', `${gear}/items/${potion.id}/picture`, { as: t.sam.token })).statusCode, 200);
+
+    // The DM's equipped list carries the picture's key.
+    const { sheet } = t.sheets.get(t.campaign.id, t.sam.id);
+    t.sheets.save(t.campaign.id, t.sam.id, { ...sheet, inventory: sheet.inventory.map((g) => ({ ...g, equipped: 1 })) });
+    const thorin = (await t.request('GET', `${gear}/equipped`)).json().players.find((p) => p.user_id === t.sam.id);
+    assert.deepEqual(thorin.gear.map((g) => [g.name, g.item_id, g.picture]), [['Potion of Healing', potion.id, pictures[potion.id]], ['Rope', rope.id, null]]);
+  } finally {
+    await t.cleanup();
+  }
+});
+
 test('merchants: restock every N long rests the DM calls (short rests do not count), or by hand', async () => {
   const t = await setup({ llm: llm() });
   try {
