@@ -353,3 +353,37 @@ test('campaign settings: the DM sets the weight rule; everyone gets it; it chang
     await t.cleanup();
   }
 });
+
+test("attacks: a player can't save a typed attack with a weapon that isn't in their inventory; ones the sheet already had stay", async () => {
+  const t = await setup();
+  try {
+    const url = `/campaigns/${t.campaign.id}/sheet`;
+    const put = (sheet, version) => t.request('PUT', url, { as: t.sam.token, body: { sheet, version } });
+    const blank = (await t.request('GET', url, { as: t.sam.token })).json().sheet;
+
+    // Unarmed strikes, spells and features are fine; a Longsword not carried isn't.
+    const ok = await put({ ...blank, attacks: [{ name: 'Unarmed strike', damage: '1 bludgeoning' }, { name: 'Fire breath', kind: 'save' }] }, 0);
+    assert.equal(ok.statusCode, 200);
+    const sheet = ok.json().sheet;
+    const refused = await put({ ...sheet, attacks: [...sheet.attacks, { name: 'Longsword', damage: '1d8 slashing' }, { name: 'Two daggers' }] }, 1);
+    assert.equal(refused.statusCode, 400);
+    assert.match(refused.json().error, /these weapons: Longsword, Dagger in your Inventory/);
+    assert.equal((await t.request('GET', url, { as: t.sam.token })).json().version, 1, 'nothing saved');
+
+    // With the longsword in the inventory, the attack saves.
+    const armed = await put({ ...sheet, inventory: [{ name: '+1 Longsword', kind: 'weapon' }], attacks: [...sheet.attacks, { name: 'Longsword (two hands)', damage: '1d10 slashing' }] }, 1);
+    assert.equal(armed.statusCode, 200);
+
+    // An uploaded or older sheet keeps an attack it already had, even after the sword is gone; renaming it to another weapon isn't allowed.
+    t.sheets.save(t.campaign.id, t.sam.id, { ...armed.json().sheet, inventory: [], attacks: [{ name: 'Shortbow', damage: '1d6 piercing' }] });
+    const old = (await t.request('GET', url, { as: t.sam.token })).json();
+    assert.equal((await put({ ...old.sheet, coins: { ...old.sheet.coins, gp: 5 } }, old.version)).statusCode, 200);
+    const renamed = await put({ ...old.sheet, attacks: [{ name: 'Heavy crossbow' }] }, old.version + 1);
+    assert.equal(renamed.statusCode, 400);
+    assert.match(renamed.json().error, /a Heavy crossbow in your Inventory/);
+    // A stale version still gets the usual conflict, not this.
+    assert.equal((await put({ ...old.sheet, attacks: [{ name: 'Maul' }] }, 0)).statusCode, 409);
+  } finally {
+    await t.cleanup();
+  }
+});

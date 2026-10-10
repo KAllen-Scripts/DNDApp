@@ -223,7 +223,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/conversations[/:id]` | Your chats (pinned first, then most recent) |
 | PATCH | `/campaigns/:cid/conversations/:id` | `{ pinned?, title? }`: pin/unpin or rename one of your chats |
 | DELETE | `/campaigns/:cid/conversations/:id` | Delete one of your chats (its questions and answers are erased; it still counts toward the hourly limit) |
-| GET / PUT | `/campaigns/:cid/sheet` | Your character sheet (blank, version 0, if none) / save it `{sheet, version}`. 409 `{error, current}` if it was saved elsewhere since `version`. Players only: 403 for the DM (who has Creatures), as for all sheet and character picture routes |
+| GET / PUT | `/campaigns/:cid/sheet` | Your character sheet (blank, version 0, if none) / save it `{sheet, version}`. 409 `{error, current}` if it was saved elsewhere since `version`. 400 if it adds an attack with a PHB weapon that isn't in the sheet's inventory (one the saved sheet already had may stay). Players only: 403 for the DM (who has Creatures), as for all sheet and character picture routes |
 | POST | `/campaigns/:cid/sheet/import` | Upload a sheet `{filename, data (base64), version?}`: PDF, image, text, or a downloaded sheet. Replies with the saved sheet and the AI's `notes` |
 | GET | `/campaigns/:cid/character/pictures` | Your token and full picture `{token, picture}` (each null or `{key, width, height}`) |
 | PUT / DELETE | `/campaigns/:cid/character/token` | Upload your token picture `{filename?, data (base64)}` (shown on your token on maps) / stop using it |

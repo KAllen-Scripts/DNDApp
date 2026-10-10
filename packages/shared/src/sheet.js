@@ -126,7 +126,8 @@ export const DAMAGE_TYPES = ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'li
 
 /** A new attack: proficient, Strength, nothing written yet. */
 export const newAttack = () => ({ name: '', kind: 'attack', ability: 'str', proficient: true, magic: 0, bonus: '', save: '', dc: '', damage: '', notes: '' });
-const SPELL_SOURCES = ['srd', 'book', 'ai', 'import', 'manual'];
+// Where a spell's details came from; custom: the player's own (homebrew, or one nobody else knows), never looked up.
+const SPELL_SOURCES = ['srd', 'book', 'ai', 'import', 'manual', 'custom'];
 
 // ---------- helpers ----------
 
