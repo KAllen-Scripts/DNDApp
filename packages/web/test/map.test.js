@@ -540,6 +540,11 @@ test('AI walls: the DM sees it working (step and time so far), then what it foun
     assert.equal(button.textContent, 'AI walls');
     assert.ok(!button.disabled);
     assert.ok(!page.$('#map-ai-note .spinner'));
+    // Pressing on the message is the message's, not the map's: the map doesn't take the pointer
+    // (in a browser it would then get the click, and the message couldn't be closed).
+    page.pointer('#map-ai-note [aria-label=Close]', 'pointerdown', { clientX: 350, clientY: 20 });
+    assert.ok(!page.$('#map-view').hasPointerCapture(1), 'the map took the pointer');
+    page.pointer('#map-ai-note [aria-label=Close]', 'pointerup', { clientX: 350, clientY: 20 });
     // Closed, it stays closed (in this browser) until the next go.
     page.click('#map-ai-note [aria-label=Close]');
     assert.ok(!page.visible('#map-ai-note'));
