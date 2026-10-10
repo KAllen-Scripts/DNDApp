@@ -5,6 +5,7 @@
  * accent colour. All kept in this browser.
  */
 import { test } from 'node:test';
+import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { withPage, addDm } from './helpers.js';
 
@@ -80,6 +81,58 @@ test('beside the map, on the left: chosen under Look; the handle widens it the o
     assert.equal(width(), '640px');
     page.key('#sheet-splitter', 'ArrowLeft');
     assert.equal(width(), '620px');
+  });
+});
+
+test('beside the map under Look: pick what goes there; its side is greyed out until something is', async () => {
+  await withPage(asSam(), async (page) => {
+    openLook(page, 'map');
+    const sides = () => page.$$('.look-card[data-key=besideSide]');
+    const pick = page.$('#look-beside');
+    assert.deepEqual([...pick.options].map((o) => o.textContent), ['Nothing', 'Sheet', 'Inventory', 'Ask', 'Notes', 'Handouts'], 'only what this person has');
+    assert.equal(pick.value, '');
+    assert.ok(sides().every((c) => c.getAttribute('aria-disabled') === 'true'));
+    assert.match(page.text('#look-side-says'), /Nothing is beside the map yet/);
+    // The side can't be picked while nothing is beside the map.
+    page.click(card(page, 'besideSide', 'left'));
+    page.key(card(page, 'besideSide', 'right'), 'ArrowRight');
+    assert.equal(root(page).dataset.besideSide, 'right');
+
+    page.type('#look-beside', 'ask');
+    assert.equal(page.$('#map-beside').value, 'ask', 'the toolbar menu agrees');
+    assert.equal(page.window.localStorage.getItem('dndapp.beside'), 'ask');
+    assert.ok(sides().every((c) => c.getAttribute('aria-disabled') === 'false'));
+    page.click(card(page, 'besideSide', 'left'));
+    assert.equal(root(page).dataset.besideSide, 'left');
+
+    page.$('#look-dialog').close();
+    page.click('[data-tab=map]');
+    assert.ok(page.visible('#tab-map') && page.visible('#tab-ask'));
+    assert.ok(page.$('#app-view').classList.contains('beside'));
+
+    // Changed on the toolbar, the dialog shows it next time.
+    page.type('#map-beside', 'notes');
+    openLook(page, 'map');
+    assert.equal(page.$('#look-beside').value, 'notes');
+    page.type('#look-beside', '');
+    assert.ok(!page.$('#app-view').classList.contains('beside'));
+    assert.ok(!page.visible('#tab-notes'));
+  });
+});
+
+test('the bar along the top stays put: every tab has room for its bold name, and its width never depends on the tab', async () => {
+  const css = fs.readFileSync(new URL('../public/style.css', import.meta.url), 'utf8') + fs.readFileSync(new URL('../public/themes.css', import.meta.url), 'utf8');
+  // Only the panels change width with the tab; the page itself doesn't.
+  const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].map(([, sel, body]) => [sel.trim(), body]);
+  for (const [sel, body] of rules) {
+    if (sel.split(',').some((s) => /^#app-view\.(wide|beside)$/.test(s.trim()))) assert.doesNotMatch(body, /max-width|--bar-width/, sel);
+    if (/^#app-view$/.test(sel)) assert.doesNotMatch(body, /max-width/, sel);
+  }
+  await withPage(asSam(), async (page) => {
+    for (const tab of page.$$('#app-view .tabs [data-tab]')) {
+      const label = tab.querySelector('[data-label]');
+      assert.equal(label.dataset.label, label.textContent, tab.dataset.tab);
+    }
   });
 });
 

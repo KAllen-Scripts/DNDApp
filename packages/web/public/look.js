@@ -1,7 +1,7 @@
 /**
  * The "Look" dialog: themes, layouts, density, chat style, sheet style and
  * sheet layout; an accent colour, the tabs' order, and how the map page is
- * laid out (toolbar, the side panel's side, token names, which tools show). Choices apply straight away and are kept in this browser
+ * laid out (toolbar, what goes beside it and on which side, token names, which tools show). Choices apply straight away and are kept in this browser
  * (look-boot.js applies them on load). Previews reuse the real CSS: a theme
  * preview carries data-theme, a chat preview data-chat, and so on.
  */
@@ -137,6 +137,11 @@ const sheetPreview = (key) => {
 // ---------- the dialog ----------
 
 function section(group, title, hint, key, options, preview, cls = '') {
+  return block(group, title, hint, cards(title, key, options, preview, cls));
+}
+
+/** One choice as a row of cards, like radio buttons. */
+function cards(title, key, options, preview, cls = '') {
   const current = look.get()[key];
   const grid = el('div', { class: `look-grid ${cls}`, role: 'radiogroup', 'aria-label': title });
   for (const [value, [name, blurb]] of Object.entries(options)) {
@@ -147,7 +152,7 @@ function section(group, title, hint, key, options, preview, cls = '') {
     );
     grid.append(card);
   }
-  return block(group, title, hint, grid);
+  return grid;
 }
 
 const block = (group, title, hint, ...content) =>
@@ -186,6 +191,38 @@ function tabsSection() {
   return block('page', 'Tabs', 'Put them in your order, hide the ones you don’t use, and pick the one the page opens on.', el('ol', { class: 'look-tabs', id: 'look-tabs' }, rows));
 }
 
+/**
+ * What goes beside the map (the same choice as the menu on the map's toolbar,
+ * sheet-place.js), and which side it goes on. The side only means something
+ * once a panel is beside the map, so until then its cards are greyed out.
+ */
+function besideSection() {
+  const pick = $('#map-beside');
+  const select = el('select', { id: 'look-beside', 'aria-label': 'What goes beside the map' },
+    [...pick.options].filter((o) => !o.hidden).map((o) => {
+      const option = el('option', { value: o.value }, o.value ? o.textContent.replace(/ beside$/, '') : 'Nothing');
+      option.selected = o.value === pick.value;
+      return option;
+    }));
+  return block('map', 'Beside the map',
+    'Keep another panel open next to the map, like your sheet, Ask or Notes. It shows while the Map tab is open. The menu on the map’s toolbar changes it too.',
+    el('label', { class: 'look-row' }, 'What goes there', select),
+    el('p', { class: 'muted small', id: 'look-side-says' }),
+    cards('Which side it goes on', 'besideSide', BESIDE_SIDES, (k) => diagram('side', k), 'small-cards'));
+}
+
+/** Grey out the side cards while nothing is beside the map. */
+function besideState() {
+  const none = !$('#map-beside').value;
+  const grid = $body().querySelector('.look-card[data-key="besideSide"]')?.parentElement;
+  if (!grid) return;
+  grid.classList.toggle('off', none);
+  for (const c of grid.children) c.setAttribute('aria-disabled', String(none));
+  $('#look-side-says').textContent = none
+    ? 'Nothing is beside the map yet. Pick something above, then choose its side.'
+    : 'Which side it goes on:';
+}
+
 /** The map tools you want on the toolbar. */
 function toolsSection() {
   const { hiddenTools } = look.get();
@@ -213,10 +250,11 @@ function build() {
     section('sheet', 'Character sheet style', null, 'sheetStyle', SHEET_STYLES, sheetPreview),
     section('sheet', 'Character sheet layout', null, 'sheetLayout', SHEET_LAYOUTS, (k) => diagram('sheet', k), 'small-cards'),
     section('map', 'Toolbar', 'Where the map’s tools go.', 'mapBar', MAP_BARS, (k) => diagram('mapbar', k), 'small-cards'),
-    section('map', 'Beside the map', 'Pick what goes beside the map with the menu on the map’s toolbar. Here, which side it goes on.', 'besideSide', BESIDE_SIDES, (k) => diagram('side', k), 'small-cards'),
+    besideSection(),
     section('map', 'Token names', null, 'tokenLabels', TOKEN_LABELS, (k) => diagram('labels', k), 'small-cards'),
     toolsSection(),
   );
+  besideState();
   showGroup(group);
 }
 
@@ -277,6 +315,7 @@ export function initLook() {
   }
   $body().addEventListener('click', (e) => {
     const card = e.target.closest('.look-card');
+    if (card?.getAttribute('aria-disabled') === 'true') return;
     if (card) return choose(card.dataset.key, card.dataset.value);
     const groupTab = e.target.closest('[data-group-tab]');
     if (groupTab) return showGroup(groupTab.dataset.groupTab);
@@ -293,6 +332,13 @@ export function initLook() {
   });
   $body().addEventListener('change', (e) => {
     if (e.target.closest('#look-tabs')) return tabsChanged(e);
+    if (e.target.id === 'look-beside') {
+      // The toolbar's menu does the work (sheet-place.js), so the two always agree.
+      const pick = $('#map-beside');
+      pick.value = e.target.value;
+      pick.dispatchEvent(new Event('change', { bubbles: true }));
+      return besideState();
+    }
     const tool = e.target.dataset.toolShow;
     if (tool) {
       const hidden = look.get().hiddenTools.filter((x) => x !== tool);
@@ -309,7 +355,7 @@ export function initLook() {
   // Arrow keys move between choices in a group, like radio buttons.
   $body().addEventListener('keydown', (e) => {
     const card = e.target.closest('.look-card');
-    if (!card) return;
+    if (!card || card.getAttribute('aria-disabled') === 'true') return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       return choose(card.dataset.key, card.dataset.value);
