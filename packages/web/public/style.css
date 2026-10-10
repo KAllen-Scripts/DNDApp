@@ -712,9 +712,16 @@ input.num, .sheet .num { text-align: center; }
 .attacks .gear-attack { padding: 0.15rem 0; border-bottom: 1px dashed var(--border); }
 .gear-attack .gear-name { font-weight: 600; overflow-wrap: anywhere; }
 .gear-attack .gear-dmg-pair { display: inline-flex; gap: 0.25rem; }
+/* A typed attack with a weapon not in the Inventory: doesn't roll, says why and offers to add the weapon. */
+.attacks .tr.unowned > input[aria-label="Attack name"] { border-color: var(--error); }
+.attacks .atk-warn { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.6rem; }
+.attacks .atk-warn[hidden] { display: none; }
+.attacks .atk-warn button { padding: 0.15rem 0.5rem; font-size: 0.8rem; }
 
 /* The Inventory tab (players): one row per item, details folded away. */
 .inventory .gear-list { display: grid; gap: 0.4rem; }
+.gear-group { display: grid; gap: 0.4rem; }
+.gear-group h4 { margin: 0.4rem 0 0; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
 .gear-row { border: 1px solid var(--border); border-radius: 8px; padding: 0.4rem 0.6rem; }
 .gear-row.equipped { border-color: var(--accent); }
 .gear-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.8rem; }
@@ -958,6 +965,7 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .tag { font-size: 0.68rem; font-weight: 700; border: 1px solid var(--border); border-radius: 4px; padding: 0 0.25rem; color: var(--muted); }
 .source { font-size: 0.7rem; padding: 0.05rem 0.5rem; border-radius: 999px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
 .source-ai { color: #9a5b00; background: #fbecd0; }
+.source-custom { color: var(--accent); border: 1px solid var(--accent); }
 .spell-body { padding: 0.4rem 0.7rem 0.7rem; display: grid; gap: 0.55rem; border-top: 1px solid var(--border); }
 .spell-body p { margin: 0; }
 .spell-body p:empty { display: none; }
