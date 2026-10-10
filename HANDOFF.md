@@ -33,7 +33,7 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 
 **Numbers:** schema **v15**, `PIPELINE_VERSION` **15**, **387 tests** passing (`npm test`: server 168, shared 73, web 146). Tests are offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools; the page is tested in jsdom against a real test server (`packages/web/test/page.js`). Headless Chromium is only needed for what jsdom can't show (real layout, WebGL dice, touch). There's no CI: `npm test` is the check.
 
-**Git:** `main` has PRs #1–#31 merged (#16: housekeeping; #17: walls and doors; #18: book lookups; #20: stat blocks from your creatures and books first; #21: rolling from the sheet, the Inventory tab and campaign settings; #22: rests and hit dice; #23: merchants and items, which brought #22 in with it; #24: the ruleset note in SPEC; #25: full screen map and the DM's edit mode; #26: the archivist reads handout pictures; #27: attacks need the weapon, Inventory by kind, spells of your own; #28: item pictures in inventories and custom items made from a merchant; #30: the top bar stays put and "Beside the map" in Look; #31: contradictions resolved: rules edition per campaign, token hit points from the sheet, docs; #29: AI walls show they're working). Open: the AI walls message fix and lower walls effort (branch `claude/project-thread-4st1c0`). Merges to `main` need the owner's OK.
+**Git:** `main` has PRs #1–#32 merged (#16: housekeeping; #17: walls and doors; #18: book lookups; #20: stat blocks from your creatures and books first; #21: rolling from the sheet, the Inventory tab and campaign settings; #22: rests and hit dice; #23: merchants and items, which brought #22 in with it; #24: the ruleset note in SPEC; #25: full screen map and the DM's edit mode; #26: the archivist reads handout pictures; #27: attacks need the weapon, Inventory by kind, spells of your own; #28: item pictures in inventories and custom items made from a merchant; #30: the top bar stays put and "Beside the map" in Look; #31: contradictions resolved: rules edition per campaign, token hit points from the sheet, docs; #29: AI walls show they're working; #32: the AI walls message closes, walls at xhigh effort). Nothing open. Merges to `main` need the owner's OK.
 
 **Installs:**
 - **Owner's PC** (the server): `data/` holds the admin login ("admin") and a player account for Kenny. The database upgrades itself (to v13 with rests, v14 with merchants, v15 with campaign settings) on the next start. Start with `npm start`, open http://127.0.0.1:4400. `.env` is in the repo root (copy of `.env.example`).
@@ -819,6 +819,10 @@ The owner: "When we get the window saying the map was generated, it gets stuck. 
 - **Effort:** the `walls` task defaults to `xhigh` instead of `max` (`config.js`, `.env.example`; `EFFORT_WALLS=max` in `.env` brings it back). Nothing else in the draft changed (still a draft plus a check, close-ups on big maps). No prompt change, so `PIPELINE_VERSION` stays. If the owner's `.env` sets `EFFORT_WALLS`, that wins.
 - Tests: 387 (server 168: the default effort).
 - **Not checked:** a real browser; the token use at xhigh.
+
+### 2026-10-10: PR #32 merged
+
+The owner said "Merge". PR #32 (the AI walls message closes again, walls at xhigh effort) is merged into `main`; this file was updated to say so in the PR's last commit.
 
 ## Verified vs. not verified
 
