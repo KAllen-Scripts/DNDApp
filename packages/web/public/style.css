@@ -96,17 +96,25 @@ button:disabled { opacity: 0.6; cursor: default; }
 button.link { border: none; background: none; padding: 0; color: var(--accent); text-decoration: underline; font-size: 0.9rem; }
 
 /* ---------- app ---------- */
-#app-view { display: flex; flex-direction: column; height: 100%; max-width: 860px; margin: 0 auto; }
+/* The page fills the window. Each tab's panel is as wide as it needs (--page-width:
+   narrow for Ask and Notes, wider for the sheet and the map), but the bar along the
+   top is always the same width (--bar-width), so it never moves when you switch tabs. */
+#app-view { display: flex; flex-direction: column; height: 100%; --page-width: 860px; --bar-width: 1280px; }
+#app-view > .panel { width: 100%; max-width: var(--page-width); margin-inline: auto; }
 .topbar {
   display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
   padding: 0.75rem 16px; border-bottom: 1px solid var(--border); background: var(--topbar-bg);
 }
+#app-view > .topbar { padding-inline: max(16px, calc((100% - var(--bar-width)) / 2 + 16px)); }
 .tab-icon { display: none; }
 .who { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
 .who select { width: auto; max-width: 100%; padding: 0.3rem 0.5rem; }
 .tabs { display: flex; gap: 0.25rem; background: var(--surface-2); padding: 0.2rem; border-radius: 9px; }
 .tabs button { border: none; background: transparent; padding: 0.35rem 0.9rem; border-radius: 7px; }
 .tabs button[aria-selected="true"] { background: var(--surface); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }
+/* Each tab keeps room for its name in bold, so picking one doesn't nudge the others. */
+.tabs button > [data-label] { display: inline-flex; flex-direction: column; align-items: center; }
+.tabs button > [data-label]::after { content: attr(data-label); font-weight: 600; height: 0; overflow: hidden; visibility: hidden; }
 
 .panel { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0.75rem 16px 16px; gap: 0.75rem; }
 .panel-head { display: flex; gap: 0.5rem; align-items: center; }
@@ -578,7 +586,7 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 @media print { .dice-open, .dice-panel, .dice-stage, .dice-result { display: none !important; } }
 
 /* ---------- character sheet ---------- */
-#app-view.wide { max-width: 1280px; }
+#app-view.wide { --page-width: 1280px; }
 .sheet-panel { overflow-y: auto; }
 .sheet-bar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .sheet-bar #sheet-status { flex: 1; min-width: 12rem; }
@@ -589,11 +597,12 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 /* ---------- a panel beside the map, or the sheet in its own window (sheet-place.js) ---------- */
 
 #app-view.beside {
-  display: grid; max-width: none;
+  display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, var(--side-width, 540px));
   grid-template-rows: auto minmax(0, 1fr);
 }
 #app-view.beside > .topbar { grid-column: 1 / -1; }
+#app-view.beside > .panel { max-width: none; margin-inline: 0; }
 #app-view.beside > #tab-map { grid-column: 1; grid-row: 2; padding-right: 8px; }
 #app-view.beside > #sheet-splitter { grid-column: 2; grid-row: 2; }
 #app-view.beside > .beside-panel { grid-column: 3; grid-row: 2; padding-left: 8px; overflow-y: auto; }
@@ -621,7 +630,7 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
   #app-view.beside .map-view { min-height: 6rem; }
 }
 /* The popped-out window: just the sheet. */
-.sheet-window #app-view { max-width: none; }
+.sheet-window #app-view { --page-width: none; --bar-width: 100%; }
 .sheet-window :is(.tabs, #switch-campaign, .change-password) { display: none !important; }
 
 /*
@@ -988,7 +997,7 @@ details.spell > summary::-webkit-details-marker { display: none; }
 @media print {
   body { background: #fff; color: #000; }
   .topbar, .sheet-bar, .add-spell, .spell-actions, .slot-help, .reset, .add-row, .icon-x, .icon-roll, .spell-rolls select, .sh-tabbar, button.link { display: none !important; }
-  #app-view, #app-view.wide { max-width: none; height: auto; display: block; }
+  #app-view, #app-view.wide { --page-width: none; height: auto; display: block; }
   .panel { display: block; overflow: visible; padding: 0; }
   .panel:not(#tab-sheet) { display: none !important; }
   /* Every tab prints, one after the other. */
@@ -1028,7 +1037,7 @@ details.spell > summary::-webkit-details-marker { display: none; }
 /* Full screen (map-full.js): the map fills the screen and its toolbars float over it,
    see-through until pointed at; a tool that's on stays solid so you can tell. */
 :root[data-map-full] #app-view > .topbar { display: none; }
-:root[data-map-full] #app-view { max-width: none; }
+:root[data-map-full] #app-view { --page-width: none; }
 :root[data-map-full] #tab-map { position: relative; padding: 0; }
 :root[data-map-full] .map-view { min-height: 0; border: none; border-radius: 0; }
 :root[data-map-full] .map-bars {

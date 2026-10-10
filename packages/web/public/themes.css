@@ -268,8 +268,8 @@
    ===================================================================== */
 
 /* Sidebar and full width: the chat list stays open on the left when there's room. */
-:root[data-layout="sidebar"] #app-view { max-width: 1180px; }
-:root[data-layout="wide"] #app-view, :root[data-layout="wide"] #app-view.wide { max-width: none; }
+:root[data-layout="sidebar"] #app-view { --page-width: 1180px; --bar-width: 1180px; }
+:root[data-layout="wide"] #app-view, :root[data-layout="wide"] #app-view.wide { --page-width: none; --bar-width: 100%; }
 @media (min-width: 900px) {
   :root:is([data-layout="sidebar"], [data-layout="wide"]) .chats {
     position: static; transform: none; visibility: visible; transition: none; box-shadow: var(--shadow);
@@ -588,6 +588,10 @@
 .look-groups button { padding: 0.35rem 0.9rem; }
 .look-groups button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 .look-row { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+.look-row select { width: auto; }
+/* Choices that don't apply yet (the side, with nothing beside the map). */
+.look-grid.off .look-card { opacity: 0.45; cursor: not-allowed; }
+.look-grid.off .look-card:hover { transform: none; }
 .look-row input[type="color"] { width: 3rem; height: 2.2rem; padding: 0.15rem; cursor: pointer; }
 .look-check { display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; }
 .look-check input { width: auto; margin: 0; accent-color: var(--accent); }
