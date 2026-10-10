@@ -7,9 +7,14 @@
  * handouts/<id>/, and handouts/<id>/changes.jsonl gets the whole handout on
  * each change, so restore takes the last line. Removing a handout marks it
  * removed; the archive keeps it. The archivist reads new and changed
- * handouts between sessions (kb/updates.js).
+ * handouts between sessions (kb/updates.js). It can't see pictures, so the
+ * AI reads each handout picture first (any writing word for word, then what
+ * it shows) and the archivist gets that with the handout's text.
  */
+import fs from 'node:fs';
 import crypto from 'node:crypto';
+import sharp from 'sharp';
+import { z } from 'zod';
 import { EventEmitter } from 'node:events';
 import { NotFoundError } from './store.js';
 import { inspectPicture, createImageCache } from './images.js';
@@ -17,6 +22,16 @@ import { localTime } from './kb/updates.js';
 
 export const MAX_HANDOUT_TEXT = 20_000;
 const SHOW_PX = 2000;
+const AI_PX = 1568;
+
+const ReadOut = z.object({
+  writing: z.string().describe('Every word written in the picture, word for word, in reading order, keeping line breaks. Empty if there is no writing.'),
+  description: z.string().describe('What the picture shows, in plain words: two to six sentences.'),
+});
+
+const READ_SYSTEM = `You read a picture the Dungeon Master of a D&D game handed to some players (a letter, a wanted poster, a map scrap, a portrait, a riddle). The campaign's archivist can't see pictures and will keep a record from what you write.
+- writing: copy every word you can read, exactly, including names, numbers, signatures and seals' lettering. Mark a word you can't make out as [illegible]. Don't translate or correct it.
+- description: say what it shows that a player could learn from it: what kind of thing it is, people and creatures (looks, clothing, marks), places, labels and routes on a map, symbols, damage or stains. Plain words, no guesses about the plot.`;
 
 export const isHandoutId = (id) => /^[a-f0-9]{10}$/.test(String(id));
 
@@ -42,10 +57,45 @@ export function normalizeHandout(h = {}) {
 /** Whether someone may see a handout (the DM sees every one). */
 export const canSeeHandout = (h, { role, userId }) => !h.removed && (role === 'dm' || h.to === 'everyone' || h.to.includes(userId));
 
-export function createHandouts({ db, archive, store }) {
+/**
+ * @param {object} o
+ * @param {object} [o.llm]  for reading handout pictures to the archivist
+ */
+export function createHandouts({ db, archive, store, llm = null }) {
   const events = new EventEmitter();
   events.setMaxListeners(0);
   const images = createImageCache(16);
+  const readings = new Map(); // `${cid}/${handout id}/${file}` -> what the AI read in the picture
+
+  /** What the AI reads in a handout's picture, as text for the archivist (once per picture). */
+  async function readPicture(cid, h) {
+    const key = `${cid}/${h.id}/${h.image.file}`;
+    if (readings.has(key)) return readings.get(key);
+    if (!llm) return '(It has a picture, which you cannot see.)';
+    const file = archive.handoutImagePath(store.getCampaign(cid).slug, h.id, h.image.file);
+    const small = await sharp(fs.readFileSync(file))
+      .rotate()
+      .resize({ width: AI_PX, height: AI_PX, fit: 'inside', withoutEnlargement: true })
+      .flatten({ background: '#ffffff' })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+    const out = await llm.structured({
+      task: 'import',
+      purpose: 'handout:picture',
+      campaignId: cid,
+      system: READ_SYSTEM,
+      attachments: [{ type: 'image', media_type: 'image/jpeg', data: small.toString('base64') }],
+      prompt: `Read this handout picture${h.title ? ` ("${h.title}")` : ''}.`,
+      schema: ReadOut,
+    });
+    const text = [
+      'It has a picture. The AI read it for you:',
+      out.writing.trim() ? `<picture_writing>\n${out.writing.trim()}\n</picture_writing>` : 'No writing in the picture.',
+      `<picture_shows>${out.description.trim()}</picture_shows>`,
+    ].join('\n');
+    readings.set(key, text);
+    return text;
+  }
 
   const rows = (cid) => db.prepare('SELECT data FROM handouts WHERE campaign_id = ? ORDER BY created_at, id').all(cid).map((r) => normalizeHandout(JSON.parse(r.data)));
 
@@ -121,20 +171,24 @@ export function createHandouts({ db, archive, store }) {
       return { buf: await images.shrunk(file, SHOW_PX), type: 'image/webp' };
     },
 
-    /** Handouts given, changed or taken back in a time window, as text for the archivist. */
-    forArchivist(cid, since, until) {
+    /**
+     * Handouts given, changed or taken back in a time window, as text for the
+     * archivist. Pictures are read by the AI first; if that fails, so does the
+     * archivist's run, and the handout is tried again next time.
+     */
+    async forArchivist(cid, since, until) {
       const names = new Map(store.roster(cid).map((m) => [m.user_id, m.name]));
       const toText = (h) => (h.to === 'everyone' ? 'everyone' : h.to.map((id) => `user ${id} (${names.get(id) ?? '?'})`).join(', ') || 'nobody yet');
-      return rows(cid)
-        .filter((h) => h.updated_at > since && h.updated_at <= until)
-        .map((h) => {
-          const when = h.created_at > since ? `given="${localTime(h.created_at)}"` : `changed="${localTime(h.updated_at)}"`;
-          const head = `<handout title="${h.title.replace(/"/g, "'")}" ${when} to="${toText(h)}"${h.removed ? ' removed="true"' : ''}>`;
-          const body = h.removed
-            ? 'The DM took this handout back. What it said is still what those players were shown.'
-            : [h.text || '(no text)', h.image ? '(It has a picture, which you cannot see.)' : ''].filter(Boolean).join('\n');
-          return `${head}\n${body}\n</handout>`;
-        });
+      const out = [];
+      for (const h of rows(cid).filter((x) => x.updated_at > since && x.updated_at <= until)) {
+        const when = h.created_at > since ? `given="${localTime(h.created_at)}"` : `changed="${localTime(h.updated_at)}"`;
+        const head = `<handout title="${h.title.replace(/"/g, "'")}" ${when} to="${toText(h)}"${h.removed ? ' removed="true"' : ''}>`;
+        const body = h.removed
+          ? 'The DM took this handout back. What it said is still what those players were shown.'
+          : [h.text || '(no text)', h.image ? await readPicture(cid, h) : ''].filter(Boolean).join('\n');
+        out.push(`${head}\n${body}\n</handout>`);
+      }
+      return out;
     },
   };
   return handouts;
