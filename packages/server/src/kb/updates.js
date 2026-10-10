@@ -129,7 +129,7 @@ export function sheetText(sheet, settings = {}) {
 
 /**
  * @param {object} o
- * @param {(cid: number, since: string, until: string) => string[]} [o.handoutsBetween]  handouts given in that window, as text
+ * @param {(cid: number, since: string, until: string) => Promise<string[]>|string[]} [o.handoutsBetween]  handouts given in that window, as text
  */
 export function createUpdates({ db, store, archive, handoutsBetween = () => [] }) {
   const mark = (cid) => db.prepare('SELECT updates_until FROM archivist_marks WHERE campaign_id = ?').get(cid)?.updates_until ?? EPOCH;
@@ -197,9 +197,9 @@ export function createUpdates({ db, store, archive, handoutsBetween = () => [] }
     },
 
     /** What's new for the archivist up to `until`: { since, until, sheets, notes, handouts } (lists of text). */
-    collect(cid, until = new Date().toISOString()) {
+    async collect(cid, until = new Date().toISOString()) {
       const since = mark(cid);
-      return { since, until, sheets: sheetBlocks(cid, since, until), notes: noteLines(cid, since, until), handouts: handoutsBetween(cid, since, until) };
+      return { since, until, sheets: sheetBlocks(cid, since, until), notes: noteLines(cid, since, until), handouts: await handoutsBetween(cid, since, until) };
     },
   };
 }

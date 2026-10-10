@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { setup, createFakeLLM, defaultArchivist, SAMPLE } from './helpers.js';
+import { setup, createFakeLLM, defaultArchivist, SAMPLE, terrain } from './helpers.js';
 import { sheetChanges, sheetText, localTime } from '../src/kb/updates.js';
 import { emptySheet, normalizeSheet } from '@dndapp/shared/sheet.js';
 
@@ -140,6 +140,49 @@ test('handouts reach the archivist with who got them', async () => {
     await t.jobs.idle();
     const { prompt } = updateCalls(t).at(-1);
     assert.match(prompt, new RegExp(`<handout title="Letter from the Baron" given="[\\d-]+ [\\d:]+" to="user ${t.sam.id} \\(Sam\\)">\\nMeet me at the mill\\.\\n</handout>`));
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('handout pictures: the AI reads each one (writing word for word, then what it shows) and the archivist gets that; a failed read is tried again', async () => {
+  let fail = true;
+  const llm = createFakeLLM({
+    structured: async ({ purpose }) => {
+      assert.equal(purpose, 'handout:picture');
+      if (fail) throw new Error('AI is down');
+      return { writing: 'WANTED\nThe Ashen Prophet\n500 gold', description: 'A torn poster with a hooded figure drawn in charcoal.' };
+    },
+  });
+  const t = await setup({ llm });
+  try {
+    const picture = { filename: 'poster.png', data: (await terrain(64, 48)).toString('base64') };
+    await t.request('POST', `/campaigns/${t.campaign.id}/handouts`, { body: { title: 'Wanted poster', text: '', to: [t.sam.id], picture } });
+    // The read fails: the archivist doesn't run and the handout waits for next time.
+    t.jobs.enqueueUpdates(t.campaign.id);
+    await t.jobs.idle();
+    assert.equal(updateCalls(t).length, 0);
+    assert.ok(t.updates.pendingSince(t.campaign.id));
+
+    fail = false;
+    t.jobs.enqueueUpdates(t.campaign.id);
+    await t.jobs.idle();
+    const read = llm.calls.filter((c) => c.purpose === 'handout:picture').at(-1);
+    assert.equal(read.attachments[0].media_type, 'image/jpeg');
+    const { prompt } = updateCalls(t).at(-1);
+    assert.match(prompt, new RegExp(`<handout title="Wanted poster" given="[^"]+" to="user ${t.sam.id} \\(Sam\\)">`));
+    assert.match(prompt, /<picture_writing>\nWANTED\nThe Ashen Prophet\n500 gold\n<\/picture_writing>/);
+    assert.match(prompt, /<picture_shows>A torn poster with a hooded figure drawn in charcoal\.<\/picture_shows>/);
+    assert.doesNotMatch(prompt, /which you cannot see/);
+
+    // Changing who it's for doesn't read the same picture again.
+    const reads = llm.calls.filter((c) => c.purpose === 'handout:picture').length;
+    const h = t.handouts.list(t.campaign.id, { role: 'dm' })[0];
+    t.handouts.update(t.campaign.id, h.id, { to: 'everyone' });
+    t.jobs.enqueueUpdates(t.campaign.id);
+    await t.jobs.idle();
+    assert.match(updateCalls(t).at(-1).prompt, /to="everyone">[\s\S]*<picture_shows>/);
+    assert.equal(llm.calls.filter((c) => c.purpose === 'handout:picture').length, reads);
   } finally {
     await t.cleanup();
   }
