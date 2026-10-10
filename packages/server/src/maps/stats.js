@@ -38,7 +38,7 @@ const statsFrom = (out, source, from) => ({
  * @param {object} [opts.books]  the group's books (sheets/books.js); looked in after the DM's creatures
  * @param {object} [opts.creatures]  the DM's creatures (creatures.js); looked in first
  */
-export function createStatBlocks({ llm, books = null, creatures = null }) {
+export function createStatBlocks({ llm, books = null, creatures = null, editions = null }) {
   return {
     /**
      * @param {string} name
@@ -50,7 +50,7 @@ export function createStatBlocks({ llm, books = null, creatures = null }) {
       if (own) {
         return { stats: { ...own.stats, from: own.stats.from || `your creatures (${own.name})` }, size: own.size === 1 ? null : own.size, hp: own.hp_max, creature: own.name };
       }
-      const printed = await books?.findCreature(name);
+      const printed = await books?.findCreature(name, { edition: editions ? await editions.of(campaignId) : null });
       if (printed) {
         const out = await llm.structured({
           task: 'maps',

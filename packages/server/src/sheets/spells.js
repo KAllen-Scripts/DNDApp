@@ -37,7 +37,7 @@ const MEMORY_SYSTEM = `You know the official D&D 5th edition books (2014 Player'
 const fromSrd = (s) =>
   normalizeSpell({ ...s, source: 'srd', source_note: 'SRD 5.1 (Creative Commons Attribution 4.0)' });
 
-export function createSpells({ books, llm }) {
+export function createSpells({ books, llm, editions = null }) {
   const srdByName = new Map(SRD.map((s) => [normName(s.name), s]));
   const cache = new Map();
 
@@ -95,11 +95,13 @@ export function createSpells({ books, llm }) {
     async lookup(name, { campaignId, userId, beforeAi } = {}) {
       const srd = srdMatch(name);
       if (srd) return fromSrd(srd);
-      const key = normName(name);
+      // The campaign's edition picks between a 2014 and a 2024 book that both print it.
+      const edition = editions ? await editions.of(campaignId) : null;
+      const key = `${edition ?? ''}:${normName(name)}`;
       if (cache.has(key)) return structuredClone(cache.get(key));
 
       let spell = null;
-      const printed = await books.findSpell(name);
+      const printed = await books.findSpell(name, { edition });
       if (printed) {
         beforeAi?.();
         const out = await llm.structured({

@@ -13,6 +13,7 @@ import { createUpdates } from './kb/updates.js';
 import { createHandouts } from './handouts.js';
 import { createRolls } from './rolls.js';
 import { createRests } from './rests.js';
+import { createEditions } from './editions.js';
 import { createCreatures } from './creatures.js';
 import { createCreatureFinder } from './creatures-find.js';
 import { createItems } from './items.js';
@@ -45,6 +46,8 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const sheets = createSheets({ db, archive, store, onSave: (cid) => jobs.scheduleUpdates(cid) });
   const pictures = createPictures({ db, archive, store });
   const maps = createMaps({ db, archive, store, pictures, sheets });
+  // A character's token shows the sheet's hit points: maps with it are sent again when the sheet changes.
+  sheets.events.on('save', ({ campaign_id, user_id }) => maps.sheetChanged(campaign_id, user_id));
   // What happened on the maps on a session's day goes to the archivist with the transcript.
   const archivist = createArchivist({ db, store, kb, search, llm, config, mapEvents: (cid, date) => maps.eventsOn(cid, date, config.notes.rolloverHour) });
   const handouts = createHandouts({ db, archive, store, llm });
@@ -57,9 +60,11 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const pipeline = createPipeline({ db, store, archive, search, kb, archivist, updates, config });
   const jobs = createJobs({ db, store, search, pipeline, config, log });
   const books = createBooks({ dir: config.booksDir, log });
-  const qa = createQA({ db, store, kb, search, books, creatures, llm, config });
+  // The campaign's rules edition (2014 or 2024): rests, Ask and lookups in the books follow it.
+  const editions = createEditions({ store, books, config });
+  const qa = createQA({ db, store, kb, search, books, creatures, editions, llm, config });
   const rolls = createRolls({ db });
-  const rests = createRests({ db, archive, store, sheets, rolls, books, config });
+  const rests = createRests({ db, archive, store, sheets, rolls, books, config, editions });
   // Each long rest the DM calls counts towards merchants restocking.
   rests.events.on('rest', (rest) => {
     if (rest.kind !== 'long') return;
@@ -69,13 +74,13 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
       log?.error?.(err);
     }
   });
-  const spells = createSpells({ books, llm });
+  const spells = createSpells({ books, llm, editions });
   const sheetImport = createSheetImport({ llm });
   const pictureDescriber = createPictureDescriber({ llm });
   const mapReader = createMapReader({ llm });
-  const statBlocks = createStatBlocks({ llm, books, creatures });
-  const creatureFinder = createCreatureFinder({ llm, books, ...(fetchImage && { fetchImage }) });
-  const itemFinder = createItemFinder({ llm, books, items, ...(fetchImage && { fetchImage }) });
+  const statBlocks = createStatBlocks({ llm, books, creatures, editions });
+  const creatureFinder = createCreatureFinder({ llm, books, editions, ...(fetchImage && { fetchImage }) });
+  const itemFinder = createItemFinder({ llm, books, items, editions, ...(fetchImage && { fetchImage }) });
 
   // If the database was lost or replaced, bring back accounts and campaigns from the archive.
   const restored = store.restoreFromArchive();
@@ -89,5 +94,5 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   // Changes made while the server was off (or before its last run finished) still reach the archivist.
   for (const { id } of db.prepare('SELECT id FROM campaigns').all()) if (updates.pendingSince(id)) jobs.scheduleUpdates(id);
 
-  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, creatures, rolls, rests, items, itemFinder, merchants, pipeline, jobs, qa, books, spells, sheets, sheetImport, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, restored };
+  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, creatures, rolls, rests, items, itemFinder, merchants, pipeline, jobs, qa, books, editions, spells, sheets, sheetImport, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, restored };
 }

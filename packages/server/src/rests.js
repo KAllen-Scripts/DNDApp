@@ -18,7 +18,7 @@ import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { computeSheet, hitDice, longRest, shortRest, spendHitDie, formatBonus } from '@dndapp/shared/sheet.js';
 import { BadRequestError } from './store.js';
-import { handbookEditions } from './sheets/books.js';
+import { createEditions } from './editions.js';
 
 export const REST_KINDS = ['short', 'long'];
 
@@ -40,18 +40,12 @@ export function normalizeRest(r = {}) {
 /** Whether someone hears about a rest: the DM always, a player when it was for them. */
 export const canHearRest = (rest, { role, userId }) => role === 'dm' || rest.user_ids.includes(userId);
 
-export function createRests({ db, archive, store, sheets, rolls, books = null, config }) {
+export function createRests({ db, archive, store, sheets, rolls, books = null, config, editions = createEditions({ store, books, config }) }) {
   const events = new EventEmitter();
   events.setMaxListeners(0);
 
-  /** 2014 or 2024: REST_RULES, else the group's Player's Handbook (if exactly one edition), else 2014 like the sheet's rules. */
-  async function edition() {
-    if (config.sheets?.restRules) return config.sheets.restRules;
-    if (!books) return '2014';
-    await books.load();
-    const editions = handbookEditions(books.status().books);
-    return editions.length === 1 && editions[0] ? editions[0] : '2014';
-  }
+  /** 2014 or 2024: the campaign's setting (editions.js). */
+  const edition = (cid) => editions.of(cid);
 
   const players = (cid) =>
     db.prepare("SELECT u.id FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.campaign_id = ? AND m.role = 'player' AND u.revoked_at IS NULL ORDER BY u.id").all(cid).map((r) => r.id);
@@ -112,7 +106,7 @@ export function createRests({ db, archive, store, sheets, rolls, books = null, c
       const user_ids = to === 'everyone' ? all : [...new Set(to)];
       for (const id of user_ids) if (!all.includes(id)) throw new BadRequestError(`User ${id} isn't a player in this campaign.`);
       if (!user_ids.length) throw new BadRequestError('There are no players to rest.');
-      const ed = await edition();
+      const ed = await edition(cid);
       const skipped = [];
       for (const uid of user_ids) {
         const current = sheets.get(cid, uid);

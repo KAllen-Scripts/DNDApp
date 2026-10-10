@@ -4,7 +4,7 @@
  */
 import { z } from 'zod';
 import { BadRequestError, NotFoundError, sessionDateFor } from '../store.js';
-import { WEIGHT_RULES } from '@dndapp/shared/settings.js';
+import { EDITIONS, WEIGHT_RULES } from '@dndapp/shared/settings.js';
 
 export function registerAccounts(app, r) {
   const { access, auth, config, db, requireAdmin, search, store } = r;
@@ -48,10 +48,13 @@ export function registerAccounts(app, r) {
     return { campaign, role, character_name: membership?.character_name ?? null, settings: store.getSettings(campaign.id) };
   });
 
-  /** Change the campaign's settings (DM): { weight?: 'capacity' | 'variant' | 'ignore' }. Everyone in it hears `settings` live. */
+  /**
+   * Change the campaign's settings (DM): { weight?: 'capacity' | 'variant' | 'ignore',
+   * edition?: '2014' | '2024' | null } (null: not chosen, follow the books). Everyone in it hears `settings` live.
+   */
   app.patch('/campaigns/:cid/settings', async (request) => {
     const a = access(request, { dm: true });
-    const body = z.object({ weight: z.enum(Object.keys(WEIGHT_RULES)).optional() }).strict().parse(request.body ?? {});
+    const body = z.object({ weight: z.enum(Object.keys(WEIGHT_RULES)).optional(), edition: z.enum(Object.keys(EDITIONS)).nullable().optional() }).strict().parse(request.body ?? {});
     return store.setSettings(a.cid, body);
   });
 

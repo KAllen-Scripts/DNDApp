@@ -8,7 +8,8 @@ The design is in [SPEC.md](SPEC.md). Project status, change log and next steps a
 
 ```
 packages/
-  shared/   plain JS both sides use: transcript parser, citation format, character sheet rules, dice, map geometry, coins
+  shared/   plain JS both sides use: transcript parser, citation format, character sheet rules, dice, map geometry, coins,
+            sheet rolls, the inventory (gear), campaign settings
   server/   Node.js server: API (src/routes/), archive, processing pipeline, Q&A agent; also serves the web page
   web/      the web page (plain HTML/CSS/JS in public/, no build step)
 ```
@@ -28,7 +29,7 @@ Use `--ignore-scripts` (also when adding packages). A plain `npm install` makes 
 
 To use the Anthropic API instead of your subscription, copy `.env.example` to `.env`, set `LLM_PROVIDER=api` and add `ANTHROPIC_API_KEY`. Other settings (models, effort, limits) are in the same file.
 
-When running through Claude Code, the server starts it with everything switched off except its own tools. That means no file or shell tools, no MCP servers or claude.ai connectors, no skills, plugins, hooks or CLAUDE.md files, and no saved sessions. Web tools are off too, with one exception: the DM's **Find online** (Creatures tab) lets the AI use WebSearch and WebFetch, and nothing else, to look a creature up. AI usage counts toward your Claude Code limits.
+When running through Claude Code, the server starts it with everything switched off except its own tools. That means no file or shell tools, no MCP servers or claude.ai connectors, no skills, plugins, hooks or CLAUDE.md files, and no saved sessions. Web tools are off too, with one exception: the DM's **Find online** (Creatures and Items tabs) lets the AI use WebSearch and WebFetch, and nothing else, to look a creature or item up. AI usage counts toward your Claude Code limits.
 
 `init` creates the **admin login**. The server listens on `http://127.0.0.1:4400`: open it in a browser and log in with that name and password.
 
@@ -60,14 +61,20 @@ A login lasts 30 days from when it was last used (`LOGIN_DAYS`). After 10 wrong 
 
 Each player has a **Sheet** tab (the DM has Creatures instead, and no sheet), laid out like the official 5e sheet (core stats, then character details, then spells). It's private to them, saved to the server a moment after they stop typing, and archived.
 
-- **Automatic values** (modifiers, proficiency bonus, saves, skills, passive Perception, initiative, unarmoured AC, speed, HP, hit dice, spell save DC and attack bonus, spell slots) are worked out from the scores, classes and race using the 2014 Player's Handbook rules. Anything a player types into one of those boxes becomes **their own value**: it's marked, never changed by the rules, and stays until they click ↺.
+- **Automatic values** (modifiers, proficiency bonus, saves, skills, passive Perception, initiative, AC (from the armour and shield equipped on the Inventory tab, or unarmoured), speed, HP, hit dice, spell save DC and attack bonus, spell slots) are worked out from the scores, classes and race using the 2014 Player's Handbook rules. Anything a player types into one of those boxes becomes **their own value**: it's marked, never changed by the rules, and stays until they click ↺.
 - **Upload a sheet**: a PDF (filled-in form, typed or scanned), a photo, a text file, or a sheet downloaded from here. The AI copies it in; numbers on their sheet that differ from the rules are kept as their own values. The uploaded file is archived as it was.
 - **Spells**: type a name to add one, and its details are filled in from (1) the SRD 5.1 spell list built into the server, (2) the PDFs in the books folder, or (3) the AI's own knowledge, labelled as such. Every detail can be edited. Details are only replaced when the player asks.
 - **Books**: drop PDFs into `DND books` next to this repo (`BOOKS_DIR` in `.env` to change it). Scanned books need an OCR text layer (if a scan has none, run it through `ocrmypdf` once). The server reads them into memory at start-up (a few seconds; nothing is stored). EPUBs aren't read. The books are used for spell lookups and by Q&A, which can search them, read pages and browse their contents to quote a rule, citing the page ("Player's Handbook p. 195"). Use each book's name and year as the file name ("Player's Handbook (2014).pdf"); that's how Q&A refers to it. Q&A checks every rules question in the books, and uses the rules of the group's Player's Handbook edition.
 
 ### Rests and hit dice
 
-The Hit dice box on a player's sheet has a row per die size (a Fighter 3 / Wizard 2 has d10s and d6s) with a tick per spent die. **Spend** rolls that die plus the Constitution modifier (on the server, shown with the dice and shared like any roll) and adds the hit points, up to the maximum. **Short rest** gives back what a short rest does on the sheet (Pact Magic slots). The DM gets a **Rest** button in the header: tick who rests (everyone by default) and choose Short rest or Long rest. A long rest gives back all hit points, every spell slot, and spent hit dice (up to half the character's total under the 2014 rules, all of them under 2024), and clears temporary hit points and death saves; under the 2014 rules a character at 0 hit points gets nothing from it. Each player's sheet changes at once and they get a note. The rules follow the edition of the Player's Handbook in your books folder (2014 if there's none, or both); `REST_RULES=2014` or `2024` in `.env` sets it. Map token hit points are separate (the DM's) and aren't changed by rests.
+The Hit dice box on a player's sheet has a row per die size (a Fighter 3 / Wizard 2 has d10s and d6s) with a tick per spent die. **Spend** rolls that die plus the Constitution modifier (on the server, shown with the dice and shared like any roll) and adds the hit points, up to the maximum. **Short rest** gives back what a short rest does on the sheet (Pact Magic slots). The DM gets a **Rest** button in the header: tick who rests (everyone by default) and choose Short rest or Long rest. A long rest gives back all hit points, every spell slot, and spent hit dice (up to half the character's total under the 2014 rules, all of them under 2024), and clears temporary hit points and death saves; under the 2014 rules a character at 0 hit points gets nothing from it. Each player's sheet changes at once and they get a note. The rules follow the campaign's **Rules edition** (the DM's Settings). Until the DM picks one: `REST_RULES=2014` or `2024` in `.env`, else the edition of the Player's Handbook in your books folder (2014 if there's none, or both). A player character's map token shows the sheet's hit points, so it follows; NPCs' and enemies' tokens aren't changed, and nor are item charges.
+
+### Inventory and campaign settings
+
+Players have an **Inventory** tab: look an item up by name (PHB weapons and armour straight from the tables, anything else from the books or the AI, never the DM's own items) or add one by hand, then equip it. Equipped weapons show in Attacks with their to-hit and damage worked out; equipped armour and a shield set the AC; weight, charges, attunement and magic items' effects on the sheet are tracked there too. The DM's Items tab shows what each player has **equipped** (with their AC, weight carried and attunements), not the rest of their sheet.
+
+The DM's **Settings** button holds the campaign's settings: the **Rules edition** (2014 or 2024: rests, Ask's rules answers and lookups in the books follow it; the character sheet itself always uses the 2014 rules for now) and **Weight limits** (carrying capacity, variant encumbrance, or ignore).
 
 ### Dice
 
@@ -109,7 +116,7 @@ The DM adds **tokens** for player characters (tied to a player), NPCs and enemie
 For running a fight, the DM has:
 
 - **Fog & walls**: turn on fog of war and drag rectangles to reveal or cover parts of the map (turning fog on starts in Reveal, since everything begins covered). Draw walls and doors (or let the AI draft them from the picture, then correct them) and tick **Line of sight**: each player then also sees whatever their own token has a clear line to, and places they've seen before stay dimmed. Draw **obstacles** for things players see over but can't cross (a building's roof, a cliff edge). Anyone clicks a door to open or close it: players only doors next to their token, and not ones the DM has locked (Lock mode). **Unseen parts** sets what players get outside their sight: dark, greyed out, or the map shown (tokens there are hidden either way); **Remember explored** keeps a dim view of where they've been. Players can't move their token through walls, obstacles or closed doors. Players' copy of the image is blacked out on the server, and tokens they can't see are hidden from them.
-- **Hit points and conditions** on each token (type `-7`, `+5` or `12` in the selection bar). Players see enemies' and NPCs' health only as unhurt, hurt, bloodied or down.
+- **Hit points and conditions** on each token (type `-7`, `+5` or `12` in the selection bar). Players see enemies' and NPCs' health only as unhurt, hurt, bloodied or down. A player character's token uses the hit points on that player's sheet: damage on the map changes the sheet, and healing on the sheet changes the token.
 - **Hidden** tokens that players don't see at all.
 - **Stat block (AI)**: fills in an enemy's 5e stat block, hit points and size, copied from the DM's own creature of that name if there is one, else from the group's books (it says which book and page), else from the AI's memory. Only the DM sees it.
 - **From the campaign's records**: put someone the archivist knows about on the map and read their record from there.
@@ -128,7 +135,7 @@ Everyone can drop **pins** with a note on a map; only the person who placed them
 
 ### Items and merchants (the DM)
 
-**Items** keeps what merchants sell: make one, **Look up** one by name (your items first, then the books in `DND books`, then the AI), or **Find online**. **Merchants** sets up shops: add items with a price, how many are in stock (or no limit) and what restocking brings them back up to; restock every so many long rests the DM calls with **Rest**, or with **Restock now**; **Place on map** puts the merchant down as a token with a gold badge. Players pick the token, press **Shop** and buy on their own: the coins come off their sheet (with change) and the item goes into their equipment. **Sales** shows who bought what.
+**Items** keeps what merchants sell: make one, **Look up** one by name (your items first, then the books in `DND books`, then the AI), or **Find online**. **Merchants** sets up shops: add items with a price, how many are in stock (or no limit) and what restocking brings them back up to; restock every so many long rests the DM calls with **Rest**, or with **Restock now**; **Place on map** puts the merchant down as a token with a gold badge. Players pick the token, press **Shop** and buy on their own: the coins come off their sheet (with change) and the item goes into their Inventory. **Sales** shows who bought what.
 
 ### The public address
 
@@ -150,7 +157,7 @@ The first time a transcript is processed, the server downloads a small search mo
 
 Everything lives in `data/` (git-ignored):
 
-- `data/archive/` is the permanent record: accounts, original transcripts, player notes (every version), character sheets (every change, plus uploaded files), character pictures, maps (the images or PDFs as imported, other pictures of them, token pictures, every change, and everyone's private pins), handouts, the DM's creatures, items and merchants (with recent sales), speaker map, glossary, DM corrections, and a snapshot of the knowledge base after every archivist run. **Back this folder up.**
+- `data/archive/` is the permanent record: accounts, original transcripts, player notes (every version), character sheets (every change, plus uploaded files), character pictures, maps (the images or PDFs as imported, other pictures of them, token pictures, every change, and everyone's private pins), handouts, the DM's creatures, items and merchants (with recent sales), the rests the DM called (`rests.jsonl`), the campaign's settings (`settings.json`), speaker map, glossary, DM corrections, and a snapshot of the knowledge base after every archivist run. **Back this folder up.**
 - `data/dndapp.sqlite` is the working database. It can be rebuilt from the archive.
 
 ### Rebuilding
@@ -185,7 +192,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | POST | `/logout` | Ends this login |
 | GET | `/me` | Your account and campaigns (each with its `settings`) |
 | GET | `/campaigns/:cid` | Campaign, your role and character, and its `settings` |
-| PATCH | `/campaigns/:cid/settings` | Change the campaign's settings (DM) `{weight?: capacity \| variant \| ignore}` → the settings; sent live as `settings` |
+| PATCH | `/campaigns/:cid/settings` | Change the campaign's settings (DM) `{weight?: capacity \| variant \| ignore, edition?: 2014 \| 2024 \| null}` (`null`: not chosen, follow `REST_RULES` or the books' Player's Handbook) → the settings; sent live as `settings` |
 | GET | `/campaigns/:cid/members` | List members (DM) |
 | GET / POST | `/admin/users` | List accounts (with campaigns, logins, status) / create `{name, password}` (admin) |
 | PUT | `/admin/users/:uid/campaigns` | Set exactly which campaigns an account can access `{campaigns: [{campaign_id, role, character_name?}]}` (admin). `POST /admin/users` takes the same optional `campaigns` |
@@ -239,7 +246,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/gear/items/:iid/picture?v=` | One of them, cut to a square (webp); 404 unless that item is in your own inventory and has a picture |
 | POST | `/campaigns/:cid/roll` | Roll dice: `{notation: "1d20+5", mode?: normal \| advantage \| disadvantage, label?, visibility?: party \| dm \| self, initiative?: true}` → `{notation, mode, terms, total, natural, roll, initiative?}`. d2–d20 and d100, up to 50 dice. Logged and sent live to whoever may see it (`party`: everyone, the default; `dm`: the DM and you, a secret roll for the DM; `self`: only you). With `initiative` the notation may be left out (d20 + the initiative on your sheet), and the total goes into every fight on a map waiting for one of your player character tokens: `initiative: [{map_id, map, token_id, name}]` |
 | GET | `/campaigns/:cid/rolls` | The last 50 rolls you may see `{rolls: [{id, user_id, name, from_dm, visibility, label, result, rolled_at}]}` |
-| GET | `/campaigns/:cid/live` | Live news for the campaign (SSE): `roll` (a roll you may see), `handout` (one given to you, or changed), `handout-gone` `{id}`, `rest` (a rest the DM called that includes you; the DM hears all), `merchant` `{id}` (a merchant's stock, prices or shop changed), `settings` (the DM changed the campaign's settings) |
+| GET | `/campaigns/:cid/live` | Live news for the campaign (SSE): `roll` (a roll you may see), `handout` (one given to you, or changed), `handout-gone` `{id}`, `rest` (a rest the DM called that includes you; the DM hears all), `merchant` `{id}` (a merchant's stock, prices or shop changed), `settings` (the DM changed the campaign's settings), `sheet` `{version}` (your own sheet was saved somewhere else: hit points changed on the map, a purchase, a rest) |
 | POST | `/campaigns/:cid/sheet/hit-dice` | Spend one of your hit dice `{die: 8, visibility?}`: the server rolls it plus your Constitution modifier (logged and shared like `/roll`) and adds the hit points. Replies like `/roll` plus `{healed, sheet, version, updated_at}`. 400 if you have none of that size left |
 | POST | `/campaigns/:cid/sheet/short-rest` | A short rest on your own sheet (Pact Magic slots back) → `{sheet, version, updated_at}` |
 | GET / POST | `/campaigns/:cid/rests` | The rests the DM called, newest first, and the rules used `{edition: "2014" \| "2024", rests: [{id, kind, at, by, edition, user_ids, skipped}]}` / call one (DM) `{kind: short \| long, to?: "everyone" \| [player ids]}`: every sheet in it changes, players hear it live (`skipped`: at 0 hit points, so a 2014 long rest did nothing) |
@@ -264,12 +271,12 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/maps/records/:rid` | One record (DM); `?title=` finds it if its id changed |
 | POST | `/campaigns/:cid/maps/:mid/read` | Read the map with the AI again (DM) |
 | POST | `/campaigns/:cid/maps/:mid/tokens` | Add a token (DM) `{kind: pc \| npc \| enemy, name?, user_id?, size?, color?, x?, y?, hp?: {current, max}, conditions?, hidden?, record?: {id}}` |
-| PATCH / DELETE | `/campaigns/:cid/maps/:mid/tokens/:tid` | Change a token: the player it belongs to may set `{x, y, path?, hp, conditions, light, darkvision}` (`path`: waypoints on the way, walls checked on every leg; in a fight the cost counts toward the turn's movement), the DM anything (also `speed`) / remove it (DM). Snapped to the grid by the server |
+| PATCH / DELETE | `/campaigns/:cid/maps/:mid/tokens/:tid` | Change a token: the player it belongs to may set `{x, y, path?, hp, conditions, light, darkvision}` (`path`: waypoints on the way, walls checked on every leg; in a fight the cost counts toward the turn's movement), the DM anything (also `speed`) / remove it (DM). Snapped to the grid by the server. A player character whose player has saved a sheet has the sheet's hit points (`hp_sheet: true`): `hp.current` is saved to the sheet and `hp.max` is ignored |
 | PUT / DELETE | `/campaigns/:cid/maps/:mid/tokens/:tid/picture` | Give an NPC or enemy token a picture (DM) `{filename, data (base64), same_name?}` (`same_name`: every token on the map with that name) / back to initials |
 | GET | `/campaigns/:cid/maps/:mid/tokens/:tid/picture` | That picture, 256 px square (for whoever can see the token) |
 | POST | `/campaigns/:cid/maps/:mid/tokens/:tid/stats` | Fill the token's stat block with the AI (DM) `{name?}`; 404 if the AI doesn't know the creature |
 | POST | `/campaigns/:cid/maps/:mid/creatures/:crid` | Put one of the DM's creatures on a map (DM) `{count? (1-20), x?, y?, hidden?, name?}`; a group is numbered and set out in a row. Returns `{map, tokens}` |
-| GET / POST | `/campaigns/:cid/creatures` | The DM's creatures (DM only) `{creatures}` / save one `{name, kind: enemy \| npc, size?, color?, hp_max?, darkvision?, speed?, stats?, record?, notes?, picture?: {filename, data}}`, or `{from: {map_id, token_id}}` to save a token from a map |
+| GET / POST | `/campaigns/:cid/creatures` | The DM's creatures (DM only) `{creatures}` / save one `{name, kind: enemy \| npc, size?, color?, hp_max?, ac?, darkvision?, speed?, stats?, record?, notes?, picture?: {filename, data}}`, or `{from: {map_id, token_id}}` to save a token from a map |
 | PATCH / DELETE | `/campaigns/:cid/creatures/:crid` | Change one (DM; placed tokens keep what they had) / remove it (DM; kept in the archive) |
 | GET / PUT / DELETE | `/campaigns/:cid/creatures/:crid/picture` | Its picture, cut to a square (DM) / give it one `{filename, data}` / back to initials |
 | POST | `/campaigns/:cid/creatures/:crid/stats` | Fill its stat block with the AI (DM) `{name?}`; 404 if the AI doesn't know the creature |

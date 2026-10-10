@@ -6,6 +6,7 @@ import sharp from 'sharp';
 import { setup, createFakeLLM, fakeEmbedder, terrain } from './helpers.js';
 import { createContext } from '../src/context.js';
 import { detectGrid } from '../src/maps/read.js';
+import { emptySheet } from '@dndapp/shared/sheet.js';
 
 /** What the AI might say about a battle map: a grid of roughly `columns` squares, no scale printed. */
 const readOut = (over = {}) => ({
@@ -302,6 +303,49 @@ test('tokens: hit points and conditions; players see how hurt enemies look, neve
     assert.equal((await patch(ogre.id, { hp: { current: 1, max: 59 } }, t.sam.token)).statusCode, 403);
     assert.equal((await patch(thorin.id, { hidden: true }, t.sam.token)).statusCode, 403);
     assert.deepEqual((await seen()).tokens.find((x) => x.name === 'Thorin').conditions, ['poisoned']);
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test("tokens: a player character with a saved sheet shows the sheet's hit points; a change on the map goes on the sheet", async () => {
+  const t = await setup({ llm: mapLLM() });
+  try {
+    const map = await importMap(t, await terrain(700, 490, { size: 35 }));
+    const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+    await t.request('PATCH', base, { body: { shown: true } });
+    const thorin = (await t.request('POST', `${base}/tokens`, { body: { kind: 'pc', name: 'Thorin', user_id: t.sam.id, hp: { current: 5, max: 5 } } })).json().token;
+    const seen = async (as) => (await t.request('GET', base, { as })).json().tokens.find((x) => x.id === thorin.id);
+    // No sheet yet: the token's own hit points.
+    assert.deepEqual((await seen()).hp, { current: 5, max: 5 });
+    assert.equal((await seen()).hp_sheet, false);
+
+    // Fighter 3 (Con 10): 10 + 2 × 6 = 22 hit points; 20 now.
+    const sheet = { ...emptySheet({ name: 'Thorin' }), classes: [{ name: 'Fighter', level: 3 }], hp: { current: 20, temp: null } };
+    t.sheets.save(t.campaign.id, t.sam.id, sheet);
+    for (const as of [undefined, t.sam.token, t.alex.token]) {
+      const tok = await seen(as);
+      assert.deepEqual(tok.hp, { current: 20, max: 22 });
+      assert.equal(tok.hp_sheet, true);
+    }
+
+    // The DM deals 7 on the map: the sheet says 13, saved with the reason and by the DM.
+    const heard = [];
+    t.maps.events.on('update', (m) => heard.push(m.id));
+    const res = await t.request('PATCH', `${base}/tokens/${thorin.id}`, { body: { hp: { current: 13, max: 99 } } });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.json().token.hp, { current: 13, max: 22 }, 'the maximum stays the sheet\'s');
+    assert.equal(t.sheets.get(t.campaign.id, t.sam.id).sheet.hp.current, 13);
+    assert.ok(heard.includes(map.id), 'the map is sent again');
+    const lines = fs.readFileSync(path.join(t.paths.archive, t.campaign.slug, 'character-sheets', `${t.sam.id}.jsonl`), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.equal(lines.at(-1).reason, 'hit points changed on the map');
+
+    // The player heals on their sheet: the token follows. And they can change it from their token too.
+    t.sheets.save(t.campaign.id, t.sam.id, { ...t.sheets.get(t.campaign.id, t.sam.id).sheet, hp: { current: 25, temp: null } });
+    assert.equal((await seen(t.alex.token)).hp.current, 25);
+    assert.equal((await t.request('PATCH', `${base}/tokens/${thorin.id}`, { body: { hp: { current: 0, max: 22 }, conditions: ['unconscious'] }, as: t.sam.token })).statusCode, 200);
+    assert.equal(t.sheets.get(t.campaign.id, t.sam.id).sheet.hp.current, 0);
+    assert.deepEqual((await seen()).conditions, ['unconscious']);
   } finally {
     await t.cleanup();
   }

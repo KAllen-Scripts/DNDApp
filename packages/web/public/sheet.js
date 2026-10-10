@@ -610,6 +610,23 @@ async function takeShortRest() {
 }
 
 /**
+ * The player's sheet was saved somewhere else (live, from table.js): hit
+ * points changed on the map, a purchase, a rest, another window. A newer
+ * version is loaded unless something here is waiting to be saved (saving it
+ * then meets the newer version and asks which to keep).
+ */
+export async function sheetHeard({ version }) {
+  if (!state.sheet || state.dirty || state.saving || version <= state.version) return;
+  const res = await state.guarded(() => api('GET', `${base()}/sheet`)).catch(() => null);
+  if (!res || state.dirty || state.saving || res.version <= state.version) return;
+  // Keep what the status line says (a rest's or a purchase's note may be there).
+  const note = $('#sheet-status').textContent;
+  useSheet(res.sheet, res.version);
+  if (note) status(note);
+  announce();
+}
+
+/**
  * The DM called a rest that includes this player (live, from table.js): load
  * the changed sheet. With changes waiting here, saving them first meets the
  * newer version and asks which to keep, as with another device.
@@ -618,9 +635,12 @@ export async function restCalled(rest) {
   if (!state.sheet || state.saving) return;
   if (state.dirty) return save();
   const res = await state.guarded(() => api('GET', `${base()}/sheet`)).catch(() => null);
-  if (!res || state.dirty || res.version <= state.version) return;
-  useSheet(res.sheet, res.version);
-  announce();
+  if (!res || state.dirty) return;
+  // The sheet may already be loaded (the live `sheet` news can come first).
+  if (res.version > state.version) {
+    useSheet(res.sheet, res.version);
+    announce();
+  }
   status(rest.kind === 'long' ? 'The DM called a long rest: your sheet is updated.' : 'The DM called a short rest: spend hit dice to heal.');
 }
 

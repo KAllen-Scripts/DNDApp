@@ -50,6 +50,8 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
   const events = new EventEmitter();
   events.setMaxListeners(0);
   const sight = createSight({ db });
+  // What each character's token last showed from its sheet (hit points, speed), so unrelated saves don't resend maps.
+  const sheetShown = new Map();
 
   const fromRow = (r) => ({ id: r.id, campaign_id: r.campaign_id, ...normalizeMap(JSON.parse(r.data)), version: r.version, created_at: r.created_at, updated_at: r.updated_at });
   const row = (cid, id) => (isMapId(id) ? db.prepare('SELECT * FROM maps WHERE id = ? AND campaign_id = ?').get(id, cid) : null);
@@ -178,14 +180,29 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
       if (!map || map.removed) return null;
       // A player character's token shows the token picture its player uploaded; others, the DM's.
       const picture = (t) => (t.kind === 'pc' ? (pictures ? pictures.tokenKey(map.campaign_id, t.user_id) : null) : t.art ? t.art.file.replace(/\.[^.]*$/, '') : null);
+      // A player character's saved sheet, worked out (once per token).
+      const settings = store.getSettings(map.campaign_id);
+      const sheetOf = new Map();
+      const linked = (t) => {
+        if (!sheetOf.has(t.id)) {
+          const found = t.kind === 'pc' && t.user_id != null && sheets ? sheets.get(map.campaign_id, t.user_id) : null;
+          sheetOf.set(t.id, found?.version ? { sheet: found.sheet, calc: computeSheet(found.sheet, settings) } : null);
+        }
+        return sheetOf.get(t.id);
+      };
       // How far it walks in a turn: what the DM set, else the player's sheet, else the stat block.
       const moveSpeed = (t) => {
         if (t.speed != null) return t.speed;
-        if (t.kind === 'pc' && t.user_id != null && sheets) {
-          const { sheet, version } = sheets.get(map.campaign_id, t.user_id);
-          return version ? Number(computeSheet(sheet, store.getSettings(map.campaign_id)).values.speed) || null : null;
-        }
+        if (t.kind === 'pc' && t.user_id != null) return linked(t) ? Number(linked(t).calc.values.speed) || null : null;
         return speedFromText(t.stats?.speed) ?? null;
+      };
+      // A player character with a saved sheet has the sheet's hit points (current and maximum).
+      const hpOf = (t) => {
+        const l = linked(t);
+        if (!l) return { hp: t.hp, hp_sheet: false };
+        const max = l.calc.values.hp_max == null ? null : Number(l.calc.values.hp_max) || null;
+        const current = l.sheet.hp.current ?? max;
+        return { hp: current == null && max == null ? null : { current, max }, hp_sheet: true };
       };
       // Where each link leads: the target map's name, or null if it's gone.
       const target = (to) => {
@@ -198,7 +215,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
       const out = {
         ...map,
         // The picture's file name stays on the server; `picture` is its key.
-        tokens: map.tokens.map(({ art: _art, ...t }) => ({ ...t, picture: picture({ ...t, art: _art }), move_speed: moveSpeed(t) })),
+        tokens: map.tokens.map(({ art: _art, ...t }) => ({ ...t, ...hpOf(t), picture: picture({ ...t, art: _art }), move_speed: moveSpeed(t) })),
         links: links.map(({ target: m, ...l }) => ({ ...l, to_name: m?.name ?? null })),
       };
       delete out.campaign_id;
@@ -269,6 +286,35 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
          ON CONFLICT (map_id, user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
       ).run(map.id, userId, JSON.stringify(after), saved_at);
       return after;
+    },
+
+    /**
+     * A player's sheet was saved: maps with their character's token are sent
+     * again, since the token shows the sheet's hit points and speed (only
+     * when one of those changed, not on every keystroke's save).
+     */
+    sheetChanged(campaignId, userId) {
+      const { sheet, version } = sheets.get(campaignId, userId);
+      const values = version ? computeSheet(sheet, store.getSettings(campaignId)).values : {};
+      const shown = JSON.stringify([sheet.hp.current, values.hp_max ?? null, values.speed ?? null]);
+      const key = `${campaignId}:${userId}`;
+      if (sheetShown.get(key) === shown) return;
+      sheetShown.set(key, shown);
+      for (const r of db.prepare('SELECT * FROM maps WHERE campaign_id = ?').all(campaignId)) {
+        const map = fromRow(r);
+        if (!map.removed && map.tokens.some((t) => t.kind === 'pc' && t.user_id === userId)) events.emit('update', map);
+      }
+    },
+
+    /**
+     * Hit points changed on a player character's token: they go on the
+     * player's sheet (current only; the maximum is the sheet's), saved with
+     * the reason so the archive and the archivist see it.
+     */
+    setSheetHp(campaignId, userId, current, { by }) {
+      const { sheet, version } = sheets.get(campaignId, userId);
+      if (!version) return null;
+      return sheets.save(campaignId, userId, { ...sheet, hp: { ...sheet.hp, current } }, { by, reason: 'hit points changed on the map' });
     },
 
     /** Forget where everyone has been on a map, and tell everyone looking at it. */

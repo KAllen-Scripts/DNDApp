@@ -6,7 +6,7 @@
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { withPage, addDm } from './helpers.js';
+import { withPage, addDm, importMap, addToken } from './helpers.js';
 
 const NO_3D = { 'dndapp.dice': JSON.stringify({ threeD: false, sound: false }) };
 const byLabel = (page, label) => page.el(`#sheet [aria-label="${label}"]`);
@@ -93,5 +93,17 @@ test("a player's sheet reloads when the DM's long rest reaches them, with a note
     assert.match(page.text('#dice-toast'), /The DM called a long rest\./);
     assert.match(page.text('#sheet-status'), /long rest/);
     assert.equal(page.$$('#sheet .hd-row[data-die="8"] .pips input:checked').length, 0);
+  });
+});
+
+test("a player's sheet follows hit points the DM changes on their map token, live", async () => {
+  await withPage({ before: (t) => giveSheet(t), page: (t) => ({ as: t.sam, storage: NO_3D }) }, async (page, t) => {
+    const map = await importMap(t, { patch: { shown: true } });
+    const token = await addToken(t, map, { kind: 'pc', name: 'Thorin', user_id: t.sam.id });
+    page.click('[data-tab=sheet]');
+    assert.equal(byLabel(page, 'Current hit points').value, '20');
+    const res = await t.request('PATCH', `/campaigns/${t.campaign.id}/maps/${map.id}/tokens/${token.id}`, { body: { hp: { current: 13, max: 42 } } });
+    assert.equal(res.json().token.hp.current, 13);
+    await page.waitFor(() => byLabel(page, 'Current hit points').value === '13', { what: 'the sheet to follow the token' });
   });
 });
