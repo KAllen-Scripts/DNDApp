@@ -32,7 +32,7 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 
 **Numbers:** schema **v15**, `PIPELINE_VERSION` **14**, **368 tests** passing (`npm test`: server 161, shared 70, web 137). Tests are offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools; the page is tested in jsdom against a real test server (`packages/web/test/page.js`). Headless Chromium is only needed for what jsdom can't show (real layout, WebGL dice, touch). There's no CI: `npm test` is the check.
 
-**Git:** `main` has PRs #1–#25 merged (#16: housekeeping; #17: walls and doors; #18: book lookups; #20: stat blocks from your creatures and books first; #21: rolling from the sheet, the Inventory tab and campaign settings; #22: rests and hit dice; #23: merchants and items, which brought #22 in with it; #24: the ruleset note in SPEC; #25: full screen map and the DM's edit mode). Open: the archivist reading handout pictures (branch `claude/project-thread-vrgqhu`). Merges to `main` need the owner's OK.
+**Git:** `main` has PRs #1–#26 merged (#16: housekeeping; #17: walls and doors; #18: book lookups; #20: stat blocks from your creatures and books first; #21: rolling from the sheet, the Inventory tab and campaign settings; #22: rests and hit dice; #23: merchants and items, which brought #22 in with it; #24: the ruleset note in SPEC; #25: full screen map and the DM's edit mode; #26: the archivist reads handout pictures). Nothing open. Merges to `main` need the owner's OK.
 
 **Installs:**
 - **Owner's PC** (the server): `data/` holds the admin login ("admin") and a player account for Kenny. The database upgrades itself (to v13 with rests, v14 with merchants, v15 with campaign settings) on the next start. Start with `npm start`, open http://127.0.0.1:4400. `.env` is in the repo root (copy of `.env.example`).
@@ -735,6 +735,10 @@ The owner said "Merge". PR #25 (full screen map with see-through tools and More,
 ### 2026-10-10: The archivist sees handout pictures
 
 The owner: "Make sure the archivist can see handouts as well." Handout text already reached it between sessions; pictures didn't ("It has a picture, which you cannot see"). Now, before the archivist's between-sessions run, the AI reads each new or changed handout picture (`handouts.js`, `llm.structured` with purpose `handout:picture` on the `import` task, image shrunk to 1568 px as for character pictures): every word written in it, word for word, then what it shows. That goes into the `<handout>` block with the text and who got it, so privacy is unchanged (the archivist already treats a handout as known by those who got it). Readings are kept in memory per picture (changing who gets a handout doesn't read it again); a failed read fails the run, the mark doesn't move, and it's tried next time. `updates.collect` is now async. Archivist prompt line about handouts updated; `PIPELINE_VERSION` 13 → 14. SPEC §5.2, §6.7, the privacy table and §9 (open question removed). 368 tests.
+
+### 2026-10-10: PR #26 merged
+
+The owner said "Merge". PR #26 (the archivist reads handout pictures) is merged into `main`; this file was updated to say so in the PR's last commit.
 
 ## Verified vs. not verified
 
