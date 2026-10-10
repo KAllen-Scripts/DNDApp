@@ -267,9 +267,10 @@ function polyfill(window, page) {
     button.form.requestSubmit(button);
   });
   Object.assign(Element.prototype, {
-    setPointerCapture() {},
-    releasePointerCapture() {},
-    hasPointerCapture() { return false; },
+    // Remembered, so a test can tell which element took the pointer (in a browser, it then gets the click too).
+    setPointerCapture(id) { (this.capturedPointers ??= new Set()).add(id); },
+    releasePointerCapture(id) { this.capturedPointers?.delete(id); },
+    hasPointerCapture(id) { return !!this.capturedPointers?.has(id); },
     scrollIntoView() {},
     scrollTo() {},
   });

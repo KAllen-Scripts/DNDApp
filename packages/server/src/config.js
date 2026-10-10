@@ -65,8 +65,8 @@ export const config = {
       spells: { model: env.MODEL_SPELLS || DEFAULT_MODEL, effort: env.EFFORT_SPELLS || 'low' },
       // Maps: reading an imported map (kind, grid, scale).
       maps: { model: env.MODEL_MAPS || DEFAULT_MODEL, effort: env.EFFORT_MAPS || 'medium' },
-      // Maps: drafting walls and doors (two looks: a draft, then checking it). The most effort: a map is set up once, and closing every room takes care.
-      walls: { model: env.MODEL_WALLS || env.MODEL_MAPS || DEFAULT_MODEL, effort: env.EFFORT_WALLS || 'max' },
+      // Maps: drafting walls and doors (two looks: a draft, then checking it). One level below the most (owner, 2026-10-10: max used about 30% of a session's tokens): a map is set up once, and closing every room takes care.
+      walls: { model: env.MODEL_WALLS || env.MODEL_MAPS || DEFAULT_MODEL, effort: env.EFFORT_WALLS || 'xhigh' },
     },
     // API provider only: re-run refused requests on Anthropic's recommended fallback model.
     fallbacks: env.LLM_FALLBACKS !== 'off',

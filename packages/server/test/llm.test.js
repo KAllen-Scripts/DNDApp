@@ -185,3 +185,7 @@ test('claude-code: tool wrapper counts calls and stops at the limit', async () =
   assert.equal(r.isError, true);
   assert.match(r.content[0].text, /boom/);
 });
+
+test('AI walls run one level below the most effort by default (the owner: max cost too much)', { skip: process.env.EFFORT_WALLS ? 'EFFORT_WALLS is set' : false }, () => {
+  assert.equal(config.llm.tasks.walls.effort, 'xhigh');
+});

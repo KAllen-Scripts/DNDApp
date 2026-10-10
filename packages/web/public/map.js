@@ -1059,7 +1059,7 @@ export function toImage(clientX, clientY) {
 }
 
 function viewDown(e) {
-  if (!state.current || e.target.closest('.map-selection, .map-combat')) return;
+  if (!state.current || e.target.closest('.map-selection, .map-combat, .map-ai-note')) return;
   // Measuring and placing a template can start on a token; otherwise tokens and pins handle their own pointers.
   // Alt+click pings, whatever tool is on.
   if (e.altKey && !state.pointers.size) {
