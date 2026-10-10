@@ -174,7 +174,18 @@ test('normalizeWalls keeps real lines on the image; only doors can be open', () 
   ]);
   const m = normalizeMap({ image: { width: 10, height: 10 } });
   assert.deepEqual(m.walls, []);
-  assert.deepEqual(m.wall_draft, { status: '', error: '', notes: '' });
+  assert.deepEqual(m.wall_draft, { status: '', error: '', notes: '', step: '', parts: 0, parts_done: 0, started_at: '', finished_at: '', found: null });
+  // Its progress and what it found are kept; nonsense isn't.
+  const drafting = normalizeMap({
+    image: { width: 10, height: 10 },
+    wall_draft: { status: 'pending', step: 'checking', parts: 9, parts_done: 4, started_at: '2026-10-10T15:00:00.000Z', finished_at: 'soon', found: { walls: 3, doors: '2', evil: 1 } },
+  }).wall_draft;
+  assert.deepEqual(drafting, {
+    status: 'pending', error: '', notes: '', step: 'checking', parts: 9, parts_done: 4, started_at: '2026-10-10T15:00:00.000Z', finished_at: '',
+    found: { walls: 3, obstacles: 0, doors: 2, lights: 0, terrain: 0 },
+  });
+  assert.equal(normalizeMap({ image: { width: 10, height: 10 }, wall_draft: { step: 'napping', parts: 50 } }).wall_draft.step, '');
+  assert.equal(normalizeMap({ image: { width: 10, height: 10 }, wall_draft: { parts: 50 } }).wall_draft.parts, 9);
   assert.equal(m.fog.sight, false);
   assert.equal(m.fog.memory, true);
   assert.equal(m.fog.map, 'dark');

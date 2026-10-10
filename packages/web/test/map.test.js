@@ -495,6 +495,77 @@ test('walls: the DM draws walls and doors (snapped to wall ends and grid corners
   });
 });
 
+test('AI walls: the DM sees it working (step and time so far), then what it found or why it failed, and can try again', async () => {
+  // The AI answers only when the test lets it, so the "working" state can be seen.
+  let release;
+  let fail = false;
+  const llm = createFakeLLM({
+    structured: async (opts) => {
+      if (!opts.purpose.startsWith('map:walls')) return mapReading();
+      if (opts.purpose === 'map:walls') await new Promise((r) => { release = r; });
+      if (fail) throw new Error('overloaded');
+      return { walls: [{ points: [{ x: 500, y: 0 }, { x: 500, y: 1000 }] }], doors: [{ from: { x: 0, y: 500 }, to: { x: 100, y: 500 } }], notes: 'Rough around the tower.' };
+    },
+  });
+  await withPage({
+    setup: { llm },
+    before: async (t) => ({ dana: await addDm(t), map: await importMap(t, { patch: SHOWN }) }),
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page) => {
+    await openMapTab(page);
+    assert.ok(!page.visible('#map-ai-note'), 'nothing to say yet');
+    page.click('#map-fog-open');
+    const button = page.$('#map-walls-draft');
+    page.click('#map-walls-draft');
+    // Straight away, before the server answers.
+    assert.equal(button.textContent, 'AI walls: starting…');
+    assert.ok(button.disabled);
+    await page.waitFor(() => release, { what: 'the AI asked' });
+    await page.waitFor(() => page.visible('#map-ai-note'), { what: 'the working message' });
+    assert.equal(button.textContent, 'AI walls: working…');
+    assert.ok(button.classList.contains('busy'));
+    assert.equal(button.getAttribute('aria-busy'), 'true');
+    assert.ok(page.$('#map-ai-note .spinner'));
+    assert.match(page.text('#map-ai-note'), /AI walls: tracing the walls, doors and lights… \d+ s so far\./);
+    assert.match(page.text('#map-ai-note'), /carry on meanwhile/);
+    // It shows over the map whatever tools are open.
+    page.click('#map-fog-open');
+    assert.ok(page.visible('#map-ai-note'));
+    page.click('#map-fog-open');
+
+    release();
+    await page.waitFor(() => /AI walls done/.test(page.text('#map-ai-note')), { what: 'the done message' });
+    assert.match(page.text('#map-ai-note'), /AI walls done: 1 wall and 1 door in \d+ s\. They're drawn in purple/);
+    assert.match(page.text('#map-ai-note'), /Rough around the tower\./);
+    assert.equal(button.textContent, 'AI walls');
+    assert.ok(!button.disabled);
+    assert.ok(!page.$('#map-ai-note .spinner'));
+    // Closed, it stays closed (in this browser) until the next go.
+    page.click('#map-ai-note [aria-label=Close]');
+    assert.ok(!page.visible('#map-ai-note'));
+    page.click('#map-fit');
+    await page.settle();
+    assert.ok(!page.visible('#map-ai-note'));
+
+    // The next go fails: the DM is told why, and tries again from the message.
+    fail = true;
+    release = null;
+    page.click('#map-walls-draft');
+    await page.waitFor(() => release, { what: 'the AI asked again' });
+    release();
+    await page.waitFor(() => page.$('#map-ai-note.failed'), { what: 'the failed message' });
+    assert.match(page.text('#map-ai-note'), /The AI couldn't draft walls/);
+    fail = false;
+    release = null;
+    const again = [...page.$('#map-ai-note').querySelectorAll('button')].find((b) => b.textContent === 'Try again');
+    again.click();
+    await page.waitFor(() => release, { what: 'the AI asked a third time' });
+    await page.waitFor(() => /tracing/.test(page.text('#map-ai-note')), { what: 'working again' });
+    release();
+    await page.waitFor(() => /AI walls done/.test(page.text('#map-ai-note')), { what: 'done again' });
+  });
+});
+
 test('line of sight: a player sees what their token sees, opens the door next to them with a click; never the walls', async () => {
   await withPage({
     setup: { llm: mapLLM() },

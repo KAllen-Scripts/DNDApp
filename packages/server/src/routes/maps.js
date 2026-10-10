@@ -97,12 +97,23 @@ export function registerMaps(app, r) {
 
   /** Draft walls with the AI in the background. The new draft replaces the AI's old one; the DM's own walls stay. */
   function draftWallsInBackground(cid, map, userId) {
+    const started_at = new Date().toISOString();
     maps.change(cid, map.id, (m) => {
-      m.wall_draft = { status: 'pending', error: '', notes: '' };
+      m.wall_draft = { status: 'pending', error: '', notes: '', step: 'tracing', parts: 0, parts_done: 0, started_at, finished_at: '', found: null };
     }, { by: userId, reason: 'drafting walls' });
+    // How far it has got, live to the DM, so they can see it working.
+    const onProgress = ({ step, parts = 0, parts_done = 0 }) => {
+      try {
+        maps.change(cid, map.id, (m) => {
+          if (m.wall_draft.status === 'pending') Object.assign(m.wall_draft, { step, parts, parts_done });
+        }, { reason: 'drafting walls' });
+      } catch {
+        // removed meanwhile
+      }
+    };
     const buf = fs.readFileSync(maps.imagePath(cid, map.id, { base: true }).path);
     return mapReader
-      .walls({ buf, width: map.image.width, height: map.image.height, grid: map.grid, campaignId: cid, userId })
+      .walls({ buf, width: map.image.width, height: map.image.height, grid: map.grid, campaignId: cid, userId, onProgress })
       .then((r) =>
         maps.change(cid, map.id, (m) => {
           const own = m.walls.filter((w) => w.source !== 'ai');
@@ -115,14 +126,23 @@ export function registerMaps(app, r) {
           // And difficult terrain (water, rubble, undergrowth).
           const ownTerrain = m.terrain.filter((t) => t.source !== 'ai');
           m.terrain = [...ownTerrain, ...(r.terrain ?? []).slice(0, MAX_TERRAIN - ownTerrain.length).map((t) => ({ ...t, id: newTokenId(), source: 'ai' }))];
-          m.wall_draft = { status: 'done', error: '', notes: r.notes };
+          // What it found (what was kept), for the DM's "done" message.
+          const ai = m.walls.filter((w) => w.source === 'ai');
+          const found = {
+            walls: ai.filter((w) => !w.door && w.kind !== 'low').length,
+            obstacles: ai.filter((w) => !w.door && w.kind === 'low').length,
+            doors: ai.filter((w) => w.door).length,
+            lights: m.lights.filter((l) => l.source === 'ai').length,
+            terrain: m.terrain.filter((t) => t.source === 'ai').length,
+          };
+          m.wall_draft = { ...m.wall_draft, status: 'done', error: '', notes: r.notes, step: '', finished_at: new Date().toISOString(), found };
         }, { reason: 'walls drafted by the AI' }),
       )
       .catch((err) => {
         app.log.warn(err);
         try {
           maps.change(cid, map.id, (m) => {
-            m.wall_draft = { status: 'failed', error: `The AI couldn't draft walls: ${publicMessage(err)}`, notes: '' };
+            m.wall_draft = { ...m.wall_draft, status: 'failed', error: `The AI couldn't draft walls: ${publicMessage(err)}`, notes: '', step: '', finished_at: new Date().toISOString(), found: null };
           }, { reason: 'wall draft failed' });
         } catch {
           // removed meanwhile

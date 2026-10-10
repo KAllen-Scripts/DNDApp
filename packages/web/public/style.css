@@ -1066,9 +1066,11 @@ details.spell > summary::-webkit-details-marker { display: none; }
 @media (prefers-reduced-motion: reduce) { :root[data-map-full] .map-bar > * { transition: none; } }
 /* The turn order and the picked token's bar keep clear of the toolbars. */
 :root[data-map-full] .map-combat { top: calc(var(--bars-h, 0px) + 1rem); max-height: calc(100% - var(--bars-h, 0px) - 1.5rem); }
+:root[data-map-full] .map-ai-note { top: calc(var(--bars-h, 0px) + 1rem); }
 /* Toolbars along the bottom (Look). */
 :root[data-map-full][data-map-bar="bottom"] .map-bars { top: auto; bottom: 0.5rem; }
 :root[data-map-full][data-map-bar="bottom"] .map-combat { top: 0.5rem; }
+:root[data-map-full][data-map-bar="bottom"] .map-ai-note { top: 0.5rem; }
 :root[data-map-full][data-map-bar="bottom"] .map-selection { bottom: calc(var(--bars-h, 0px) + 1rem); }
 /* Down the left side (Look); on a phone there isn't room, so along the bottom. */
 @media (min-width: 561px) {
@@ -1133,6 +1135,26 @@ details.spell > summary::-webkit-details-marker { display: none; }
   cursor: default;
 }
 .map-selection button { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+/* The AI drafting walls (DM): over the top of the map, so it shows whatever tools are open. */
+.map-ai-note {
+  position: absolute; left: 50%; top: 0.5rem; transform: translateX(-50%); z-index: 4; width: max-content; max-width: calc(100% - 1rem);
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.7rem; cursor: default;
+  background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: var(--radius); box-shadow: 0 2px 10px rgb(0 0 0 / 0.2);
+  font-size: 0.9rem;
+}
+.map-ai-note[hidden] { display: none; }
+.map-ai-note.failed { border-left-color: var(--error); }
+.map-ai-note .tick { color: var(--accent); font-weight: 700; }
+.map-ai-note .cross { color: var(--error); font-weight: 700; }
+.map-ai-note button:not(.chip-x) { padding: 0.25rem 0.6rem; font-size: 0.85rem; flex: none; }
+.map-ai-note .spinner, button.busy::before {
+  flex: none; width: 0.9rem; height: 0.9rem; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent);
+  animation: map-spin 0.9s linear infinite;
+}
+button.busy::before { content: ''; display: inline-block; vertical-align: -0.15rem; margin-right: 0.35rem; width: 0.75rem; height: 0.75rem; }
+button.busy:disabled { opacity: 1; }
+@keyframes map-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .map-ai-note .spinner, button.busy::before { animation: none; } }
 .map-selection .swatch { width: 1rem; height: 1rem; border-radius: 50%; flex: none; }
 .map-selection .spacer, .map-dialog-actions .spacer { flex: 1; }
 
