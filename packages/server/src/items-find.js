@@ -68,10 +68,14 @@ const fieldsFrom = (out, source) => ({
  * @param {object} [opts.items]  the DM's items (items.js); looked in first
  * @param {(url: string) => Promise<{ buf: Buffer }>} [opts.fetchImage]  injectable for tests
  */
-export function createItemFinder({ llm, books = null, items = null, fetchImage = (url) => fetchPublic(url) }) {
-  /** The pages of the books most likely to have it: the best page for its name, and the next one. */
-  async function fromBooks(name) {
-    const hits = books ? await books.search([name], { limit: 1 }) : [];
+export function createItemFinder({ llm, books = null, items = null, editions = null, fetchImage = (url) => fetchPublic(url) }) {
+  /**
+   * The pages of the books most likely to have it: the best page for its name,
+   * and the next one. The campaign's edition's books first, then any.
+   */
+  async function fromBooks(name, edition) {
+    let hits = books && edition ? await books.search([name], { limit: 1, edition }) : [];
+    if (books && !(Array.isArray(hits) && hits.length)) hits = await books.search([name], { limit: 1 });
     if (!Array.isArray(hits) || !hits.length) return null;
     const read = await books.readPages(hits[0].book, hits[0].page, 2);
     if (read.error || !read.pages.length) return null;
@@ -103,7 +107,7 @@ export function createItemFinder({ llm, books = null, items = null, fetchImage =
         const { name: n, kind, rarity, attunement, price, weight, text, source } = own;
         return { fields: { name: n, kind, rarity, attunement, price, weight, text, source: source ?? { kind: 'dm', from: `your items (${n})` } }, from: 'yours' };
       }
-      const printed = await fromBooks(name);
+      const printed = await fromBooks(name, editions ? await editions.of(campaignId) : null);
       if (printed) {
         beforeAi?.();
         const out = await llm.structured({

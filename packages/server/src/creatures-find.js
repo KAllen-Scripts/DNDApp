@@ -59,7 +59,7 @@ const TIDY = 'Turn research notes about a D&D 5e creature into the requested fie
  * @param {object} [opts.books]  the group's books (sheets/books.js); looked in first
  * @param {(url: string) => Promise<{ buf: Buffer }>} [opts.fetchImage]  injectable for tests
  */
-export function createCreatureFinder({ llm, books = null, fetchImage = (url) => fetchPublic(url) }) {
+export function createCreatureFinder({ llm, books = null, editions = null, fetchImage = (url) => fetchPublic(url) }) {
   /** The first of the pictures that downloads and is really a picture, or null. */
   async function firstPicture(urls) {
     for (const url of urls.slice(0, 6)) {
@@ -78,7 +78,7 @@ export function createCreatureFinder({ llm, books = null, fetchImage = (url) => 
      * or null if nothing was found.
      */
     async find(query, { campaignId, userId }) {
-      const printed = await books?.findCreature(query);
+      const printed = await books?.findCreature(query, { edition: editions ? await editions.of(campaignId) : null });
       const prompt = printed ? `Find this creature: ${query}\n\n${FROM_BOOK(printed)}` : `Find this creature: ${query}`;
       const notes = await llm.research({ task: 'maps', purpose: printed ? 'creature:find-book' : 'creature:find', system: RESEARCH, prompt, campaignId, userId });
       const out = await llm.structured({ task: 'maps', purpose: 'creature:tidy', system: TIDY, prompt: `<request>${query}</request>\n<notes>\n${notes}\n</notes>`, schema: FoundOut, campaignId, userId });

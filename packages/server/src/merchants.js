@@ -2,7 +2,7 @@
  * Merchants: shops the DM sets up and puts on maps as tokens. Each sells
  * items from the DM's items (items.js) at its own prices, with a stock
  * level (or no limit). Players buy on their own: the price comes out of the
- * coins on their character sheet and the item goes into its equipment, and
+ * coins on their character sheet and the item goes into its inventory, and
  * the stock goes down. A merchant can restock (back up to each item's
  * "restock to" level) every so many long rests the DM calls (rests.js).
  *

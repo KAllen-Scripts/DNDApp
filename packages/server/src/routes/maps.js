@@ -728,17 +728,26 @@ export function registerMaps(app, r) {
     if (a.role !== 'dm' && moves) {
       for (let i = 1; i < route.length; i++) if (wallBetween(map, route[i - 1], route[i])) throw new BadRequestError("There's a wall in the way.");
     }
-    const saved = maps.change(a.cid, map.id, (m) => {
-      const t = m.tokens.find((x) => x.id === token.id);
-      if (!t) return;
-      Object.assign(t, body);
-      if (t.kind !== 'pc') t.user_id = null;
-      Object.assign(t, snapToken(m, t, t.x, t.y));
-      // In a fight, count how far it has moved this turn (difficult terrain costs double).
-      const entry = moves && m.combat?.entries.find((e) => e.id === t.id);
-      if (entry) entry.moved = (entry.moved ?? 0) + (pathCost(map, route)?.value ?? 0);
-    }, { by: request.user.id, reason: moving ? 'token moved' : 'token changed' });
-    return { map: maps.view(saved, a), token: saved.tokens.find((t) => t.id === token.id) };
+    // A player character with a saved sheet has the sheet's hit points: a change goes on the sheet (current only).
+    if (body.hp !== undefined && token.hp_sheet && (body.user_id === undefined || body.user_id === token.user_id)) {
+      const { hp } = body;
+      delete body.hp;
+      if (hp?.current != null) maps.setSheetHp(a.cid, token.user_id, hp.current, { by: request.user.id });
+    }
+    const changed = Object.keys(body).length
+      ? maps.change(a.cid, map.id, (m) => {
+        const t = m.tokens.find((x) => x.id === token.id);
+        if (!t) return;
+        Object.assign(t, body);
+        if (t.kind !== 'pc') t.user_id = null;
+        Object.assign(t, snapToken(m, t, t.x, t.y));
+        // In a fight, count how far it has moved this turn (difficult terrain costs double).
+        const entry = moves && m.combat?.entries.find((e) => e.id === t.id);
+        if (entry) entry.moved = (entry.moved ?? 0) + (pathCost(map, route)?.value ?? 0);
+      }, { by: request.user.id, reason: moving ? 'token moved' : 'token changed' })
+      : null;
+    const out = maps.view(changed ?? maps.get(a.cid, map.id), a);
+    return { map: out, token: out?.tokens.find((t) => t.id === token.id) ?? null };
   });
 
   /**

@@ -18,7 +18,7 @@ const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
  * Bump this whenever chunking, prompts, schemas or the memory design change.
  * Every generated output is tagged with it so we know which approach made it.
  */
-export const PIPELINE_VERSION = 13;
+export const PIPELINE_VERSION = 14;
 
 const DEFAULT_MODEL = env.MODEL || 'claude-opus-5-5';
 
@@ -124,7 +124,8 @@ export const config = {
   sheets: {
     // AI calls (sheet uploads, spell lookups outside the SRD) per player per hour.
     aiPerHour: num(env.SHEET_AI_PER_HOUR, 60),
-    // Which rules rests follow: 2014 or 2024. Empty: the edition of the group's Player's Handbook in BOOKS_DIR, else 2014.
+    // The rules edition (2014 or 2024) for a campaign whose DM hasn't picked one in its settings (editions.js).
+    // Empty: the edition of the group's Player's Handbook in BOOKS_DIR, else 2014.
     restRules: ['2014', '2024'].includes(env.REST_RULES) ? env.REST_RULES : '',
   },
 

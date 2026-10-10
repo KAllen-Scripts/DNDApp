@@ -200,6 +200,9 @@ test("Q&A: the books' editions and a long contents trimmed to its chapters", asy
   assert.match(groupEdition([{ title: 'Players Handbook 5th Edition DD', year: 2014 }]), /the 2014 one, so answer with the 2014 rules/);
   assert.match(groupEdition([{ title: "Player's Handbook (2014)" }, { title: "Player's Handbook (2024)" }]), /both editions/);
   assert.match(groupEdition([{ title: 'Monster Manual' }]), /unknown/);
+  // The DM's campaign setting wins over the books, and applies without books too.
+  assert.match(groupEdition([{ title: "Player's Handbook (2014)" }], '2024'), /set this campaign to the 2024 rules/);
+  assert.match(groupEdition([], '2014'), /2014 rules\.$/);
 
   const sections = Array.from({ length: 400 }, (_, i) => ({ title: `A rather long section heading number ${i}`, page: 2 }));
   const llm = createFakeLLM({
@@ -246,6 +249,23 @@ test('books: creatures\' stat blocks are found in the 2014 and 2024 layouts, by 
     assert.equal((await books.findCreature('Goblins')).page, 2, 'the stat block, not the lore page before it');
     assert.equal(await books.findCreature('Ember Wyrmling'), null);
     assert.equal(await books.findSpell('Goblin'), null, 'creatures are not spells');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("books: the campaign's edition picks between a 2014 and a 2024 book that both print a spell or creature", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dndapp-books-'));
+  fs.writeFileSync(path.join(dir, 'Players Handbook (2014).pdf'), makePdf([['FIREBALL', '3rd-level evocation', 'Casting Time: 1 action', 'Old wording.']]));
+  fs.writeFileSync(path.join(dir, 'Players Handbook (2024).pdf'), makePdf([['FIREBALL', 'Level 3 Evocation (Sorcerer, Wizard)', 'Casting Time: Action', 'New wording.']]));
+  fs.writeFileSync(path.join(dir, 'Monster Manual (2014).pdf'), makePdf([['GOBLIN', 'Small humanoid (goblinoid), neutral evil', 'Armor Class 15', 'Hit Points 7 (2d6)']]));
+  fs.writeFileSync(path.join(dir, 'Monster Manual (2024).pdf'), makePdf([['Goblin Warrior', 'Small Fey (Goblinoid), Chaotic Neutral', 'AC 15 Initiative +6 (16)', 'HP 10 (3d6)']]));
+  const books = createBooks({ dir, log: {} });
+  try {
+    assert.match((await books.findSpell('Fireball', { edition: '2024' })).text, /New wording/);
+    assert.match((await books.findSpell('Fireball', { edition: '2014' })).text, /Old wording/);
+    assert.equal((await books.findCreature('Goblin', { edition: '2024' })).book, 'Monster Manual (2014)', 'only the other edition has it: used anyway');
+    assert.deepEqual((await books.search(['Fireball'], { edition: '2024' })).map((h) => h.book), ['Players Handbook (2024)']);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

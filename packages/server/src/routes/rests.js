@@ -42,7 +42,7 @@ export function registerRests(app, r) {
   /** The rests the DM called (newest first) and which rules long rests follow (2014 or 2024). */
   app.get('/campaigns/:cid/rests', async (request) => {
     const a = access(request);
-    return { edition: await rests.edition(), rests: rests.list(a.cid).map((rest) => rests.view(rest, a)) };
+    return { edition: await rests.edition(a.cid), rests: rests.list(a.cid).map((rest) => rests.view(rest, a)) };
   });
 
   /**

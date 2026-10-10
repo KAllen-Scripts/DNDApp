@@ -165,6 +165,24 @@ test('2024 rules (REST_RULES or a 2024 Player\'s Handbook): every hit die back, 
   }
 });
 
+test("the campaign's rules edition (the DM's setting) wins over REST_RULES and the books", async () => {
+  const t = await setup({ config: { sheets: { aiPerHour: 60, restRules: '2024' } } });
+  try {
+    await saveSheet(t, t.alex, { name: 'Lyra', classes: [{ name: 'Rogue', level: 2 }], hp: { current: 0 } });
+    t.store.setSettings(t.campaign.id, { edition: '2014' });
+    assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/rests`)).json().edition, '2014');
+    const rest = (await t.request('POST', `/campaigns/${t.campaign.id}/rests`, { body: { kind: 'long' } })).json();
+    assert.equal(rest.edition, '2014');
+    assert.deepEqual(rest.skipped, [t.alex.id], 'at 0 hit points under the 2014 rules');
+    // Back to "not chosen": REST_RULES again.
+    assert.equal((await t.request('PATCH', `/campaigns/${t.campaign.id}/settings`, { body: { edition: null } })).json().edition, null);
+    assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/rests`)).json().edition, '2024');
+    assert.equal((await t.request('PATCH', `/campaigns/${t.campaign.id}/settings`, { body: { edition: '5e' } })).statusCode, 400);
+  } finally {
+    await t.cleanup();
+  }
+});
+
 test('rests go out live: each player hears the ones that include them, the DM hears every one', async () => {
   const t = await setup();
   await t.app.listen({ port: 0, host: '127.0.0.1' });

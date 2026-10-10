@@ -73,8 +73,14 @@ How to format:
 - Put citations in the text as usual, e.g. inside a table cell; they still become links.
 - Keep short answers as plain sentences. Use structure when it makes the answer easier to read, not for its own sake.`;
 
-/** Which rules the group plays by, judged from their Player's Handbook(s). */
-export function groupEdition(shelf) {
+/**
+ * Which rules the group plays by: the DM's campaign setting when there is one
+ * ('2014' or '2024'), else judged from their Player's Handbook(s).
+ */
+export function groupEdition(shelf, chosen = null) {
+  if (chosen) {
+    return `The group's edition: the DM has set this campaign to the ${chosen} rules. Answer rules questions with the ${chosen} rules${shelf.length ? `, from the ${chosen} books where the group has them (if only a book of the other edition covers it, say which edition you're quoting)` : ''}.`;
+  }
   const editions = handbookEditions(shelf);
   const known = editions.filter(Boolean);
   if (known.length === 1 && editions.length === 1) {
@@ -86,7 +92,7 @@ export function groupEdition(shelf) {
   return "The group's edition: unknown. Use the edition the archivist's guide or pinned records say they play; if nothing says, say which edition your answer is from.";
 }
 
-export function createQA({ db, store, kb, search, books, creatures = null, llm, config }) {
+export function createQA({ db, store, kb, search, books, creatures = null, editions = null, llm, config }) {
   const Q = config.qa;
 
   function checkRate(userId) {
@@ -155,6 +161,7 @@ export function createQA({ db, store, kb, search, books, creatures = null, llm, 
     const dmCreatures = viewer.seesAll && creatures ? creatures.list(campaignId).filter((c) => !c.finding) : [];
     await books?.load();
     const shelf = books?.status().books ?? [];
+    const chosenEdition = editions?.chosen(campaignId) ?? null;
     const who = member
       ? `${member.name}${member.role === 'dm' ? ' (the DM; may see everything except players\' private notes)' : member.character_name ? `, who plays ${member.character_name}` : ''}`
       : 'a member of the campaign';
@@ -165,8 +172,10 @@ export function createQA({ db, store, kb, search, books, creatures = null, llm, 
       shelf.length
         ? `<books note="The group's own rulebooks. Search them with search_books, read_book and book_contents.">\n${shelf
             .map((b) => `- ${b.title} (${b.year ? `first printed ${b.year}, ` : ''}pages ${b.range})`)
-            .join('\n')}\n</books>\n${groupEdition(shelf)}`
-        : '',
+            .join('\n')}\n</books>\n${groupEdition(shelf, chosenEdition)}`
+        : chosenEdition
+          ? groupEdition([], chosenEdition)
+          : '',
       dmCreatures.length
         ? `<dm_creatures note="The DM's own enemies and NPCs, saved on their Creatures tab. Only the DM sees them; you're answering the DM.">\n${dmCreatures
             .map((c) => `- ${c.name} (${c.kind === 'npc' ? 'NPC' : 'enemy'}${c.stats ? '' : ', no stat block'})`)
