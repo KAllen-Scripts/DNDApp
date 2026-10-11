@@ -4,7 +4,7 @@
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { CONDITIONS, FOG_MAP, FOG_OPS, MAX_FOG_SHAPES, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_TERRAIN, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, pathCost, snapToken, stepTurn, wallBetween } from '@dndapp/shared/map.js';
+import { CONDITIONS, EFFORTS, FOG_MAP, FOG_OPS, MAX_FOG_SHAPES, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_TERRAIN, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, pathCost, snapToken, stepTurn, wallBetween } from '@dndapp/shared/map.js';
 import sharp from 'sharp';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
@@ -96,10 +96,10 @@ export function registerMaps(app, r) {
   }
 
   /** Draft walls with the AI in the background. The new draft replaces the AI's old one; the DM's own walls stay. */
-  function draftWallsInBackground(cid, map, userId) {
+  function draftWallsInBackground(cid, map, userId, effort = null) {
     const started_at = new Date().toISOString();
     maps.change(cid, map.id, (m) => {
-      m.wall_draft = { status: 'pending', error: '', notes: '', step: 'tracing', parts: 0, parts_done: 0, started_at, finished_at: '', found: null };
+      m.wall_draft = { status: 'pending', error: '', notes: '', step: 'tracing', parts: 0, parts_done: 0, started_at, effort: effort || config.llm.tasks.walls.effort, finished_at: '', found: null };
     }, { by: userId, reason: 'drafting walls' });
     // How far it has got, live to the DM, so they can see it working.
     const onProgress = ({ step, parts = 0, parts_done = 0 }) => {
@@ -113,7 +113,7 @@ export function registerMaps(app, r) {
     };
     const buf = fs.readFileSync(maps.imagePath(cid, map.id, { base: true }).path);
     return mapReader
-      .walls({ buf, width: map.image.width, height: map.image.height, grid: map.grid, campaignId: cid, userId, onProgress })
+      .walls({ buf, width: map.image.width, height: map.image.height, grid: map.grid, campaignId: cid, userId, effort, onProgress })
       .then((r) =>
         maps.change(cid, map.id, (m) => {
           const own = m.walls.filter((w) => w.source !== 'ai');
@@ -153,7 +153,9 @@ export function registerMaps(app, r) {
   /** Maps this viewer can see. can_edit: whether they're the DM here. */
   app.get('/campaigns/:cid/maps', async (request) => {
     const a = access(request);
-    return { can_edit: a.role === 'dm', maps: maps.list(a.cid).map((m) => maps.view(m, a)).filter(Boolean) };
+    const dm = a.role === 'dm';
+    // The DM also gets the AI walls effort used when they don't pick one (EFFORT_WALLS).
+    return { can_edit: dm, ...(dm && { walls_effort: config.llm.tasks.walls.effort }), maps: maps.list(a.cid).map((m) => maps.view(m, a)).filter(Boolean) };
   });
 
   /**
@@ -617,13 +619,18 @@ export function registerMaps(app, r) {
     return maps.view(saved, a);
   });
 
-  /** Draft the walls and doors with the AI (DM), in the background. Replaces the AI's earlier draft; walls the DM drew stay. */
+  /**
+   * Draft the walls and doors with the AI (DM), in the background. Replaces the AI's earlier draft; walls the DM drew stay.
+   * { effort? }: how hard the AI thinks (low to max); left out, the `walls` task's (EFFORT_WALLS).
+   */
   app.post('/campaigns/:cid/maps/:mid/walls/draft', async (request) => {
     const a = access(request, { dm: true });
     const { map } = viewableMap(request);
+    const effort = request.body?.effort ?? null;
+    if (effort !== null && !EFFORTS.includes(effort)) throw new BadRequestError(`Effort must be one of: ${EFFORTS.join(', ')}.`);
     if (map.wall_draft.status === 'pending') throw new BadRequestError('The AI is already drafting walls for this map.');
     mapAiAllowed(request.user.id);
-    draftWallsInBackground(a.cid, map, request.user.id);
+    draftWallsInBackground(a.cid, map, request.user.id, effort);
     return maps.view(maps.get(a.cid, map.id), a);
   });
 

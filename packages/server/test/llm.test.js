@@ -189,3 +189,16 @@ test('claude-code: tool wrapper counts calls and stops at the limit', async () =
 test('AI walls run one level below the most effort by default (the owner: max cost too much)', { skip: process.env.EFFORT_WALLS ? 'EFFORT_WALLS is set' : false }, () => {
   assert.equal(config.llm.tasks.walls.effort, 'xhigh');
 });
+
+test('a structured call can run at another effort than its task (the DM\'s pick for AI walls)', async () => {
+  const { usage } = usageFor();
+  const client = createFakeAnthropic([fakeMessage([{ type: 'text', text: '{"title":"Hi"}' }])]);
+  await createApiProvider({ config, usage, client }).structured({ task: 'walls', purpose: 'map:walls', system: 's', prompt: 'p', schema: Schema, effort: 'low' });
+  assert.equal(client.requests[0].output_config.effort, 'low');
+  const queryFn = fakeQuery([result({ structured_output: { title: 'Hi' } }), result({ structured_output: { title: 'Hi' } })]);
+  const cc = createClaudeCodeProvider({ config, usage, queryFn });
+  await cc.structured({ task: 'walls', purpose: 'map:walls', system: 's', prompt: 'p', schema: Schema, effort: 'max' });
+  assert.equal(queryFn.calls[0].options.effort, 'max');
+  await cc.structured({ task: 'walls', purpose: 'map:walls', system: 's', prompt: 'p', schema: Schema });
+  assert.equal(queryFn.calls[1].options.effort, config.llm.tasks.walls.effort, 'none picked: the task\'s');
+});

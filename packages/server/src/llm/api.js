@@ -36,9 +36,10 @@ export function createApiProvider({ config, usage, client = new Anthropic() }) {
   }
 
   /** One streamed request. Returns the final message and its cost. */
-  async function call(params, { task, purpose, campaignId, userId, onText }) {
+  async function call(params, { task, purpose, campaignId, userId, onText, effort: chosen }) {
     usage.checkCap('api');
-    const { model, effort } = tasks[task];
+    const { model } = tasks[task];
+    const effort = chosen || tasks[task].effort;
     const request = {
       model,
       max_tokens: 64000,
@@ -81,7 +82,7 @@ export function createApiProvider({ config, usage, client = new Anthropic() }) {
     costOf,
     call,
 
-    async structured({ task, purpose, system, prompt, schema, attachments, campaignId, userId }) {
+    async structured({ task, purpose, system, prompt, schema, attachments, campaignId, userId, effort }) {
       const { message } = await call(
         {
           system,
@@ -89,7 +90,7 @@ export function createApiProvider({ config, usage, client = new Anthropic() }) {
           messages: [{ role: 'user', content: userContent(prompt, attachments) }],
           output_config: { format: { type: 'json_schema', schema: toOutputSchema(schema) } },
         },
-        { task, purpose, campaignId, userId },
+        { task, purpose, campaignId, userId, effort },
       );
       if (message.stop_reason === 'max_tokens') {
         throw new LLMError(`${purpose}: output was cut off (max_tokens). Raise the limit or split the input.`);

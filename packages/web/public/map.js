@@ -9,8 +9,8 @@
  * the server decides where a token really ends up.
  */
 import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from './api.js';
-import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, FOG_MASK_FILL, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, inTemplate, snapTemplatePoint } from './shared/map.js';
-import { EDITING_KEY, PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, base, report, state, status } from './map-state.js';
+import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, FOG_MASK_FILL, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, inTemplate, snapTemplatePoint, EFFORTS } from './shared/map.js';
+import { EDITING_KEY, PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, WALLS_EFFORT_KEY, base, report, state, status } from './map-state.js';
 import { canChangeTemplate, placeTemplate, renderTemplates, selectTemplate, templateControls, templateDialog, templateMove, templateUp } from './map-templates.js';
 import { openShop } from './merchants.js';
 import { chooseTokenPicture, fillStats, forgetPlayers, importMap, recordDialog, removeToken, removeTokenPicture, saveCreature, settingsDialog, statsDialog, tokenDialog } from './map-dm.js';
@@ -31,8 +31,9 @@ export async function loadMaps({ campaignId, userId, guarded }) {
   state.images.clear();
   for (const url of state.tokenPictures.values()) if (url) URL.revokeObjectURL(url);
   state.tokenPictures.clear();
-  const { can_edit, maps } = await api('GET', base());
+  const { can_edit, maps, walls_effort } = await api('GET', base());
   state.canEdit = can_edit;
+  if (can_edit) fillWallsEffort(walls_effort);
   state.maps = maps;
   $('#tab-map').classList.toggle('can-edit', can_edit);
   const remembered = maps.find((m) => m.id === storage.get(PICK_KEY()));
@@ -313,6 +314,7 @@ function renderFogTools() {
   draftButton.classList.toggle('busy', drafting);
   draftButton.setAttribute('aria-busy', String(drafting));
   draftButton.textContent = drafting ? 'AI walls: working…' : 'AI walls';
+  $('#map-walls-effort').disabled = drafting;
   walls.querySelector('[data-wall-action="clear-ai"]').disabled = ![...map.walls, ...(map.lights ?? []), ...(map.terrain ?? [])].some((w) => w.source === 'ai');
   walls.querySelector('[data-wall-action="forget"]').disabled = !map.fog?.enabled || !map.fog.sight || !map.fog.memory;
   const count = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -328,6 +330,20 @@ function renderFogTools() {
 /** The DM's dismissed AI walls messages: the map's id → the finished_at they closed. */
 const WALL_NOTE_KEY = (mapId) => `dndapp.map.wallNoteSeen.${mapId}`;
 let wallDraftTick = null;
+
+/** AI walls effort, in words. */
+export const EFFORT_NAMES = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
+
+/** The DM's AI walls effort picker: the server's default (EFFORT_WALLS), or one they pick (kept per browser). */
+function fillWallsEffort(fallback) {
+  const select = $('#map-walls-effort');
+  select.replaceChildren(
+    new Option(`Effort: default${EFFORT_NAMES[fallback] ? ` (${EFFORT_NAMES[fallback]})` : ''}`, ''),
+    ...EFFORTS.map((e) => new Option(`Effort: ${EFFORT_NAMES[e]}`, e)),
+  );
+  const kept = storage.get(WALLS_EFFORT_KEY);
+  select.value = EFFORTS.includes(kept) ? kept : '';
+}
 
 /** What the AI is doing now, in words, from the map's wall_draft. */
 export function wallDraftStep(d) {
@@ -376,7 +392,7 @@ function renderWallDraft() {
     tick.unref?.();
     wallDraftTick = tick;
   } else if (d.status === 'done') {
-    const took = d.started_at ? ` in ${sinceText(d.started_at, Date.parse(d.finished_at))}` : '';
+    const took = (d.started_at ? ` in ${sinceText(d.started_at, Date.parse(d.finished_at))}` : '') + (EFFORT_NAMES[d.effort] ? ` (${EFFORT_NAMES[d.effort].toLowerCase()} effort)` : '');
     el.replaceChildren(
       h('span', { class: 'tick', 'aria-hidden': 'true' }, '✓'),
       h('span', {}, h('strong', {}, 'AI walls done: '), `${foundText(d.found)}${took}. They're drawn in purple; fix anything it got wrong.`, d.notes ? h('span', { class: 'muted' }, ` ${d.notes}`) : ''),
@@ -1530,7 +1546,8 @@ export function initMapActions() {
     button.disabled = true;
     button.textContent = 'AI walls: starting…';
     try {
-      const saved = await state.guarded(() => api('POST', `${base()}/${map.id}/walls/draft`, {}));
+      const effort = $('#map-walls-effort').value;
+      const saved = await state.guarded(() => api('POST', `${base()}/${map.id}/walls/draft`, effort ? { effort } : {}));
       if (saved) onMap(saved);
     } catch (err) {
       report(err);
@@ -1538,6 +1555,7 @@ export function initMapActions() {
       if (state.current) renderFogTools();
     }
   });
+  $('#map-walls-effort').addEventListener('change', (e) => storage.set(WALLS_EFFORT_KEY, e.target.value));
   $('#map-walls-file').addEventListener('click', () => $('#map-walls-file-input').click());
   $('#map-walls-file-input').addEventListener('change', async (e) => {
     const file = e.target.files[0];
