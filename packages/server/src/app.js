@@ -25,6 +25,7 @@ import { registerCreatures } from './routes/creatures.js';
 import { registerItems } from './routes/items.js';
 import { registerMerchants } from './routes/merchants.js';
 import { registerMapCreator } from './routes/map-creator.js';
+import { LABEL_FONT_FILES } from './maps/fonts.js';
 import { registerRests } from './routes/rests.js';
 
 /**
@@ -81,6 +82,7 @@ const CONTENT_TYPES = {
   '.json': 'application/json',
   '.mp3': 'audio/mpeg',
   '.webp': 'image/webp',
+  '.woff2': 'font/woff2',
 };
 
 /**
@@ -111,6 +113,9 @@ function serveWebPage(app, dir) {
     '/shared/settings.js': '@dndapp/shared/settings.js',
     '/shared/map.js': '@dndapp/shared/map.js',
     '/shared/map-design.js': '@dndapp/shared/map-design.js',
+    '/shared/map-paint.js': '@dndapp/shared/map-paint.js',
+    '/shared/map-art.js': '@dndapp/shared/map-art.js',
+    '/shared/map-art-assets.js': '@dndapp/shared/map-art-assets.js',
     '/shared/coins.js': '@dndapp/shared/coins.js',
     '/vendor/marked.js': 'marked',
     '/vendor/purify.js': 'dompurify',
@@ -149,6 +154,10 @@ function serveWebPage(app, dir) {
   // cannon-es physics, both as ES modules. Loaded only when someone uses that roller.
   for (const [url, file] of Object.entries(VENDOR_FILES)) {
     app.get(url, { config: { public: true } }, sendLibrary(file()));
+  }
+  // The map label fonts (maps/fonts.js), so the creator's preview writes labels like the server's picture.
+  for (const font of LABEL_FONT_FILES) {
+    app.get(font.url, { config: { public: true } }, sendFile(font.file(), CONTENT_TYPES['.woff2']));
   }
   // The dice's sounds and textures, from the same package (dice-box.js asks for /vendor/dice/sounds/... and
   // /vendor/dice/textures/...; a texture is only fetched when a dice style uses it).

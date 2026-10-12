@@ -11,6 +11,9 @@
     "./gear.js": "./src/gear.js",
     "./map.js": "./src/map.js",
     "./map-design.js": "./src/map-design.js",
+    "./map-paint.js": "./src/map-paint.js",
+    "./map-art.js": "./src/map-art.js",
+    "./map-art-assets.js": "./src/map-art-assets.js",
     "./citations.js": "./src/citations.js",
     "./coins.js": "./src/coins.js",
     "./settings.js": "./src/settings.js"
