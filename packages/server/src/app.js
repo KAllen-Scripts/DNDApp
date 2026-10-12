@@ -24,6 +24,7 @@ import { registerCombat } from './routes/combat.js';
 import { registerCreatures } from './routes/creatures.js';
 import { registerItems } from './routes/items.js';
 import { registerMerchants } from './routes/merchants.js';
+import { registerMapCreator } from './routes/map-creator.js';
 import { registerRests } from './routes/rests.js';
 
 /**
@@ -109,6 +110,7 @@ function serveWebPage(app, dir) {
     '/shared/gear.js': '@dndapp/shared/gear.js',
     '/shared/settings.js': '@dndapp/shared/settings.js',
     '/shared/map.js': '@dndapp/shared/map.js',
+    '/shared/map-design.js': '@dndapp/shared/map-design.js',
     '/shared/coins.js': '@dndapp/shared/coins.js',
     '/vendor/marked.js': 'marked',
     '/vendor/purify.js': 'dompurify',
@@ -242,7 +244,7 @@ export function exposureWarnings({ host, publicUrl }) {
 
 const trustProxySetting = (v) => (v === 'true' ? true : v === 'false' || v === 'off' || v === '' ? false : v);
 
-export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, handouts, creatures, rolls, rests, items, itemFinder, merchants, archive, config, logger = true }) {
+export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, handouts, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, archive, config, logger = true }) {
   const app = Fastify({
     logger,
     bodyLimit: SMALL_BODY,
@@ -347,7 +349,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     !db.prepare('SELECT 1 FROM attendance WHERE session_id = ?').get(sessionId);
 
   // The routes, by part of the app (routes/). Each takes what it needs from r and adds what later ones use.
-  const r = { db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, handouts, creatures, rolls, rests, items, itemFinder, merchants, archive, config, upload, requireAdmin, access, openLiveStream, forViewer, attended, openSse, publicMessage, DATE };
+  const r = { db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, spells, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, handouts, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, archive, config, upload, requireAdmin, access, openLiveStream, forViewer, attended, openSse, publicMessage, DATE };
   registerAccounts(app, r);
   registerCampaign(app, r);
   registerCharacters(app, r);
@@ -357,6 +359,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   registerCreatures(app, r);
   registerItems(app, r);
   registerMerchants(app, r);
+  registerMapCreator(app, r);
   registerRests(app, r);
 
   serveWebPage(app, config.webDir);

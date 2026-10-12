@@ -2,12 +2,13 @@
  * Maps: the shape of a map document, and the geometry both the server and
  * the page need (token sizes, snapping to the grid, distances).
  *
- * Plain JS with no imports, like sheet.js and dice.js: the server normalises
+ * Plain JS (it imports only map-design.js, maps made in the creator): the server normalises
  * every saved map with this, and the page loads the same file from
  * /shared/map.js to snap and measure while a token is being dragged.
  *
  * Positions are in the map image's own pixels; a token's x/y is its centre.
  */
+import { normalizeDesign } from './map-design.js';
 
 export const MAP_KINDS = ['battle', 'dungeon', 'building', 'town', 'region', 'world', 'other'];
 export const TOKEN_KINDS = ['pc', 'npc', 'enemy'];
@@ -28,7 +29,7 @@ export const MAX_FOG_SHAPES = 1000;
 export const FOG_OPS = ['reveal', 'cover'];
 export const MAX_WALLS = 2000;
 /** Where a wall came from: drawn by the DM, or drafted by the AI from the picture. */
-export const WALL_SOURCES = ['dm', 'ai', 'file']; // drawn by the DM, drafted by the AI, or from a map maker's file (.dd2vtt)
+export const WALL_SOURCES = ['dm', 'ai', 'file', 'creator']; // drawn by the DM, drafted by the AI, from a map maker's file (.dd2vtt), or from a map made in the app's creator
 /**
  * What a wall stops: 'wall' blocks sight and movement; 'low' (an obstacle:
  * a building seen from above, a cliff, a fence) only blocks movement, so
@@ -281,7 +282,8 @@ function normalizeFound(f) {
 export function normalizeMap(input = {}) {
   const m = input && typeof input === 'object' ? input : {};
   const image = {
-    file: /^image\.(png|jpg|webp)$/.test(m.image?.file) ? m.image.file : 'image.png',
+    // A map made in the creator gets a new picture each time it's saved again (image-r2.webp...).
+    file: /^image(-r\d{1,6})?\.(png|jpg|webp)$/.test(m.image?.file) ? m.image.file : 'image.png',
     type: pick(m.image?.type, ['image/png', 'image/jpeg', 'image/webp'], 'image/png'),
     width: num(m.image?.width, { min: 1, max: 100_000, fallback: 1 }),
     height: num(m.image?.height, { min: 1, max: 100_000, fallback: 1 }),
@@ -329,6 +331,8 @@ export function normalizeMap(input = {}) {
     variant: null,
     // Stairs and doors to another map.
     links: normalizeLinks(m.links, image),
+    // A map made in the app's creator: what the DM made it from (the DM's alone; players never get it).
+    design: m.design && typeof m.design === 'object' ? normalizeDesign(m.design) : null,
     tokens: [],
   };
   if (out.variants.some((v) => v.id === m.variant)) out.variant = m.variant;

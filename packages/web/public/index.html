@@ -270,6 +270,8 @@
     <!-- A merchant's shop (merchants.js): players open it from the merchant's token and buy. -->
     <dialog id="shop-dialog" class="map-dialog shop-dialog"></dialog>
     <dialog id="shop-item-dialog" class="map-dialog"></dialog>
+    <!-- The DM's map creator (map-creator.js). -->
+    <dialog id="map-creator" class="map-creator"></dialog>
 
     <!-- Maps (map.js): the DM imports and sets them up; players move their own token. -->
     <section id="tab-map" class="panel map-panel" hidden>
@@ -309,6 +311,7 @@
         <select id="map-variant" class="dm-only" aria-label="Which picture of the map everyone sees" title="Which picture of the map everyone sees" hidden></select>
         <button id="map-settings" class="ghost dm-only map-edit-tool map-needs-map">Map settings</button>
         <button id="map-import" class="ghost dm-only map-edit-tool">Import map</button>
+        <button id="map-create" class="ghost dm-only map-edit-tool" title="Make a map from scratch: paint floors, draw rooms, walls and doors, and place furniture, trees and your own pictures">Make a map</button>
         <input id="map-file" type="file" accept="image/png,image/jpeg,image/webp,application/pdf,.pdf,.dd2vtt,.uvtt,.df2vtt" hidden>
       </div>
       <div id="map-fog-tools" class="map-bar map-fog-tools dm-only" hidden>

@@ -13,7 +13,8 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { normalizeMap, normalizePins, canSee, healthOf, speedFromText } from '@dndapp/shared/map.js';
+import { MAX_LIGHTS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, canSee, healthOf, speedFromText } from '@dndapp/shared/map.js';
+import { designToMap } from '@dndapp/shared/map-design.js';
 import { computeSheet } from '@dndapp/shared/sheet.js';
 import { createSight } from './sight.js';
 import { mapEvents } from './events.js';
@@ -45,6 +46,40 @@ function doorSeen(map, polygons, w) {
   const my = (w.y1 + w.y2) / 2;
   return canSee(map, polygons, mx + nx, my + ny) || canSee(map, polygons, mx - nx, my - ny);
 }
+
+/**
+ * What a map made in the creator gets from its design, merged into the map
+ * document `m`: the grid and 5 ft squares, and its walls, doors, obstacles,
+ * lights and difficult terrain (`source: 'creator'`), replacing those from the
+ * design saved before. What the DM drew on the map, or the AI or a file
+ * added, stays. A creator wall that's the same as before keeps its id, and a
+ * door keeps whether it's open or locked.
+ */
+export function applyDesign(m, design) {
+  const g = designToMap(design);
+  const key = (w) => [w.x1, w.y1, w.x2, w.y2, w.kind, w.door].join();
+  const before = new Map((m.walls ?? []).filter((w) => w.source === 'creator').map((w) => [key(w), w]));
+  const own = (m.walls ?? []).filter((w) => w.source !== 'creator');
+  const used = new Set();
+  const walls = g.walls.map((w) => {
+    const old = before.get(key(w));
+    const id = old && !used.has(old.id) ? old.id : newTokenId();
+    used.add(id);
+    return { ...w, id, open: !!(w.door && old?.open), locked: !!(w.door && old?.locked), source: 'creator' };
+  });
+  m.walls = [...own, ...walls.slice(0, Math.max(0, MAX_WALLS - own.length))];
+  const ownLights = (m.lights ?? []).filter((l) => l.source !== 'creator');
+  m.lights = [...ownLights, ...g.lights.slice(0, Math.max(0, MAX_LIGHTS - ownLights.length)).map((l) => ({ ...l, id: newTokenId(), source: 'creator' }))];
+  const ownTerrain = (m.terrain ?? []).filter((t) => t.source !== 'creator');
+  m.terrain = [...ownTerrain, ...g.terrain.slice(0, Math.max(0, MAX_TERRAIN - ownTerrain.length)).map((t) => ({ ...t, id: newTokenId(), source: 'creator' }))];
+  m.grid = g.grid;
+  m.scale = g.scale;
+  m.design = design;
+  return m;
+}
+
+/** Which picture of a map this is: 1 for the first, 2 for image-r2.webp... (a map made in the creator gets a new one on each save). */
+const imageRev = (image) => Number(/-r(\d+)\./.exec(image.file)?.[1] ?? 1);
 
 export function createMaps({ db, archive, store, pictures = null, sheets = null }) {
   const events = new EventEmitter();
@@ -105,6 +140,41 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
       const source = pdf ? { file: 'source.pdf', page: pdf.page } : null;
       const doc = normalizeMap({ name, named, image: { file, type, width, height }, source, shown: false, reading: { status: 'pending' } });
       return write(campaignId, id, null, doc, { by, reason: 'imported', created: true });
+    },
+
+    /**
+     * A new map made in the creator. Its picture (drawn from the design by
+     * maps/design.js) is archived first, then the map with the design and what
+     * it gives (applyDesign). No AI reading is needed; it starts hidden.
+     * @param {{ name: string, design: object, image: { buf: Buffer, ext: string, type: string, width: number, height: number }, by: number }} input
+     */
+    createDesigned(campaignId, { name, design, image, by }) {
+      const c = store.getCampaign(campaignId);
+      const id = newMapId();
+      const file = `image.${image.ext}`;
+      archive.saveMapImage(c.slug, id, file, image.buf);
+      const doc = { name, named: true, kind: 'battle', image: { file, type: image.type, width: image.width, height: image.height }, shown: false, reading: { status: 'done' } };
+      return write(campaignId, id, null, normalizeMap(applyDesign(doc, design)), { by, reason: 'made in the creator', created: true });
+    },
+
+    /**
+     * A map made in the creator, changed there and saved again: the new
+     * picture is archived beside the old ones (`image-r<n>`), and the design's
+     * walls, lights and terrain replace those from before. Tokens, fog, the
+     * DM's own walls and everything else stay. If the map's size changed,
+     * where players have explored is forgotten (it no longer lines up).
+     */
+    redesign(campaignId, id, { design, image, by }) {
+      const map = maps.get(campaignId, id);
+      const file = `image-r${imageRev(map.image) + 1}.${image.ext}`;
+      archive.saveMapImage(store.getCampaign(campaignId).slug, map.id, file, image.buf);
+      const resized = map.image.width !== image.width || map.image.height !== image.height;
+      const saved = maps.change(campaignId, id, (m) => {
+        m.image = { file, type: image.type, width: image.width, height: image.height };
+        applyDesign(m, design);
+      }, { by, reason: 'changed in the creator' });
+      if (resized) sight.forget(map.id);
+      return saved;
     },
 
     /**
@@ -211,7 +281,8 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         return m && !m.removed ? m : null;
       };
       const links = map.links.map((l) => ({ ...l, target: target(l.to) }));
-      const variantKey = map.variant ? `-${map.variant}` : '';
+      // A new picture (a map saved again in the creator) changes the key, so browsers fetch it.
+      const variantKey = `${map.variant ? `-${map.variant}` : ''}${imageRev(map.image) > 1 ? `-r${imageRev(map.image)}` : ''}`;
       const out = {
         ...map,
         // The picture's file name stays on the server; `picture` is its key.
@@ -219,7 +290,9 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         links: links.map(({ target: m, ...l }) => ({ ...l, to_name: m?.name ?? null })),
       };
       delete out.campaign_id;
-      if (role === 'dm') return { ...out, image_key: `dm${variantKey}`, can_edit: true };
+      // The design is fetched on its own when the DM opens the creator (GET .../design); players never get it.
+      delete out.design;
+      if (role === 'dm') return { ...out, designed: !!map.design, image_key: `dm${variantKey}`, can_edit: true };
       if (!map.shown) return null;
       const seen = sight.forPlayer(map, userId);
       const tokens = out.tokens.filter((t) => t.user_id === userId || (!t.hidden && canSee(map, seen.polygons, t.x, t.y)));
@@ -255,6 +328,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
           .map(({ target: m, ...l }) => ({ ...l, to_name: m.name })),
         variants: map.variants.filter((v) => v.id === map.variant).map(({ id, name }) => ({ id, name })),
         image_key: `${seen.key}${variantKey}`,
+        designed: false,
         can_edit: false,
       };
     },

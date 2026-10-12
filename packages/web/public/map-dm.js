@@ -9,6 +9,7 @@ import { base, report, state, status } from './map-state.js';
 import { creatureList, creatureSaved } from './creatures.js';
 import { markdownBox } from './markdown.js';
 import { showStatBlock, statsFound } from './stat-block.js';
+import { openCreator } from './map-creator.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -161,7 +162,9 @@ export function settingsDialog() {
       h('p', { class: 'muted small' }, 'Only you see this.'),
       h('div', { class: 'map-dialog-actions' },
         h('button', { type: 'button', class: 'ghost danger', onclick: () => removeMap(map).then(() => dialog.close()) }, 'Remove map'),
-        h('button', { type: 'button', class: 'ghost', disabled: reading.status === 'pending', onclick: () => readAgain(map).then(() => dialog.close()) }, 'Read again with the AI'),
+        map.designed
+          ? h('button', { type: 'button', class: 'ghost', onclick: () => { dialog.close(); openCreator(map).catch(report); } }, 'Change in the map creator')
+          : h('button', { type: 'button', class: 'ghost', disabled: reading.status === 'pending', onclick: () => readAgain(map).then(() => dialog.close()) }, 'Read again with the AI'),
         h('span', { class: 'spacer' }),
         h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel'),
         h('button', { class: 'primary' }, 'Save'),

@@ -13,6 +13,7 @@ import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, snapToken, tokenPx, mea
 import { EDITING_KEY, PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, WALLS_EFFORT_KEY, base, report, state, status } from './map-state.js';
 import { canChangeTemplate, placeTemplate, renderTemplates, selectTemplate, templateControls, templateDialog, templateMove, templateUp } from './map-templates.js';
 import { openShop } from './merchants.js';
+import { openCreator } from './map-creator.js';
 import { chooseTokenPicture, fillStats, forgetPlayers, importMap, recordDialog, removeToken, removeTokenPicture, saveCreature, settingsDialog, statsDialog, tokenDialog } from './map-dm.js';
 import { renderCombat } from './map-combat.js';
 import { initMapFull } from './map-full.js';
@@ -173,7 +174,7 @@ export function render() {
     $('#map-signals').replaceChildren();
     empty.hidden = false;
     empty.textContent = state.canEdit
-      ? 'No maps yet. Import one: a battle map, a town, a region, anything. The AI reads its grid and scale, then you can add tokens.'
+      ? 'No maps yet. Import one (a battle map, a town, a region, anything: the AI reads its grid and scale), or make one from scratch with Make a map. Then add tokens.'
       : 'No maps to see yet. Your DM shares them here.';
     status('');
     return;
@@ -1491,6 +1492,7 @@ export function initMapActions() {
     if (state.current) renderGrid();
   });
   $('#map-import').addEventListener('click', () => $('#map-file').click());
+  $('#map-create').addEventListener('click', () => openCreator().catch(report));
   $('#map-file').addEventListener('change', (e) => {
     const file = e.target.files[0];
     e.target.value = '';
