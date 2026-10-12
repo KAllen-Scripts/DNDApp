@@ -412,7 +412,7 @@ export function drawFloorCell(ctx, ch, col, row, cell) {
   }
   const rnd = seeded(col, row, ch.charCodeAt(0));
   // Built floors (tiles, boards, stones) vary square to square; natural ones barely, so they read as one ground.
-  const jitter = (rnd() - 0.5) * ('sfwc'.includes(ch) ? 0.06 : 0.015);
+  const jitter = (rnd() - 0.5) * ('sfwc'.includes(ch) ? 0.06 : 0.01);
   ctx.fillStyle = shade(f.base, jitter);
   ctx.fillRect(x, y, cell, cell);
   const specks = (n, size, spread) => {

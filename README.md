@@ -111,6 +111,8 @@ Besides transcripts and notes, the archivist gets each player's character sheet 
 
 The **Map** tab shows maps the DM imported: a battle map, a town, a region, anything (PNG, JPEG or WebP, or one page of a PDF). After an import the AI reads the map in the background: what kind it is, a name, whether it has a grid and its scale. Where it sees a grid, the server measures the exact square size from the image, so tokens line up. The DM can correct the grid (it's drawn over the map while the settings are open) and the scale under **Map settings**, and decides when players can see the map (new maps start hidden).
 
+The DM can also **make a map from scratch** with **Make a map**: paint floors (stone, wood, grass, water and more) on a grid of 5 ft squares, drag out rooms, draw walls, fences and doors, and place trees, furniture, pillars, campfires and the like, or your own pictures (Add a picture…, a PNG with a see-through background works best). Save it and the server draws it into an ordinary map, with its grid, walls, doors, obstacles, lights and difficult terrain already set up. To change it later: Map settings → Change in the map creator.
+
 The DM adds **tokens** for player characters (tied to a player), NPCs and enemies, with a size from Tiny to Gargantuan and a colour. **Players can drag their own token; the DM can drag any.** Tokens snap to the grid, the distance moved shows while dragging, and every move appears live on everyone's screen. Drag the map to pan; zoom with the mouse wheel or by pinching. The image and every change are archived.
 
 For running a fight, the DM has:
@@ -157,7 +159,7 @@ The first time a transcript is processed, the server downloads a small search mo
 
 Everything lives in `data/` (git-ignored):
 
-- `data/archive/` is the permanent record: accounts, original transcripts, player notes (every version), character sheets (every change, plus uploaded files), character pictures, maps (the images or PDFs as imported, other pictures of them, token pictures, every change, and everyone's private pins), handouts, the DM's creatures, items and merchants (with recent sales), the rests the DM called (`rests.jsonl`), the campaign's settings (`settings.json`), speaker map, glossary, DM corrections, and a snapshot of the knowledge base after every archivist run. **Back this folder up.**
+- `data/archive/` is the permanent record: accounts, original transcripts, player notes (every version), character sheets (every change, plus uploaded files), character pictures, maps (the images or PDFs as imported, the pictures drawn for maps made in the creator, other pictures of them, token pictures, every change, and everyone's private pins), handouts, the DM's creatures, items and merchants (with recent sales), the DM's own map creator assets, the rests the DM called (`rests.jsonl`), the campaign's settings (`settings.json`), speaker map, glossary, DM corrections, and a snapshot of the knowledge base after every archivist run. **Back this folder up.**
 - `data/dndapp.sqlite` is the working database. It can be rebuilt from the archive.
 
 ### Rebuilding
@@ -254,6 +256,11 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | PATCH / DELETE | `/campaigns/:cid/handouts/:hid` | Change one (DM) `{title?, text?, to?}` / take it back (DM; kept in the archive) |
 | GET | `/campaigns/:cid/handouts/:hid/image` | A handout's picture (only for those it was given to, and the DM) |
 | GET / POST | `/campaigns/:cid/maps` | Maps you can see `{can_edit, maps}` (players: only shown maps, without the AI's description) / import one (DM) `{filename, data (base64), name?, page?}` (an image, or a PDF and the page to use, default 1); the AI reads it in the background. 429 past `MAP_AI_PER_HOUR` AI calls |
+| POST | `/campaigns/:cid/maps/design` | Make a map in the creator (DM) `{name, design}` (SPEC §6.6 "Making a map"): the server draws its picture and sets up its grid, walls, doors, lights and difficult terrain; starts hidden |
+| GET / PUT | `/campaigns/:cid/maps/:mid/design` | A made map's design (DM) `{design}` / save it again `{design}`: a new picture, the creator's walls, lights and terrain replaced, everything else kept |
+| GET / POST | `/campaigns/:cid/map-assets` | The DM's own assets for the creator `{assets}` / add one `{name?, filename?, data (base64), blocks?: none \| low \| wall}` (DM) |
+| PATCH / DELETE | `/campaigns/:cid/map-assets/:aid` | Rename it or change what it blocks `{name?, blocks?}` / take it off the list (maps using it keep it) (DM) |
+| GET | `/campaigns/:cid/map-assets/:aid/picture` | An asset's picture, at most 512 px, WebP (DM) |
 | GET | `/campaigns/:cid/maps/events` | Live changes (SSE): `map` (the map as you may see it), `gone` `{id}`, and pings and sketches `ping` / `draw` `{map_id, by, name, color, points}` |
 | GET / PATCH / DELETE | `/campaigns/:cid/maps/:mid` | One map / change it (DM) `{name?, shown?, grid?: {size, x, y} \| null, scale?: {distance, unit, per: square \| width} \| null, variant?: id \| null}` / remove it (DM; kept in the archive) |
 | GET | `/campaigns/:cid/maps/:mid/image` | The picture showing (the original or the chosen variant) (players: blacked out where they can't see, dimmed where they've seen before) |
