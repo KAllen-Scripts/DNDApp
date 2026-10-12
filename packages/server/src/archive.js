@@ -29,6 +29,8 @@
  *     items/<id>/changes.jsonl         the whole item after each change, append-only
  *     merchants/<id>/<picture file>    a merchant's picture, as uploaded
  *     merchants/<id>/changes.jsonl     the whole merchant (stock, prices, sales) after each change, append-only
+ *     map_assets/<id>/<picture file>   one of the DM's own assets for the map creator, as uploaded
+ *     map_assets/<id>/changes.jsonl    the whole asset after each change, append-only
  *     rests.jsonl                      short and long rests the DM called, append-only
  *     sessions/0001/
  *       transcript.txt                 byte-for-byte as uploaded, read-only
@@ -58,8 +60,8 @@ const userDir = (id) => {
   if (!Number.isInteger(Number(id)) || Number(id) <= 0) throw new Error(`Bad user id: ${id}`);
   return String(Number(id));
 };
-/** The archive folders the DM's items and merchants live in. */
-const LIBRARY_FOLDERS = ['items', 'merchants'];
+/** The archive folders the DM's items, merchants and map creator assets live in. */
+const LIBRARY_FOLDERS = ['items', 'merchants', 'map_assets'];
 const libraryDir = (folder) => {
   if (!LIBRARY_FOLDERS.includes(folder)) throw new Error(`Bad library folder: ${folder}`);
   return folder;
@@ -356,6 +358,7 @@ export function createArchive(root) {
           creatures,
           items: lastOfEach('items'),
           merchants: lastOfEach('merchants'),
+          mapAssets: lastOfEach('map_assets'),
           rests: readLines(path.join(campaignDir(slug), 'rests.jsonl')),
         };
       }
