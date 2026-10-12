@@ -273,7 +273,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | POST | `/campaigns/:cid/maps/:mid/links/:lid/use` | Take a token through a link `{token}` → `{map (the other one), token (its id there)}`. A player: their own character, within a square and a half, to a shown map. The DM: any token |
 | POST | `/campaigns/:cid/maps/:mid/ping` / `draw` | Ping a spot `{x, y}` / sketch a line `{points: [[x, y], ...]}` (2 to 500) for everyone looking; not saved; 20 per 10 s |
 | POST | `/campaigns/:cid/maps/:mid/doors/:wid/toggle` | Open or close a door. The DM: any. A player: a door they can see, not locked, within a square and a half of their token |
-| POST | `/campaigns/:cid/maps/:mid/walls/draft` | The AI drafts walls and doors from the picture, in the background (DM). Replaces its earlier draft; the DM's own walls stay |
+| POST | `/campaigns/:cid/maps/:mid/walls/draft` | The AI drafts walls and doors from the picture, in the background (DM). `{ effort? }`: `low` to `max`, else `EFFORT_WALLS`. Replaces its earlier draft; the DM's own walls stay |
 | GET | `/campaigns/:cid/maps/records` | The campaign's records, people first, for linking a token (DM) |
 | GET | `/campaigns/:cid/maps/records/:rid` | One record (DM); `?title=` finds it if its id changed |
 | POST | `/campaigns/:cid/maps/:mid/read` | Read the map with the AI again (DM) |

@@ -515,6 +515,13 @@ test('AI walls: the DM sees it working (step and time so far), then what it foun
     await openMapTab(page);
     assert.ok(!page.visible('#map-ai-note'), 'nothing to say yet');
     page.click('#map-fog-open');
+    // How hard the AI thinks: the server's default unless the DM picks one (kept in this browser).
+    const effort = page.$('#map-walls-effort');
+    assert.equal(effort.value, '');
+    assert.equal(effort.selectedOptions[0].textContent, 'Effort: default (Extra high)');
+    assert.deepEqual([...effort.options].map((o) => o.value), ['', 'low', 'medium', 'high', 'xhigh', 'max']);
+    page.type('#map-walls-effort', 'high');
+    assert.equal(page.window.localStorage.getItem('dndapp.map.wallsEffort'), 'high');
     const button = page.$('#map-walls-draft');
     page.click('#map-walls-draft');
     // Straight away, before the server answers.
@@ -525,6 +532,8 @@ test('AI walls: the DM sees it working (step and time so far), then what it foun
     assert.equal(button.textContent, 'AI walls: working…');
     assert.ok(button.classList.contains('busy'));
     assert.equal(button.getAttribute('aria-busy'), 'true');
+    assert.ok(effort.disabled, 'no changing it mid-draft');
+    assert.equal(llm.calls.find((c) => c.purpose === 'map:walls').effort, 'high');
     assert.ok(page.$('#map-ai-note .spinner'));
     assert.match(page.text('#map-ai-note'), /AI walls: tracing the walls, doors and lights… \d+ s so far\./);
     assert.match(page.text('#map-ai-note'), /carry on meanwhile/);
@@ -535,7 +544,8 @@ test('AI walls: the DM sees it working (step and time so far), then what it foun
 
     release();
     await page.waitFor(() => /AI walls done/.test(page.text('#map-ai-note')), { what: 'the done message' });
-    assert.match(page.text('#map-ai-note'), /AI walls done: 1 wall and 1 door in \d+ s\. They're drawn in purple/);
+    assert.match(page.text('#map-ai-note'), /AI walls done: 1 wall and 1 door in \d+ s \(high effort\)\. They're drawn in purple/);
+    assert.ok(!effort.disabled);
     assert.match(page.text('#map-ai-note'), /Rough around the tower\./);
     assert.equal(button.textContent, 'AI walls');
     assert.ok(!button.disabled);

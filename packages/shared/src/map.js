@@ -53,6 +53,9 @@ const num = (v, { min, max, fallback = null }) => {
   return Math.min(max, Math.max(min, n));
 };
 const pick = (v, list, fallback) => (list.includes(v) ? v : fallback);
+
+/** How hard the AI thinks, least to most: the DM picks one for AI walls. */
+export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 /** A date and time as an ISO string, or '' if it isn't one. */
 const isoStr = (v) => (typeof v === 'string' && v.length <= 40 && !Number.isNaN(Date.parse(v)) ? v : '');
 const color = (v, fallback) => (/^#[0-9a-f]{6}$/i.test(String(v)) ? String(v).toLowerCase() : fallback);
@@ -315,6 +318,8 @@ export function normalizeMap(input = {}) {
       parts: Math.round(num(m.wall_draft?.parts, { min: 0, max: 9, fallback: 0 })),
       parts_done: Math.round(num(m.wall_draft?.parts_done, { min: 0, max: 9, fallback: 0 })),
       started_at: isoStr(m.wall_draft?.started_at),
+      // The effort it ran at ('' before this was kept).
+      effort: pick(m.wall_draft?.effort, EFFORTS, ''),
       finished_at: isoStr(m.wall_draft?.finished_at),
       // What the finished draft holds, for the DM's "done" message.
       found: normalizeFound(m.wall_draft?.found),
