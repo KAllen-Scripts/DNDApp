@@ -208,6 +208,18 @@ CREATE TABLE IF NOT EXISTS merchants (
 );
 CREATE INDEX IF NOT EXISTS merchants_campaign ON merchants(campaign_id);
 
+-- The DM's own assets for the map creator (pictures placed on maps made in
+-- the app). Archived as map_assets/<id>/changes.jsonl (the whole asset each
+-- time) plus its picture. Schema v16.
+CREATE TABLE IF NOT EXISTS map_assets (
+  id           TEXT PRIMARY KEY,  -- random, also the archive folder name
+  campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  data         TEXT NOT NULL,     -- JSON; see normalizeMapAsset in src/map-assets.js
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS map_assets_campaign ON map_assets(campaign_id);
+
 -- ---------- DERIVED ----------
 
 -- How far the archivist has read sheet changes and note edits (see kb/updates.js). Schema v11.
