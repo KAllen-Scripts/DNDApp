@@ -407,7 +407,9 @@ export function registerMaps(app, r) {
   /**
    * Take a token through a link to the other map: { token }. Players move their own character, standing
    * next to a link they can see, to a map the DM has shown; the DM can send any token. It arrives at the
-   * link on the other map that leads back here, or the middle of that map.
+   * link on the other map that leads back here, or the middle of that map. Between levels of the same
+   * building (the same size), it arrives where it was: at the way back nearest the link it took, or the
+   * same spot if there's none.
    */
   app.post('/campaigns/:cid/maps/:mid/links/:lid/use', async (request) => {
     const a = access(request);
@@ -423,7 +425,9 @@ export function registerMaps(app, r) {
     const target = maps.get(a.cid, link.to);
     if (!dm && !target.shown) throw new NotFoundError('No such map');
     if (target.tokens.length >= MAX_TOKENS) throw new BadRequestError(`${target.name} is full.`);
-    const back = target.links.find((l) => l.to === map.id);
+    const levels = map.level && target.level?.group === map.level.group && target.image.width === map.image.width && target.image.height === map.image.height;
+    const backs = target.links.filter((l) => l.to === map.id);
+    const back = levels ? backs.sort((p, q) => Math.hypot(p.x - link.x, p.y - link.y) - Math.hypot(q.x - link.x, q.y - link.y))[0] ?? { x: link.x, y: link.y } : backs[0];
     const { x, y } = snapToken(target, token, back?.x ?? target.image.width / 2, back?.y ?? target.image.height / 2);
     maps.change(a.cid, map.id, (m) => {
       if (m.combat?.turn === token.id) Object.assign(m.combat, stepTurn(m.combat, 1));
@@ -484,15 +488,20 @@ export function registerMaps(app, r) {
   /**
    * Walls and doors (DM): { add?: {x1, y1, x2, y2, door?, kind?: wall | low}, curve?: {x1, y1, mx, my, x2, y2, kind?}
    * (a curved wall through the middle point), circle?: {x, y, r, kind?} (a round wall), remove?: id (with the rest of
-   * its curve), toggle?: id (open or close a door), lock?: id (lock or unlock a door), clear?: ai | all }. Curves are
-   * stored as short straight pieces sharing a `group`. Walls block line of sight and players' tokens, obstacles ('low')
-   * only tokens. Players never get walls, only the doors they can see.
+   * its curve), toggle?: id (open or close a door), lock?: id (lock or unlock a door), secret?: id (make a door a
+   * secret door, or an ordinary one again), reveal?: id (a secret door found, or hidden again and shut), clear?: ai |
+   * all }. Curves are stored as short straight pieces sharing a `group`. Walls block line of sight and players' tokens,
+   * obstacles ('low') only tokens. Players never get walls, only the doors they can see (not secret doors they haven't
+   * found; opening one finds it).
    */
   app.patch('/campaigns/:cid/maps/:mid/walls', async (request) => {
     const a = access(request, { dm: true });
     const { map } = viewableMap(request);
     const body = z
-      .object({ add: WALL.optional(), curve: CURVE.optional(), circle: CIRCLE.optional(), remove: z.string().max(20).optional(), toggle: z.string().max(20).optional(), lock: z.string().max(20).optional(), clear: z.enum(['ai', 'all']).optional() })
+      .object({
+        add: WALL.optional(), curve: CURVE.optional(), circle: CIRCLE.optional(), remove: z.string().max(20).optional(), toggle: z.string().max(20).optional(),
+        lock: z.string().max(20).optional(), secret: z.string().max(20).optional(), reveal: z.string().max(20).optional(), clear: z.enum(['ai', 'all']).optional(),
+      })
       .parse(request.body ?? {});
     // A curve or circle, as its pieces.
     let pieces = null;
@@ -504,12 +513,13 @@ export function registerMaps(app, r) {
     }
     const adding = body.add ? 1 : pieces ? pieces.length - 1 : 0;
     if (adding && map.walls.length + adding > MAX_WALLS) throw new BadRequestError(`A map can have at most ${MAX_WALLS} walls.`);
-    for (const id of [body.remove, body.toggle, body.lock]) {
+    for (const id of [body.remove, body.toggle, body.lock, body.secret, body.reveal]) {
       if (id !== undefined && !map.walls.some((w) => w.id === id)) throw new NotFoundError('No such wall');
     }
-    for (const id of [body.toggle, body.lock]) {
+    for (const id of [body.toggle, body.lock, body.secret, body.reveal]) {
       if (id && !map.walls.find((w) => w.id === id).door) throw new BadRequestError("That's a wall, not a door.");
     }
+    if (body.reveal && !map.walls.find((w) => w.id === body.reveal).secret) throw new BadRequestError("That isn't a secret door.");
     const saved = maps.change(a.cid, map.id, (m) => {
       if (body.clear === 'all') m.walls = [];
       if (body.clear === 'ai') m.walls = m.walls.filter((w) => w.source !== 'ai');
@@ -527,6 +537,17 @@ export function registerMaps(app, r) {
         door.locked = !door.locked;
         if (door.locked) door.open = false;
       }
+      if (body.secret) {
+        const door = m.walls.find((w) => w.id === body.secret);
+        door.secret = !door.secret;
+        door.revealed = false;
+      }
+      if (body.reveal) {
+        // Found (players see it as a door from now on), or hidden again: shut, and wall to them once more.
+        const door = m.walls.find((w) => w.id === body.reveal);
+        door.revealed = !door.revealed;
+        if (!door.revealed) door.open = false;
+      }
       if (body.add) m.walls.push({ ...body.add, id: newTokenId(), open: false, source: 'dm' });
       if (pieces) {
         const group = newTokenId();
@@ -535,7 +556,7 @@ export function registerMaps(app, r) {
           m.walls.push({ x1: pieces[i - 1].x, y1: pieces[i - 1].y, x2: pieces[i].x, y2: pieces[i].y, door: false, kind, id: newTokenId(), open: false, source: 'dm', group });
         }
       }
-    }, { by: request.user.id, reason: body.toggle ? 'door' : 'walls' });
+    }, { by: request.user.id, reason: body.toggle || body.reveal ? 'door' : 'walls' });
     return maps.view(saved, a);
   });
 

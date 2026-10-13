@@ -1199,6 +1199,7 @@ button.busy:disabled { opacity: 1; }
 .map-walls .door-grain { stroke: #5a3510; stroke-width: 1.5px; }
 .map-walls .door.locked { stroke: #e0563f; }
 .map-walls .door.open { stroke-width: 5px; }
+.map-walls .door.secret { stroke: #9b7be0; stroke-dasharray: 10 6; }
 .map-walls .door-post { stroke: #f5f0e6; stroke-width: 4px; }
 .map-walls .doorway { stroke: #ffb74d; stroke-width: 2px; stroke-dasharray: 3 5; }
 .map-walls .door-swing { fill: none; stroke: #ffb74d; stroke-width: 1.5px; stroke-dasharray: 2 4; vector-effect: non-scaling-stroke; }

@@ -13,7 +13,7 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { MAX_LIGHTS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, canSee, healthOf, speedFromText } from '@dndapp/shared/map.js';
+import { MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, canSee, doorKnown, healthOf, speedFromText } from '@dndapp/shared/map.js';
 import { designToMap } from '@dndapp/shared/map-design.js';
 import { computeSheet } from '@dndapp/shared/sheet.js';
 import { createSight } from './sight.js';
@@ -49,15 +49,17 @@ function doorSeen(map, polygons, w) {
 
 /**
  * What a map made in the creator gets from its design, merged into the map
- * document `m`: the grid and 5 ft squares, and its walls, doors, obstacles,
- * lights and difficult terrain (`source: 'creator'`), replacing those from the
- * design saved before. What the DM drew on the map, or the AI or a file
- * added, stays. A creator wall that's the same as before keeps its id, and a
- * door keeps whether it's open or locked.
+ * document `m`: the grid and 5 ft squares, and its walls, doors, secret
+ * doors, obstacles, lights, difficult terrain and ways to other maps
+ * (`source: 'creator'`), replacing those from the design saved before. What
+ * the DM drew on the map, or the AI or a file added, stays. A creator wall
+ * that's the same as before keeps its id, and a door keeps whether it's open
+ * or locked (a secret door, whether it's been found); a way to another map
+ * from the same place to the same map keeps its id.
  */
 export function applyDesign(m, design) {
   const g = designToMap(design);
-  const key = (w) => [w.x1, w.y1, w.x2, w.y2, w.kind, w.door].join();
+  const key = (w) => [w.x1, w.y1, w.x2, w.y2, w.kind, w.door, !!w.secret].join();
   const before = new Map((m.walls ?? []).filter((w) => w.source === 'creator').map((w) => [key(w), w]));
   const own = (m.walls ?? []).filter((w) => w.source !== 'creator');
   const used = new Set();
@@ -65,9 +67,13 @@ export function applyDesign(m, design) {
     const old = before.get(key(w));
     const id = old && !used.has(old.id) ? old.id : newTokenId();
     used.add(id);
-    return { ...w, id, open: !!(w.door && old?.open), locked: !!(w.door && old?.locked), source: 'creator' };
+    return { ...w, id, open: !!(w.door && old?.open), locked: !!(w.door && old?.locked), ...(w.secret && { revealed: !!old?.revealed }), source: 'creator' };
   });
   m.walls = [...own, ...walls.slice(0, Math.max(0, MAX_WALLS - own.length))];
+  const linkKey = (l) => [l.x, l.y, l.to].join();
+  const oldLinks = new Map((m.links ?? []).filter((l) => l.source === 'creator').map((l) => [linkKey(l), l]));
+  const ownLinks = (m.links ?? []).filter((l) => l.source !== 'creator');
+  m.links = [...ownLinks, ...g.links.slice(0, Math.max(0, MAX_LINKS - ownLinks.length)).map((l) => ({ ...l, id: oldLinks.get(linkKey(l))?.id ?? newTokenId(), source: 'creator' }))];
   const ownLights = (m.lights ?? []).filter((l) => l.source !== 'creator');
   m.lights = [...ownLights, ...g.lights.slice(0, Math.max(0, MAX_LIGHTS - ownLights.length)).map((l) => ({ ...l, id: newTokenId(), source: 'creator' }))];
   const ownTerrain = (m.terrain ?? []).filter((t) => t.source !== 'creator');
@@ -146,14 +152,14 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
      * A new map made in the creator. Its picture (drawn from the design by
      * maps/design.js) is archived first, then the map with the design and what
      * it gives (applyDesign). No AI reading is needed; it starts hidden.
-     * @param {{ name: string, design: object, image: { buf: Buffer, ext: string, type: string, width: number, height: number }, by: number }} input
+     * @param {{ name: string, design: object, image: { buf: Buffer, ext: string, type: string, width: number, height: number }, level?: { group: string, n: number } | null, by: number }} input
      */
-    createDesigned(campaignId, { name, design, image, by }) {
+    createDesigned(campaignId, { name, design, image, level = null, by }) {
       const c = store.getCampaign(campaignId);
       const id = newMapId();
       const file = `image.${image.ext}`;
       archive.saveMapImage(c.slug, id, file, image.buf);
-      const doc = { name, named: true, kind: 'battle', image: { file, type: image.type, width: image.width, height: image.height }, shown: false, reading: { status: 'done' } };
+      const doc = { name, named: true, kind: 'battle', image: { file, type: image.type, width: image.width, height: image.height }, shown: false, reading: { status: 'done' }, level };
       return write(campaignId, id, null, normalizeMap(applyDesign(doc, design)), { by, reason: 'made in the creator', created: true });
     },
 
@@ -306,8 +312,9 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         lights: [],
         // Difficult terrain where they can see any of it.
         terrain: map.terrain.filter((a) => a.points.some(([x, y]) => canSee(map, seen.polygons, x, y))),
+        // A secret door looks like wall until it's found.
         doors: map.walls
-          .filter((w) => w.door && doorSeen(map, seen.polygons, w))
+          .filter((w) => doorKnown(w) && doorSeen(map, seen.polygons, w))
           .map(({ id, x1, y1, x2, y2, open, locked }) => ({ id, x1, y1, x2, y2, open, locked })),
         wall_draft: { status: '', error: '', notes: '', step: '', parts: 0, parts_done: 0, started_at: '', finished_at: '', found: null },
         fog: { ...map.fog, shapes: [], mask: seen.mask },
