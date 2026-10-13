@@ -128,7 +128,7 @@ test('Q&A can search, read and browse the books; without books it has no book to
   }
 });
 
-test('books: PDF text pieces are joined by position, so OCR layers read as words', () => {
+test('regression: books: PDF text pieces are joined by position, so OCR layers read as words', () => {
   const at = (str, x, { y = 700, w = str.length * 5, eol = false } = {}) => ({ str, transform: [10, 0, 0, 10, x, y], width: w, height: 10, hasEOL: eol });
   const items = [
     at('H', 36, { w: 13 }), at('eavy', 49), at(' ', 69, { w: 12 }), at('rain', 81, { eol: true }),
