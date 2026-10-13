@@ -16,7 +16,7 @@ import { SheetConflictError } from '../sheets/store.js';
 import { SpendingCapError } from '../llm/index.js';
 
 export function registerCharacters(app, r) {
-  const { access, archive, auth, config, db, itemFinder, items, maps, pictureDescriber, pictures, publicMessage, sheetImport, sheets, spells, store, upload } = r;
+  const { access, archive, auth, config, db, editions, itemFinder, items, maps, pictureDescriber, pictures, publicMessage, sheetImport, sheetReview, sheets, spells, store, upload } = r;
 
   // ---------- character sheets (private to their player) ----------
 
@@ -88,6 +88,29 @@ export function registerCharacters(app, r) {
     });
     const saved = sheets.save(cid, request.user.id, sheet, { reason: `uploaded ${filename}` });
     return { ...saved, notes };
+  });
+
+  /**
+   * Review your saved sheet: is it valid for its level, classes and race?
+   * Rules checks the server works out (free), then the AI against the group's
+   * books (and the web for what they don't cover). Returns { edition,
+   * summary, findings: [{ severity: problem|check, area, message, source }],
+   * ai: whether the AI part ran, error?: why it didn't, lookups }. Nothing is saved.
+   */
+  app.post('/campaigns/:cid/sheet/review', async (request) => {
+    const { cid } = sheetOwner(request);
+    const { sheet, version } = sheets.get(cid, request.user.id);
+    if (!version) throw new BadRequestError('Fill in your sheet first: there is nothing to review yet.');
+    const checks = sheetReview.checks(sheet);
+    const edition = await editions.of(cid);
+    try {
+      const ai = await sheetReview.ai(sheet, { campaignId: cid, userId: request.user.id, beforeAi: sheetAiAllowed(request.user.id) });
+      return { edition, summary: ai.summary, findings: [...checks, ...ai.findings], ai: true, lookups: ai.lookups };
+    } catch (err) {
+      // The free checks still count; say why the rest didn't happen.
+      if (!(err instanceof RateLimitError || err instanceof SpendingCapError)) request.log.warn(err);
+      return { edition, summary: '', findings: checks, ai: false, error: `The AI couldn't review the rest of the sheet: ${publicMessage(err)}` };
+    }
   });
 
   /** The sheet as a file to keep or upload again later. */

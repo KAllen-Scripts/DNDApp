@@ -242,6 +242,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/members/:uid/token` | A member's token picture, 256 px square (anyone in the campaign) |
 | GET | `/campaigns/:cid/sheet/download` | Your sheet as a file (`{format: "dndapp-sheet", sheet}`) that can be uploaded again |
 | GET | `/campaigns/:cid/spells?q=` | Spell name suggestions (SRD and your books) |
+| POST | `/campaigns/:cid/sheet/review` | Review your saved sheet (players): rules checks, then the AI against your books (and the web for what they don't cover) → `{edition, summary, findings: [{severity: problem \| check, area, message, source}], ai, error?, lookups}`. Nothing is saved; the AI part counts towards `SHEET_AI_PER_HOUR` |
 | GET | `/campaigns/:cid/spells/lookup?name=` | A spell's details: SRD, else your books (tidied by the AI), else the AI's memory. 404 if not found; 429 past `SHEET_AI_PER_HOUR` AI calls |
 | GET | `/campaigns/:cid/gear/lookup?name=` | An item for your Inventory (players): PHB weapons and armour from the tables (also "+1 Longsword"), else your books, else the AI's memory, never the DM's own items → `{item, from: srd \| book \| ai}` (an unsaved inventory line); 404 if not found; 429 past `SHEET_AI_PER_HOUR` AI calls |
 | GET | `/campaigns/:cid/gear/pictures` | Pictures of the DM's items in your Inventory (players; bought from a merchant) → `{pictures: {item id: key}}`, only those with one |
