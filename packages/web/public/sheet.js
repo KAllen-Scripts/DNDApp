@@ -66,6 +66,8 @@ export async function loadSheet({ campaignId, userId, guarded }) {
   state.pictureUrls.clear();
   state.itemPictures.clear();
   Object.assign(state, { campaignId, userId, guarded, dirty: false, unusedDescription: '', itemPicturesLoading: null });
+  const review = $('#sheet-review-result');
+  if (review) review.hidden = true;
   const [{ sheet, version }, pictures] = await Promise.all([api('GET', `${base()}/sheet`), api('GET', `${base()}/character/pictures`)]);
   state.pictures = pictures;
   useSheet(sheet, version);
@@ -1791,6 +1793,52 @@ function refreshSummary(card, spell) {
   card.querySelector('.spell-meta').textContent = [spell.casting_time, spell.range, spell.duration].filter(Boolean).join(' · ');
 }
 
+// ---------- review ----------
+
+/**
+ * Review the saved sheet: the server's rules checks, then the AI against the
+ * group's books (and the web). Only when the player presses the button: it
+ * costs an AI call. Shown above the sheet until closed.
+ */
+async function reviewSheet() {
+  if (!state.sheet) return;
+  await flush();
+  const button = $('#sheet-review');
+  const box = $('#sheet-review-result');
+  button.disabled = true;
+  box.hidden = false;
+  box.replaceChildren(h('p', { class: 'muted' }, 'Reviewing your sheet against the rules and your books… (this can take a minute or two)'));
+  try {
+    const res = await state.guarded(() => api('POST', `${base()}/sheet/review`));
+    if (!res) { box.hidden = true; return; }
+    showReview(res);
+  } catch (err) {
+    box.replaceChildren(h('p', { class: 'error' }, `Couldn't review the sheet: ${err.message}`));
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function showReview(res) {
+  const box = $('#sheet-review-result');
+  const list = (severity) => res.findings.filter((f) => f.severity === severity).map((f) => h('li', {},
+    h('strong', {}, `${f.area}: `), f.message, f.source ? h('span', { class: 'source' }, ` (${f.source})`) : null));
+  const problems = list('problem');
+  const checks = list('check');
+  box.replaceChildren(
+    h('header', {},
+      h('h3', {}, `Sheet review (${res.edition} rules)`),
+      h('button', { type: 'button', class: 'ghost small', onclick: () => { box.hidden = true; } }, 'Close')),
+    res.summary ? h('p', {}, res.summary) : null,
+    problems.length ? h('h4', {}, 'Against the rules') : null,
+    problems.length ? h('ul', { class: 'review-problems' }, problems) : null,
+    checks.length ? h('h4', {}, 'Worth checking') : null,
+    checks.length ? h('ul', { class: 'review-checks' }, checks) : null,
+    !problems.length && !checks.length && res.ai ? h('p', {}, 'Nothing found: the sheet looks valid.') : null,
+    res.error ? h('p', { class: 'error' }, res.error) : null,
+  );
+}
+
 // ---------- upload and download ----------
 
 export function initSheetActions() {
@@ -1840,6 +1888,8 @@ export function initSheetActions() {
   });
 
   $('#sheet-print').addEventListener('click', () => window.print());
+
+  $('#sheet-review').addEventListener('click', reviewSheet);
 
   // The Inventory tab's add form: weapons and armour from the PHB tables at once, anything else from the books or the AI.
   $('#dl-gear').replaceChildren(...GEAR_NAMES.map((n) => h('option', { value: n })));

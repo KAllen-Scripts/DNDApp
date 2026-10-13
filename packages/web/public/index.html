@@ -203,12 +203,14 @@
     <section id="tab-sheet" class="panel sheet-panel" hidden>
       <div class="sheet-bar">
         <span id="sheet-status" class="muted small" role="status"></span>
+        <button id="sheet-review" class="ghost" title="Check the sheet is valid for its level, classes and race: the rules, then the AI with your books (and the web for what they don't cover)">Review sheet</button>
         <button id="sheet-upload" class="ghost">Upload a sheet</button>
         <input id="sheet-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.json,.txt,application/pdf,image/*" hidden>
         <button id="sheet-download" class="ghost">Download</button>
         <button id="sheet-print" class="ghost">Print</button>
         <button id="sheet-popout" class="ghost" title="Open your character sheet in its own window (to keep it open beside the map, or on another screen)">Pop out</button>
       </div>
+      <div id="sheet-review-result" class="notice sheet-review" role="region" aria-label="Sheet review" hidden></div>
       <div id="sheet" class="sheet"></div>
     </section>
 

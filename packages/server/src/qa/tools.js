@@ -105,6 +105,47 @@ function renderCreature(c) {
   ].filter(Boolean).join('\n');
 }
 
+/** The book tools' handlers (search_books, read_book, book_contents), clipped like other tool results. */
+function bookHandlers(books, clip, maxChars) {
+  return {
+    search_books: async ({ terms, book }) => {
+      const hits = await books.search(terms, { book });
+      if (hits.error) return hits.error;
+      return clip(
+        hits.map((h) => `--- (${h.book} p. ${h.page})\n${h.snippet}`).join('\n\n') ||
+          'No pages match. Try other terms (synonyms, the official name), or book_contents.',
+      );
+    },
+    read_book: async ({ book, page, count }) => {
+      const r = await books.readPages(book, page, count ?? 1);
+      // Two full pages, even when that's more than other tools may return: a rule cut off mid-page is worse.
+      return r.error ?? clip(r.pages.map((p) => `--- (${r.book} p. ${p.page})\n${p.text || '(no text on this page)'}`).join('\n\n'), maxChars * 2);
+    },
+    book_contents: async ({ book, from_page, to_page }) => {
+      const r = await books.contents(book, { fromPage: from_page, toPage: to_page });
+      if (r.error) return r.error;
+      const head = `${r.book} (${r.from === 'bookmarks' ? "the PDF's bookmarks" : 'headings found on the pages'}):`;
+      if (!r.entries.length) return `${head}\nNothing found in that range.`;
+      // A long contents loses its deepest levels rather than its last chapters.
+      const render = (depth) => r.entries.filter((e) => e.depth <= depth).map((e) => `${'  '.repeat(e.depth)}p. ${e.page}: ${e.title}`).join('\n');
+      let depth = Math.max(...r.entries.map((e) => e.depth));
+      while (depth > 0 && render(depth).length > maxChars) depth--;
+      const hidden = r.entries.some((e) => e.depth > depth) ? '\n(Deeper headings hidden to fit. Ask for a page range to see them.)' : '';
+      return clip(`${head}\n${render(depth)}${hidden}`);
+    },
+  };
+}
+
+/**
+ * The book tools on their own (search_books, read_book, book_contents), for
+ * other agents that look things up in the group's rulebooks (sheet reviews).
+ */
+export function bookTools(books, { maxChars = 10_000 } = {}) {
+  const clip = (s, max = maxChars) => (s.length > max ? `${s.slice(0, max)}\n…(truncated)` : s);
+  const handlers = bookHandlers(books, clip, maxChars);
+  return Object.entries(BOOK_DEFS).map(([name, d]) => ({ name, description: d.description, schema: d.schema, run: handlers[name] }));
+}
+
 /**
  * @param {object} opts
  * @param {{ userId: number, seesAll: boolean }} opts.viewer  who is asking
@@ -181,31 +222,7 @@ export function createTools({ db, store, kb, search, books, config, campaignId, 
       const found = names.map((n) => dmCreatures.find((c) => creatureKey(c.name) === creatureKey(n)) ?? `--- ${n}: not one of the DM's creatures.`);
       return clip(found.map((c) => (typeof c === 'string' ? c : renderCreature(c))).join('\n\n'));
     },
-    search_books: async ({ terms, book }) => {
-      const hits = await books.search(terms, { book });
-      if (hits.error) return hits.error;
-      return clip(
-        hits.map((h) => `--- (${h.book} p. ${h.page})\n${h.snippet}`).join('\n\n') ||
-          'No pages match. Try other terms (synonyms, the official name), or book_contents.',
-      );
-    },
-    read_book: async ({ book, page, count }) => {
-      const r = await books.readPages(book, page, count ?? 1);
-      // Two full pages, even when that's more than other tools may return: a rule cut off mid-page is worse.
-      return r.error ?? clip(r.pages.map((p) => `--- (${r.book} p. ${p.page})\n${p.text || '(no text on this page)'}`).join('\n\n'), maxChars * 2);
-    },
-    book_contents: async ({ book, from_page, to_page }) => {
-      const r = await books.contents(book, { fromPage: from_page, toPage: to_page });
-      if (r.error) return r.error;
-      const head = `${r.book} (${r.from === 'bookmarks' ? "the PDF's bookmarks" : 'headings found on the pages'}):`;
-      if (!r.entries.length) return `${head}\nNothing found in that range.`;
-      // A long contents loses its deepest levels rather than its last chapters.
-      const render = (depth) => r.entries.filter((e) => e.depth <= depth).map((e) => `${'  '.repeat(e.depth)}p. ${e.page}: ${e.title}`).join('\n');
-      let depth = Math.max(...r.entries.map((e) => e.depth));
-      while (depth > 0 && render(depth).length > maxChars) depth--;
-      const hidden = r.entries.some((e) => e.depth > depth) ? '\n(Deeper headings hidden to fit. Ask for a page range to see them.)' : '';
-      return clip(`${head}\n${render(depth)}${hidden}`);
-    },
+    ...bookHandlers(books, clip, maxChars),
   };
 
   const defs = { ...DEFS, ...(books?.status().books.length ? BOOK_DEFS : {}), ...(dmCreatures.length ? CREATURE_DEFS : {}) };

@@ -875,3 +875,29 @@ test('campaign settings: a player\u2019s sheet follows the DM\u2019s weight rule
     assert.ok(page.$('#tab-inventory .gear-warn').hidden);
   });
 });
+
+test('sheet: Review sheet shows the rules checks and the AI\'s findings above the sheet, and closes', async () => {
+  const llm = createFakeLLM({
+    qaScript: [[
+      { tool: 'submit_review', input: { summary: 'One thing to fix.', findings: [{ severity: 'problem', area: 'Class features', message: 'Action Surge comes at 2nd level.', source: "Player's Handbook p. 72" }] } },
+      { answer: 'Done.' },
+    ]],
+  });
+  await withPage(sheetPage({ setup: { llm } }), async (page) => {
+    page.click('[data-tab=sheet]');
+    assert.ok(page.el('#sheet-review-result').hidden);
+    page.type(byLabel(page, 'Class'), 'Fighter');
+    page.type(byLabel(page, 'Proficiency bonus'), '4');
+    page.click('#sheet-review');
+    await page.waitFor(() => page.$('#sheet-review-result h3'), { what: 'the review' });
+    const box = page.el('#sheet-review-result');
+    assert.equal(page.text(box.querySelector('h3')), 'Sheet review (2014 rules)');
+    assert.match(page.text(box), /One thing to fix\./);
+    const problems = page.$$('#sheet-review-result .review-problems li').map((li) => page.text(li));
+    assert.equal(problems.length, 2);
+    assert.match(problems[0], /^Proficiency bonus: The sheet says \+4; at level 1 it is \+2\./);
+    assert.match(problems[1], /Action Surge comes at 2nd level\. \(Player's Handbook p\. 72\)/);
+    page.click(page.$$('#sheet-review-result button').find((b) => page.text(b) === 'Close'));
+    assert.ok(box.hidden);
+  });
+});

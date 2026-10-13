@@ -598,6 +598,12 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 .sheet-bar button { padding: 0.35rem 0.8rem; font-size: 0.9rem; }
 .sheet-bar .sheet-modes { display: flex; align-items: center; gap: 0.35rem; }
 .sheet-bar .dice-modes button { padding: 0.25rem 0.55rem; font-size: 0.8rem; }
+.sheet-review { margin: 0.5rem 0; }
+.sheet-review header { display: flex; align-items: center; gap: 0.5rem; }
+.sheet-review header h3 { margin: 0; flex: 1; font-size: 1rem; }
+.sheet-review h4 { margin: 0.5rem 0 0; font-size: 0.9rem; }
+.sheet-review li { margin: 0.2rem 0; }
+.sheet-review .source { color: var(--muted); font-size: 0.8rem; }
 
 /* ---------- a panel beside the map, or the sheet in its own window (sheet-place.js) ---------- */
 
@@ -1025,7 +1031,7 @@ details.spell > summary::-webkit-details-marker { display: none; }
 
 @media print {
   body { background: #fff; color: #000; }
-  .topbar, .sheet-bar, .add-spell, .spell-actions, .slot-help, .reset, .add-row, .icon-x, .icon-roll, .spell-rolls select, .sh-tabbar, button.link { display: none !important; }
+  .topbar, .sheet-bar, .sheet-review, .add-spell, .spell-actions, .slot-help, .reset, .add-row, .icon-x, .icon-roll, .spell-rolls select, .sh-tabbar, button.link { display: none !important; }
   #app-view, #app-view.wide { --page-width: none; height: auto; display: block; }
   .panel { display: block; overflow: visible; padding: 0; }
   .panel:not(#tab-sheet) { display: none !important; }
