@@ -7,6 +7,8 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 - `npm run test:regressions` runs only those tests (about 20 seconds). `npm test` runs everything, regressions included.
 - Before every `git commit` that touches `packages/`, a Claude Code hook (`.claude/hooks/regressions.mjs`) runs `npm run test:regressions` and stops the commit if one fails.
 - A regression test must fail on the code before the fix and pass after it.
+- **Small, not end to end** (the owner's rule): a regression test checks that one past bug hasn't come back, at the lowest level that shows it, with the fake AI. Never a real AI call, a whole flow from login to result, or anything else that spends credits.
+- **Checks that need the owner's machine** (a real browser or GPU, his book PDFs, the real AI) are not regression tests. Put them under "Checks to run in VS Code" in HANDOFF.md instead. The next VS Code session runs them and takes them off that list, so they're only run again when someone adds them back.
 - A failing regression test means the change broke something that was fixed before. Fix the code, not the test. Change or remove a regression test only when the owner has decided the behaviour should change, and say so in its row below.
 
 **Adding one:** add a row below (newest first): the date, what was wrong in plain words, and where the test is (`package/test/file.test.js`, then the test's name after `regression: `).
