@@ -57,6 +57,7 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 
 ## Next steps
 
+0. **Regression tests: backfill the past fixes** listed in [docs/regressions.md](docs/regressions.md) a few at a time (the "Regression tests" thread owns this), and add one for every new fix.
 0. **PR #33, the AI walls effort picker: waiting on the owner's OK.** Merge `main` into its branch first (it's missing #35), rerun `npm test`, then merge on his word.
 0. **Picture assets for the map creator: waiting on the owner's pick.** Researched 2026-10-13 ([docs/notes/picture-assets-research.md](docs/notes/picture-assets-research.md)): part 1, CC0 ground textures (Poly Haven, ambientCG) shipped in the repo and tiled by the server under made maps; part 2, asset packs (Forgotten Adventures, 2-Minute Tabletop, Dungeondraft) kept in a folder on the host's PC, like the books, and read into the creator's asset list by sub-folder (their licences don't allow bundling them). The question left with him: build part 1, part 2, or both? AI-made pictures were ruled out (Claude can't make images; it would need a paid image service).
 0. **Map creator, second stage (PR #35, merged): try it for real.** Nothing of it has been tried with the real AI or in a real browser yet (only jsdom and the fake AI).
@@ -948,6 +949,13 @@ The owner asked for "a worker that will update and maintain regression tests": w
 - **The hook:** `.claude/settings.json` runs `.claude/hooks/regressions.mjs` before every `git commit` in Claude Code; if `packages/` has changes it runs `npm run test:regressions` and stops the commit when one fails. Checked: other commands and clean runs pass through; a regression test made to fail stops the commit with its name.
 - **First two:** the SSE stream that never closed (2026-10-03) and OCR words broken into pieces (2026-10-08) already had tests; they were renamed `regression: …`. Six more past fixes are listed for backfilling.
 - AGENTS.md has the rule; README "Tests" and SPEC §3.1 describe it. No app behaviour changed; 439 tests pass.
+
+### 2026-10-13: Regression suite reviewed; four more past fixes tagged
+
+The owner started a "Regression tests" thread in the new project to own this suite. The suite above was on a branch that hadn't been merged yet, so it comes in with this change.
+- Went through this change log for every bug that was fixed and looked for a test guarding each. Four already had a test that does exactly that and were renamed `regression: …`: the top bar jumping between tabs (2026-10-10), Classic 3D dice pushed below the window (2026-10-07), live map streams carrying on after a block, removal or demotion (2026-10-07), and campaign names with extra spaces that couldn't be deleted (2026-10-04). 6 regression tests now.
+- `docs/regressions.md` "not yet covered" now lists ten past fixes, with where each is partly tested already. Next: backfill them a few at a time, each proved to fail without its fix.
+- No app behaviour changed; 439 tests pass.
 
 ## Verified vs. not verified
 

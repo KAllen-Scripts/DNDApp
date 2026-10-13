@@ -407,7 +407,7 @@ test('admin can delete a campaign: gone from the database, kept (marked) in the 
   }
 });
 
-test('names are stored with extra spaces cleaned up, matching what the page shows', async () => {
+test('regression: names are stored with extra spaces cleaned up, matching what the page shows', async () => {
   const t = await setup();
   try {
     const c = (await t.request('POST', '/admin/campaigns', { body: { name: '  test   camp ' } })).json();
