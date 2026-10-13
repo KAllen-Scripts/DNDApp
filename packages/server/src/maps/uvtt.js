@@ -3,7 +3,7 @@
  * a map maker's export with the picture, the grid, and exact walls, doors and
  * lights. Positions in the file are in grid squares from `map_origin`.
  *
- * The format (version 0.2 / 0.3):
+ * The format (version 0.2 / 0.3; toUvtt writes 0.3):
  *   { format, resolution: { map_origin: {x, y}, map_size: {x, y}, pixels_per_grid },
  *     line_of_sight: [[{x, y}, ...], ...], objects_line_of_sight?: [[...]],
  *     portals: [{ position, bounds: [{x, y}, {x, y}], rotation, closed, freestanding }],
@@ -98,4 +98,41 @@ export function uvttContents(doc, { width, height, feetPerSquare = 5 }) {
     .map((l) => ({ x: l.x, y: l.y, bright: (l.range * feetPerSquare) / 2, dim: (l.range * feetPerSquare) / 2 }));
   const notes = dropped ? `The file has more walls than a map can hold (${MAX_WALLS}); ${dropped} were left out.` : '';
   return { walls: all.slice(0, MAX_WALLS), lights, grid: { size: ppg * sx, x: -origin.x * ppg * sx || 0, y: -origin.y * ppg * sy || 0 }, notes };
+}
+
+const r4 = (v) => Math.round(v * 10_000) / 10_000;
+
+/**
+ * A map as a Universal VTT file (format 0.3), to take it to another VTT or
+ * map maker: its picture (`png`, a PNG buffer), grid, walls (line_of_sight;
+ * low walls and windows, which don't block sight, are left out), doors
+ * (portals; secret doors as plain doors) and lights. Positions are in squares
+ * from the grid's corner; `map_origin` is where the picture's corner falls.
+ * The map needs a grid. Reading the file back (uvttContents) gives the same walls.
+ */
+export function toUvtt(map, png) {
+  const g = map.grid;
+  if (!g) throw new BadRequestError("This map has no grid yet. Set its grid first: the file measures everything in squares.");
+  const ppg = g.size;
+  const origin = { x: r4(-g.x / ppg) || 0, y: r4(-g.y / ppg) || 0 };
+  const pt = (x, y) => ({ x: r4(x / ppg + origin.x), y: r4(y / ppg + origin.y) });
+  const line_of_sight = map.walls.filter((w) => !w.door && w.kind === 'wall').map((w) => [pt(w.x1, w.y1), pt(w.x2, w.y2)]);
+  const portals = map.walls.filter((w) => w.door).map((w) => {
+    const a = pt(w.x1, w.y1);
+    const b = pt(w.x2, w.y2);
+    return { position: { x: r4((a.x + b.x) / 2), y: r4((a.y + b.y) / 2) }, bounds: [a, b], rotation: r4(Math.atan2(b.y - a.y, b.x - a.x)), closed: !w.open, freestanding: false };
+  });
+  // Light ranges go in squares (the map's lights are in its own unit).
+  const per = map.scale?.per === 'square' && map.scale.distance > 0 ? map.scale.distance : 5;
+  const lights = map.lights.map((l) => ({ position: pt(l.x, l.y), range: r4((l.bright + l.dim) / per), intensity: 1, color: 'ffffd9a0', shadows: true }));
+  return {
+    format: 0.3,
+    resolution: { map_origin: origin, map_size: { x: r4(map.image.width / ppg), y: r4(map.image.height / ppg) }, pixels_per_grid: r4(ppg) },
+    line_of_sight,
+    objects_line_of_sight: [],
+    portals,
+    environment: { baked_lighting: false, ambient_light: 'ffffffff' },
+    lights,
+    image: png.toString('base64'),
+  };
 }

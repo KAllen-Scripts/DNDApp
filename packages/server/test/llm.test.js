@@ -189,3 +189,8 @@ test('claude-code: tool wrapper counts calls and stops at the limit', async () =
 test('AI walls run one level below the most effort by default (the owner: max cost too much)', { skip: process.env.EFFORT_WALLS ? 'EFFORT_WALLS is set' : false }, () => {
   assert.equal(config.llm.tasks.walls.effort, 'xhigh');
 });
+
+test("the map creator's AI draft has its own task: the maps model unless set, high effort", { skip: process.env.EFFORT_DESIGN || process.env.MODEL_DESIGN ? 'MODEL_DESIGN or EFFORT_DESIGN is set' : false }, () => {
+  assert.equal(config.llm.tasks.design.effort, 'high');
+  assert.equal(config.llm.tasks.design.model, config.llm.tasks.maps.model);
+});

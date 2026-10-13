@@ -18,7 +18,7 @@ const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
  * Bump this whenever chunking, prompts, schemas or the memory design change.
  * Every generated output is tagged with it so we know which approach made it.
  */
-export const PIPELINE_VERSION = 15;
+export const PIPELINE_VERSION = 16;
 
 const DEFAULT_MODEL = env.MODEL || 'claude-opus-5-5';
 
@@ -67,6 +67,8 @@ export const config = {
       maps: { model: env.MODEL_MAPS || DEFAULT_MODEL, effort: env.EFFORT_MAPS || 'medium' },
       // Maps: drafting walls and doors (two looks: a draft, then checking it). One level below the most (owner, 2026-10-10: max used about 30% of a session's tokens): a map is set up once, and closing every room takes care.
       walls: { model: env.MODEL_WALLS || env.MODEL_MAPS || DEFAULT_MODEL, effort: env.EFFORT_WALLS || 'xhigh' },
+      // Maps: planning a whole map in the map creator from the DM's description (and sketch).
+      design: { model: env.MODEL_DESIGN || env.MODEL_MAPS || DEFAULT_MODEL, effort: env.EFFORT_DESIGN || 'high' },
     },
     // API provider only: re-run refused requests on Anthropic's recommended fallback model.
     fallbacks: env.LLM_FALLBACKS !== 'off',

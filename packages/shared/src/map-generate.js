@@ -1044,3 +1044,10 @@ export function generateDesign(kind, { cols = null, rows = null, seed = 1 } = {}
   const r = clamp(Math.round(rows ?? def.rows), 12, 60);
   return MAKERS[kind](builder(c, r, Math.round(Number(seed) || 1), Object.keys(GENERATORS).indexOf(kind) + 1));
 }
+
+/**
+ * The builder the generators use, for the server's AI draft (maps/design-draft.js):
+ * `designBuilder(cols, rows, seed, salt)`, then fill, style, autoWalls, setEdge, put
+ * and the rest, and `done(look)` for the design.
+ */
+export { builder as designBuilder };

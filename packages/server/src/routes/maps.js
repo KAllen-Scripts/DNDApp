@@ -14,7 +14,7 @@ import { RateLimitError } from '../qa/agent.js';
 import { createPlayerImages } from '../maps/image.js';
 import { isMapId, newTokenId } from '../maps/store.js';
 import { isPdf, renderPdfPage } from '../maps/pdf.js';
-import { isUvtt, readUvtt, uvttImage, uvttContents } from '../maps/uvtt.js';
+import { isUvtt, readUvtt, toUvtt, uvttImage, uvttContents } from '../maps/uvtt.js';
 
 export function registerMaps(app, r) {
   const { access, archive, auth, config, kb, mapReader, maps, openLiveStream, publicMessage, statBlocks, upload } = r;
@@ -666,6 +666,23 @@ export function registerMaps(app, r) {
       notes = applyUvtt(m, doc);
     }, { by: request.user.id, reason: 'walls from a file' });
     return { ...maps.view(saved, a), file_notes: notes };
+  });
+
+  /**
+   * The map as a Universal VTT file (DM), to use it in another VTT or map
+   * maker: its picture (the one shown now), grid, walls, doors and lights.
+   */
+  app.get('/campaigns/:cid/maps/:mid/export.dd2vtt', async (request, reply) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    if (!map.grid) throw new BadRequestError('This map has no grid yet. Set its grid first: the file measures everything in squares.');
+    const png = await sharp(maps.imagePath(a.cid, map.id).path).png().toBuffer();
+    const name = map.name.replace(/[^\p{L}\p{N} _-]+/gu, '').trim().slice(0, 80) || 'map';
+    return reply
+      .type('application/json')
+      .header('Content-Disposition', `attachment; filename="${name.replace(/[^\x20-\x7e]/g, '_')}.dd2vtt"; filename*=UTF-8''${encodeURIComponent(name)}.dd2vtt`)
+      .header('Cache-Control', 'private, no-store')
+      .send(JSON.stringify(toUvtt(map, png)));
   });
 
   /** Read the map with the AI again (DM). Its grid, scale and description are replaced. */
