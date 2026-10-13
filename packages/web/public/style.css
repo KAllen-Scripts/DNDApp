@@ -1374,10 +1374,11 @@ button.busy:disabled { opacity: 1; }
 .creator-body { display: grid; grid-template-columns: 19rem 1fr; min-height: 0; }
 .creator-tools { min-height: 0; border-right: 1px solid var(--border); display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); }
 .creator-tools h3 { margin: 0.3rem 0 0; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
-.creator-toolgrid { grid-template-columns: repeat(4, 1fr); padding: 0.5rem 0.6rem 0.3rem; }
-.creator-toolgrid button { padding: 0.3rem 0.2rem; font-size: 0.8rem; }
+.creator-grid.creator-toolgrid { grid-template-columns: repeat(4, 1fr); gap: 0.25rem; padding: 0.5rem 0.6rem 0.3rem; }
+.creator-toolgrid button { padding: 0.3rem 0.1rem; font-size: 0.78rem; }
 .creator-options { display: grid; gap: 0.4rem; align-content: start; padding: 0.2rem 0.6rem 0.5rem; max-height: 42vh; overflow-y: auto; border-bottom: 1px solid var(--border); }
 .creator-options p { margin: 0; }
+.creator-options button:not(.creator-swatch):not(.creator-style), .creator-options select, .creator-options input:not([type=checkbox]):not([type=color]) { padding: 0.25rem 0.5rem; font-size: 0.82rem; }
 .creator-tabs { display: flex; gap: 0.2rem; padding: 0.35rem 0.5rem 0; border-bottom: 1px solid var(--border); }
 .creator-tabs button { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: none; padding: 0.3rem 0.6rem; font-size: 0.85rem; }
 .creator-tabs button[aria-selected="true"] { background: var(--surface-2); font-weight: 600; }
@@ -1423,7 +1424,7 @@ button.busy:disabled { opacity: 1; }
 .creator-start-part p { margin: 0; }
 .creator-start-part textarea { width: 100%; resize: vertical; }
 .creator-kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; }
-.creator-kind { display: grid; gap: 0.1rem; text-align: left; padding: 0.4rem 0.5rem; line-height: 1.2; }
+.creator-kind { display: grid; gap: 0.1rem; align-content: start; text-align: left; padding: 0.4rem 0.5rem; line-height: 1.2; }
 .creator-kind[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .creator-start-result { display: grid; align-content: start; justify-items: start; gap: 0.5rem; }
 .creator-start-result h3 { margin: 0; }

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ASSETS, FLOORS, LOOK, PATH_KINDS, WALL_STYLES, WALL_TYPES, addCircle, addRoom, addWall, emptyDesign, normalizeDesign, paintFloor } from '../src/map-design.js';
 import {
-  drawAsset, drawBuiltIn, drawDesign, drawFloor, drawFloorSwatch, drawLabels, drawLook, drawPathSwatch, drawWallSwatch, drawWalls, labelFont, lightSources,
+  drawAsset, drawBuiltIn, drawDesign, drawFloor, drawFloorSwatch, drawLabels, drawLook, drawPathSwatch, drawWallSwatch, drawWalls, labelFont, lightAreas, lightSources,
 } from '../src/map-art.js';
 import { ART } from '../src/map-art-assets.js';
 import { fbm, hash2, mix, noise, shade, rgba, lightness } from '../src/map-paint.js';
@@ -171,7 +171,7 @@ test('the look: lights glow, dusk and night darken round them, a grid; labels in
     { id: 'crys01', a: 'crystal', x: 5, y: 5, tint: '#00ff00' },
   ], paths: [{ id: 'lava01', kind: 'lava', pts: [[0, 9], [5, 9]] }] });
   const lights = lightSources(d);
-  assert.deepEqual(lights[0], { x: 2, y: 2, r: 8, bright: 4, colour: '#ffae42' });
+  assert.deepEqual(lights[0], { x: 2, y: 2, r: 8, bright: 4, colour: '#ffae42', owner: 'fire01', rot: 0 });
   assert.equal(lights[1].colour, '#00ff00', 'a crystal glows in its own colour');
   assert.ok(!lights.some((l) => l.x === 4 && l.y === 2), 'a campfire put out gives no light');
   assert.ok(lights.some((l) => l.colour === '#ff6a1a' && l.x === 8.5), 'lava glows');
@@ -209,6 +209,64 @@ test('the look: lights glow, dusk and night darken round them, a grid; labels in
   drawLabels(ctx, normalizeDesign({ labels: [{ text: 'North', colour: '#ffffff' }, { text: 'South', colour: '#000000', halo: false }] }), 20);
   assert.deepEqual(calls.filter((c) => c[0] === 'fillText' || c[0] === 'strokeText').map((c) => c[0]), ['strokeText', 'fillText', 'fillText']);
   assert.ok(calls.some((c) => c[0] === '=strokeStyle' && String(c[1]).startsWith('rgba(20,16,12')), 'a dark halo round light lettering');
+});
+
+/** Is the point inside the polygon? */
+function inside(poly, [x, y]) {
+  let inn = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i, i += 1) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inn = !inn;
+  }
+  return inn;
+}
+
+test('the look: light stops at walls, closed doors and things that block sight, not at windows or its own thing', () => {
+  let d = addRoom(emptyDesign(24, 12, 'g'), { x1: 2, y1: 2, x2: 9, y2: 8 }, 'w', 'stone');
+  d = addWall(d, { x1: 12, y1: 1, x2: 12, y2: 11, type: 'wall' });
+  d = addWall(d, { x1: 12, y1: 4, x2: 12, y2: 6, type: 'window' });
+  d = normalizeDesign({ ...d, assets: [
+    { id: 'fire01', a: 'campfire', x: 5, y: 5 },
+    { id: 'torc01', a: 'torch', x: 4, y: 2.2 },
+    { id: 'torc02', a: 'torch', x: 8.8, y: 6, rot: 90 },
+    { id: 'crys01', a: 'crystal_big', x: 18, y: 6 },
+    { id: 'pill01', a: 'pillar', x: 20.5, y: 6 },
+    { id: 'lamp01', a: 'lamp_post', x: 10.5, y: 5 },
+  ] });
+  const lights = lightSources(d);
+  const areas = lightAreas(d, lights);
+  const of = (id) => areas[lights.findIndex((l) => l.owner === id)];
+  // A fire in a closed room lights the room and nothing outside it.
+  assert.ok(inside(of('fire01'), [3, 3]) && inside(of('fire01'), [8.5, 7.5]));
+  assert.ok(!inside(of('fire01'), [1, 5]) && !inside(of('fire01'), [10, 5]) && !inside(of('fire01'), [5, 9]));
+  // A torch hung on the wall shines into the room, not through the wall behind it.
+  for (const id of ['torc01', 'torc02']) {
+    assert.ok(of(id).length > 8, id);
+    assert.ok(inside(of(id), [5, 4]), `${id} lights the room`);
+    assert.ok(!inside(of(id), [4, 1.5]) && !inside(of(id), [9.5, 6]), `${id} stays inside`);
+  }
+  // A crystal that blocks sight still lights round itself; a pillar throws a shadow.
+  assert.ok(inside(of('crys01'), [16.5, 6]) && inside(of('crys01'), [19.5, 6]));
+  assert.ok(!inside(of('crys01'), [21.6, 6]), 'behind the pillar');
+  assert.ok(inside(of('crys01'), [21.6, 4.5]), 'beside the pillar');
+  // A window lets the light through; the wall round it doesn't.
+  assert.ok(inside(of('lamp01'), [13, 5]), 'through the window');
+  assert.ok(!inside(of('lamp01'), [13.5, 9.5]), 'not through the wall');
+  // Nothing in the way: no clipping at all.
+  assert.deepEqual(lightAreas(normalizeDesign({ cols: 10, rows: 10, assets: [{ id: 'fire01', a: 'campfire', x: 5, y: 5 }] }), lightSources(normalizeDesign({ cols: 10, rows: 10, assets: [{ id: 'fire01', a: 'campfire', x: 5, y: 5 }] }))), [null]);
+
+  // At night the light's hole in the dark, and its glow, are clipped to where it reaches.
+  const { ctx, calls } = recorder();
+  const made = [];
+  const makeCanvas = (w, h) => {
+    const r = recorder();
+    made.push(r.calls);
+    return { width: w, height: h, getContext: () => r.ctx };
+  };
+  drawLook(ctx, { ...d, look: { ...d.look, mood: 'night' } }, 20, { makeCanvas });
+  assert.equal(made[0].filter((c) => c[0] === 'clip').length, lights.length);
+  assert.equal(calls.filter((c) => c[0] === 'clip').length, lights.length);
 });
 
 test('painting helpers: colours and noise', () => {

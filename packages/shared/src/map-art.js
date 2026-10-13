@@ -8,7 +8,8 @@
  * only; everything that looks random is seeded by where it is, so a design
  * draws the same every time.
  */
-import { ASSETS, DESIGN_CELL, EMPTY, FLOORS, LABEL_FONTS, LOOK, PATH_KINDS, drawOrder, layerOf, normalizeLook, smoothPoints, wallPoints } from './map-design.js';
+import { ASSETS, DESIGN_CELL, EMPTY, FLOORS, LABEL_FONTS, LOOK, PATH_KINDS, assetOutline, drawOrder, layerOf, normalizeLook, smoothPoints, wallPoints } from './map-design.js';
+import { sightPolygon } from './map.js';
 import { TAU, shade, rgba, lightness, hash2, noise, fbm, circle, oval, rect, poly, line, polyline, blobPoints, smoothShape, radial, glow } from './map-paint.js';
 import { drawBuiltIn } from './map-art-assets.js';
 
@@ -1463,7 +1464,7 @@ export function lightSources(design) {
     const def = ASSETS[a.a];
     if (!def?.light || !a.light) continue;
     const colour = def.glow === 'tint' ? a.tint ?? def.tint : def.glow ?? '#ffd27a';
-    out.push({ x: a.x, y: a.y, r: (def.light.bright + def.light.dim) / 5, bright: def.light.bright / 5, colour });
+    out.push({ x: a.x, y: a.y, r: (def.light.bright + def.light.dim) / 5, bright: def.light.bright / 5, colour, owner: a.id, rot: a.rot ?? 0 });
   }
   const { cols, rows, floor } = design;
   for (let r = 0; r < rows; r += 1) {
@@ -1481,6 +1482,63 @@ export function lightSources(design) {
   return out;
 }
 
+const SIGHT_SCALE = 20; // sightPolygon rounds to 0.1, so it works in twentieths of a square
+
+/**
+ * Where each light reaches in the picture (a polygon in squares, or null
+ * when nothing is in its way): walls, closed and secret doors, and things
+ * that block sight stop it; windows, archways, low walls and fences don't.
+ * A light's own thing doesn't (a lit crystal that blocks), and one hung on
+ * a wall (a torch) shines from just in front of it.
+ */
+export function lightAreas(design, sources) {
+  const segs = [];
+  for (const w of design.walls ?? []) {
+    if (w.type === 'arch' || w.type === 'low' || w.type === 'window') continue;
+    const pts = wallPoints(w);
+    for (let i = 1; i < pts.length; i += 1) segs.push({ x1: pts[i - 1][0], y1: pts[i - 1][1], x2: pts[i][0], y2: pts[i][1], owner: null });
+  }
+  for (const a of design.assets ?? []) {
+    const def = ASSETS[a.a];
+    if ((a.blocks ?? def?.blocks) !== 'wall') continue;
+    const pts = assetOutline({ ...a, w: a.w ?? def?.w ?? 1, h: a.h ?? def?.h ?? 1, rot: a.rot ?? 0 });
+    pts.forEach((p, i) => {
+      const q = pts[(i + 1) % pts.length];
+      segs.push({ x1: p[0], y1: p[1], x2: q[0], y2: q[1], owner: a.id });
+    });
+  }
+  const K = SIGHT_SCALE;
+  const dist = (g, x, y) => {
+    const dx = g.x2 - g.x1;
+    const dy = g.y2 - g.y1;
+    const t = Math.max(0, Math.min(1, ((x - g.x1) * dx + (y - g.y1) * dy) / (dx * dx + dy * dy || 1)));
+    return Math.hypot(x - (g.x1 + dx * t), y - (g.y1 + dy * t));
+  };
+  return sources.map((s) => {
+    const near = segs.filter((g) => g.owner !== (s.owner ?? undefined) && Math.max(g.x1, g.x2) >= s.x - s.r && Math.min(g.x1, g.x2) <= s.x + s.r && Math.max(g.y1, g.y2) >= s.y - s.r && Math.min(g.y1, g.y2) <= s.y + s.r);
+    if (!near.length) return null;
+    let { x, y } = s;
+    if (near.some((g) => dist(g, x, y) < 0.15)) {
+      // On a wall: shine from just in front of it (its front is the way it faces, down when not turned).
+      const a = ((s.rot ?? 0) * Math.PI) / 180;
+      x -= Math.sin(a) * 0.22;
+      y += Math.cos(a) * 0.22;
+    }
+    const map = { image: { width: design.cols * K, height: design.rows * K }, walls: near.map((g) => ({ x1: g.x1 * K, y1: g.y1 * K, x2: g.x2 * K, y2: g.y2 * K, kind: 'wall' })) };
+    const poly = sightPolygon(map, { x: x * K, y: y * K }, s.r * K);
+    return poly.length >= 3 ? poly.map(([px, py]) => [px / K, py / K]) : [];
+  });
+}
+
+/** Clip `ctx` to a light's area (scaled by k): nothing for a light with nothing in its way. */
+function clipTo(ctx, area, k) {
+  if (!area) return;
+  ctx.beginPath();
+  area.forEach(([x, y], i) => (i ? ctx.lineTo(x * k, y * k) : ctx.moveTo(x * k, y * k)));
+  ctx.closePath();
+  ctx.clip();
+}
+
 /**
  * The look over everything: the mood (dusk, night or gloom darken and tint
  * the picture, with light round lit things; needs `makeCanvas(w, h)` for the
@@ -1492,6 +1550,7 @@ export function drawLook(ctx, design, cell = DESIGN_CELL, { makeCanvas = null, g
   const H = design.rows * cell;
   const mood = MOOD_LOOK[look.mood];
   const sources = mood || look.glow ? lightSources(design) : [];
+  const areas = sources.length ? lightAreas(design, sources) : [];
   if (mood) {
     const scale = Math.min(1, 12 / cell);
     const mw = Math.max(1, Math.ceil(W * scale));
@@ -1504,7 +1563,8 @@ export function drawLook(ctx, design, cell = DESIGN_CELL, { makeCanvas = null, g
       m.fillStyle = mood.tint;
       m.fillRect(0, 0, mw, mh);
       m.globalCompositeOperation = 'destination-out';
-      for (const s of sources) {
+      sources.forEach((s, i) => {
+        if (areas[i]?.length === 0) return; // walled in on every side
         const R = s.r * cell * scale;
         const x = s.x * cell * scale;
         const y = s.y * cell * scale;
@@ -1512,11 +1572,14 @@ export function drawLook(ctx, design, cell = DESIGN_CELL, { makeCanvas = null, g
         gr.addColorStop(0, 'rgba(0,0,0,1)');
         gr.addColorStop(Math.min(0.9, Math.max(0.1, s.bright / (s.r || 1))), 'rgba(0,0,0,0.85)');
         gr.addColorStop(1, 'rgba(0,0,0,0)');
+        m.save();
+        clipTo(m, areas[i], cell * scale);
         m.fillStyle = gr;
         m.beginPath();
         m.arc(x, y, Math.max(0.5, R), 0, TAU);
         m.fill();
-      }
+        m.restore();
+      });
       ctx.drawImage(mask, 0, 0, W, H);
     } else {
       ctx.fillStyle = mood.tint;
@@ -1528,7 +1591,13 @@ export function drawLook(ctx, design, cell = DESIGN_CELL, { makeCanvas = null, g
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
     const alpha = mood ? mood.glow : 0.16;
-    for (const s of sources) glow(ctx, s.x * cell, s.y * cell, Math.min(s.r, 6) * cell * 0.55, s.colour, alpha);
+    sources.forEach((s, i) => {
+      if (areas[i]?.length === 0) return;
+      ctx.save();
+      clipTo(ctx, areas[i], cell);
+      glow(ctx, s.x * cell, s.y * cell, Math.min(s.r, 6) * cell * 0.55, s.colour, alpha);
+      ctx.restore();
+    });
     ctx.restore();
   }
   if (grid && look.grid !== 'none') {

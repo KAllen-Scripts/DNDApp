@@ -141,6 +141,9 @@ function crystals(g, n, len, wide, base) {
   circle(ctx, 0, 0, wide * 0.6, shade(base, -0.3));
 }
 
+/** The pieces above, for drawings kept elsewhere. */
+export const PIECES = { shadow, lit, canopy, stone, planks, fire, candle, coin, band, wheel, book, crystals };
+
 // ---------- the drawings ----------
 
 export const ART = {
