@@ -10,143 +10,19 @@
  * DM's tint or the asset's own), sx, sy (which way its shadow falls, turned
  * with it) }.
  */
-import { ASSETS } from './map-design.js';
+import { ASSETS, hullShape } from './map-design.js';
 import { TAU, shade, rgba, circle, oval, rect, rrect, poly, line, polyline, blobPoints, smoothShape, radial, glow } from './map-paint.js';
+import { shadow, lit, canopy, stone, planks, fire, candle, coin, band, wheel, book, crystals } from './map-art-pieces.js';
+import { ART_TEMPLE } from './map-art-temple.js';
+import { ART_FARM } from './map-art-farm.js';
 
-// ---------- pieces many assets share ----------
-
-/** A soft drop shadow: an oval or a rounded box, offset the way light falls; taller things cast it further. */
-function shadow(g, kind = 'round', rx = g.w / 2, ry = g.h / 2, height = 1) {
-  const { ctx } = g;
-  if (!g.shadows) return;
-  const dx = g.sx * height;
-  const dy = g.sy * height;
-  for (const k of [1.07, 0.97, 0.87]) {
-    if (kind === 'round') oval(ctx, dx, dy, rx * k, ry * k, 0, 'rgba(0,0,0,0.12)');
-    else rrect(ctx, dx - rx * k, dy - ry * k, rx * 2 * k, ry * 2 * k, Math.min(rx, ry) * 0.25, 'rgba(0,0,0,0.12)');
-  }
-}
-
-/** A light-to-dark fill for a round thing lit from the top left. */
-const lit = (ctx, x, y, r, base, amount = 0.14) => radial(ctx, x, y, r, shade(base, amount), shade(base, -amount * 0.8), x - r * 0.35, y - r * 0.35);
-
-/** A leafy crown: lobes round a middle, each lit from the top left, with clumps of light and shade. */
-function canopy(g, r, lobes, base, { spots = 2, rough = 0.12 } = {}) {
-  const { ctx, rnd } = g;
-  const edge = rgba(shade(base, -0.3), 0.55);
-  const parts = [];
-  for (let i = 0; i < lobes; i += 1) {
-    const a = (i / lobes) * TAU + rnd() * 0.5;
-    const d = r * (0.48 + rnd() * rough);
-    parts.push([Math.cos(a) * d, Math.sin(a) * d, r * (0.42 + rnd() * 0.14)]);
-  }
-  for (const [x, y, rr] of parts) circle(ctx, x + r * 0.04, y + r * 0.05, rr, shade(base, -0.18));
-  for (const [x, y, rr] of parts) circle(ctx, x, y, rr, lit(ctx, x, y, rr, base), edge, r * 0.02);
-  circle(ctx, 0, 0, r * 0.55, lit(ctx, 0, 0, r * 0.55, shade(base, 0.03)));
-  for (let i = 0; i < lobes * spots; i += 1) {
-    const a = rnd() * TAU;
-    const d = rnd() * r * 0.85;
-    const x = Math.cos(a) * d;
-    const y = Math.sin(a) * d;
-    circle(ctx, x, y, r * (0.05 + rnd() * 0.07), rgba(x + y < 0 ? shade(base, 0.24) : shade(base, -0.22), 0.5));
-  }
-}
-
-/** An angular stone, lit from the top left, with a lighter face. */
-function stone(g, cx, cy, rx, ry, base, n = 9, rough = 0.32) {
-  const { ctx, rnd, m } = g;
-  const pts = blobPoints(cx, cy, rx, ry, n, rough, rnd, rnd() * TAU);
-  poly(ctx, pts, lit(ctx, cx, cy, Math.max(rx, ry), base, 0.12), shade(base, -0.32), Math.max(1, m * 0.025));
-  const face = [];
-  for (const [x, y] of pts) if (x - cx + (y - cy) < 0) face.push([cx + (x - cx) * 0.7, cy + (y - cy) * 0.7]);
-  if (face.length >= 2) poly(ctx, [...face, [cx + rx * 0.08, cy + ry * 0.08]], rgba(shade(base, 0.22), 0.55));
-}
-
-/** Planks side by side across a box (`across`: the planks run left to right). */
-function planks(g, x, y, w, h, base, n, across = true, seams = 0.18) {
-  const { ctx, rnd, m } = g;
-  for (let i = 0; i < n; i += 1) {
-    const c = shade(base, (rnd() - 0.5) * 0.12);
-    if (across) rect(ctx, x, y + (h * i) / n, w, h / n, c);
-    else rect(ctx, x + (w * i) / n, y, w / n, h, c);
-  }
-  const lw = Math.max(0.8, m * 0.02);
-  for (let i = 1; i < n; i += 1) {
-    if (across) line(ctx, x, y + (h * i) / n, x + w, y + (h * i) / n, shade(base, -seams), lw, 'butt');
-    else line(ctx, x + (w * i) / n, y, x + (w * i) / n, y + h, shade(base, -seams), lw, 'butt');
-  }
-  // Grain.
-  for (let i = 0; i < n * 2; i += 1) {
-    const k = rnd();
-    if (across) line(ctx, x + rnd() * w * 0.6, y + h * ((Math.floor(i / 2) + 0.2 + rnd() * 0.6) / n), x + w * (0.4 + k * 0.6), y + h * ((Math.floor(i / 2) + 0.3 + rnd() * 0.4) / n), rgba(shade(base, -0.1), 0.6), Math.max(0.5, m * 0.008));
-    else line(ctx, x + w * ((Math.floor(i / 2) + 0.2 + rnd() * 0.6) / n), y + rnd() * h * 0.6, x + w * ((Math.floor(i / 2) + 0.3 + rnd() * 0.4) / n), y + h * (0.4 + k * 0.6), rgba(shade(base, -0.1), 0.6), Math.max(0.5, m * 0.008));
-  }
-}
-
-/** Fire seen from above: ragged tongues, orange to yellow. */
-function fire(g, x, y, r) {
-  const { ctx, rnd } = g;
-  glow(ctx, x, y, r * 1.6, '#ffb347', 0.45);
-  smoothShape(ctx, blobPoints(x, y, r, r, 9, 0.7, rnd), '#d9461a');
-  smoothShape(ctx, blobPoints(x, y, r * 0.72, r * 0.72, 8, 0.6, rnd), '#f2852a');
-  smoothShape(ctx, blobPoints(x, y, r * 0.45, r * 0.45, 7, 0.5, rnd), '#ffc94a');
-  circle(ctx, x, y, r * 0.2, '#fff2b0');
-}
-
-/** A candle from above: wax, wick and a little flame. */
-function candle(g, x, y, r) {
-  const { ctx } = g;
-  glow(ctx, x, y, r * 2.4, '#ffd27a', 0.35);
-  circle(ctx, x, y, r, '#efe6cf', '#b9ab8a', Math.max(0.5, r * 0.15));
-  circle(ctx, x, y, r * 0.55, '#ffcf5a');
-  circle(ctx, x, y, r * 0.25, '#fff5c8');
-}
-
-/** A gold coin. */
-const coin = (g, x, y, r) => {
-  circle(g.ctx, x, y, r, lit(g.ctx, x, y, r, '#d4a72c', 0.18), '#8a6a14', Math.max(0.5, r * 0.18));
-};
-
-/** Iron hoops or bands across a box. */
-const band = (ctx, x, y, w, h, colour = '#3a3a3a') => rect(ctx, x, y, w, h, colour);
-
-/** A wheel seen from above: a thin dark box. */
-const wheel = (ctx, x, y, w, h) => rrect(ctx, x - w / 2, y - h / 2, w, h, w * 0.3, '#2e2419', '#17110b', 1);
-
-/** A book seen from above. */
-const book = (ctx, x, y, w, h, colour, rot = 0) => {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(rot);
-  rect(ctx, -w / 2, -h / 2, w, h, colour, shade(colour, -0.3), Math.max(0.5, w * 0.06));
-  rect(ctx, -w / 2 + w * 0.1, -h / 2, w * 0.08, h, shade(colour, 0.15));
-  ctx.restore();
-};
-
-/** Crystals pointing out from the middle: long six-sided prisms with a light and a dark face. */
-function crystals(g, n, len, wide, base) {
-  const { ctx, rnd, m } = g;
-  const order = Array.from({ length: n }, (_, i) => ({ a: (i / n) * TAU + rnd() * 0.6, l: len * (0.6 + rnd() * 0.4), wd: wide * (0.7 + rnd() * 0.5) }));
-  order.sort((p, q) => Math.sin(p.a) - Math.sin(q.a)); // the far ones first
-  for (const c of order) {
-    ctx.save();
-    ctx.rotate(c.a);
-    const tip = c.l;
-    const body = [[0, -c.wd / 2], [tip * 0.75, -c.wd / 2], [tip, 0], [tip * 0.75, c.wd / 2], [0, c.wd / 2]];
-    poly(ctx, body, shade(base, -0.05), shade(base, -0.4), Math.max(0.8, m * 0.015));
-    poly(ctx, [[0, -c.wd / 2], [tip * 0.75, -c.wd / 2], [tip, 0], [0, 0]], shade(base, 0.22));
-    line(ctx, tip * 0.1, 0, tip * 0.85, 0, rgba('#ffffff', 0.35), Math.max(0.5, m * 0.012));
-    ctx.restore();
-  }
-  circle(ctx, 0, 0, wide * 0.6, shade(base, -0.3));
-}
-
-/** The pieces above, for drawings kept elsewhere. */
+/** The shared pieces, for drawings made elsewhere. */
 export const PIECES = { shadow, lit, canopy, stone, planks, fire, candle, coin, band, wheel, book, crystals };
+
 
 // ---------- the drawings ----------
 
-export const ART = {
+const BASE_ART = {
   // ----- Nature -----
   tree(g) {
     shadow(g, 'round', g.w * 0.46, g.h * 0.46, 2.2);
@@ -605,6 +481,113 @@ export const ART = {
     for (const y of [-h * 0.12, h * 0.16]) rect(ctx, -w * 0.38, y, w * 0.76, h * 0.06, '#6e4a2a');
     line(ctx, -w * 0.75, -h * 0.05, w * 0.75, h * 0.05, '#7a5532', Math.max(0.8, m * 0.05));
     for (const s of [-1, 1]) oval(ctx, s * w * 0.72, s * h * 0.05, w * 0.12, h * 0.05, 0.1, '#7a5532');
+  },
+  floor_round(g) {
+    // A round paved floor, for a tower or a round room (the squares can't follow a round wall): rings of flagstones
+    // round a middle stone, a dark edge where the wall stands.
+    const { ctx, m, rnd, t } = g;
+    const R = m / 2;
+    circle(ctx, 0, 0, R, shade(t, -0.3));
+    const rings = 6;
+    const gap = Math.max(0.6, R * 0.012);
+    for (let i = rings; i >= 2; i -= 1) {
+      const r1 = (R * i) / rings - gap;
+      const r0 = (R * (i - 1)) / rings + gap;
+      const n = Math.max(4, Math.round((TAU * (r0 + r1)) / 2 / (R / rings)));
+      const off = rnd() * TAU;
+      for (let k = 0; k < n; k += 1) {
+        const a0 = off + (k / n) * TAU + gap / r1;
+        const a1 = off + ((k + 1) / n) * TAU - gap / r1;
+        ctx.beginPath();
+        ctx.arc(0, 0, r1, a0, a1);
+        ctx.arc(0, 0, r0, a1, a0, true);
+        ctx.closePath();
+        ctx.fillStyle = shade(t, (rnd() - 0.5) * 0.16);
+        ctx.fill();
+        if (rnd() < 0.2) {
+          ctx.fillStyle = rgba('#000000', 0.06 + rnd() * 0.06);
+          ctx.fill();
+        }
+      }
+    }
+    circle(ctx, 0, 0, R / rings - gap, shade(t, 0.05), shade(t, -0.25), Math.max(0.5, R * 0.01));
+    // Wear in the middle, moss in the cracks at the edge.
+    ctx.fillStyle = radial(ctx, 0, 0, R * 0.7, rgba('#000000', 0.07), rgba('#000000', 0));
+    circle(ctx, 0, 0, R * 0.7, ctx.fillStyle);
+    for (let i = 0; i < 10; i += 1) {
+      const a = rnd() * TAU;
+      oval(ctx, Math.cos(a) * R * 0.94, Math.sin(a) * R * 0.94, R * 0.05, R * 0.025, a, rgba('#4f6b2a', 0.45));
+    }
+  },
+  hull(g) {
+    // The deck of a ship, to build on (masts, helm, cannons are their own assets): the rim, planks along its length,
+    // the raised forecastle and quarterdeck, cleats along the rails. Its outline is hullShape's, which the generator's
+    // rails follow.
+    const { ctx, w, h, m, rnd, sx, sy, shadows } = g;
+    const rim = m * 0.04;
+    const { outline, y0 } = hullShape(w, h, 18);
+    const inner = hullShape(w - rim * 2, h - rim * 2, 18).outline;
+    const trace = (pts, dx = 0, dy = 0) => {
+      ctx.beginPath();
+      pts.forEach(([x, y], i) => (i ? ctx.lineTo(x + dx, y + dy) : ctx.moveTo(x + dx, y + dy)));
+      ctx.closePath();
+    };
+    if (shadows) {
+      trace(outline, sx * 0.8, sy * 0.8);
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fill();
+    }
+    trace(outline);
+    ctx.fillStyle = '#3e2715';
+    ctx.fill();
+    ctx.save();
+    trace(inner);
+    ctx.clip();
+    const base = '#9a6d42';
+    planks(g, -w / 2, -h / 2, w, h, base, Math.max(8, Math.round((w / m) * 20)), false, 0.22);
+    // Butt joints, staggered plank to plank.
+    const n = Math.max(8, Math.round((w / m) * 20));
+    for (let i = 0; i < n; i += 1) {
+      const x = -w / 2 + (w * (i + 0.5)) / n;
+      for (let y = -h / 2 + ((i * 7) % 5) * (h / 22); y < h / 2; y += h / 4.4) line(ctx, x - w / n / 2, y, x + w / n / 2, y, rgba(shade(base, -0.35), 0.7), Math.max(0.6, m * 0.008), 'butt');
+    }
+    // Forecastle and quarterdeck: a little higher (lighter), a step down to the main deck with its shadow.
+    const qd = h / 2 - h * 0.2;
+    rect(ctx, -w / 2, qd, w, h * 0.2, 'rgba(255,240,210,0.07)');
+    ctx.beginPath();
+    ctx.rect(-w / 2, -h / 2, w, y0 + h * 0.02 + h / 2);
+    ctx.fillStyle = 'rgba(255,240,210,0.07)';
+    ctx.fill();
+    for (const [y, down] of [[qd, -1], [y0 + h * 0.02, 1]]) {
+      rect(ctx, -w / 2, down < 0 ? y - m * 0.05 : y, w, m * 0.05, 'rgba(0,0,0,0.22)');
+      line(ctx, -w / 2, y, w / 2, y, '#4a3019', Math.max(1, m * 0.022), 'butt');
+      line(ctx, -w / 2, y + down * m * 0.012, w / 2, y + down * m * 0.012, rgba('#d9b58a', 0.5), Math.max(0.5, m * 0.008), 'butt');
+    }
+    // Wear down the middle, and a few stains.
+    ctx.globalAlpha = 0.08;
+    rect(ctx, -w * 0.18, -h / 2, w * 0.36, h, '#2a1a0c');
+    ctx.globalAlpha = 1;
+    for (let i = 0; i < 4; i += 1) oval(ctx, (rnd() - 0.5) * w * 0.6, (rnd() - 0.5) * h * 0.7, m * (0.05 + rnd() * 0.08), m * (0.03 + rnd() * 0.05), rnd() * 3, 'rgba(40,25,10,0.12)');
+    ctx.restore();
+    // The rim: a cap rail along its top, and cleats inside it.
+    trace(hullShape(w - rim, h - rim, 18).outline);
+    ctx.strokeStyle = '#7a5332';
+    ctx.lineWidth = Math.max(1, rim * 0.45);
+    ctx.stroke();
+    ctx.strokeStyle = rgba('#e0b98a', 0.35);
+    ctx.lineWidth = Math.max(0.5, rim * 0.12);
+    ctx.stroke();
+    trace(inner);
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+    ctx.lineWidth = Math.max(1, m * 0.012);
+    ctx.stroke();
+    trace(outline);
+    ctx.strokeStyle = '#24160b';
+    ctx.lineWidth = Math.max(1, m * 0.01);
+    ctx.stroke();
+    for (const s of [-1, 1]) {
+      for (let y = y0 + h * 0.06; y < h / 2 - h * 0.04; y += h / 9) rect(ctx, s * (w / 2 - rim * 1.5) - m * 0.012, y, m * 0.024, m * 0.06, '#5a4a3a', '#1e140a', Math.max(0.5, m * 0.005));
+    }
   },
 
   // ----- Camp and travel -----
@@ -1734,6 +1717,9 @@ export const ART = {
  * changed it; `sx`, `sy`: which way its shadow falls (already turned);
  * `shadows: false` leaves shadows out.
  */
+/** Every built-in asset's drawing, by its key. */
+export const ART = { ...BASE_ART, ...ART_FARM, ...ART_TEMPLE };
+
 export function drawBuiltIn(ctx, key, w, h, { seed = 1, tint = null, sx = null, sy = null, shadows = true } = {}) {
   const def = ASSETS[key];
   const draw = ART[key];

@@ -312,7 +312,7 @@ function thingsTab(c, act) {
 function stampsTab(c, act) {
   const button = (s, mine = false) => h('div', { class: 'creator-stamp' },
     h('button', { type: 'button', class: 'ghost', 'data-stamp': s.id, title: s.name, onclick: () => act.startPaste(s.clip, s.name) },
-      clipThumb(`${s.id}:${s.updated_at ?? ''}`, s.clip, c.images, s.group === 'Outdoors' ? 'g' : s.group ? 'f' : '.'), h('span', {}, s.name)),
+      clipThumb(`${s.id}:${s.updated_at ?? ''}`, s.clip, c.images, ({ Outdoors: 'g', Ships: 'W' })[s.group] ?? (s.group ? 'f' : '.')), h('span', {}, s.name)),
     mine ? h('span', { class: 'creator-stamp-tools' },
       h('button', { type: 'button', class: 'ghost small', title: 'Rename', 'aria-label': `Rename ${s.name}`, onclick: () => act.renameStamp(s).catch((err) => act.status(err.message)) }, '✎'),
       h('button', { type: 'button', class: 'ghost small danger', title: 'Take off the list', 'aria-label': `Remove ${s.name}`, onclick: () => act.removeStamp(s).catch((err) => act.status(err.message)) }, '×')) : null);

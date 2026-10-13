@@ -76,11 +76,11 @@ test('the builder: areas walled where they meet, doors cut in, things put agains
 });
 
 test('the built-in stamps: clean clips of known things, each with its own id and a group', () => {
-  assert.equal(BUILT_IN_STAMPS.length, 16);
-  assert.equal(new Set(BUILT_IN_STAMPS.map((s) => s.id)).size, 16);
+  assert.equal(BUILT_IN_STAMPS.length, 35);
+  assert.equal(new Set(BUILT_IN_STAMPS.map((s) => s.id)).size, 35);
   for (const s of BUILT_IN_STAMPS) {
     assert.match(s.id, /^b:[a-z_]+$/);
-    assert.ok(s.name && ['Rooms', 'Outdoors'].includes(s.group), s.id);
+    assert.ok(s.name && ['Rooms', 'Dungeon', 'Outdoors', 'Ships'].includes(s.group), s.id);
     assert.ok(s.clip.assets.length >= 3, `${s.id} has things in it`);
     assert.ok(s.clip.assets.every((a) => ASSETS[a.a]), s.id);
     const again = normalizeClip(s.clip);

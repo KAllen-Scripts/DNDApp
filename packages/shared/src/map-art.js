@@ -793,7 +793,8 @@ function water(g, c, r, ripples) {
   if (!isWater(g.at(c, r))) return;
   const rnd = rndOf(c, r, g.seed);
   const d = g.depth ? g.depth[r * g.cols + c] : 4;
-  const col = d === 0 ? shade(g.f.base, 0.06) : d === 1 ? shade(g.f.base, 0.02) : d === 255 ? g.f.base : shade(g.f.base, -0.03 * Math.min(3, d - 1));
+  // Out past the shallows (255: further than 4 squares from any shore) it's as deep as it gets.
+  const col = d === 0 ? shade(g.f.base, 0.06) : d === 1 ? shade(g.f.base, 0.02) : shade(g.f.base, -0.03 * Math.min(3, d - 1));
   const cx = (c + 0.5) * k;
   const cy = (r + 0.5) * k;
   ctx.fillStyle = radial(ctx, cx, cy, k * 0.95, rgba(col, 0.8), rgba(col, 0));
