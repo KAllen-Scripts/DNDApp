@@ -5,7 +5,7 @@
 import { onGone, onMap, renderGrid, select, show, toImage } from './map.js';
 import { TOKEN_COLORS, TOKEN_KINDS, TOKEN_KIND_NAMES, TOKEN_SIZES, TOKEN_SIZE_NAMES, UNITS } from './shared/map.js';
 import { api, h, readBase64 } from './api.js';
-import { base, report, state, status } from './map-state.js';
+import { base, downloadUvtt, report, state, status } from './map-state.js';
 import { creatureList, creatureSaved } from './creatures.js';
 import { markdownBox } from './markdown.js';
 import { showStatBlock, statsFound } from './stat-block.js';
@@ -157,6 +157,9 @@ export function settingsDialog() {
       h('p', { class: 'muted small' }, 'The same map at night, after a fire, with a secret door showing… Each is stretched to fit this map, so everything stays in place. Pick which one everyone sees in the map bar.'),
       variants,
       field('Add a picture', addVariant),
+      h('h3', {}, 'Other VTTs'),
+      h('p', { class: 'muted small' }, 'Download the map as a Universal VTT file (.dd2vtt): its picture, grid, walls, doors and lights, for Foundry, Dungeondraft and others.'),
+      h('button', { type: 'button', class: 'ghost', id: 'map-export', disabled: !map.grid, title: map.grid ? '' : 'Set the grid first', onclick: () => downloadUvtt(map).catch(report) }, 'Download .dd2vtt'),
       h('h3', {}, 'What the AI saw'),
       h('p', { class: 'muted small map-ai' }, reading.status === 'pending' ? 'Reading…' : reading.status === 'failed' ? reading.error : aiText || 'Nothing to add.'),
       h('p', { class: 'muted small' }, 'Only you see this.'),

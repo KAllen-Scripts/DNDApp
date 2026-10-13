@@ -180,6 +180,8 @@ export async function openPage(t, { as = null, campaign = null, storage = {}, an
         await new Promise((r) => setTimeout(r, 5));
       }
     },
+    /** One of the page's own modules (this page's copy of it), to read what isn't on screen, e.g. page.module('map-creator.js'). */
+    module: (file) => import(new URL(`../public/${file}?page=${page.number}`, import.meta.url).href),
     /** Close the page: stop its live streams and put Node's globals back. */
     async close() {
       page.closed = true;
@@ -200,6 +202,7 @@ export async function openPage(t, { as = null, campaign = null, storage = {}, an
   });
 
   pages += 1;
+  page.number = pages;
   try {
     await import(`../public/app.js?page=${pages}`);
     if (settle) await page.settle();
