@@ -149,7 +149,7 @@ How the address reaches this PC (set up 2026-10-13):
 - A **Cloudflare Tunnel** called `thepartyledger` is managed from the Cloudflare dashboard (Zero Trust → Networks → Tunnels). It sends `thepartyledger.fyi` and `www.thepartyledger.fyi` to `http://127.0.0.1:4400` and answers anything else with 404. Both names are proxied CNAME records pointing at the tunnel.
 - **`cloudflared`** is installed on this PC (winget package `Cloudflare.cloudflared`) and runs as the Windows service **cloudflared**, which starts with Windows. It only connects out to Cloudflare. Check it with `Get-Service cloudflared`; update it with `winget upgrade Cloudflare.cloudflared` (as admin).
 - The zone redirects http to https ("Always Use HTTPS") and accepts TLS 1.2 or newer. The certificate is Cloudflare's free Universal SSL.
-- **The server itself isn't a service.** The site only works while `npm start` is running; when it isn't, players get Cloudflare's 502 page.
+- **The server itself isn't a service.** The site only works while the server is running; when it isn't, players get Cloudflare's 502 page. `npm start` runs it in your terminal. `npm run restart` stops the running one (whichever way it was started) and starts it again in the background, so it keeps going after the terminal or Claude Code session closes; its output goes to `data/server.log` (the run before is in `data/server-previous.log`). `npm run restart -- stop` stops it.
 - The Cloudflare API token used for the setup lives in `API_key` at the repo root, which git ignores. Nothing needs it while the site runs; the tunnel uses its own token, stored in the service.
 
 ### Letting players in safely
