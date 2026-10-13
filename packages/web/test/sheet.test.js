@@ -491,6 +491,55 @@ test('inventory: shown sorted by kind under headings, whatever order things were
   });
 });
 
+test('sheet: the point buy calculator is off until turned on, follows the scores as they are typed, and its buttons and bonuses change them', async () => {
+  await withPage(sheetPage(), async (page, t) => {
+    page.click('[data-tab=sheet]');
+    const pb = () => page.$('#point-buy');
+    assert.ok(pb().hidden);
+    assert.equal(page.el('#sheet .pb-toggle').getAttribute('aria-pressed'), 'false');
+    page.click('#sheet .pb-toggle');
+    assert.ok(!pb().hidden);
+    assert.equal(page.text('#point-buy .pb-points'), '12 of 27 points spent, 15 left.');
+
+    // Typed scores: a High Elf (2014, the campaign's rules) with 15 Dex has bought 13.
+    page.type(byLabel(page, 'Race'), 'High Elf');
+    page.type(byLabel(page, 'Strength score'), '15');
+    page.type(byLabel(page, 'Dexterity score'), '15');
+    assert.equal(page.el('#point-buy [aria-label="Dexterity before bonuses"]').value, '13');
+    assert.equal(page.text(page.el('#point-buy [aria-label="Dexterity before bonuses"]').closest('tr').querySelector('.pb-fixed')), '+2');
+    assert.equal(page.text('#point-buy .pb-points'), '21 of 27 points spent, 6 left.');
+    assert.ok(page.el('#point-buy [aria-label="Intelligence bonus you choose"]').hidden); // a High Elf's bonuses are fixed
+
+    // The buttons change the sheet's scores; + stops when the points run out.
+    page.click('#point-buy [aria-label="One more Constitution"]');
+    assert.equal(byLabel(page, 'Constitution score').value, '11');
+    assert.equal(byLabel(page, 'Constitution modifier').value, '+0');
+    page.click('#point-buy [aria-label="One less Wisdom"]');
+    page.click('#point-buy [aria-label="One less Wisdom"]');
+    assert.equal(byLabel(page, 'Wisdom score').value, '8');
+    assert.ok(page.el('#point-buy [aria-label="One less Wisdom"]').disabled);
+
+    // 2024: the race's bonuses come off, and the player chooses where the background's go.
+    page.type('#point-buy [aria-label="Point buy rules"]', '2024');
+    assert.equal(byLabel(page, 'Dexterity score').value, '13');
+    assert.equal(byLabel(page, 'Intelligence score').value, '9'); // the High Elf's +1 came off: 9 was bought
+    assert.match(page.text('#point-buy .pb-problems'), /raises one ability by 2 and another by 1/);
+    page.type('#point-buy [aria-label="Strength bonus you choose"]', '2');
+    page.type('#point-buy [aria-label="Dexterity bonus you choose"]', '1');
+    assert.equal(byLabel(page, 'Strength score').value, '17');
+    assert.equal(byLabel(page, 'Dexterity score').value, '14');
+    assert.ok(page.$('#point-buy .pb-problems').hidden);
+
+    await saved(page);
+    const { sheet } = await serverSheet(t);
+    assert.deepEqual(sheet.point_buy, { on: true, rules: '2024', choice: { 2014: {}, 2024: { str: 2, dex: 1 } } });
+    assert.equal(sheet.abilities.str, 17);
+
+    page.click('#sheet .pb-toggle');
+    assert.ok(pb().hidden);
+  });
+});
+
 test('sheet: the layouts chosen under Look draw the same sheet; the Tabs layout remembers its tab', async () => {
   await withPage(sheetPage(), async (page) => {
     page.click('[data-tab=sheet]');
@@ -500,6 +549,7 @@ test('sheet: the layouts chosen under Look draw the same sheet; the Tabs layout 
       await page.waitFor(() => page.$(`#sheet .row-${layout === 'tabs' ? 'strip' : layout === 'abilities' ? 'abilities' : layout}`), { what: `the ${layout} layout` });
       assert.equal(byLabel(page, 'Character name').value, 'Lyra', layout);
       assert.equal(page.$$('#sheet [aria-label="Strength score"]').length, 1, layout);
+      assert.equal(page.$$('#sheet .pb-toggle').length, 1, layout);
       assert.ok(page.$('#sheet [aria-label="Armour class"]'), layout);
     }
 

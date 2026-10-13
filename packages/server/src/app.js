@@ -110,6 +110,7 @@ function serveWebPage(app, dir) {
     '/shared/dice.js': '@dndapp/shared/dice.js',
     '/shared/rolls.js': '@dndapp/shared/rolls.js',
     '/shared/gear.js': '@dndapp/shared/gear.js',
+    '/shared/point-buy.js': '@dndapp/shared/point-buy.js',
     '/shared/settings.js': '@dndapp/shared/settings.js',
     '/shared/map.js': '@dndapp/shared/map.js',
     '/shared/map-design.js': '@dndapp/shared/map-design.js',

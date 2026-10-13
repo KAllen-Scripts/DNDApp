@@ -45,6 +45,16 @@ test('sheetChanges: the first save is the whole sheet; later saves are changes w
   assert.equal(sheetChanges(entries, { since: at(60), until: at(80) }).changes.length, 0);
 });
 
+test('sheetChanges: turning the point buy calculator on or choosing its rules is not a change to the character', () => {
+  const at = (min) => new Date(Date.UTC(2026, 9, 8, 12, min)).toISOString();
+  const entries = [
+    { version: 1, saved_at: at(0), changes: [{ p: [], v: sheetFor() }] },
+    { version: 2, saved_at: at(30), changes: [{ p: ['point_buy', 'on'], v: true }, { p: ['point_buy', 'rules'], v: '2024' }] },
+    { version: 3, saved_at: at(31), changes: [{ p: ['point_buy', 'choice', '2024', 'str'], v: 2 }, { p: ['abilities', 'str'], v: 12 }] },
+  ];
+  assert.deepEqual(sheetChanges(entries, { since: at(10), until: at(200) }).changes.map((c) => c.field), ['abilities.str']);
+});
+
 test('sheetText: what the player entered plus the numbers worked out from it', () => {
   const text = sheetText(sheetFor({ abilities: { str: 16, dex: 12, con: 14, int: 10, wis: 10, cha: 8 }, spells: [{ name: 'Shield', level: 1, prepared: true }], backstory: 'Exiled from the mountain.' }));
   assert.match(text, /Character: Thorin/);

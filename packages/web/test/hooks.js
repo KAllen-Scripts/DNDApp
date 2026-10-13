@@ -41,6 +41,7 @@ const MODULES = {
   'shared/map-art-temple.js': '@dndapp/shared/map-art-temple.js',
   'shared/map-art-farm.js': '@dndapp/shared/map-art-farm.js',
   'shared/coins.js': '@dndapp/shared/coins.js',
+  'shared/point-buy.js': '@dndapp/shared/point-buy.js',
   'shared/citations.js': '@dndapp/shared/citations.js',
   'vendor/marked.js': 'marked',
   'vendor/purify.js': 'dompurify',

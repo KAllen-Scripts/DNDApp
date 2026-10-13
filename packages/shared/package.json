@@ -9,6 +9,7 @@
     "./dice.js": "./src/dice.js",
     "./rolls.js": "./src/rolls.js",
     "./gear.js": "./src/gear.js",
+    "./point-buy.js": "./src/point-buy.js",
     "./map.js": "./src/map.js",
     "./map-design.js": "./src/map-design.js",
     "./map-paint.js": "./src/map-paint.js",

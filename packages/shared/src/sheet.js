@@ -158,6 +158,22 @@ const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(
 
 // ---------- the sheet ----------
 
+/** The point buy calculator's rules (point-buy.js has the rest). */
+export const POINT_BUY_RULES = ['2014', '2024'];
+
+/** The sheet's point buy settings, cleaned up: { on, rules: '' | '2014' | '2024', choice: { 2014: {a: n}, 2024: {a: n} } }. */
+export function normalizePointBuy(p = {}) {
+  const out = { on: p?.on === true, rules: POINT_BUY_RULES.includes(p?.rules) ? p.rules : '', choice: { 2014: {}, 2024: {} } };
+  for (const rules of POINT_BUY_RULES) {
+    for (const a of ABILITIES) {
+      const n = Math.trunc(Number(p?.choice?.[rules]?.[a]));
+      if (n >= 1 && n <= 2) out.choice[rules][a] = n;
+    }
+  }
+  return out;
+}
+
+
 export function emptySheet({ name = '', player_name = '' } = {}) {
   return {
     ...Object.fromEntries(Object.keys(TEXT_FIELDS).map((k) => [k, ''])),
@@ -175,6 +191,7 @@ export function emptySheet({ name = '', player_name = '' } = {}) {
     coins: Object.fromEntries(COINS.map((c) => [c, 0])),
     spellcasting: { class: '', slots_used: {}, pact_used: 0 },
     spells: [],
+    point_buy: normalizePointBuy(), // the point buy calculator (point-buy.js): off until the player turns it on
     overrides: {},
   };
 }
@@ -308,6 +325,7 @@ export function normalizeSheet(input = {}) {
     if (used) out.spellcasting.slots_used[n] = used;
   }
   out.spellcasting.pact_used = int(s.spellcasting?.pact_used, { min: 0, max: 10, fallback: 0 });
+  out.point_buy = normalizePointBuy(s.point_buy);
   out.spells = (Array.isArray(s.spells) ? s.spells : []).slice(0, 400).map(normalizeSpell).filter((sp) => sp.name);
   for (const [k, v] of Object.entries(s.overrides ?? {})) {
     const c = coerceDerived(k, v);
