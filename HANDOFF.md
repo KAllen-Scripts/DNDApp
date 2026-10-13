@@ -96,7 +96,7 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
    - **Archivist between sessions:** fill in a sheet with real Claude Code running, wait 10 minutes, check what the archivist made of it; again after a level-up. Process a session played with a map and check it used `<map_events>`.
    - **Dice:** Deluxe and Classic on a real GPU and a phone (Safari and Firefox untested). Deluxe is the default now; the owner can change it with `DICE_ROLLER`.
    - **Look:** show the players; see which themes, layouts and layout options they use, then prune (owner's call).
-3a. **Regression tests:** when a bug is fixed, have the `regression-keeper` worker add its test; backfill the ten past fixes listed in `docs/regressions.md` a few at a time (the "Regression tests" thread owns this).
+3a. **Regression tests:** when a bug is fixed, have the `regression-keeper` worker add its test (the "Regression tests" thread owns this). Every past fix in this log now has one (18).
 4. **Decisions waiting on the owner:** all in "Open questions for the owner" below.
 5. **Later, planned:** a ready-made creature library from the books once they're all scanned (SPEC §6.6); glossary and speaker-map editing on the page; **sessions built from notes only** (designed with the owner, not built: [docs/notes/notes-only-sessions.md](docs/notes/notes-only-sessions.md), SPEC §6.3); the sheet's rules following the campaign's edition (SPEC §6.3). On hold until the owner raises them: the rest of the DM screen ([docs/notes/dm-screen-ideas.md](docs/notes/dm-screen-ideas.md)); see "Parked, ruled out and on hold" below.
 6. **Hosting:** buy the domain, set `PUBLIC_URL`, set up Cloudflare Tunnel, write a short player guide. Check whether Claude Code's WebFetch (Find online) can reach addresses on the home network before opening it up (SPEC §3.5).
@@ -962,6 +962,10 @@ The owner started a "Regression tests" thread in the new project to own this sui
 - `docs/regressions.md` "not yet covered" now lists ten past fixes, with where each is partly tested already. Next: backfill them a few at a time, each proved to fail without its fix.
 - **The owner's rule** (2026-10-13): regression tests only check that past bugs haven't returned; they are never end-to-end tests, which waste credits. Checks that need his machine go in the new "Checks to run in VS Code" section above, which a VS Code session runs and then clears. Written into AGENTS.md, `docs/regressions.md` and the worker's guide.
 - No app behaviour changed; 439 tests pass.
+
+### 2026-10-13: Every past fix has a regression test
+
+The owner: "Just merge stuff. If it's broken we will fix it." PRs #37 (the regression setup) and #38 (four tests tagged, the VS Code list) were merged. Then the past fixes that had no tagged test got one each (12 tests, in two batches): the DM's sheet (403), a web stat block keeping its source on a map, DMG footer page numbers, the AI walls message that couldn't be closed, logins switching without a reload, `h()` nested children, a bad speaker link refused before archiving, the claude.ai connectors kept out of Claude Code runs, top-level text in an answer, short book-search terms as whole words, an ambiguous book name, and a fast drag in the map creator. Each was checked to fail with its fix taken out of the source and to pass with it back. 18 regression tests, all small with the fake AI; nothing needed the VS Code list. 451 tests pass.
 
 ## Verified vs. not verified
 

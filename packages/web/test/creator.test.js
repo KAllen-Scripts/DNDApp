@@ -152,6 +152,22 @@ test('creator: the DM starts blank, draws a room with a door, a pond and a campf
   });
 });
 
+// A fast drag (one pointer move across many squares) painted only its two ends.
+test('regression: creator: a fast floor drag paints every square between the pointer\'s stops', async () => {
+  await withPage(dm(), async (page, t) => {
+    await openNew(page);
+    page.click('#creator-blank');
+    tool(page, 'floor');
+    page.click('[data-floor="g"]');
+    page.click('#creator-fill-all');
+    page.click('[data-floor="d"]');
+    drag(page, [1.5, 15.5], [8.5, 15.5]);
+    page.type(page.$('#creator-name'), 'Path');
+    await saveAndClose(page);
+    assert.equal(t.maps.list(t.campaign.id)[0].design.floor[15].slice(0, 10), 'gddddddddg');
+  });
+});
+
 test("creator: the DM's own picture as an asset, placed on the map; closing with changes asks first", async () => {
   await withPage(dm({ page: () => ({ answers: { confirm: [false, true] } }) }), async (page, t) => {
     await openNew(page);

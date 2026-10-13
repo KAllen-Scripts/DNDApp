@@ -564,6 +564,21 @@ test('upload preview lists speakers; links sent with the upload are saved before
   }
 });
 
+// A bad speaker link used to be found only after the transcript was archived, leaving a permanent orphan session.
+test('regression: an upload with a bad speaker link is refused before anything is archived', async () => {
+  const t = await setup();
+  try {
+    const res = await t.request('POST', `/campaigns/${t.campaign.id}/sessions`, {
+      body: { number: 1, played_on: '2026-10-08', transcript: SAMPLE, speakers: [{ speaker: 'SamPlays', user_id: 999 }] },
+    });
+    assert.equal(res.statusCode, 400);
+    assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/sessions/1`)).statusCode, 404);
+    assert.ok(!fs.existsSync(path.join(t.paths.archive, t.campaign.slug, 'sessions', '0001')), 'nothing archived');
+  } finally {
+    await t.cleanup();
+  }
+});
+
 // ---------- sessions & archivist ----------
 
 test('upload needs a date; transcripts are archived and never replaced', async () => {
