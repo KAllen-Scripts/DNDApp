@@ -13,6 +13,10 @@
 import { ASSETS, hullShape } from './map-design.js';
 import { TAU, shade, rgba, circle, oval, rect, rrect, poly, line, polyline, blobPoints, smoothShape, radial, glow } from './map-paint.js';
 import { shadow, lit, canopy, stone, planks, fire, candle, coin, band, wheel, book, crystals } from './map-art-pieces.js';
+import { ART_OUTDOORS } from './map-art-outdoors.js';
+import { ART_DUNGEON } from './map-art-dungeon.js';
+import { ART_FURNITURE } from './map-art-furniture.js';
+import { ART_SHIPS } from './map-art-ships.js';
 import { ART_TEMPLE } from './map-art-temple.js';
 import { ART_FARM } from './map-art-farm.js';
 
@@ -512,8 +516,7 @@ const BASE_ART = {
     }
     circle(ctx, 0, 0, R / rings - gap, shade(t, 0.05), shade(t, -0.25), Math.max(0.5, R * 0.01));
     // Wear in the middle, moss in the cracks at the edge.
-    ctx.fillStyle = radial(ctx, 0, 0, R * 0.7, rgba('#000000', 0.07), rgba('#000000', 0));
-    circle(ctx, 0, 0, R * 0.7, ctx.fillStyle);
+    circle(ctx, 0, 0, R * 0.7, radial(ctx, 0, 0, R * 0.7, rgba('#000000', 0.07), rgba('#000000', 0)));
     for (let i = 0; i < 10; i += 1) {
       const a = rnd() * TAU;
       oval(ctx, Math.cos(a) * R * 0.94, Math.sin(a) * R * 0.94, R * 0.05, R * 0.025, a, rgba('#4f6b2a', 0.45));
@@ -564,9 +567,7 @@ const BASE_ART = {
       line(ctx, -w / 2, y + down * m * 0.012, w / 2, y + down * m * 0.012, rgba('#d9b58a', 0.5), Math.max(0.5, m * 0.008), 'butt');
     }
     // Wear down the middle, and a few stains.
-    ctx.globalAlpha = 0.08;
-    rect(ctx, -w * 0.18, -h / 2, w * 0.36, h, '#2a1a0c');
-    ctx.globalAlpha = 1;
+    rect(ctx, -w * 0.18, -h / 2, w * 0.36, h, 'rgba(42,26,12,0.08)');
     for (let i = 0; i < 4; i += 1) oval(ctx, (rnd() - 0.5) * w * 0.6, (rnd() - 0.5) * h * 0.7, m * (0.05 + rnd() * 0.08), m * (0.03 + rnd() * 0.05), rnd() * 3, 'rgba(40,25,10,0.12)');
     ctx.restore();
     // The rim: a cap rail along its top, and cleats inside it.
@@ -1718,7 +1719,7 @@ const BASE_ART = {
  * `shadows: false` leaves shadows out.
  */
 /** Every built-in asset's drawing, by its key. */
-export const ART = { ...BASE_ART, ...ART_FARM, ...ART_TEMPLE };
+export const ART = { ...BASE_ART, ...ART_FARM, ...ART_TEMPLE, ...ART_SHIPS, ...ART_FURNITURE, ...ART_DUNGEON, ...ART_OUTDOORS };
 
 export function drawBuiltIn(ctx, key, w, h, { seed = 1, tint = null, sx = null, sy = null, shadows = true } = {}) {
   const def = ASSETS[key];
