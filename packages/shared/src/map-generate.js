@@ -1,7 +1,9 @@
 /**
  * Starting points for the map creator (SPEC §6.6 "Making a map"): a
- * dungeon, a cave, a forest glade, a village, a tavern, a camp, a crypt or a
- * river crossing, made from a seed, for the DM to change as they like. The
+ * dungeon, a cave, a forest glade, a village, a tavern, a camp, a crypt, a
+ * river crossing, and (map-generate-more.js) a ship at sea, docks, a temple,
+ * a farm, a mine, a graveyard, a wizard's tower, a castle, sewers or a
+ * monster's lair, made from a seed, for the DM to change as they like. The
  * server makes them (POST .../maps/design/generate); the same seed and size
  * always make the same map. Plain JS, built from the creator's own pieces
  * (map-design.js), so what comes out is an ordinary design.

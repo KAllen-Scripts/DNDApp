@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ASSETS, ASSET_GROUPS, DESIGN_MAX, EMPTY, FLOORS, LABEL_FONTS, LOOK, MAX_DESIGN_LABELS, PATH_KINDS, WALL_STYLES,
-  addCircle, addRoom, addWall, assetAt, assetOutline, brushCells, clearArea, copyArea, cutWallAt, designToMap, difficultAreas,
+  addCircle, addRoom, addWall, assetAt, hullShape, assetOutline, brushCells, clearArea, copyArea, cutWallAt, designToMap, difficultAreas,
   drawOrder, emptyDesign, eraseWallAt, fillFloor, labelAt, normalizeClip, normalizeDesign, paintFloor, pasteClip, pathAt,
   pathOutline, rectCells, resizeDesign, scatterAssets, seeded, shiftDesign, transformClip, uploadedRefs, wallAt, wallEdges, wallPoints,
 } from '../src/map-design.js';
@@ -381,4 +381,15 @@ test('designToMap: pixels, an exact grid, walls, doors, secret doors, windows, c
   assert.equal(n.terrain.length, 1, 'the river is difficult terrain; the road is not');
   assert.ok(n.terrain[0].points.length >= 4 && n.terrain[0].points.length <= 200);
   assert.ok(pathOutline(e.paths[0]).every(([, y]) => y >= 2.9 && y <= 5.1));
+});
+
+test("a ship's hull: a pointed bow at the top, straight sides from the stern, inside its box", () => {
+  const { outline, L } = hullShape(6, 18);
+  assert.deepEqual(outline[0], [-3, 9]);
+  assert.deepEqual(outline.at(-1), [3, 9]);
+  assert.ok(outline.some(([x, y]) => x === 0 && y === -9), 'the bow tip');
+  assert.ok(outline.every(([x, y]) => Math.abs(x) <= 3 + 1e-9 && Math.abs(y) <= 9 + 1e-9));
+  assert.ok(Math.abs(L - 6) < 1e-9);
+  assert.equal(ASSETS.hull.group, 'Ships');
+  assert.equal(ASSETS.floor_round.shape, 'round');
 });

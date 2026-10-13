@@ -49,6 +49,34 @@ test('what each kind has: rooms with doors indoors, water and a bridge at the cr
   assert.ok(has(generateDesign('tavern', { seed: 3 }), 'bar'));
 });
 
+test('the newer kinds: a ship on the sea, berths at the docks, fields at the farm, graves, sewer water', () => {
+  const has = (d, a) => d.assets.some((x) => x.a === a);
+  const ship = generateDesign('ship', { seed: 4 });
+  assert.ok(has(ship, 'hull') && has(ship, 'mast') && has(ship, 'helm'), 'a ship with masts and a helm');
+  assert.ok(ship.walls.some((w) => w.type === 'low'), 'rails round the deck');
+  assert.ok(ship.floor.some((l) => l.includes('j')) && ship.floor.some((l) => l.includes('D')), 'deck and deep sea');
+  const docks = generateDesign('docks', { seed: 4 });
+  assert.ok(has(docks, 'hull') && docks.floor.some((l) => /[WD]/.test(l)), 'a ship in the harbour');
+  assert.ok(has(generateDesign('farm', { seed: 4 }), 'windmill') || has(generateDesign('farm', { seed: 4 }), 'barn'));
+  assert.ok(generateDesign('graveyard', { seed: 4 }).assets.filter((a) => /grave|tomb/.test(a.a)).length >= 5, 'graves');
+  assert.ok(has(generateDesign('tower', { seed: 4 }), 'floor_round'), 'a round tower floor');
+  assert.ok(generateDesign('castle', { seed: 4 }).walls.filter((w) => w.type === 'wall').length >= 20, 'castle walls');
+  assert.ok(generateDesign('sewer', { seed: 4 }).floor.some((l) => /[WD]/.test(l)), 'sewer water');
+  for (const kind of ['temple', 'mine', 'lair', 'sewer']) {
+    const d = generateDesign(kind, { seed: 4 });
+    assert.ok(d.walls.filter((w) => w.type === 'wall').length >= 8, `${kind} has walls`);
+  }
+});
+
+test("the builder: things put underfoot (a ship's deck) don't count as in the way", () => {
+  const b = designBuilder(12, 12, 1, 1);
+  b.fill(0, 0, 12, 12, 'f');
+  b.put('hull', 6, 6, { w: 4, h: 10, underfoot: true });
+  assert.ok(b.free(6, 6, 1, 1), 'free on the deck');
+  b.put('barrel', 6, 6);
+  assert.ok(!b.free(6, 6, 1, 1), 'but not where a barrel stands');
+});
+
 test('a size of its own (within limits), and an unknown kind refused', () => {
   const d = generateDesign('forest', { cols: 20, rows: 16, seed: 1 });
   assert.deepEqual([d.cols, d.rows], [20, 16]);

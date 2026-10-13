@@ -188,7 +188,7 @@ test('starting points: the kinds of map, and a generated one (the same seed make
   const t = await setup({ llm: createFakeLLM() });
   try {
     const kinds = (await t.request('GET', `/campaigns/${t.campaign.id}/maps/design/kinds`)).json().kinds;
-    assert.deepEqual(kinds.map((k) => k.key), ['dungeon', 'cave', 'forest', 'village', 'tavern', 'camp', 'crypt', 'crossing']);
+    assert.deepEqual(kinds.map((k) => k.key), ['dungeon', 'cave', 'forest', 'village', 'tavern', 'camp', 'crypt', 'crossing', 'ship', 'docks', 'temple', 'farm', 'mine', 'graveyard', 'tower', 'castle', 'sewer', 'lair']);
     assert.ok(kinds.every((k) => k.name && k.about && k.cols >= 16 && k.rows >= 12));
     const url = `/campaigns/${t.campaign.id}/maps/design/generate`;
     const a = (await t.request('POST', url, { body: { kind: 'tavern', seed: 42 } })).json();
@@ -357,7 +357,7 @@ test("stamps: the built-in ones, the DM's own kept, renamed and taken off the li
   try {
     const url = `/campaigns/${t.campaign.id}/map-stamps`;
     let list = (await t.request('GET', url)).json();
-    assert.equal(list.builtIn.length, 16);
+    assert.equal(list.builtIn.length, 35);
     assert.ok(list.builtIn.every((s) => s.id.startsWith('b:') && s.name && s.group && s.clip.cols >= 1));
     assert.deepEqual(list.stamps, []);
 

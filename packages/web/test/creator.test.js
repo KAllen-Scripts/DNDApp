@@ -189,7 +189,7 @@ test('creator: starting from a map the server makes (a tavern, another, then a c
   await withPage(dm(), async (page, t) => {
     await openNew(page);
     await page.waitFor('[data-generate="tavern"]', { what: 'the kinds of map' });
-    assert.deepEqual(page.$$('[data-generate]').map((b) => b.dataset.generate), ['dungeon', 'cave', 'forest', 'village', 'tavern', 'camp', 'crypt', 'crossing']);
+    assert.deepEqual(page.$$('[data-generate]').map((b) => b.dataset.generate), ['dungeon', 'cave', 'forest', 'village', 'tavern', 'camp', 'crypt', 'crossing', 'ship', 'docks', 'temple', 'farm', 'mine', 'graveyard', 'tower', 'castle', 'sewer', 'lair']);
     assert.match(page.text('[data-generate="tavern"]'), /Tavern/);
     assert.match(page.text('#creator-result'), /shows here first/);
 
