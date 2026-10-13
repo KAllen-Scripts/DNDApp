@@ -63,6 +63,8 @@ export const config = {
       // Character sheets: reading an uploaded sheet, and tidying a spell from a book.
       import: { model: env.MODEL_IMPORT || DEFAULT_MODEL, effort: env.EFFORT_IMPORT || 'medium' },
       spells: { model: env.MODEL_SPELLS || DEFAULT_MODEL, effort: env.EFFORT_SPELLS || 'low' },
+      // Character sheets: reviewing a sheet against the books (and the web when they don't cover it), on the player's button.
+      review: { model: env.MODEL_REVIEW || DEFAULT_MODEL, effort: env.EFFORT_REVIEW || 'medium' },
       // Maps: reading an imported map (kind, grid, scale).
       maps: { model: env.MODEL_MAPS || DEFAULT_MODEL, effort: env.EFFORT_MAPS || 'medium' },
       // Maps: drafting walls and doors (two looks: a draft, then checking it). One level below the most (owner, 2026-10-10: max used about 30% of a session's tokens): a map is set up once, and closing every room takes care.
@@ -126,6 +128,10 @@ export const config = {
   sheets: {
     // AI calls (sheet uploads, spell lookups outside the SRD) per player per hour.
     aiPerHour: num(env.SHEET_AI_PER_HOUR, 60),
+    // Reviewing a sheet (the Review sheet button): tool calls (book lookups) and web lookups per review, and a cost limit.
+    reviewMaxToolCalls: num(env.SHEET_REVIEW_MAX_TOOL_CALLS, 16),
+    reviewWebLookups: num(env.SHEET_REVIEW_WEB_LOOKUPS, 3),
+    reviewMaxCostUsd: num(env.SHEET_REVIEW_MAX_COST_USD, 1),
     // The rules edition (2014 or 2024) for a campaign whose DM hasn't picked one in its settings (editions.js).
     // Empty: the edition of the group's Player's Handbook in BOOKS_DIR, else 2014.
     restRules: ['2014', '2024'].includes(env.REST_RULES) ? env.REST_RULES : '',
