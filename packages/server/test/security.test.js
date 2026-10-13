@@ -152,7 +152,7 @@ test('logins: guesses from one address are limited across names; the per-name lo
   }
 });
 
-test('live map updates stop when a player is blocked or removed, and follow role changes', async () => {
+test('regression: live map updates stop when a player is blocked or removed, and follow role changes', async () => {
   const t = await setup({ llm: mapLLM() });
   try {
     // Alex is blocked: their open stream ends at the next update instead of carrying on.

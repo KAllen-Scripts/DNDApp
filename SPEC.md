@@ -1,6 +1,7 @@
 # DNDApp — Project Spec
 
-> Status: v0.34 (2026-10-13). Checked against everything discussed in the first Claude project before moving to a new one: its design notes and research copied into `docs/notes/` (§3.1); the picture-asset research for the map creator (§6.6); sessions built from notes only, and the parked and ruled-out ideas (§6.3); open questions brought together (§9). No behaviour change.
+> Status: v0.35 (2026-10-13). Regression tests: every fixed bug gets a `regression: …` test, listed in `docs/regressions.md`, run with `npm run test:regressions` and before every commit (§3.1). No behaviour change.
+> Previously v0.34 (2026-10-13). Checked against everything discussed in the first Claude project before moving to a new one: its design notes and research copied into `docs/notes/` (§3.1); the picture-asset research for the map creator (§6.6); sessions built from notes only, and the parked and ruled-out ideas (§6.3); open questions brought together (§9). No behaviour change.
 > Previously v0.33 (2026-10-13). The map creator's second stage: 32 floors that blend at their edges, 356 built-in assets in 14 groups (all drawn in code), walls in 8 styles with curves, round towers, secret doors, windows and archways, roads and rivers, labels, the look (daylight, dusk, night, gloom) with lights that stop at walls, scatter, areas and stamps (35 built in, plus the DM's own, schema v17), 18 kinds of starting map made from a seed, an AI draft from a description or sketch, floors of a building linked as levels, autosave, and a Universal VTT (.dd2vtt) download (§6.6).
 > Previously v0.32 (2026-10-12). The map creator: the DM makes a map from scratch in the app (floors painted on a grid, rooms, walls, fences and doors, built-in assets and their own pictures), and the server draws it into an ordinary map that works with tokens, fog, walls and line of sight; a plan for what later stages add (§6.6).
 > Previously v0.31 (2026-10-10). The AI walls done or failed message over the map can be closed again (a click on it used to go to the map), and AI walls run at `xhigh` effort instead of `max` (§5, §6.6).
@@ -165,6 +166,9 @@ DNDApp/
                   style.css, themes.css, icon.svg
       test/       page tests in jsdom against a real test server (page.js), fakes for the dice libraries
   docs/notes/     design notes, research and checklists from the first Claude project (README.md lists them)
+  docs/regressions.md  every bug found and fixed, and the `regression: …` test that keeps it fixed
+  .claude/        Claude Code set-up: agents/regression-keeper.md (the worker that writes and checks regression tests),
+                  settings.json + hooks/regressions.mjs (regression tests run before every commit touching packages/)
   SPEC.md  HANDOFF.md  README.md  AGENTS.md  CLAUDE.md
 ```
 

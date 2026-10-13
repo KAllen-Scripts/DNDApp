@@ -407,7 +407,7 @@ test('admin can delete a campaign: gone from the database, kept (marked) in the 
   }
 });
 
-test('names are stored with extra spaces cleaned up, matching what the page shows', async () => {
+test('regression: names are stored with extra spaces cleaned up, matching what the page shows', async () => {
   const t = await setup();
   try {
     const c = (await t.request('POST', '/admin/campaigns', { body: { name: '  test   camp ' } })).json();
@@ -559,6 +559,21 @@ test('upload preview lists speakers; links sent with the upload are saved before
     assert.deepEqual(map, { KennyDM: ['DM', t.dm.id], SamPlays: ['Thorin (Sam)', t.sam.id], Guest: ['Guest', null] });
     const attendees = (await t.request('GET', `/campaigns/${cid}/sessions/2`)).json().attendees.map((a) => a.name).sort();
     assert.deepEqual(attendees, ['Kenny', 'Sam']);
+  } finally {
+    await t.cleanup();
+  }
+});
+
+// A bad speaker link used to be found only after the transcript was archived, leaving a permanent orphan session.
+test('regression: an upload with a bad speaker link is refused before anything is archived', async () => {
+  const t = await setup();
+  try {
+    const res = await t.request('POST', `/campaigns/${t.campaign.id}/sessions`, {
+      body: { number: 1, played_on: '2026-10-08', transcript: SAMPLE, speakers: [{ speaker: 'SamPlays', user_id: 999 }] },
+    });
+    assert.equal(res.statusCode, 400);
+    assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/sessions/1`)).statusCode, 404);
+    assert.ok(!fs.existsSync(path.join(t.paths.archive, t.campaign.slug, 'sessions', '0001')), 'nothing archived');
   } finally {
     await t.cleanup();
   }
@@ -915,7 +930,7 @@ test('players can pin and delete their own conversations; deleting erases them b
   }
 });
 
-test('Q&A streams over a real HTTP connection and closes when done', async () => {
+test('regression: Q&A streams over a real HTTP connection and closes when done', async () => {
   const llm = createFakeLLM({ qaScript: [[{ tool: 'list_sessions', input: {} }, { answer: 'One session so far [S1].' }]] });
   const t = await setup({ llm });
   try {

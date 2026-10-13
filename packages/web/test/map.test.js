@@ -571,6 +571,25 @@ test('AI walls: the DM sees it working (step and time so far), then what it foun
   });
 });
 
+// Pressing ✕ on the AI walls message started a map pan, so the map got the click and the message stuck.
+test('regression: pressing on the AI walls message does not start a pan, so it can be closed', async () => {
+  const llm = createFakeLLM({
+    structured: async (opts) => (opts.purpose.startsWith('map:walls') ? { walls: [{ points: [{ x: 500, y: 0 }, { x: 500, y: 1000 }] }], doors: [], notes: '' } : mapReading()),
+  });
+  await withPage({
+    setup: { llm },
+    before: async (t) => ({ dana: await addDm(t), map: await importMap(t, { patch: SHOWN }) }),
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page) => {
+    await openMapTab(page);
+    page.click('#map-fog-open');
+    page.click('#map-walls-draft');
+    await page.waitFor(() => /AI walls done/.test(page.text('#map-ai-note')), { what: 'the done message' });
+    page.pointer('#map-ai-note [aria-label=Close]', 'pointerdown', { clientX: 350, clientY: 20 });
+    assert.ok(!page.$('#map-view').hasPointerCapture(1), 'the map took the pointer');
+  });
+});
+
 test('line of sight: a player sees what their token sees, opens the door next to them with a click; never the walls', async () => {
   await withPage({
     setup: { llm: mapLLM() },

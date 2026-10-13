@@ -120,7 +120,7 @@ test('beside the map under Look: pick what goes there; its side is greyed out un
   });
 });
 
-test('the bar along the top stays put: every tab has room for its bold name, and its width never depends on the tab', async () => {
+test('regression: the bar along the top stays put: every tab has room for its bold name, and its width never depends on the tab', async () => {
   const css = fs.readFileSync(new URL('../public/style.css', import.meta.url), 'utf8') + fs.readFileSync(new URL('../public/themes.css', import.meta.url), 'utf8');
   // Only the panels change width with the tab; the page itself doesn't.
   const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].map(([, sel, body]) => [sel.trim(), body]);

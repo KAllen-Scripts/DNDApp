@@ -133,6 +133,17 @@ test('claude-code: runs locked down, on the subscription, and returns structured
   }
 });
 
+// The host's claude.ai connectors (Gmail, Calendar, Drive) reached Claude Code runs, and an answer told a player to authorise them.
+test("regression: claude-code: the host's claude.ai connectors, synced skills and other MCP servers stay out of runs", async () => {
+  const { usage } = usageFor();
+  const queryFn = fakeQuery([result({ structured_output: { title: 'Hi' } })]);
+  await createClaudeCodeProvider({ config, usage, queryFn }).structured({ task: 'archivist', purpose: 'archivist:test', system: 's', prompt: 'p', schema: Schema });
+  const { options } = queryFn.calls[0];
+  assert.equal(options.strictMcpConfig, true);
+  assert.deepEqual(options.settings, { disableClaudeAiConnectors: true, syncClaudeAiSkills: false, syncClaudeAiPlugins: false });
+  assert.deepEqual(options.skills, []);
+});
+
 test('claude-code: agent exposes only the given tools and streams text', async () => {
   const { usage } = usageFor();
   const queryFn = fakeQuery([

@@ -29,6 +29,7 @@
     "./settings.js": "./src/settings.js"
   },
   "scripts": {
-    "test": "node --test \"test/*.test.js\""
+    "test": "node --test \"test/*.test.js\"",
+    "test:regressions": "node --test --test-name-pattern=\"^regression: \" \"test/*.test.js\""
   }
 }

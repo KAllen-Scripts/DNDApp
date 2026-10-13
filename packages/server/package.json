@@ -8,6 +8,7 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "test": "node --test \"test/*.test.js\"",
+    "test:regressions": "node --test --test-name-pattern=\"^regression: \" \"test/*.test.js\"",
     "admin": "node src/cli/admin.js",
     "rebuild": "node src/cli/rebuild.js"
   },

@@ -208,7 +208,7 @@ test('dice: when the device asks for less motion, no 3D dice and no effects', as
   mock.restoreAll();
 });
 
-test('dice: every roller\'s canvas sits on top of the others in the stage (a second 3D roller was pushed below the window)', async () => {
+test('regression: dice: every roller\'s canvas sits on top of the others in the stage (a second 3D roller was pushed below the window)', async () => {
   const fs = await import('node:fs');
   const css = fs.readFileSync(new URL('../public/style.css', import.meta.url), 'utf8');
   const rule = /\.dice-stage canvas\s*{([^}]*)}/.exec(css)?.[1] ?? '';

@@ -348,6 +348,14 @@ test('notes: a player saves a note', async () => {
 
 `withPage` fails the test if the page throws. See the existing tests in `packages/web/test/` for dialogs, uploads, dragging and live updates.
 
+**Regression tests** guard bugs that were found and fixed. They're ordinary tests whose names start with `regression: `, kept next to the related tests; [docs/regressions.md](docs/regressions.md) lists each bug and its test.
+
+```sh
+npm run test:regressions   # only the regression tests (about 20 seconds)
+```
+
+In Claude Code, the `regression-keeper` worker (`.claude/agents/`) writes and checks them, and a hook (`.claude/settings.json`, `.claude/hooks/regressions.mjs`) runs them before every `git commit` that touches `packages/`, stopping the commit if one fails.
+
 ## Licences
 
 Spell text in `packages/server/src/sheets/srd-spells.json` is from the System Reference Document 5.1 by Wizards of the Coast LLC, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/legalcode), as prepared by the [5e-bits/5e-database](https://github.com/5e-bits/5e-database) project (MIT).
