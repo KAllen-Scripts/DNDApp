@@ -104,6 +104,11 @@ test('record links, stat blocks and hit points are cleaned or dropped', () => {
   assert.equal(normalizeHp({}), null);
 });
 
+// A creature found online became "manual" once placed on a map, so the map didn't say to check it.
+test('regression: a stat block found on the web keeps source "web" when cleaned for a map token', () => {
+  assert.equal(normalizeStats({ name: 'Owlbear', text: '**Owlbear**', source: 'web' }).source, 'web');
+});
+
 test('tokens: unknown kinds become NPCs; only player characters belong to a player; ungridded sizes follow the map', () => {
   const map = normalizeMap({ image: { width: 800, height: 400 } });
   const t = normalizeToken({ id: 'tok123', kind: 'dragon', user_id: 3, size: 9, color: 'blue', conditions: ['prone', 'prone', 'sleepy'], hidden: 'yes' }, map);
