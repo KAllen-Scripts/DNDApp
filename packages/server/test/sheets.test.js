@@ -130,6 +130,19 @@ test('character sheet: blank to start, saved and versioned, private, archived as
   }
 });
 
+// The DM's Sheet tab was only hidden; the server still gave the DM a sheet of their own.
+test('regression: the DM gets no character sheet or character pictures from the server', async () => {
+  const t = await setup();
+  try {
+    const url = `/campaigns/${t.campaign.id}/sheet`;
+    assert.equal((await t.request('GET', url)).statusCode, 403);
+    assert.equal((await t.request('PUT', url, { body: { sheet: emptySheet(), version: 0 } })).statusCode, 403);
+    assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/character/pictures`)).statusCode, 403);
+  } finally {
+    await t.cleanup();
+  }
+});
+
 test('uploading a sheet: the AI reads it; numbers on the sheet that differ from the rules are kept as the player typed them', async () => {
   const llm = createFakeLLM({ structured: async () => importOut() });
   const t = await setup({ llm });

@@ -178,6 +178,53 @@ test('books: titles, printed years, footer page numbers, short terms, headings, 
   }
 });
 
+// The 2024 DMG scan has its page numbers only in running footers, and every citation was pages off.
+test('regression: books: page numbers in running footers give the printed page, not the PDF page', async () => {
+  const footer = (n, lines) => [...lines, `CHAPTER 2 | RUNNING THE GAME ${n}`];
+  const guide = [
+    ['DUNGEON MASTER’S GUIDE'],
+    ['Contents'],
+    footer(1, ['Weather', 'Rain falls.']),
+    footer(2, ['Grids', 'Squares are 5 feet.']),
+    footer(3, ['Grappled', "A grappled creature's speed becomes 0."]),
+    footer(4, ['Armor', 'Armor helps.']),
+  ];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dndapp-books-'));
+  fs.writeFileSync(path.join(dir, 'Dungeon Masters Guide.pdf'), makePdf(guide));
+  const books = createBooks({ dir, log: {} });
+  try {
+    assert.equal((await books.search(['grappled']))[0]?.page, 3);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// "AC" found every page that says "action".
+test('regression: books: a term of 3 letters or fewer matches whole words only', async () => {
+  const { books, cleanup } = shelf();
+  try {
+    const hits = await books.search(['grappled'], { book: 'Players Handbook' });
+    assert.equal(hits[0]?.page, 3);
+    // The Handbook says "action" and "attack" a lot, and "AC" never.
+    assert.deepEqual(await books.search(['AC'], { book: 'Players Handbook' }), []);
+  } finally {
+    cleanup();
+  }
+});
+
+// With both editions of a book, "Players Handbook" searched nothing, which read as "not in the book".
+test('regression: books: an ambiguous book name is an error naming the books, not an empty search', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dndapp-books-'));
+  fs.writeFileSync(path.join(dir, 'Players Handbook (2014).pdf'), makePdf(HANDBOOK));
+  fs.writeFileSync(path.join(dir, 'Players Handbook (2024).pdf'), makePdf(HANDBOOK));
+  const books = createBooks({ dir, log: {} });
+  try {
+    assert.match((await books.search(['grappled'], { book: 'Players Handbook' })).error, /could be Players Handbook \(2014\) or Players Handbook \(2024\)/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('books: spells in the 2024 layout are found; class sections that look like spells are not', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dndapp-books-'));
   fs.writeFileSync(

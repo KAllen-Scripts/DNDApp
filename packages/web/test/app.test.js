@@ -56,6 +56,44 @@ test('logout: ends the login on the server and shows the login form', async () =
   });
 });
 
+// Logging out of the admin screen and in as a player (no reload) left the admin screen showing too.
+test('regression: logging out of the admin screen and in as a player shows only the player app', async () => {
+  await withPage({ page: (t) => ({ as: { token: t.dmToken } }) }, async (page) => {
+    assert.ok(page.visible('#admin-view'));
+    page.click('#admin-view .logout');
+    await page.settle();
+    page.type('#login-form [name=name]', 'Sam');
+    page.type('#login-form [name=password]', PASSWORD);
+    page.submit('#login-form');
+    await page.settle();
+    assert.ok(page.visible('#app-view'));
+    assert.ok(!page.visible('#admin-view'), 'the admin screen is still showing');
+  });
+});
+
+// The element helper only flattened one level of children: pills showed "[object HTMLSpanElement]".
+test('regression: the element helper h() takes children nested to any depth', async () => {
+  await withPage({}, async () => {
+    const { h } = await import('../public/api.js');
+    const el = h('p', {}, 'a', [h('span', {}, 'b'), ['c', [h('i', {}, 'd')]]]);
+    assert.equal(el.textContent, 'abcd');
+    assert.equal(el.querySelectorAll('span, i').length, 2);
+  });
+});
+
+// Text at the top level of an answer (not inside a paragraph) crashed the answer renderer.
+test('regression: an answer with text at its top level is shown, not a crash', async () => {
+  const answer = '<div class="stat-block"><b>Ogre</b></div>\nAC 11 [S9]';
+  const llm = createFakeLLM({ qaScript: [[{ answer }]] });
+  await withPage({ setup: { llm }, page: (t) => ({ as: t.sam }) }, async (page) => {
+    page.type('#ask-form textarea', 'Ogre?');
+    page.submit('#ask-form');
+    await page.settle();
+    assert.equal(page.$('#thread .a .stat-block b')?.textContent, 'Ogre');
+    assert.equal(page.$('#thread .a .error'), null);
+  });
+});
+
 test('the admin login gets the admin screen, not the player app', async () => {
   await withPage({ page: (t) => ({ as: { token: t.dmToken } }) }, async (page) => {
     assert.ok(page.visible('#admin-view'));
