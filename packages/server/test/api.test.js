@@ -915,7 +915,7 @@ test('players can pin and delete their own conversations; deleting erases them b
   }
 });
 
-test('Q&A streams over a real HTTP connection and closes when done', async () => {
+test('regression: Q&A streams over a real HTTP connection and closes when done', async () => {
   const llm = createFakeLLM({ qaScript: [[{ tool: 'list_sessions', input: {} }, { answer: 'One session so far [S1].' }]] });
   const t = await setup({ llm });
   try {

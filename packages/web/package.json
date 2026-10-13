@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Player web page. Plain static files in public/, served by @dndapp/server at /. No build step.",
   "scripts": {
-    "test": "node --test \"test/*.test.js\""
+    "test": "node --test \"test/*.test.js\"",
+    "test:regressions": "node --test --test-name-pattern=\"^regression: \" \"test/*.test.js\""
   },
   "devDependencies": {
     "jsdom": "^29.1.1"
