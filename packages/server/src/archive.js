@@ -60,8 +60,8 @@ const userDir = (id) => {
   if (!Number.isInteger(Number(id)) || Number(id) <= 0) throw new Error(`Bad user id: ${id}`);
   return String(Number(id));
 };
-/** The archive folders the DM's items, merchants and map creator assets live in. */
-const LIBRARY_FOLDERS = ['items', 'merchants', 'map_assets'];
+/** The archive folders the DM's items, merchants, and map creator assets and stamps live in. */
+const LIBRARY_FOLDERS = ['items', 'merchants', 'map_assets', 'map_stamps'];
 const libraryDir = (folder) => {
   if (!LIBRARY_FOLDERS.includes(folder)) throw new Error(`Bad library folder: ${folder}`);
   return folder;
@@ -359,6 +359,7 @@ export function createArchive(root) {
           items: lastOfEach('items'),
           merchants: lastOfEach('merchants'),
           mapAssets: lastOfEach('map_assets'),
+          mapStamps: lastOfEach('map_stamps'),
           rests: readLines(path.join(campaignDir(slug), 'rests.jsonl')),
         };
       }

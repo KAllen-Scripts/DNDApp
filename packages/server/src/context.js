@@ -20,6 +20,7 @@ import { createItems } from './items.js';
 import { createItemFinder } from './items-find.js';
 import { createMerchants } from './merchants.js';
 import { createMapAssets } from './map-assets.js';
+import { createMapStamps } from './map-stamps.js';
 import { createPipeline } from './pipeline/ingest.js';
 import { createJobs } from './jobs.js';
 import { createQA } from './qa/agent.js';
@@ -29,6 +30,7 @@ import { createSheets } from './sheets/store.js';
 import { createSheetImport } from './sheets/import.js';
 import { createMaps } from './maps/store.js';
 import { createMapReader } from './maps/read.js';
+import { createDesignDrafter } from './maps/design-draft.js';
 import { createStatBlocks } from './maps/stats.js';
 import { createPictures, createPictureDescriber } from './characters/pictures.js';
 
@@ -56,6 +58,7 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const items = createItems({ db, archive, store });
   const merchants = createMerchants({ db, archive, store });
   const mapAssets = createMapAssets({ db, archive, store });
+  const mapStamps = createMapStamps({ db, archive, store });
   handouts.events.on('update', ({ campaign_id }) => jobs.scheduleUpdates(campaign_id));
   // Sheet changes, late note edits and handouts reach the archivist between sessions.
   const updates = createUpdates({ db, store, archive, handoutsBetween: handouts.forArchivist });
@@ -80,6 +83,7 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const sheetImport = createSheetImport({ llm });
   const pictureDescriber = createPictureDescriber({ llm });
   const mapReader = createMapReader({ llm });
+  const designDrafter = createDesignDrafter({ llm });
   const statBlocks = createStatBlocks({ llm, books, creatures, editions });
   const creatureFinder = createCreatureFinder({ llm, books, editions, ...(fetchImage && { fetchImage }) });
   const itemFinder = createItemFinder({ llm, books, items, editions, ...(fetchImage && { fetchImage }) });
@@ -96,5 +100,5 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   // Changes made while the server was off (or before its last run finished) still reach the archivist.
   for (const { id } of db.prepare('SELECT id FROM campaigns').all()) if (updates.pendingSince(id)) jobs.scheduleUpdates(id);
 
-  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, pipeline, jobs, qa, books, editions, spells, sheets, sheetImport, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, restored };
+  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, mapStamps, pipeline, jobs, qa, books, editions, spells, sheets, sheetImport, maps, mapReader, designDrafter, statBlocks, creatureFinder, pictures, pictureDescriber, restored };
 }

@@ -1,6 +1,6 @@
 /**
  * What happened on the maps during a session, for the archivist: fights
- * starting and ending, tokens going down or getting up, doors opened,
+ * starting and ending, tokens going down or getting up, doors opened, secret doors found,
  * characters taking stairs to another map, and so on.
  *
  * Worked out from the archived change lines (maps/<id>/changes.jsonl), so
@@ -51,6 +51,8 @@ function eventsOf(before, after, reason) {
   const doors = new Map(before.walls.filter((w) => w.door).map((w) => [w.id, w]));
   const opened = after.walls.filter((w) => w.door && w.open && doors.has(w.id) && !doors.get(w.id).open).length;
   if (opened) out.push(`${opened === 1 ? 'A door was' : `${opened} doors were`} opened ${on}.`);
+  const found = after.walls.filter((w) => w.secret && w.revealed && doors.get(w.id)?.secret && !doors.get(w.id).revealed).length;
+  if (found) out.push(`${found === 1 ? 'A secret door was' : `${found} secret doors were`} found ${on}.`);
   return out;
 }
 

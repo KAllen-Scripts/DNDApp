@@ -16,6 +16,8 @@
     "@anthropic-ai/claude-agent-sdk": "^0.3.288",
     "@anthropic-ai/sdk": "^0.131.0",
     "@dndapp/shared": "^0.1.0",
+    "@fontsource/cinzel": "^5.3.0",
+    "@fontsource/im-fell-english": "^5.3.0",
     "@huggingface/transformers": "^4.3.0",
     "@napi-rs/canvas": "^1.0.10",
     "better-sqlite3": "^13.0.3",

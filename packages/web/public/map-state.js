@@ -2,7 +2,7 @@
  * What the Map tab's parts share: the page's map state and small helpers (map.js and its parts).
  */
 
-import { LoggedOut } from './api.js';
+import { LoggedOut, fileUrl, h } from './api.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -64,3 +64,13 @@ export const report = (err) => {
   if (err instanceof LoggedOut) throw err;
   status(err.message, true);
 };
+
+/** Download a map as a Universal VTT file (.dd2vtt), for other VTTs (map settings and the creator). */
+export async function downloadUvtt(map) {
+  const url = await fileUrl(`${base()}/${map.id}/export.dd2vtt`);
+  const a = h('a', { href: url, download: `${(map.name || 'map').replace(/[^\w -]+/g, '').trim() || 'map'}.dd2vtt` });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}

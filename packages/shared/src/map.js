@@ -157,7 +157,13 @@ export function normalizeVariants(list) {
 
 export const MAX_LINKS = 50;
 
-/** Ways to another map (stairs, a door, a trapdoor): [{ id, x, y, to (map id), label }]. */
+/** Levels of a building: up to 9 floors above the ground floor and 9 below. */
+export const MAX_LEVEL = 9;
+const FLOOR_NAMES = ['Ground floor', 'First floor', 'Second floor', 'Third floor'];
+/** A level's name: Ground floor, First floor..., Cellar, Lower cellar, Level -3... */
+export const levelName = (n) => (n >= 0 ? FLOOR_NAMES[n] ?? `Floor ${n}` : n === -1 ? 'Cellar' : n === -2 ? 'Lower cellar' : `Level ${n}`);
+
+/** Ways to another map (stairs, a door, a trapdoor): [{ id, x, y, to (map id), label, source? ('creator': from a map made in the creator) }]. */
 export function normalizeLinks(list, image = {}) {
   const { width = 1, height = 1 } = image;
   const seen = new Set();
@@ -171,6 +177,7 @@ export function normalizeLinks(list, image = {}) {
       y: round(num(l.y, { min: 0, max: height, fallback: height / 2 }), 2),
       to: String(l.to),
       label: str(l.label, 60),
+      ...(l.source === 'creator' ? { source: 'creator' } : {}),
     });
   }
   return out;
@@ -328,6 +335,8 @@ export function normalizeMap(input = {}) {
     links: normalizeLinks(m.links, image),
     // A map made in the app's creator: what the DM made it from (the DM's alone; players never get it).
     design: m.design && typeof m.design === 'object' ? normalizeDesign(m.design) : null,
+    // One level of a building (maps sharing a group are its floors): n = 0 the ground floor, 1 the floor above, -1 the cellar.
+    level: /^[a-f0-9]{10}$/.test(String(m.level?.group)) && Number.isInteger(m.level.n) && Math.abs(m.level.n) <= MAX_LEVEL ? { group: m.level.group, n: m.level.n } : null,
     tokens: [],
   };
   if (out.variants.some((v) => v.id === m.variant)) out.variant = m.variant;
@@ -424,8 +433,9 @@ export function fogRect(map, a, b) {
 /**
  * Walls: straight lines in image pixels that block sight (and players'
  * tokens). A door is a wall that can be open (blocks nothing) or closed,
- * and locked (players can't open it). An obstacle ('low') blocks only
- * movement.
+ * and locked (players can't open it). A secret door looks like wall to
+ * players until it's found (`revealed`: the DM revealed it, or it was
+ * opened). An obstacle ('low') blocks only movement.
  */
 export function normalizeWalls(list, image = {}) {
   const { width = 1, height = 1 } = image;
@@ -448,6 +458,7 @@ export function normalizeWalls(list, image = {}) {
       door,
       open,
       locked: door && !open && w.locked === true,
+      ...(door && w.secret === true ? { secret: true, revealed: open || w.revealed === true } : {}),
       source: pick(w.source, WALL_SOURCES, 'dm'),
       // The pieces of one curved wall share a group, so they're erased together.
       ...(typeof w.group === 'string' && isTokenId(w.group) ? { group: w.group } : {}),
@@ -491,6 +502,9 @@ export function circlePoints(c, r) {
   for (let i = 0; i <= 36; i++) pts.push({ x: c.x + r * Math.cos((i * Math.PI) / 18), y: c.y + r * Math.sin((i * Math.PI) / 18) });
   return pts;
 }
+
+/** Is a door one players know about (not a secret door they haven't found)? */
+export const doorKnown = (w) => w.door && (!w.secret || w.open || w.revealed);
 
 /** The walls that block movement right now (everything but open doors). */
 export const blockingWalls = (map) => (map.walls ?? []).filter((w) => !w.open);

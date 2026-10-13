@@ -408,8 +408,9 @@ function renderWalls() {
   svg.classList.toggle('walls-hidden', hidden);
   const list = state.canEdit ? map.walls.filter((w) => !hidden || w.door) : (map.doors ?? []);
   const line = (w, cls) => svgEl('line', { x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, class: cls });
+  // A secret door players haven't found shows the DM where it is, dashed.
   const cls = (w) => (w.door || !state.canEdit
-    ? `door${w.open ? ' open' : ''}${w.locked ? ' locked' : ''}`
+    ? `door${w.open ? ' open' : ''}${w.locked ? ' locked' : ''}${w.secret && !w.revealed ? ' secret' : ''}`
     : `wall${w.kind === 'low' ? ' low' : ''}${w.source === 'ai' ? ' ai' : ''}`);
   // Lights (the DM's): the dim reach, the bright reach and the source.
   if (state.canEdit && !hidden) {
@@ -952,15 +953,20 @@ function selectDoor(id) {
 
 function doorControls(door) {
   const what = door.locked ? 'Locked' : door.open ? 'Open' : 'Closed';
+  const hidden = door.secret && !door.revealed;
   return [
-    h('strong', {}, 'Door'),
-    h('span', { class: 'muted small' }, `${what}${door.locked ? ": players can't open it" : ''}`),
+    h('strong', {}, door.secret ? 'Secret door' : 'Door'),
+    h('span', { class: 'muted small' }, `${what}${door.locked ? ": players can't open it" : ''}${hidden ? '. Players see a wall until they find it' : door.secret ? '. Found' : ''}`),
     h('span', { class: 'spacer' }),
     h('button', { class: 'ghost', onclick: () => walls({ toggle: door.id }) }, door.open ? 'Close' : 'Open'),
     h('button', { class: 'ghost', title: door.locked ? 'Let players open it again' : "Players can't open a locked door (you still can)", onclick: () => walls({ lock: door.id }) }, door.locked ? 'Unlock' : 'Lock'),
+    door.secret
+      ? h('button', { class: 'ghost', 'data-door-reveal': '', title: hidden ? 'Players found it: they see it as a door from now on' : 'Shut it and make it look like wall to players again', onclick: () => walls({ reveal: door.id }) }, hidden ? 'Reveal' : 'Hide again')
+      : null,
+    h('button', { class: 'ghost', 'data-door-secret': '', title: door.secret ? 'Make it an ordinary door everyone sees' : 'Players see a wall here until they find it (or you open or reveal it)', onclick: () => walls({ secret: door.id }) }, door.secret ? 'Not secret' : 'Make secret'),
     h('button', { class: 'ghost danger', onclick: () => walls({ remove: door.id }).then(() => selectDoor(null)) }, 'Remove'),
     h('button', { class: 'ghost icon-btn', 'aria-label': 'Close', onclick: () => selectDoor(null) }, '✕'),
-  ];
+  ].filter(Boolean);
 }
 
 export function select(id) {
