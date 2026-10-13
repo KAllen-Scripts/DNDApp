@@ -632,6 +632,8 @@ Owner (2026-10-09): "the campaign setting should have an option to ignore weight
 
 ## 9. Open questions
 
+The full list of questions waiting on the owner, including ones outside the design, is in HANDOFF "Open questions for the owner".
+
 - **The sheet's rules and the 2024 edition** (later, owner 2026-10-10): what a 2024 sheet changes, and what happens to saved sheets when a campaign's edition changes.
 - Should Q&A use players' character sheets? Should the DM see more of them than the equipped gear, AC, weight and attunements (and hit points on maps) they see now?
 - Should dice rolls go into the archive for the archivist? (They're shared live and logged in the database, but not archived.)

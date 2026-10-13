@@ -44,7 +44,7 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 
 **Numbers** (on `main`, checked 2026-10-13): schema **v17**, `PIPELINE_VERSION` **16**, **439 tests** (`npm test`: server 182, shared 99, web 158). Tests are offline and free: a fake AI, where the fake archivist calls the real knowledge-base tools; the page is tested in jsdom against a real test server (`packages/web/test/page.js`). Headless Chromium is only needed for what jsdom can't show (real layout, WebGL dice, touch). There's no CI: `npm test` is the check.
 
-**Git:** `main` has PRs #1–#32 and #34 merged (#16: housekeeping; #17: walls and doors; #18: book lookups; #20: stat blocks from your creatures and books first; #21: rolling from the sheet, the Inventory tab and campaign settings; #22: rests and hit dice; #23: merchants and items, which brought #22 in with it; #24: the ruleset note in SPEC; #25: full screen map and the DM's edit mode; #26: the archivist reads handout pictures; #27: attacks need the weapon, Inventory by kind, spells of your own; #28: item pictures in inventories and custom items made from a merchant; #30: the top bar stays put and "Beside the map" in Look; #31: contradictions resolved: rules edition per campaign, token hit points from the sheet, docs; #29: AI walls show they're working; #32: the AI walls message closes, walls at xhigh effort; #34: the map creator; #35: the map creator's second stage). PR #22 (rests) shows as closed on GitHub because #23 brought it in. **Open: PR #33, the AI walls effort picker** (branch `claude/project-thread-4st1c0`; the owner asked for it 2026-10-11; it has `main` up to #34 merged in and 400 tests passed, so it needs `main` (#35) merged in again and the tests rerun before it can merge; waiting on the owner's OK). Merges to `main` need the owner's OK, unless he says to merge when done (as he did for #35). When several PRs merge at once, the last one runs `npm test` on the combined `main`.
+**Git:** `main` has PRs #1–#32 and #34–#36 merged (#16: housekeeping; #17: walls and doors; #18: book lookups; #20: stat blocks from your creatures and books first; #21: rolling from the sheet, the Inventory tab and campaign settings; #22: rests and hit dice; #23: merchants and items, which brought #22 in with it; #24: the ruleset note in SPEC; #25: full screen map and the DM's edit mode; #26: the archivist reads handout pictures; #27: attacks need the weapon, Inventory by kind, spells of your own; #28: item pictures in inventories and custom items made from a merchant; #30: the top bar stays put and "Beside the map" in Look; #31: contradictions resolved: rules edition per campaign, token hit points from the sheet, docs; #29: AI walls show they're working; #32: the AI walls message closes, walls at xhigh effort; #34: the map creator; #35: the map creator's second stage; #36: docs brought up to date with the whole first project, and every open question in one place). PR #22 (rests) shows as closed on GitHub because #23 brought it in. **Open: PR #33, the AI walls effort picker** (branch `claude/project-thread-4st1c0`; the owner asked for it 2026-10-11; it has `main` up to #34 merged in and 400 tests passed, so it needs `main` (#35) merged in again and the tests rerun before it can merge; waiting on the owner's OK). Merges to `main` need the owner's OK, unless he says to merge when done (as he did for #35). When several PRs merge at once, the last one runs `npm test` on the combined `main`.
 
 **Installs:**
 - **Owner's PC** (the server): `data/` holds the admin login ("admin") and a player account for Kenny. The database upgrades itself (to v13 with rests, v14 with merchants, v15 with campaign settings, v16 with map creator assets, v17 with map stamps) on the next start. Start with `npm start`, open http://127.0.0.1:4400. `.env` is in the repo root (copy of `.env.example`).
@@ -95,13 +95,46 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
    - **Archivist between sessions:** fill in a sheet with real Claude Code running, wait 10 minutes, check what the archivist made of it; again after a level-up. Process a session played with a map and check it used `<map_events>`.
    - **Dice:** Deluxe and Classic on a real GPU and a phone (Safari and Firefox untested). Deluxe is the default now; the owner can change it with `DICE_ROLLER`.
    - **Look:** show the players; see which themes, layouts and layout options they use, then prune (owner's call).
-4. **Decisions waiting on the owner** (SPEC §9): whether the DM sees note- and sheet-derived knowledge through Q&A (currently yes; for notes-only sessions the recommendation was that a note marked private is hidden from the DM too, never answered); should Q&A read the asker's sheet, and should the DM see more of sheets than equipped gear, AC, weight, attunements and map hit points; should rolls go into the archive; party-shared sight and dimming light ranges.
+4. **Decisions waiting on the owner:** all in "Open questions for the owner" below.
 5. **Later, planned:** a ready-made creature library from the books once they're all scanned (SPEC §6.6); glossary and speaker-map editing on the page; **sessions built from notes only** (designed with the owner, not built: [docs/notes/notes-only-sessions.md](docs/notes/notes-only-sessions.md), SPEC §6.3); the sheet's rules following the campaign's edition (SPEC §6.3). On hold until the owner raises them: the rest of the DM screen ([docs/notes/dm-screen-ideas.md](docs/notes/dm-screen-ideas.md)); see "Parked, ruled out and on hold" below.
 6. **Hosting:** buy the domain, set `PUBLIC_URL`, set up Cloudflare Tunnel, write a short player guide. Check whether Claude Code's WebFetch (Find online) can reach addresses on the home network before opening it up (SPEC §3.5).
 7. **Install workaround (owner's call):** keep typing `npm install --ignore-scripts`, or add `ignore-scripts=true` to a project `.npmrc`. Revisit when npm fixes the `gypfile` bug or `better-sqlite3` changes how it ships binaries.
 
 When you change the web page, add or update a test in `packages/web/test/` (README "Tests"). Not covered by page tests: the dice effects' visuals (`dice-fx.js`) and some admin-sessions polling paths.
 
+
+## Open questions for the owner
+
+Every question still waiting on Kenny, in one place (gathered 2026-10-13 from the first project's chat, threads, notes and SPEC §9). When one is answered, move the answer to "Decisions" (and SPEC), and take it off this list.
+
+**Waiting on him now**
+1. **PR #33 (the DM picks the AI walls effort):** OK to merge? (Merge `main` into it first and rerun `npm test`.)
+2. **Picture assets for the map creator:** part 1 (CC0 ground textures in the repo), part 2 (asset packs read from a folder on his PC), or both? ([docs/notes/picture-assets-research.md](docs/notes/picture-assets-research.md))
+3. **Private notes and the DM** (for sessions built from notes): should a note marked private be hidden from the DM too? Recommended yes ("private" reads as only-me). Asked 2026-10-07, never answered.
+
+**Privacy and the DM role** (SPEC §9)
+4. Should the DM see knowledge the archivist built from players' private notes and sheets through Ask? (Today yes: the archivist puts the DM in `known_by`.)
+5. Should Ask read the asker's own character sheet ("what's my AC?")?
+6. Should the DM see more of players' sheets than equipped gear, AC, weight, attunements and map hit points?
+7. Should dice rolls go into the archive for the archivist? (Today they're only in the database.)
+8. Claude's defaults from PR #13, never confirmed: rolls go to the whole party unless the roller picks otherwise; rolls aren't archived or sent to the archivist.
+
+**Features**
+9. **The sheet and 2024 rules** (a later job, his call): what a 2024 sheet changes, and what happens to saved sheets when a campaign's edition changes.
+10. **Maps:** party-shared sight (players seeing what their allies see), and light that dims (bright vs dim light look the same to players today).
+11. **Look:** which themes, page layouts and layout options to keep, once the players have used them. Don't prune until he says.
+12. **DM screen** (on hold; questions from [docs/notes/dm-screen-ideas.md](docs/notes/dm-screen-ideas.md) if it comes back): table screen, campaign desk, or both first? Should DM rolls be secret by default? Who is the DM, and would they try an early version (their habits: paper screen, D&D Beyond, Foundry, Owlbear)?
+13. Is an explicit "session started" button needed, instead of matching notes to sessions by date (6am rollover)?
+
+**Facts only real use will answer**
+14. What exact format does the recorder produce, and are speakers labelled reliably per Discord user? (No real transcript tried yet.)
+15. How well does the archivist hold up over dozens of sessions (record sprawl, pinned budget, consistency)? Late-uploaded earlier sessions are seen after later ones until a rebuild; is that acceptable?
+16. Is Ask fast enough? If not, the parked faster-model experiment is ready (see "Parked, ruled out and on hold").
+
+**Housekeeping on his side**
+17. Rename `Players Handbook 5th Edition DD.pdf` to `Player's Handbook (2014).pdf` in `DND books`, and tick off [docs/notes/5e-book-checklist.md](docs/notes/5e-book-checklist.md).
+18. Keep typing `npm install --ignore-scripts`, or add `ignore-scripts=true` to a project `.npmrc`?
+19. Hosting: buy the domain, set `PUBLIC_URL`, set up Cloudflare Tunnel.
 
 ## Getting running on a new machine
 
@@ -899,6 +932,10 @@ The owner is starting a new Claude project and asked for SPEC and HANDOFF to be 
 - **`docs/notes/`** (new): the design notes, research and checklists that only lived in the old project's files (sessions from notes, DM screen ideas, picture-asset research, VTT feature research, AI walls options, both audits, the map testing checklist, the 5e book checklist, the weekly recap), with a README listing each one's state. References to the old project's files now point here.
 - **HANDOFF:** PR #35 marked merged and the numbers made `main`'s; PR #33's state (open, needs `main` merged in again); the owner's standing preferences ("Working with the owner"); a new "Parked, ruled out and on hold" table (3D renders, a C/C++/C# rewrite, a faster Ask model, the DM screen, ambient sound, premade maps, AI-made pictures, notes-session ideas he turned down); next steps for PR #33 and the picture-asset choice.
 - **SPEC v0.34:** the picture-asset research (§6.6), sessions from notes only and the DM screen on hold (§6.3), PR #33 noted as proposed (§6.6), open questions gathered (§9), `docs/notes/` and the newer `map-art-*.js` files in the repo layout (§3.1).
+
+### 2026-10-13: Every open question in HANDOFF; PR #36 merged
+
+The owner: "Put all questions in the handoff and then merge." A new section, "Open questions for the owner", lists every question still waiting on him (19, from the first project's chat, threads, notes and SPEC §9), so the new project starts with them. PR #36 (this docs catch-up) is merged into `main`; this file was updated to say so in the PR's last commit.
 
 ## Verified vs. not verified
 
