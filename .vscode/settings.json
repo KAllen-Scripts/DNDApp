@@ -1,0 +1,6 @@
+{
+  // API_key has no extension, so VS Code guesses its language (JSON) and marks it as full of errors.
+  "files.associations": {
+    "API_key": "plaintext"
+  }
+}

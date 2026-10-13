@@ -50,10 +50,10 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 **Git:** `main` has PRs #1–#32 and #34–#36 merged (#16: housekeeping; #17: walls and doors; #18: book lookups; #20: stat blocks from your creatures and books first; #21: rolling from the sheet, the Inventory tab and campaign settings; #22: rests and hit dice; #23: merchants and items, which brought #22 in with it; #24: the ruleset note in SPEC; #25: full screen map and the DM's edit mode; #26: the archivist reads handout pictures; #27: attacks need the weapon, Inventory by kind, spells of your own; #28: item pictures in inventories and custom items made from a merchant; #30: the top bar stays put and "Beside the map" in Look; #31: contradictions resolved: rules edition per campaign, token hit points from the sheet, docs; #29: AI walls show they're working; #32: the AI walls message closes, walls at xhigh effort; #34: the map creator; #35: the map creator's second stage; #36: docs brought up to date with the whole first project, and every open question in one place). PR #22 (rests) shows as closed on GitHub because #23 brought it in. **Open: PR #33, the AI walls effort picker** (branch `claude/project-thread-4st1c0`; the owner asked for it 2026-10-11; it has `main` up to #34 merged in and 400 tests passed, so it needs `main` (#35) merged in again and the tests rerun before it can merge; waiting on the owner's OK). Merges to `main` need the owner's OK, unless he says to merge when done (as he did for #35). When several PRs merge at once, the last one runs `npm test` on the combined `main`.
 
 **Installs:**
-- **Owner's PC** (the server): `data/` holds the admin login ("admin") and a player account for Kenny. The database upgrades itself (to v13 with rests, v14 with merchants, v15 with campaign settings, v16 with map creator assets, v17 with map stamps) on the next start. Start with `npm start`, open http://127.0.0.1:4400. `.env` is in the repo root (copy of `.env.example`).
+- **Owner's PC** (the server): `data/` holds the admin login ("admin") and a player account for Kenny. The database upgrades itself (to v13 with rests, v14 with merchants, v15 with campaign settings, v16 with map creator assets, v17 with map stamps) on the next start. Start with `npm start`, open http://127.0.0.1:4400 (or https://thepartyledger.fyi). There's no `.env` (checked 2026-10-13), so every setting is its default. `API_key` in the repo root holds the Cloudflare API token and ids (git-ignored; never print or commit it).
 - **Owner's laptop** (2026-10-07): Node 24.19, installed with the `--ignore-scripts` workaround; `data/` has only the admin login.
 
-**Not set up yet:** the domain (`PUBLIC_URL` is the placeholder `https://dnd.example.xyz`) and Cloudflare Tunnel. **No real transcript** has been tried; the parser is built to an assumed format.
+**Hosting (2026-10-13):** the site is live at **https://thepartyledger.fyi** (and `www.`) whenever the server runs on the owner's PC: Cloudflare Registrar, a dashboard-managed Cloudflare Tunnel `thepartyledger` to `127.0.0.1:4400`, `cloudflared` as an automatic Windows service, https forced. `PUBLIC_URL` defaults to that address. Details in README, "The public address". The server itself isn't a service yet: no `npm start`, no site (Cloudflare shows a 502). No player guide yet. **No real transcript** has been tried; the parser is built to an assumed format.
 
 **Real AI not yet tried on:** the map creator's AI draft, handout pictures read for the archivist, real maps (reading, walls, lights, terrain, stat blocks), Find online, character picture descriptions, sheets reaching the archivist, map events reaching the archivist, the book tools with all the books. Most page features have only been seen in jsdom or headless Chromium, not on a real phone or GPU.
 
@@ -102,7 +102,8 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 3a. **Regression tests:** when a bug is fixed, have the `regression-keeper` worker add its test (the "Regression tests" thread owns this). Every past fix in this log now has one (18).
 4. **Decisions waiting on the owner:** all in "Open questions for the owner" below.
 5. **Later, planned:** a ready-made creature library from the books once they're all scanned (SPEC §6.6); glossary and speaker-map editing on the page; **sessions built from notes only** (designed with the owner, not built: [docs/notes/notes-only-sessions.md](docs/notes/notes-only-sessions.md), SPEC §6.3); the sheet's rules following the campaign's edition (SPEC §6.3). On hold until the owner raises them: the rest of the DM screen ([docs/notes/dm-screen-ideas.md](docs/notes/dm-screen-ideas.md)); see "Parked, ruled out and on hold" below.
-6. **Hosting:** buy the domain, set `PUBLIC_URL`, set up Cloudflare Tunnel, write a short player guide. Check whether Claude Code's WebFetch (Find online) can reach addresses on the home network before opening it up (SPEC §3.5).
+6. **Hosting:** done except: write a short player guide; decide whether the server should start with Windows too (a scheduled task or service; today it's `npm start` by hand); check whether Claude Code's WebFetch (Find online) can reach addresses on the home network now that the site is public (SPEC §3.5).
+6a. **Windows test clean-up:** on the owner's PC, 3 server tests (`creator.test.js`, `creator-tools.test.js`) and 2 web tests (`creator.test.js`) fail at clean-up only, with `EPERM` deleting their temp folder: the drawn map `image.webp` is still held open (probably sharp's file cache; try `sharp.cache(false)` in tests or closing the handle). It fails the same on unchanged `main`, so it's older than 2026-10-13's hosting work. Leftover `dndapp-test-*` folders pile up in `%TEMP%`.
 7. **Install workaround (owner's call):** keep typing `npm install --ignore-scripts`, or add `ignore-scripts=true` to a project `.npmrc`. Revisit when npm fixes the `gypfile` bug or `better-sqlite3` changes how it ships binaries.
 
 When you change the web page, add or update a test in `packages/web/test/` (README "Tests"). Not covered by page tests: the dice effects' visuals (`dice-fx.js`) and some admin-sessions polling paths.
@@ -112,6 +113,7 @@ When you change the web page, add or update a test in `packages/web/test/` (READ
 
 Checks that only the owner's machine can do (a real browser or GPU, his book PDFs, the real AI), added by any session that needs one. **A VS Code session:** run each check, report what happened, and take it off this list (log the result in the change log). Don't run them again until someone adds them back. Keep each to one line: what to do, what should happen, and why it's here.
 
+- **The site from outside** (2026-10-13): on a phone over mobile data (not home wifi), open https://thepartyledger.fyi, log in as a player, ask something and open a map; it should all work over https with no warnings. Here because only a real phone off the home network shows what players get.
 - **Point buy calculator** (2026-10-13): on the Sheet tab press Point buy in each sheet layout and on a phone; the table should fit beside or under the abilities without spilling sideways (only jsdom has seen it).
 - **Review sheet with the real AI** (added 2026-10-13): fill in a sheet with a few mistakes (a fighter 1 with Action Surge, a wizard with a 3rd-level spell at level 3, four skills on a rogue with Criminal), press Review sheet with the PHB in `DND books`; it should flag them with book pages, take under two minutes, and not flag things that are right. Then a class from a book he doesn't have (Echo Knight) to see a web lookup. Here because only his machine has the books and the real AI.
 
@@ -146,7 +148,7 @@ Every question still waiting on Kenny, in one place (gathered 2026-10-13 from th
 **Housekeeping on his side**
 17. Rename `Players Handbook 5th Edition DD.pdf` to `Player's Handbook (2014).pdf` in `DND books`, and tick off [docs/notes/5e-book-checklist.md](docs/notes/5e-book-checklist.md).
 18. Keep typing `npm install --ignore-scripts`, or add `ignore-scripts=true` to a project `.npmrc`?
-19. Hosting: buy the domain, set `PUBLIC_URL`, set up Cloudflare Tunnel.
+19. Hosting: the server only runs while `npm start` is open. Start it with Windows too?
 
 ## Getting running on a new machine
 
@@ -983,6 +985,18 @@ The owner: "Just merge stuff. If it's broken we will fix it." PRs #37 (the regre
 
 The owner asked for "a point buy calculator. It shouldn't always be visible. Maybe a toggle that makes it appear near the core abilities and updates as you enter them. 2014 rules set bonuses based on race while 2024 let's you choose." Built as SPEC §6.4 "Point buy calculator": a Point buy button by the ability scores in every layout (off to start, `point_buy.on` on the sheet); the rules in `shared/src/point-buy.js` (27 points, 8 to 15, the PHB costs; 2014 race bonuses for the 15 PHB races and subraces, Half-Elf and Variant Human choosing; 2024 bonuses chosen by the player, limited to a 2024 PHB background's three abilities). The sheet's scores stay the truth: the calculator works back from them, so typing updates it, and its buttons and bonus choices change the scores. Defaults picked: the campaign's edition unless the sheet picks one; bonuses from levels and feats not counted. The archivist doesn't see the calculator's settings as sheet changes. New tests: shared (5), web (1), server (1); a check in a real browser and on a phone is on the VS Code list.
 
+### 2026-10-13: Live at thepartyledger.fyi
+
+The owner picked and bought `thepartyledger.fyi` (Cloudflare Registrar), put the Cloudflare API details in `API_key`, and asked to "get it set up properly so the server can be accessed through the domain".
+- **`API_key`** is git-ignored now (it had never been committed), and `.vscode/settings.json` tells VS Code it's plain text (it guessed JSON and showed errors). Regression test `server/test/security.test.js`: the API_key file (Cloudflare details) is git-ignored.
+- **Cloudflare, through the API:** a tunnel `thepartyledger` managed from the dashboard; `thepartyledger.fyi` and `www.` routed to `http://127.0.0.1:4400` (anything else 404); proxied CNAMEs to the tunnel; Always Use HTTPS on; minimum TLS 1.2. Universal SSL (Let's Encrypt) issued about 20 minutes after the zone went live.
+- **This PC:** `cloudflared` 2026.10.0 installed with winget and running as the automatic Windows service `cloudflared` (one admin prompt).
+- **`PUBLIC_URL`** defaults to `https://thepartyledger.fyi` (`config.js`, `.env.example`), so HSTS is sent for real and the start-up line shows the real address.
+- **A site password in front was considered and dropped** (owner: "It already has a login page anyway"). Cloudflare Access (email codes) would be the built-in way if it's wanted later; a shared password would need code, since the page's `Authorization: Bearer` header rules out HTTP Basic auth.
+- **Checked through the domain:** the page (200, valid certificate, CSP and HSTS headers), `www.`, http → https (301), `/me` without a login (401), and the server sees players' real addresses (not 127.0.0.1) for its login limits.
+- Docs: README "The public address" (how it's set up and where), SPEC §3.4 and v0.37.
+- Tests: `npm run test:regressions` passes. `npm test`: shared 105/105; server 192/195 and web 163/165, where every failure is the Windows `EPERM` clean-up in the map creator tests. That also fails on unchanged `main` (Next steps 6a).
+
 ## Verified vs. not verified
 
 | Verified for real | Not yet verified |
@@ -1004,7 +1018,9 @@ The owner asked for "a point buy calculator. It shouldn't always be visible. May
 ## Gotchas and lessons
 
 - **Passwords given on the admin command line** end up in shell history. Fine for a friends' server; clear history if that matters.
-- **Behind Cloudflare Tunnel every request comes from 127.0.0.1**, so the login lockout is per account name, not per IP.
+- **Behind Cloudflare Tunnel the socket is always 127.0.0.1**, but `cloudflared` sends `X-Forwarded-For` and `TRUST_PROXY=loopback` believes it, so the login lockout sees each player's real address (checked through the live tunnel, 2026-10-13).
+- **Cloudflare API from scripts:** the token in `API_key` is account-owned, so verify it with `/accounts/<id>/tokens/verify` (not `/user/tokens/verify`). Read the file in the script and never print it (Claude Code's auto mode refuses commands that show it). A new zone's certificate takes a few minutes to issue; until then https fails the TLS handshake.
+- **Windows DNS cache:** looking a domain up before its DNS exists caches "doesn't exist" for a while; `ipconfig /flushdns` clears it.
 - Unknown URLs return 401 (the login check runs before routing), not 404.
 - **Windows + background tasks:** stopping `npm start` from a background task leaves the `node` child holding port 4400. Run `node packages/server/src/index.js` directly when the server must be restarted from a tool, and check the port is free first.
 - **Web pages collapse repeated spaces**, so names shown on the page can differ from what's stored unless cleaned (see `cleanName`).

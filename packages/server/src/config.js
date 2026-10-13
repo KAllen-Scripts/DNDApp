@@ -24,9 +24,9 @@ const DEFAULT_MODEL = env.MODEL || 'claude-opus-5-5';
 
 export const config = {
   // The address players open in their browser. THE one place the public URL is set
-  // (placeholder until the domain is bought). The web page itself uses relative
-  // paths, so it works at whatever address the server is reached on.
-  publicUrl: env.PUBLIC_URL || 'https://dnd.example.xyz',
+  // (Cloudflare Tunnel brings it to this PC, README "The public address"). The web page
+  // itself uses relative paths, so it works at whatever address the server is reached on.
+  publicUrl: env.PUBLIC_URL || 'https://thepartyledger.fyi',
   host: env.HOST || '127.0.0.1',
   port: num(env.PORT, 4400),
   dataDir: path.resolve(repoRoot, env.DATA_DIR || 'data'),

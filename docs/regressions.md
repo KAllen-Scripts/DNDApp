@@ -15,6 +15,7 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-13 | The Cloudflare details file `API_key` wasn't git-ignored, so git offered to commit it. | `server/test/security.test.js`: the API_key file (Cloudflare details) is git-ignored |
 | 2026-10-12 | The map creator skipped squares on a fast drag (one pointer move across many squares painted only its ends). | `web/test/creator.test.js`: creator: a fast floor drag paints every square between the pointer's stops |
 | 2026-10-10 | The AI walls message couldn't be closed: pressing ✕ started a map pan, so the map got the click. | `web/test/map.test.js`: pressing on the AI walls message does not start a pan, so it can be closed |
 | 2026-10-10 | The page's top bar jumped sideways when switching tabs (its width followed the tab), and the bold tab name widened it. | `web/test/layout.test.js`: the bar along the top stays put: every tab has room for its bold name, and its width never depends on the tab |

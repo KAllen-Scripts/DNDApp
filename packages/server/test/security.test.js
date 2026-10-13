@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import zlib from 'node:zlib';
+import { readFileSync } from 'node:fs';
 import { setup, createFakeLLM, terrain, SAMPLE, PASSWORD } from './helpers.js';
 import { publicMessage, exposureWarnings, SECURITY_HEADERS } from '../src/app.js';
 import { inspectPicture, inspectMapImage } from '../src/images.js';
@@ -251,4 +252,10 @@ test('start-up warns when the server is reachable without https', () => {
   assert.equal(open.length, 2);
   assert.match(open[0], /HOST is 0\.0\.0\.0/);
   assert.match(open[1], /isn't https/);
+});
+
+// The owner keeps Cloudflare details in API_key at the repo root; git used to offer to commit it. (Only .gitignore is read, never the file.)
+test('regression: the API_key file (Cloudflare details) is git-ignored', () => {
+  const lines = readFileSync(new URL('../../../.gitignore', import.meta.url), 'utf8').split(/\r?\n/).map((line) => line.trim());
+  assert.ok(lines.includes('API_key'), 'the root .gitignore has no "API_key" line');
 });

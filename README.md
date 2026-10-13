@@ -141,7 +141,16 @@ Everyone can drop **pins** with a note on a map; only the person who placed them
 
 ### The public address
 
-`PUBLIC_URL` in `.env` is the address players use (a placeholder, `https://dnd.example.xyz`, until the domain is bought). It's the only place the URL is set. The web page is served by this server and calls it with relative paths, so the page itself never needs the URL. The server prints it on start-up.
+Players open **https://thepartyledger.fyi** (`www.` works too). `PUBLIC_URL` (default `https://thepartyledger.fyi`, can be changed in `.env`) is the only place the URL is set. The web page is served by this server and calls it with relative paths, so the page itself never needs the URL. The server prints it on start-up.
+
+How the address reaches this PC (set up 2026-10-13):
+
+- The domain is registered with **Cloudflare Registrar** (renews 2027-10-13) and its DNS is on Cloudflare (Free plan).
+- A **Cloudflare Tunnel** called `thepartyledger` is managed from the Cloudflare dashboard (Zero Trust → Networks → Tunnels). It sends `thepartyledger.fyi` and `www.thepartyledger.fyi` to `http://127.0.0.1:4400` and answers anything else with 404. Both names are proxied CNAME records pointing at the tunnel.
+- **`cloudflared`** is installed on this PC (winget package `Cloudflare.cloudflared`) and runs as the Windows service **cloudflared**, which starts with Windows. It only connects out to Cloudflare. Check it with `Get-Service cloudflared`; update it with `winget upgrade Cloudflare.cloudflared` (as admin).
+- The zone redirects http to https ("Always Use HTTPS") and accepts TLS 1.2 or newer. The certificate is Cloudflare's free Universal SSL.
+- **The server itself isn't a service.** The site only works while `npm start` is running; when it isn't, players get Cloudflare's 502 page.
+- The Cloudflare API token used for the setup lives in `API_key` at the repo root, which git ignores. Nothing needs it while the site runs; the tunnel uses its own token, stored in the service.
 
 ### Letting players in safely
 
