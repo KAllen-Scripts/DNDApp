@@ -18,6 +18,7 @@ import { d20Plus } from './shared/dice.js';
 import { attackRolls, gearRolls, spellRolls } from './shared/rolls.js';
 import { EFFECT_TARGETS, GEAR_NAMES, MAX_EFFECTS, attackWeapon, attunementLimit, carriedWeight, classProficient, inventoryGroups, itemStats, newUnownedWeaponAttacks, normalizeGear, normalizeInventory, ownsWeapon } from './shared/gear.js';
 import { WEIGHT_RULES } from './shared/settings.js';
+import { POINT_BUY, POINT_COST, changePointBuy, pointBuy, stepPointBuy } from './shared/point-buy.js';
 import { roll, rollModeFromEvent, modeButtons, D20_ICON } from './dice.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -411,7 +412,7 @@ function abilityTiles() {
       h('div', { class: 'ability' },
         rollButton(ABILITY_NAMES[a], check(`mod.${a}`, `${ABILITY_NAMES[a]} check`, { ability: a }), 'lbl'),
         auto(`mod.${a}`, { kind: 'bonus', label: `${ABILITY_NAMES[a]} modifier`, cls: 'mod' }),
-        field(`abilities.${a}`, { label: `${ABILITY_NAMES[a]} score`, kind: 'int', cls: 'score' }),
+        scoreField(a),
         itemScore(a),
       ),
     ),
@@ -420,7 +421,7 @@ function abilityTiles() {
 
 /** One ability with its saving throw and skills underneath (like the 2024 sheet). */
 function abilityGroup(a) {
-  const score = field(`abilities.${a}`, { label: `${ABILITY_NAMES[a]} score`, kind: 'int', cls: 'score' });
+  const score = scoreField(a);
   score.title = 'Score';
   return h('section', { class: 'sh-box ability-group' },
     h('div', { class: 'ability-head' },
@@ -454,6 +455,103 @@ function itemScore(a) {
   paint();
   state.renders.push(paint);
   return el;
+}
+
+/** An ability score box. It follows the sheet, so the point buy calculator's buttons show in it. */
+function scoreField(a) {
+  const el = field(`abilities.${a}`, { label: `${ABILITY_NAMES[a]} score`, kind: 'int', cls: 'score' });
+  state.renders.push(() => {
+    if (document.activeElement !== el) el.value = state.sheet.abilities[a];
+  });
+  return el;
+}
+
+const RULES_NAMES = { 2014: '2014: bonuses from your race', 2024: '2024: choose your bonuses' };
+
+/**
+ * The point buy calculator, beside the ability scores: hidden until the
+ * player turns it on. It reads the scores on the sheet (typing in them
+ * updates it) and its − and + buttons change them.
+ */
+function pointBuyBox() {
+  const panel = h('div', { class: 'pb-panel', id: 'point-buy' });
+  const toggle = h('button', { type: 'button', class: 'pb-toggle', 'aria-controls': 'point-buy' }, 'Point buy');
+  toggle.addEventListener('click', () => {
+    state.sheet.point_buy.on = !state.sheet.point_buy.on;
+    changed();
+  });
+  const apply = (next) => {
+    Object.assign(state.sheet.abilities, next.abilities);
+    state.sheet.point_buy = next.point_buy ?? state.sheet.point_buy;
+    changed();
+  };
+  const campaignRules = h('option', { value: '' });
+  const rules = h('select', { 'aria-label': 'Point buy rules' }, campaignRules, Object.entries(RULES_NAMES).map(([v, n]) => new Option(n, v)));
+  rules.addEventListener('change', () => apply(changePointBuy(state.sheet, { rules: rules.value }, state.settings)));
+  const rows = ABILITIES.map((a) => {
+    const minus = h('button', { type: 'button', class: 'pb-step', 'aria-label': `One less ${ABILITY_NAMES[a]}`, onclick: () => apply(stepPointBuy(state.sheet, a, -1, state.settings)) }, '−');
+    const plus = h('button', { type: 'button', class: 'pb-step', 'aria-label': `One more ${ABILITY_NAMES[a]}`, onclick: () => apply(stepPointBuy(state.sheet, a, 1, state.settings)) }, '+');
+    const base = h('output', { class: 'pb-base', 'aria-label': `${ABILITY_NAMES[a]} before bonuses` });
+    const cost = h('span', { class: 'pb-cost' });
+    const fixed = h('span', { class: 'pb-fixed' });
+    const pick = h('select', { 'aria-label': `${ABILITY_NAMES[a]} bonus you choose` }, ['', '1', '2'].map((v) => new Option(v ? `+${v}` : '–', v)));
+    pick.addEventListener('change', () => {
+      const { abilities } = pointBuy(state.sheet, state.settings);
+      const choice = Object.fromEntries(ABILITIES.map((b) => [b, b === a ? Number(pick.value) : abilities[b].chosen]));
+      apply(changePointBuy(state.sheet, { choice }, state.settings));
+    });
+    const total = h('span', { class: 'pb-total' });
+    const tr = h('tr', {}, h('th', { scope: 'row' }, ABILITY_NAMES[a]), h('td', { class: 'pb-buy' }, minus, base, plus), h('td', {}, cost), h('td', { class: 'pb-bonus' }, fixed, pick), h('td', {}, total));
+    return { a, tr, minus, plus, base, cost, fixed, pick, total };
+  });
+  const points = h('p', { class: 'pb-points' });
+  const problems = h('ul', { class: 'pb-problems' });
+  const note = h('p', { class: 'muted small pb-note' });
+  panel.append(
+    h('label', { class: 'pb-rules' }, h('span', {}, 'Rules'), rules),
+    h('table', { class: 'pb-table' },
+      h('thead', {}, h('tr', {}, h('th', {}, 'Ability'), h('th', {}, 'Bought'), h('th', {}, 'Cost'), h('th', {}, 'Bonus'), h('th', {}, 'Score'))),
+      h('tbody', {}, rows.map((r) => r.tr))),
+    points, problems, note,
+  );
+  const paint = () => {
+    const on = state.sheet.point_buy.on;
+    toggle.setAttribute('aria-pressed', String(on));
+    toggle.title = on ? 'Hide the point buy calculator' : 'Show a point buy calculator for your ability scores';
+    panel.hidden = !on;
+    if (!on) return;
+    const pb = pointBuy(state.sheet, state.settings);
+    campaignRules.textContent = `The campaign's rules (${state.settings.edition === '2024' ? '2024' : '2014'})`;
+    if (document.activeElement !== rules) rules.value = state.sheet.point_buy.rules;
+    const canChoose = pb.choose !== 0;
+    for (const r of rows) {
+      const x = pb.abilities[r.a];
+      r.base.value = String(x.base);
+      r.base.classList.toggle('bad', x.cost == null);
+      r.minus.disabled = x.base <= POINT_BUY.min;
+      r.plus.disabled = x.base >= POINT_BUY.max || (x.cost != null && POINT_COST[x.base + 1] - x.cost > pb.left);
+      r.cost.textContent = x.cost == null ? '–' : String(x.cost);
+      r.fixed.textContent = x.fixed ? `+${x.fixed}` : '';
+      const closed = !canChoose || pb.not.includes(r.a) || (pb.allowed && !pb.allowed.includes(r.a) && !x.chosen);
+      r.pick.hidden = closed;
+      r.pick.options[2].hidden = pb.max < 2;
+      if (document.activeElement !== r.pick) r.pick.value = x.chosen ? String(x.chosen) : '';
+      if (closed && !x.fixed) r.fixed.textContent = '–';
+      r.total.textContent = String(x.score);
+    }
+    points.textContent = `${pb.spent} of ${pb.budget} points spent, ${pb.left} left.`;
+    points.classList.toggle('bad', pb.left < 0);
+    problems.replaceChildren(...pb.problems.map((p) => h('li', {}, p)));
+    problems.hidden = !pb.problems.length;
+    note.textContent = [
+      `Each score is bought from ${POINT_BUY.min} to ${POINT_BUY.max} before bonuses: 9 to 13 cost 1 point each, 14 and 15 cost 2.`,
+      pb.rules === '2024' ? `Your background raises one ability by 2 and another by 1, or three by 1${pb.allowed ? ` (${state.sheet.background.trim()}: ${pb.allowed.map((a) => ABILITY_NAMES[a]).join(', ')})` : ''}.` : null,
+      pb.rules === '2014' && !pb.raceKnown ? (state.sheet.race.trim() ? `${state.sheet.race.trim()} isn't a race from the 2014 Player's Handbook: choose its bonuses.` : 'Type your race at the top to get its bonuses, or choose them here.') : null,
+      'Bonuses from levels or feats aren\'t counted: the calculator is for a new character.',
+    ].filter(Boolean).join(' ');
+  };
+  state.renders.push(paint);
+  return h('section', { class: 'sh-box point-buy' }, toggle, panel);
 }
 
 function skillRow(k, withAbility = true) {
@@ -498,7 +596,7 @@ const proficiency = () => line(auto('proficiency_bonus', { kind: 'bonus', label:
 const passive = () => line(auto('passive_perception', { label: 'Passive Wisdom (Perception)' }), 'Passive Wisdom (Perception)');
 
 /** Ability tiles beside inspiration, proficiency, saves and skills: the left of the official sheet. */
-const core = () => h('div', { class: 'core' }, abilityTiles(), h('div', { class: 'core-stack' }, inspiration(), proficiency(), saves(), skills()));
+const core = () => [h('div', { class: 'core' }, abilityTiles(), h('div', { class: 'core-stack' }, inspiration(), proficiency(), saves(), skills())), pointBuyBox()];
 
 // Combat.
 
@@ -1290,7 +1388,7 @@ const LAYOUTS = {
   abilities: () => [
     row('vitals', vitals(), hp(), hitDice(), deathSaves()),
     row('abilities',
-      col(proficiency(), inspiration(), ...['str', 'dex', 'con'].map((a) => abilityGroup(a)), skillNotes(), passive(), proficiencies()),
+      col(proficiency(), inspiration(), pointBuyBox(), ...['str', 'dex', 'con'].map((a) => abilityGroup(a)), skillNotes(), passive(), proficiencies()),
       col(...['int', 'wis', 'cha'].map((a) => abilityGroup(a))),
       col(attacks(), features()),
       col(traits(), equipment()),
@@ -1300,6 +1398,7 @@ const LAYOUTS = {
   // Like the sheets in apps: abilities and vitals across the top, the rest in tabs.
   tabs: () => [
     row('strip', abilityTiles()),
+    row('point-buy', pointBuyBox()),
     row('vitals', vitals(), hp(), hitDice(), deathSaves()),
     row('tabs',
       col(proficiency(), inspiration(), saves(), passive(), proficiencies()),

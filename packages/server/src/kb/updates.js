@@ -94,8 +94,8 @@ export function sheetChanges(entries, { since, until }) {
   return {
     before: atSince && normalizeSheet(atSince),
     after: Object.keys(atUntil).length ? normalizeSheet(atUntil) : null,
-    // A field changed and changed back is no change.
-    changes: changes.filter((c) => c.created || JSON.stringify(c.before) !== JSON.stringify(c.after)),
+    // A field changed and changed back is no change. The point buy calculator's settings are the page's, not the character's.
+    changes: changes.filter((c) => c.created || (!/^point_buy\b/.test(c.field) && JSON.stringify(c.before) !== JSON.stringify(c.after))),
   };
 }
 
