@@ -10,7 +10,8 @@
  * keep them and rebuilding the database forgets them (the DM can still
  * reveal by hand).
  */
-import { sightOf, inView } from '@dndapp/shared/map.js';
+import crypto from 'node:crypto';
+import { sightOf, fogMask, inView } from '@dndapp/shared/map.js';
 
 export const EXPLORE_CELLS = 128;
 const MEMO_SIZE = 64;
@@ -103,25 +104,28 @@ export function createSight({ db }) {
 
   return {
     /**
-     * What a player sees of a map: { polygons, explored }. polygons: what
-     * their tokens see now (for deciding which tokens, doors and so on they
-     * get); explored: the places they've seen before, as rectangles (empty
-     * unless the map remembers). Seeing somewhere marks it explored. The
-     * page works out the fog itself from the walls (see playerFogMask).
+     * What a player sees of a map: { polygons, mask, key }. polygons: what
+     * their tokens see now; mask: the fog as they get it (see fogMask), empty
+     * when the fog is off or the DM shows the map and only hides tokens; key:
+     * changes whenever their image does ('clear' when unfogged). Seeing
+     * somewhere marks it explored (when the map remembers).
      */
     forPlayer(map, userId) {
-      if (!map.fog?.enabled) return { polygons: [], explored: [] };
+      if (!map.fog?.enabled) return { polygons: [], mask: [], key: 'clear' };
       const memoKey = `${map.id}:${map.version}:${userId}`;
       if (memo.has(memoKey)) return memo.get(memoKey);
       const polygons = sightOf(map, userId);
+      if (map.fog.map === 'shown') return { polygons, mask: [], key: 'clear' };
       let explored = [];
-      if (map.fog.sight && map.fog.memory && map.fog.map !== 'shown') {
+      if (map.fog.sight && map.fog.memory) {
         const grid = exploreGrid(map.image);
         const bits = load(map.id, userId, grid);
         if (markExplored(bits, grid, polygons)) save(map.id, userId, grid, bits);
         explored = exploredRects(bits, grid, map.image);
       }
-      const out = { polygons, explored };
+      const mask = fogMask(map, { polygons, explored });
+      const key = crypto.createHash('sha1').update(JSON.stringify(mask)).digest('hex').slice(0, 12);
+      const out = { polygons, mask, key };
       memo.set(memoKey, out);
       if (memo.size > MEMO_SIZE) memo.delete(memo.keys().next().value);
       return out;

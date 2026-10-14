@@ -13,7 +13,7 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, blockingWalls, canSee, doorKnown, healthOf, speedFromText } from '@dndapp/shared/map.js';
+import { MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, canSee, doorKnown, healthOf, speedFromText } from '@dndapp/shared/map.js';
 import { designToMap } from '@dndapp/shared/map-design.js';
 import { computeSheet } from '@dndapp/shared/sheet.js';
 import { createSight } from './sight.js';
@@ -239,15 +239,13 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
 
     /**
      * What this viewer may see of a map, or null if they may not see it at all.
-     * Players: only shown maps; no AI description or notes; the walls that
-     * block (as plain lines, secret doors as wall) and the lights, so their
-     * page works out the fog (playerFogMask), with the places they've
-     * explored as `fog.explored`; the doors they can see (`doors`, to open
-     * and close them); no hidden tokens, and none they can't see (under the
-     * fog, or out of their token's sight) except their own; NPCs' and
-     * enemies' hit points only as how hurt they look; no stat blocks or
-     * links to the DM's records. They get the picture as it is (the page
-     * draws the fog over it); `image_key` changes when the picture does.
+     * Players: only shown maps; no AI description or notes; no walls or lights, only
+     * the doors they can see (`doors`, to open and close them); no
+     * hidden tokens, and none they can't see (under the fog, or out of their
+     * token's sight) except their own; NPCs' and enemies' hit points only as
+     * how hurt they look; no stat blocks or links to the DM's records. Their
+     * fog comes as `fog.mask` (what they see, see fogMask), not the DM's
+     * rectangles. `image_key` changes when their image does.
      * Players get only the spell templates they placed or whose origin they
      * can see, and only the visible tokens' places in the turn order.
      * Tokens carry `move_speed`: how far they walk in a turn, if known.
@@ -310,14 +308,8 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         description: '',
         source: null,
         reading: { status: map.reading.status, error: '', notes: '' },
-        // What blocks sight and movement, so their page works out the fog itself (owner, 2026-10-14: what a
-        // determined player could dig out of their browser doesn't matter). A secret door is plain wall to them.
-        walls: blockingWalls(map).map(({ x1, y1, x2, y2, kind }) => ({ x1, y1, x2, y2, kind })),
-        // Placed lights, and lights carried by tokens they don't get (the ones they get carry their own).
-        lights: [
-          ...map.lights.map(({ x, y, bright, dim }) => ({ x, y, bright, dim })),
-          ...map.tokens.filter((t) => t.light && !visible.has(t.id)).map((t) => ({ x: t.x, y: t.y, ...t.light })),
-        ],
+        walls: [],
+        lights: [],
         // Difficult terrain where they can see any of it.
         terrain: map.terrain.filter((a) => a.points.some(([x, y]) => canSee(map, seen.polygons, x, y))),
         // A secret door looks like wall until it's found.
@@ -325,7 +317,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
           .filter((w) => doorKnown(w) && doorSeen(map, seen.polygons, w))
           .map(({ id, x1, y1, x2, y2, open, locked }) => ({ id, x1, y1, x2, y2, open, locked })),
         wall_draft: { status: '', error: '', notes: '', step: '', parts: 0, parts_done: 0, started_at: '', finished_at: '', found: null },
-        fog: { ...map.fog, explored: seen.explored },
+        fog: { ...map.fog, shapes: [], mask: seen.mask },
         // Areas of effect: their own, and ones whose point of origin they can see.
         templates: map.templates.filter((t) => t.user_id === userId || canSee(map, seen.polygons, t.x, t.y)),
         // The turn order holds only the tokens they can see; on an unseen token's turn, `turn` is null and `turn_unseen` says so.
@@ -342,7 +334,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
           .filter((l) => l.target?.shown && canSee(map, seen.polygons, l.x, l.y))
           .map(({ target: m, ...l }) => ({ ...l, to_name: m.name })),
         variants: map.variants.filter((v) => v.id === map.variant).map(({ id, name }) => ({ id, name })),
-        image_key: `p${variantKey}`,
+        image_key: `${seen.key}${variantKey}`,
         designed: false,
         can_edit: false,
       };
