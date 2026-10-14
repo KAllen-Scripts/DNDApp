@@ -142,9 +142,8 @@ test('maps: the DM adds tokens; HP changes ("-3", "+10", "4"), conditions, hidde
     page.click('#map-add-token');
     await page.waitFor(() => dialog(page).open);
     const form = () => dialog(page).querySelector('form');
-    page.type(fieldIn(form(), 'Kind'), 'pc');
-    assert.ok(!fieldIn(form(), 'Player').closest('label').hidden);
-    page.type(fieldIn(form(), 'Player'), String(t.sam.id));
+    page.type(fieldIn(form(), 'Who is it?'), `p:${t.sam.id}`);
+    assert.ok(fieldIn(form(), 'Kind').closest('label').hidden, 'a player is always a player character');
     assert.equal(fieldIn(form(), 'Name').value, 'Thorin');
     page.submit(form());
     await page.settle();
@@ -575,6 +574,40 @@ test('AI walls: the DM sees it working (step and time so far), then what it foun
 });
 
 // Pressing ✕ on the AI walls message started a map pan, so the map got the click and the message stuck.
+test('regression: Add a token asks who it is once (players, your creatures and the records in one list, not three overlapping fields)', async () => {
+  await withPage({
+    setup: { llm: createFakeLLM({ structured: async () => mapReading() }) },
+    before: async (t) => {
+      await upload(t, { transcript: SAMPLE });
+      const dana = await addDm(t);
+      const map = await importMap(t, { patch: SHOWN });
+      await t.request('POST', `/campaigns/${t.campaign.id}/creatures`, { body: { name: 'Mira the innkeeper', kind: 'npc' } });
+      return { dana, map };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t) => {
+    await openMapTab(page);
+    page.click('#map-add-token');
+    await page.waitFor(() => dialog(page).open);
+    const form = dialog(page).querySelector('form');
+    const labels = [...form.querySelectorAll('label.map-field > span')].map((l) => l.textContent);
+    for (const old of ['From your creatures', "From the campaign's records", 'Player']) assert.ok(!labels.includes(old), `no separate "${old}" field`);
+    assert.equal(form.querySelectorAll('select').length, 3, 'who, kind and size');
+    const who = fieldIn(form, 'Who is it?');
+    assert.equal(who.options[0].textContent, 'Someone new');
+    const groups = Object.fromEntries([...who.querySelectorAll('optgroup')].map((g) => [g.label, [...g.querySelectorAll('option')].map((o) => o.textContent)]));
+    assert.ok(groups.Players.includes('Thorin (sam)') || groups.Players.some((o) => o.startsWith('Thorin')), 'the players');
+    assert.deepEqual(groups['Your creatures'], ['Mira the innkeeper (NPC)']);
+    assert.ok(groups["In the campaign's records"].includes('Brother Hal'));
+    // The kind is only asked when it isn't already known.
+    page.type(who, `p:${t.sam.id}`);
+    assert.ok(fieldIn(form, 'Kind').closest('label').hidden);
+    page.type(who, '');
+    assert.ok(!fieldIn(form, 'Kind').closest('label').hidden);
+    assert.equal(fieldIn(form, 'Kind').value, 'enemy');
+  });
+});
+
 test('regression: pressing on the AI walls message does not start a pan, so it can be closed', async () => {
   const llm = createFakeLLM({
     structured: async (opts) => (opts.purpose.startsWith('map:walls') ? { walls: [{ points: [{ x: 500, y: 0 }, { x: 500, y: 1000 }] }], doors: [], notes: '' } : mapReading()),
@@ -1001,8 +1034,7 @@ test("records: a token for someone in the campaign's records; the DM reads what 
     page.click('#map-add-token');
     await page.waitFor(() => dialog(page).open);
     const form = dialog(page).querySelector('form');
-    const record = fieldIn(form, "From the campaign's records");
-    assert.ok(!record.closest('label').hidden);
+    const record = fieldIn(form, 'Who is it?');
     const hal = [...record.options].find((o) => o.textContent === 'Brother Hal');
     assert.ok(hal, 'the archivist recorded Brother Hal');
     page.type(record, hal.value);
