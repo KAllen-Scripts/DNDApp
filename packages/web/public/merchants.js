@@ -9,7 +9,7 @@
  * token on the map and buy on their own. The coins come off their sheet and
  * the item goes into its inventory (the server does both).
  */
-import { api, h, readBase64, LoggedOut } from './api.js';
+import { api, h, readBase64, LoggedOut, note } from './api.js';
 import { formatPrice, totalCp } from './shared/coins.js';
 import { itemList, itemFace, itemSummary, detailsDialog, lookUpItem, priceInputs, itemForm, createItem } from './items.js';
 import { flush as flushSheet, reloadSheet } from './sheet.js';
@@ -31,9 +31,7 @@ const state = {
 const base = () => `/campaigns/${state.campaignId}/merchants`;
 
 function status(text, error = false) {
-  const el = $('#merchants-status');
-  el.textContent = text;
-  el.classList.toggle('error', error);
+  note($('#merchants-status'), text, error);
 }
 
 const report = (err) => {

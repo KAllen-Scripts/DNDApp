@@ -211,6 +211,9 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
 .a .stat-block p { margin: 0 0 0.35rem; }
 .a .ability-scores th, .a .ability-scores td { text-align: center; border: none; background: none; padding: 0.15rem 0.5rem; }
 .status { color: var(--muted); font-size: 0.9rem; font-style: italic; }
+/* The ✕ on a status line's message (api.js note()). */
+.note-close { margin-left: 0.4rem; padding: 0 0.3rem; border: none; background: none; color: inherit; font-size: 0.85em; line-height: 1; cursor: pointer; opacity: 0.7; }
+.note-close:hover { opacity: 1; }
 .cite {
   display: inline; border: none; padding: 0 0.3rem; margin: 0 0.1rem; border-radius: 5px;
   background: var(--cite); font-size: 0.85em; font-variant-numeric: tabular-nums;
