@@ -32,9 +32,9 @@ let relayout = () => {};
 // Can this panel go beside the map? (Only tabs this person has: the Sheet and Inventory are the players', Creatures, Items, Merchants and Archivist the DM's.)
 const available = (name) => PANELS.includes(name) && !$(`[data-tab="${name}"]`)?.hidden;
 
-/** Which panel goes beside the map (when the map tab is open), or null. */
+/** Which panel goes beside the map (when the map tab is open), or null. A phone has no room for one. */
 export function besidePanel() {
-  if (SHEET_WINDOW) return null;
+  if (SHEET_WINDOW || document.documentElement.hasAttribute('data-phone')) return null;
   let saved = storage.get(BESIDE_KEY);
   if (saved == null && storage.get(OLD_KEY) === '1') saved = 'sheet';
   return available(saved) ? saved : null;

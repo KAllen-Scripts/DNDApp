@@ -21,6 +21,7 @@ import { loadArchivist, initArchivistActions } from './archivist.js';
 import { loadCreatures, initCreatureActions } from './creatures.js';
 import { loadItems, initItemActions } from './items.js';
 import { loadMerchants, initMerchantActions, merchantsOpened } from './merchants.js';
+import { initPhone, phoneMenu } from './phone.js';
 import { SHEET_WINDOW, windowCampaign, besidePanel, placeBeside, setSheetCampaign, initSheetPlace } from './sheet-place.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -295,7 +296,9 @@ window.addEventListener('dndlook', () => {
 for (const tab of document.querySelectorAll('[data-tab]')) {
   tab.addEventListener('click', () => {
     showTab(tab.dataset.tab);
-    if (tab.dataset.tab === 'ask' || tab.dataset.tab === 'notes') $(`#tab-${tab.dataset.tab} textarea`)?.focus();
+    // Straight into the text box, except on a phone, where that would pop the keyboard up over the page.
+    const typing = tab.dataset.tab === 'ask' || tab.dataset.tab === 'notes';
+    if (typing && !document.documentElement.hasAttribute('data-phone')) $(`#tab-${tab.dataset.tab} textarea`)?.focus();
     if (tab.dataset.tab === 'handouts') handoutsOpened();
   });
 }
@@ -740,6 +743,8 @@ $('#note-form textarea').addEventListener('keydown', (e) => {
   }
 });
 
+initPhone();
+phoneMenu($('.chat-actions'), { label: 'This chat: pin, rename, delete, new chat' });
 initSheetActions();
 initSheetPlace({ onChange: () => showTab(currentTab) });
 showTab(currentTab);

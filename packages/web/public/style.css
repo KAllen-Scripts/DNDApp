@@ -326,7 +326,7 @@ table.stock .stock-actions button { padding: 0.15rem 0.45rem; font-size: 0.8rem;
   .tabs { flex: 1; }
   .tabs button { flex: 1; }
   .composer:not(.note-composer) { flex-direction: column; align-items: stretch; }
-  .chats-toggle span, .new-chat-head { display: none; }
+  .chats-toggle span:not(.chats-icon), .new-chat-head { display: none; }
 }
 
 /* ---------- admin ---------- */
