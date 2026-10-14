@@ -13,7 +13,7 @@ import { applyJson } from '../sheets/store.js';
 
 export const MAX_MAP_EVENTS = 300;
 
-const who = (t) => (t.kind === 'pc' ? t.name : `${t.name} (${t.kind === 'enemy' ? 'enemy' : 'NPC'})`);
+const who = (t) => (t.kind === 'pc' ? t.name : `${t.name} (${{ enemy: 'enemy', companion: 'a companion or summon' }[t.kind] ?? 'NPC'})`);
 const down = (t) => t.hp?.current != null && t.hp.current <= 0;
 
 /** The events in one change: before -> after (both normalised maps). */

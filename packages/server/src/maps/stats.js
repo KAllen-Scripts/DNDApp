@@ -5,7 +5,8 @@
  * books: if a book prints the creature's stat block,
  * the AI copies it from the page (labelled with the book and page). Only if
  * no book has it does the AI write it from its knowledge of 5e (labelled as
- * the AI's, like spells looked up from memory). Only the DM ever sees them.
+ * the AI's, like spells looked up from memory). Only the DM sees them, and a
+ * player their own companion's (a player's lookup skips the DM's creatures).
  */
 import { z } from 'zod';
 
@@ -42,11 +43,12 @@ export function createStatBlocks({ llm, books = null, creatures = null, editions
   return {
     /**
      * @param {string} name
-     * @param {{ campaignId: number, userId: number, exclude?: string }} opts  exclude: a creature not to copy from (the one being filled)
+     * @param {{ campaignId: number, userId: number, exclude?: string, dmCreatures?: boolean }} opts  exclude: a creature not to copy from (the one being filled);
+     *   dmCreatures: false for a player's lookup (their companion), so the DM's own creatures stay the DM's
      * @returns {Promise<{ stats, size, hp, creature?: string } | null>} null if no one knows it
      */
-    async lookup(name, { campaignId, userId, exclude = null }) {
-      const own = creatures?.withStats(campaignId, name, { exclude });
+    async lookup(name, { campaignId, userId, exclude = null, dmCreatures = true }) {
+      const own = dmCreatures ? creatures?.withStats(campaignId, name, { exclude }) : null;
       if (own) {
         return { stats: { ...own.stats, from: own.stats.from || `your creatures (${own.name})` }, size: own.size === 1 ? null : own.size, hp: own.hp_max, creature: own.name };
       }

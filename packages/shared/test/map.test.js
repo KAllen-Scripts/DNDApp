@@ -8,7 +8,7 @@ import {
   distanceToWall, doorReach,
   pathCost, isDifficult, speedFromText, normalizeTerrain,
   litAreas, inView, normalizeLights, normalizeLightRadii,
-  normalizeCombat, stepTurn, dexModifier, normalizeTemplates, templateShape, tokensInTemplate, inTemplate, snapTemplatePoint, spellArea,
+  normalizeCombat, stepTurn, dexModifier, abilityModifier, statBlockRolls, ownToken, normalizeTemplates, templateShape, tokensInTemplate, inTemplate, snapTemplatePoint, spellArea,
 } from '../src/map.js';
 
 const battle = normalizeMap({ image: { width: 700, height: 490 }, grid: { size: 70, x: 0, y: 0 }, scale: { distance: 5, unit: 'ft', per: 'square' } });
@@ -517,4 +517,29 @@ test('speedFromText and normalizeTerrain', () => {
   assert.equal(speedFromText(''), null);
   assert.deepEqual(normalizeTerrain([{ id: 'dddddd', points: [[0, 0], [900, 0], [10, 10]], source: 'ai' }, { id: 'eeeeee', points: [[0, 0], [1, 1]] }], { width: 700, height: 490 }),
     [{ id: 'dddddd', points: [[0, 0], [700, 0], [10, 10]], source: 'ai' }]);
+});
+
+test('companions: a player controls their companion tokens, which keep their owner; statBlockRolls reads attacks and checks', () => {
+  const map = normalizeMap({ image: { width: 700, height: 490 }, tokens: [
+    { id: 'wolf01', kind: 'companion', name: 'Wolf', user_id: 3 },
+    { id: 'gob001', kind: 'enemy', name: 'Goblin', user_id: 3 },
+  ] });
+  assert.equal(map.tokens[0].user_id, 3);
+  assert.equal(map.tokens[1].user_id, null, 'an enemy has no player');
+  assert.ok(ownToken(map.tokens[0], 3));
+  assert.ok(!ownToken(map.tokens[0], 4));
+  assert.ok(!ownToken(map.tokens[1], 3));
+
+  assert.equal(abilityModifier('| STR | DEX |\n|---|---|\n| 18 (+4) | 8 (-1) |', 'STR'), 4);
+  assert.equal(abilityModifier('WIS 14', 'wis'), 2);
+  const { abilities, attacks } = statBlockRolls('***Bite.*** *Melee Weapon Attack:* +4 to hit, reach 5 ft. *Hit:* 7 (2d4 + 2) piercing damage.\n'
+    + '**Claws.** *Melee Attack Roll:* +5, reach 5 ft. *Hit:* 6 (1d6 + 3) slashing damage plus 3 (1d6) fire damage.\n'
+    + '**Greatclub.** +6 to hit, 2d8 + 4 bludgeoning.\nDEX 15 (+2)');
+  assert.deepEqual(attacks, [
+    { name: 'Bite', hit: 4, damage: ['2d4+2'] },
+    { name: 'Claws', hit: 5, damage: ['1d6+3', '1d6'] },
+    { name: 'Greatclub', hit: 6, damage: ['2d8+4'] },
+  ]);
+  assert.deepEqual(abilities, [{ ability: 'DEX', mod: 2 }]);
+  assert.deepEqual(statBlockRolls(''), { abilities: [], attacks: [] });
 });

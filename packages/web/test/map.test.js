@@ -1036,3 +1036,53 @@ test('maps: after the live connection drops, the page reconnects and catches up 
     await page.waitFor(() => listens() === 2, { what: 'the reconnect' });
   });
 });
+
+test('companions: a player adds their wolf (stat block from the AI), rolls its bite from the stat block, and dismisses it; the Companion button is for players', async () => {
+  const wolf = {
+    found: true, name: 'Wolf', size: 'medium', ac: 13, hp_average: 11, hp_formula: '2d8 + 2', speed: '40 ft.', challenge: '1/4 (50 XP)',
+    stat_block: '**Wolf**\n\n| STR | DEX | CON | INT | WIS | CHA |\n|---|---|---|---|---|---|\n| 12 (+1) | 15 (+2) | 12 (+1) | 3 (-4) | 12 (+1) | 6 (-2) |\n\n***Bite.*** *Melee Weapon Attack:* +4 to hit. *Hit:* 7 (2d4 + 2) piercing damage.',
+  };
+  await withPage({
+    setup: { llm: mapLLM(wolf) },
+    before: async (t) => {
+      const map = await importMap(t, { patch: SHOWN });
+      await addToken(t, map, { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 52.5, y: 52.5 });
+      return { map };
+    },
+    page: (t) => ({ as: t.sam }),
+  }, async (page, t) => {
+    await openMapTab(page);
+    page.click('#map-add-companion');
+    await page.waitFor(() => dialog(page).open);
+    const form = dialog(page).querySelector('form');
+    page.type(fieldIn(form, 'Name'), 'Wolf');
+    page.submit(form);
+    await page.waitFor(() => tokenEl(page, 'Wolf')?.classList.contains('mine'));
+    await page.waitFor(() => selectionButton(page, 'Roll'));
+    const token = (await mapsOf(t))[0].tokens.find((x) => x.name === 'Wolf');
+    assert.equal(token.kind, 'companion');
+    assert.equal(token.user_id, t.sam.id);
+    assert.deepEqual(token.hp, { current: 11, max: 11 });
+    assert.ok(tokenEl(page, 'Wolf').classList.contains('movable'));
+
+    selectionButton(page, 'Roll').click();
+    await page.waitFor(() => dialog(page).open && dialogButton(page, 'To hit +4'));
+    assert.ok(dialogButton(page, 'Damage 2d4+2'));
+    assert.ok(dialogButton(page, 'DEX +2'));
+    dialogButton(page, 'To hit +4').click();
+    await page.settle();
+    const sent = page.requests.filter((r) => r.path.endsWith('/roll')).at(-1);
+    assert.equal(sent.body.notation, '1d20+4');
+    assert.equal(sent.body.label, 'Wolf: Bite to hit');
+
+    selectionButton(page, 'Dismiss').click();
+    await page.settle();
+    assert.ok(!(await mapsOf(t))[0].tokens.some((x) => x.name === 'Wolf'));
+  });
+  await withPage({ setup: { llm: mapLLM() }, before: async (t) => ({ map: await importMap(t, { patch: SHOWN }), dana: await addDm(t) }), page: (t, { dana }) => ({ as: dana }) }, async (page) => {
+    await openMapTab(page);
+    assert.ok(page.$('#tab-map').classList.contains('can-edit'));
+    // Players only (the stylesheet hides .player-only for the DM; the DM adds companions with Add token).
+    assert.ok(page.$('#map-add-companion').classList.contains('player-only'));
+  });
+});

@@ -1,5 +1,5 @@
 /**
- * A stat block in a dialog (DM only), with a way to look up a different
+ * A stat block in a dialog (the DM's, or a player's own companion's), with a way to look up a different
  * creature instead. Used for tokens on the map (map.js) and the DM's saved
  * creatures (creatures.js).
  */
@@ -14,9 +14,9 @@ const SOURCES = {
 
 /**
  * @param {HTMLDialogElement} dialog
- * @param {{ title: string, stats: object, onLookup: (name: string) => void }} options
+ * @param {{ title: string, stats: object, onLookup: (name: string) => void, shared?: boolean }} options  shared: a player's companion (they and the DM see it)
  */
-export function showStatBlock(dialog, { title, stats: st, onLookup }) {
+export function showStatBlock(dialog, { title, stats: st, onLookup, shared = false }) {
   const other = h('input', { placeholder: 'Another creature, e.g. Bugbear', maxLength: 100 });
   dialog.replaceChildren(
     h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => {
@@ -27,7 +27,8 @@ export function showStatBlock(dialog, { title, stats: st, onLookup }) {
       h('h2', {}, `${title}: ${st.name || 'stat block'}`),
       h('p', { class: 'muted small' }, [st.ac != null ? `AC ${st.ac}` : '', st.hp_formula ? `HP ${st.hp_formula}` : '', st.speed, st.challenge ? `CR ${st.challenge}` : ''].filter(Boolean).join(' · ')),
       markdownBox(st.text, { class: 'a stat-text stat-block' }),
-      h('p', { class: 'muted small' }, (st.from?.startsWith('your creatures') ? `From ${st.from}. Only you see this.` : SOURCES[st.source]?.(st)) ?? 'Only you see this.'),
+      h('p', { class: 'muted small' }, ((st.from?.startsWith('your creatures') ? `From ${st.from}. Only you see this.` : SOURCES[st.source]?.(st)) ?? 'Only you see this.')
+        .replace('Only you see this.', shared ? 'Only you and the DM see this.' : 'Only you see this.')),
       h('div', { class: 'map-dialog-actions' }, other, h('button', { class: 'ghost' }, 'Look up instead'), h('span', { class: 'spacer' }), h('button', { type: 'button', class: 'primary', onclick: () => dialog.close() }, 'Close')),
     ),
   );

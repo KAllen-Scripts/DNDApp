@@ -75,8 +75,9 @@ export function renderCombat() {
       h('span', { class: 'swatch', style: `background:${t.color}` }),
       h('button', { class: 'who', title: `Show ${t.name} on the map`, onclick: () => select(t.id) }, t.name),
       init,
-      mine(t) && (e.init == null || state.canEdit) ? h('button', { class: 'ghost', 'aria-label': `Roll initiative for ${t.name}`, title: 'Roll a d20 plus their initiative', onclick: (ev) => (e.init == null && !state.canEdit
-        // A player's own roll goes through the dice (3D, shared like any roll) and into the fight.
+      mine(t) && (e.init == null || state.canEdit) ? h('button', { class: 'ghost', 'aria-label': `Roll initiative for ${t.name}`, title: 'Roll a d20 plus their initiative', onclick: (ev) => (e.init == null && !state.canEdit && t.kind === 'pc'
+        // A player's own character's roll goes through the dice (3D, shared like any roll) and into the fight;
+        // a companion's or summon's is rolled by the server from its stat block, like an NPC's.
         ? roll(null, { label: 'Initiative', initiative: true, mode: rollModeFromEvent(ev) })
         : combat({ action: 'roll', id: t.id })) }, e.init == null ? 'Roll' : '↻') : null,
       state.canEdit ? h('button', { class: 'ghost icon-btn', 'aria-label': `Take ${t.name} out of the fight`, onclick: () => combat({ action: 'remove', id: t.id }) }, '✕') : null);

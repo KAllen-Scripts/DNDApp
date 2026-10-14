@@ -1066,6 +1066,8 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .map-bar button, .map-bar select { padding: 0.35rem 0.8rem; font-size: 0.9rem; }
 .map-bar select { max-width: 14rem; }
 .map-panel:not(.can-edit) .dm-only { display: none; }
+.map-panel.can-edit .player-only { display: none; }
+.companion-roll { align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 /* The DM's edit mode off: their set-up tools hide (map.js). */
 .map-panel.edit-off .map-edit-tool { display: none; }
 

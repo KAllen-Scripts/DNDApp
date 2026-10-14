@@ -4,7 +4,7 @@
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { CONDITIONS, FOG_MAP, FOG_OPS, MAX_FOG_SHAPES, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_TERRAIN, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, pathCost, snapToken, stepTurn, wallBetween } from '@dndapp/shared/map.js';
+import { CONDITIONS, FOG_MAP, FOG_OPS, MAX_COMPANIONS, MAX_FOG_SHAPES, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_TERRAIN, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, PLAYER_KINDS, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, ownToken, pathCost, snapToken, stepTurn, tokenPx, wallBetween } from '@dndapp/shared/map.js';
 import sharp from 'sharp';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
@@ -413,7 +413,7 @@ export function registerMaps(app, r) {
     const token = map.tokens.find((t) => t.id === tid);
     if (!token) throw new NotFoundError('No such token');
     const dm = a.role === 'dm';
-    if (!dm && !(token.kind === 'pc' && token.user_id === request.user.id)) throw new AuthError('You can only move your own character.', 403);
+    if (!dm && !ownToken(token, request.user.id)) throw new AuthError('You can only move your own character and companions.', 403);
     if (!dm && !nearLink(map, link, token.x, token.y)) throw new BadRequestError(`Move ${token.name} next to it first.`);
     const target = maps.get(a.cid, link.to);
     if (!dm && !target.shown) throw new NotFoundError('No such map');
@@ -564,7 +564,7 @@ export function registerMaps(app, r) {
     if (!door) throw new NotFoundError('No such door');
     if (a.role !== 'dm') {
       if (door.locked) throw new BadRequestError("It's locked.");
-      const near = map.tokens.some((t) => t.kind === 'pc' && t.user_id === request.user.id && distanceToWall(t, door) <= doorReach(map));
+      const near = map.tokens.some((t) => ownToken(t, request.user.id) && distanceToWall(t, door) <= doorReach(map));
       if (!near) throw new BadRequestError('Your character is too far away to reach that door.');
     }
     const saved = maps.change(a.cid, map.id, (m) => {
@@ -718,6 +718,10 @@ export function registerMaps(app, r) {
   });
   // What a player may change on their own token; everything else is the DM's.
   const OWNER_FIELDS = new Set(['x', 'y', 'hp', 'conditions', 'light', 'darkvision']);
+  // On their companions and summons, a player may also rename it, resize it, recolour it and write its stat block.
+  const COMPANION_FIELDS = new Set([...OWNER_FIELDS, 'name', 'size', 'color', 'stats', 'speed']);
+  // What a player sends to add a companion or summon of their own.
+  const COMPANION = TOKEN.pick({ name: true, size: true, color: true, x: true, y: true, hp: true, darkvision: true, speed: true, stats: true }).partial();
 
   /** A token linked to a record gets that record's current title (the DM only sends the id). */
   const linkRecord = (cid, body) => {
@@ -727,17 +731,24 @@ export function registerMaps(app, r) {
     body.record = { id: r.id, title: r.title };
   };
 
-  /** A player character token belongs to someone in this campaign. */
+  /** A player character's or companion's token belongs to someone in this campaign. */
   const checkTokenOwner = (cid, token) => {
-    if (token.kind === 'pc' && token.user_id != null && !auth.membership(cid, token.user_id)) {
+    if (PLAYER_KINDS.includes(token.kind) && token.user_id != null && !auth.membership(cid, token.user_id)) {
       throw new BadRequestError("That player isn't in this campaign.");
     }
   };
 
-  /** Add a token (DM): { kind, name, user_id?, color?, size?, x?, y?, hp?, conditions?, hidden? }. On a grid it snaps to squares. */
+  /**
+   * Add a token. The DM: { kind, name, user_id?, color?, size?, x?, y?, hp?, conditions?, hidden? }.
+   * A player adds a companion or summon of their own (a familiar, an animal companion, a conjured
+   * creature): { name, size?, color?, hp?, darkvision?, speed?, stats?, x?, y? }. It's theirs to
+   * control. It goes where they ask if they can see that place, else next to their character.
+   * On a grid it snaps to squares.
+   */
   app.post('/campaigns/:cid/maps/:mid/tokens', async (request, reply) => {
-    const a = access(request, { dm: true });
-    const { map } = viewableMap(request);
+    const a = access(request);
+    const { map, view } = viewableMap(request);
+    if (a.role !== 'dm') return addCompanion(request, reply, a, map, view);
     const body = TOKEN.partial().required({ kind: true }).parse(request.body ?? {});
     if (map.tokens.length >= MAX_TOKENS) throw new BadRequestError(`A map can have at most ${MAX_TOKENS} tokens.`);
     checkTokenOwner(a.cid, body);
@@ -752,10 +763,42 @@ export function registerMaps(app, r) {
     return { map: maps.view(saved, a), token: saved.tokens.find((t) => t.id === id) };
   });
 
+  /** A player adds a companion or summon of their own (see POST .../tokens). */
+  function addCompanion(request, reply, a, map, view) {
+    const { kind = 'companion', ...rest } = request.body ?? {};
+    // Anything else (an enemy, an NPC, someone else's companion, a hidden one) is the DM's to add.
+    if (kind !== 'companion' || Object.keys(rest).some((k) => !(k in COMPANION.shape))) throw new AuthError('Only the DM can add that', 403);
+    const body = COMPANION.parse(rest);
+    if (!body.name) throw new BadRequestError('What is it called?');
+    if (map.tokens.length >= MAX_TOKENS) throw new BadRequestError(`A map can have at most ${MAX_TOKENS} tokens.`);
+    if (map.tokens.filter((t) => t.kind === 'companion' && t.user_id === a.userId).length >= MAX_COMPANIONS) {
+      throw new BadRequestError(`You can have at most ${MAX_COMPANIONS} companions and summons on a map. Dismiss some first.`);
+    }
+    // Only somewhere they can see (no placing a scout under the fog); else beside their character.
+    const seen = maps.sightFor(map, a.userId);
+    const own = map.tokens.find((t) => t.kind === 'pc' && t.user_id === a.userId);
+    let at = null;
+    if (body.x != null && body.y != null && canSee(map, seen.polygons, body.x, body.y)) at = { x: body.x, y: body.y };
+    else if (own) at = { x: own.x + tokenPx(map, own), y: own.y };
+    else if (!map.fog.enabled) at = { x: map.image.width / 2, y: map.image.height / 2 };
+    if (!at) throw new BadRequestError('Put it somewhere you can see, or ask the DM to put your character on this map first.');
+    const id = newTokenId();
+    const saved = maps.change(a.cid, map.id, (m) => {
+      const token = { size: 1, ...body, kind: 'companion', user_id: a.userId, id, hidden: false, ...at };
+      if (token.hp && token.hp.current == null) token.hp.current = token.hp.max;
+      Object.assign(token, snapToken(m, { size: TOKEN_SIZES.includes(token.size) ? token.size : 1 }, token.x, token.y));
+      m.tokens.push(token);
+    }, { by: request.user.id, reason: 'companion added' });
+    reply.status(201);
+    const out = maps.view(saved, a);
+    return { map: out, token: out.tokens.find((t) => t.id === id) };
+  }
+
   /**
    * Change a token. The player it belongs to may move it ({ x, y }) and set
-   * its hit points and conditions; anything else (name, kind, owner, colour,
-   * size, hidden) is the DM's.
+   * its hit points and conditions (on their companions and summons, also its
+   * name, size, colour, speed and stat block); anything else (kind, owner,
+   * hidden) is the DM's.
    */
   app.patch('/campaigns/:cid/maps/:mid/tokens/:tid', async (request) => {
     const a = access(request);
@@ -768,8 +811,9 @@ export function registerMaps(app, r) {
     const body = TOKEN.partial().parse(rest);
     const moving = Object.keys(body).every((k) => k === 'x' || k === 'y');
     if (a.role !== 'dm') {
-      if (token.user_id !== request.user.id) throw new AuthError('You can only change your own token', 403);
-      if (!Object.keys(body).every((k) => OWNER_FIELDS.has(k))) throw new AuthError('Only the DM can change that', 403);
+      if (!ownToken(token, request.user.id)) throw new AuthError('You can only change your own token', 403);
+      const allowed = token.kind === 'companion' ? COMPANION_FIELDS : OWNER_FIELDS;
+      if (!Object.keys(body).every((k) => allowed.has(k))) throw new AuthError('Only the DM can change that', 403);
     }
     checkTokenOwner(a.cid, { ...token, ...body });
     linkRecord(a.cid, body);
@@ -790,7 +834,7 @@ export function registerMaps(app, r) {
         const t = m.tokens.find((x) => x.id === token.id);
         if (!t) return;
         Object.assign(t, body);
-        if (t.kind !== 'pc') t.user_id = null;
+        if (!PLAYER_KINDS.includes(t.kind)) t.user_id = null;
         Object.assign(t, snapToken(m, t, t.x, t.y));
         // In a fight, count how far it has moved this turn (difficult terrain costs double).
         const entry = moves && m.combat?.entries.find((e) => e.id === t.id);
@@ -802,18 +846,20 @@ export function registerMaps(app, r) {
   });
 
   /**
-   * Fill a token's stat block with the AI (DM): { name? } (default: the
-   * token's name). Sets its hit points and size too, unless the DM already
-   * did. 404 if the AI doesn't know the creature.
+   * Fill a token's stat block with the AI (DM, or a player for their own
+   * companion or summon): { name? } (default: the token's name). Sets its
+   * hit points and size too, unless they were already set. 404 if the AI
+   * doesn't know the creature.
    */
   app.post('/campaigns/:cid/maps/:mid/tokens/:tid/stats', async (request) => {
-    const a = access(request, { dm: true });
-    const { map } = viewableMap(request);
-    const token = map.tokens.find((t) => t.id === request.params.tid);
+    const a = access(request);
+    const { map, view } = viewableMap(request);
+    const token = (a.role === 'dm' ? map.tokens : view.tokens).find((t) => t.id === request.params.tid);
     if (!token) throw new NotFoundError('No such token');
+    if (a.role !== 'dm' && !(token.kind === 'companion' && token.user_id === a.userId)) throw new AuthError('Only the DM can do that', 403);
     const { name } = z.object({ name: z.string().trim().min(1).max(100).optional() }).parse(request.body ?? {});
     mapAiAllowed(request.user.id);
-    const found = await statBlocks.lookup(name ?? token.name, { campaignId: a.cid, userId: request.user.id });
+    const found = await statBlocks.lookup(name ?? token.name, { campaignId: a.cid, userId: request.user.id, dmCreatures: a.role === 'dm' });
     if (!found) throw new NotFoundError(`The AI doesn't know a creature called "${name ?? token.name}". Try its proper name, like "Goblin" or "Adult Red Dragon".`);
     const saved = maps.change(a.cid, map.id, (m) => {
       const t = m.tokens.find((x) => x.id === token.id);
@@ -822,7 +868,8 @@ export function registerMaps(app, r) {
       if (!t.hp && found.hp) t.hp = { current: found.hp, max: found.hp };
       if (found.size && t.size === 1) Object.assign(t, { size: found.size }, snapToken(m, { size: found.size }, t.x, t.y));
     }, { by: request.user.id, reason: 'stat block' });
-    return { map: maps.view(saved, a), token: saved.tokens.find((t) => t.id === token.id) };
+    const out = maps.view(saved, a);
+    return { map: out, token: out.tokens.find((t) => t.id === token.id) };
   });
 
   // Private pins: each person's own marks on a map. Only they ever see them (not even the DM).
@@ -910,15 +957,18 @@ export function registerMaps(app, r) {
     return reply.type('image/webp').header('X-Content-Type-Options', 'nosniff').header('Cache-Control', 'private, max-age=31536000, immutable').send(await tokenArt.square(file));
   });
 
+  /** Remove a token (DM), or dismiss a companion or summon of your own (a player). */
   app.delete('/campaigns/:cid/maps/:mid/tokens/:tid', async (request) => {
-    const a = access(request, { dm: true });
-    const { map } = viewableMap(request);
-    if (!map.tokens.some((t) => t.id === request.params.tid)) throw new NotFoundError('No such token');
+    const a = access(request);
+    const { map, view } = viewableMap(request);
+    const token = (a.role === 'dm' ? map.tokens : view.tokens).find((t) => t.id === request.params.tid);
+    if (!token) throw new NotFoundError('No such token');
+    if (a.role !== 'dm' && !(token.kind === 'companion' && token.user_id === a.userId)) throw new AuthError('Only the DM can remove that', 403);
     const saved = maps.change(a.cid, map.id, (m) => {
       // In a fight, removing whoever's turn it is passes the turn on.
       if (m.combat?.turn === request.params.tid) Object.assign(m.combat, stepTurn(m.combat, 1));
       m.tokens = m.tokens.filter((t) => t.id !== request.params.tid);
-    }, { by: request.user.id, reason: 'token removed' });
+    }, { by: request.user.id, reason: a.role === 'dm' ? 'token removed' : 'companion dismissed' });
     return { map: maps.view(saved, a) };
   });
 
