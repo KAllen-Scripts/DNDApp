@@ -89,10 +89,23 @@ export function phoneMenu(bar, { label = 'More', keep = null } = {}) {
   button.setAttribute('aria-expanded', 'false');
   button.textContent = '⋯';
   bar.append(list, button);
-  const menu = { box: list, button };
-  button.addEventListener('click', () => (openMenu === menu ? closeMenu() : open(menu)));
-  closesOnChoice(menu);
+  phoneSheet(list, button);
   return button;
+}
+
+/**
+ * On a phone, `button` opens `box` itself as a menu sheet from the bottom
+ * (with the scrim; choosing a button in it closes it). For a bar that already
+ * floats, like the map's tools, where nothing needs moving.
+ */
+export function phoneSheet(box, button) {
+  const menu = { box, button };
+  button.addEventListener('click', () => {
+    if (!isPhone()) return;
+    if (openMenu === menu) closeMenu();
+    else open(menu);
+  });
+  closesOnChoice(menu);
 }
 
 /** The ☰ button and the menu sheet the top bar becomes on a phone. */
@@ -110,9 +123,13 @@ export function initPhone() {
   button.textContent = '☰';
   bar.id ||= 'app-topbar';
   view.prepend(button);
-  const menu = { box: bar, button };
-  button.addEventListener('click', () => (openMenu === menu ? closeMenu() : open(menu)));
-  closesOnChoice(menu);
+  phoneSheet(bar, button);
+
+  // The picked token's bar sits just above the map's tools, however many rows of them are open.
+  const bars = $('#tab-map .map-bars');
+  if (bars && window.ResizeObserver) {
+    new ResizeObserver(() => $('#tab-map').style.setProperty('--phone-bars-h', `${bars.offsetHeight}px`)).observe(bars);
+  }
 
   // Leaving the phone layout (a phone turned on its side, a wider window) shuts any menu.
   window.addEventListener('dndlook', () => { if (!isPhone()) closeMenu({ refocus: false }); });
