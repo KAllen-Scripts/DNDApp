@@ -15,6 +15,7 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-14 | The map creator's Room tool always added walls all round, so a patch of another floor needed its walls rubbed out. | `web/test/creator-tools.test.js`: creator: the Room tool can lay its floor without walls |
 | 2026-10-13 | The Cloudflare details file `API_key` wasn't git-ignored, so git offered to commit it. | `server/test/security.test.js`: the API_key file (Cloudflare details) is git-ignored |
 | 2026-10-12 | The map creator skipped squares on a fast drag (one pointer move across many squares painted only its ends). | `web/test/creator.test.js`: creator: a fast floor drag paints every square between the pointer's stops |
 | 2026-10-10 | The AI walls message couldn't be closed: pressing ✕ started a map pan, so the map got the click. | `web/test/map.test.js`: pressing on the AI walls message does not start a pan, so it can be closed |
