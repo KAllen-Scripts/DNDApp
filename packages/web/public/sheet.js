@@ -9,7 +9,7 @@
  * never changed by the rules. Every change is saved to the server shortly
  * after typing stops.
  */
-import { api, fileUrl, h, storage } from './api.js';
+import { api, fileUrl, h, storage, note } from './api.js';
 import {
   ABILITIES, ABILITY_NAMES, SKILLS, CLASSES, RACES, BACKGROUNDS, ALIGNMENTS, SCHOOLS,
   WEAPONS, classKey, computeSheet, coerceDerived, formatBonus, newAttack, normalizeSheet, normalizeSpell, hitDice as hitDiceOf, rollDisadvantage,
@@ -927,10 +927,7 @@ function gearChanged(latest = null) {
 }
 
 function gearStatus(text, error = false) {
-  const el = $('#gear-status');
-  if (!el) return;
-  el.textContent = text;
-  el.classList.toggle('error', error);
+  note($('#gear-status'), text, error);
 }
 
 /** A new line in the inventory, with Proficient ticked if the character's class is (they can change it). */

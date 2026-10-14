@@ -112,6 +112,38 @@ test('regression: the element helper h() takes children nested to any depth', as
   });
 });
 
+// A status message ("Searching the web for …") floated over the Items page on a phone forever: no ✕, no timeout.
+test('regression: a status message can be dismissed and goes by itself', async () => {
+  await withPage({}, async () => {
+    const { note, NOTE_MS } = await import('../public/api.js');
+    const saved = { ...NOTE_MS };
+    Object.assign(NOTE_MS, { done: 20, working: 40, error: 30 });
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    try {
+      const el = document.createElement('span');
+      note(el, 'Searching the web for "power armour"…');
+      assert.match(el.textContent, /Searching the web/);
+      el.querySelector('button.note-close').click();
+      assert.equal(el.textContent, '', 'the ✕ dismisses it');
+
+      note(el, 'Searching the web for "power armour"…');
+      await wait(25);
+      assert.match(el.textContent, /Searching/, 'a working message stays longer than a done one');
+      await wait(30);
+      assert.equal(el.textContent, '', 'a working message still goes in the end');
+
+      note(el, 'Found it.');
+      note(el, 'Something broke.', true);
+      assert.ok(el.classList.contains('error'));
+      await wait(40);
+      assert.equal(el.textContent, '', 'errors go too');
+      assert.ok(!el.classList.contains('error'));
+    } finally {
+      Object.assign(NOTE_MS, saved);
+    }
+  });
+});
+
 // Text at the top level of an answer (not inside a paragraph) crashed the answer renderer.
 test('regression: an answer with text at its top level is shown, not a crash', async () => {
   const answer = '<div class="stat-block"><b>Ogre</b></div>\nAC 11 [S9]';

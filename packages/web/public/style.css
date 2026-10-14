@@ -211,6 +211,9 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
 .a .stat-block p { margin: 0 0 0.35rem; }
 .a .ability-scores th, .a .ability-scores td { text-align: center; border: none; background: none; padding: 0.15rem 0.5rem; }
 .status { color: var(--muted); font-size: 0.9rem; font-style: italic; }
+/* The ✕ on a status line's message (api.js note()). */
+.note-close { margin-left: 0.4rem; padding: 0 0.3rem; border: none; background: none; color: inherit; font-size: 0.85em; line-height: 1; cursor: pointer; opacity: 0.7; }
+.note-close:hover { opacity: 1; }
 .cite {
   display: inline; border: none; padding: 0 0.3rem; margin: 0 0.1rem; border-radius: 5px;
   background: var(--cite); font-size: 0.85em; font-variant-numeric: tabular-nums;
@@ -1254,6 +1257,10 @@ button.busy:disabled { opacity: 1; }
 .map-field input[type="color"] { height: 2.2rem; padding: 0.1rem; }
 .map-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 0.5rem; }
 .map-row[hidden] { display: none; }
+/* Add a token: the name gets the room, the kind sits beside it (and goes when a player is picked). */
+.map-row-name { display: flex; gap: 0.5rem; }
+.map-row-name > .map-field { flex: 1 1 0; min-width: 0; }
+.map-row-name > .map-field:first-child { flex-grow: 2; }
 .map-ai { white-space: pre-wrap; max-height: 10rem; overflow-y: auto; }
 .map-dialog-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
 .map-fog { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }

@@ -121,7 +121,7 @@ For running a fight, the DM has:
 - **Hit points and conditions** on each token (type `-7`, `+5` or `12` in the selection bar). Players see enemies' and NPCs' health only as unhurt, hurt, bloodied or down. A player character's token uses the hit points on that player's sheet: damage on the map changes the sheet, and healing on the sheet changes the token.
 - **Hidden** tokens that players don't see at all.
 - **Stat block (AI)**: fills in an enemy's 5e stat block, hit points and size, copied from the DM's own creature of that name if there is one, else from the group's books (it says which book and page), else from the AI's memory. Only the DM sees it.
-- **From the campaign's records**: put someone the archivist knows about on the map and read their record from there.
+- **Who is it?** in Add token: a player, one of your creatures, or someone from the campaign's records (put someone the archivist knows about on the map and read their record from there).
 - **Token pictures** for NPCs and enemies (optionally every token with the same name).
 - **Initiative**: start a fight; NPCs roll with their stat block's Dex, players roll their own (or type it); turns and rounds, a ring on whose turn it is.
 - **Darkness and lights**: night or underground, torches and other lights (placed, carried, or suggested by the AI's wall draft), darkvision per token.
@@ -131,7 +131,7 @@ Everyone can **Measure** distances, place **spell templates** (sphere, cone, lin
 
 ### The DM's Creatures tab
 
-In place of a character sheet, the DM keeps enemies and friendly NPCs: name, size, colour, hit points, AC, speed, darkvision, a stat block (typed, or filled in by the AI), a picture and private notes. **Place on map** (or **From your creatures** in Add token) puts one or a numbered group on the map; **Save to creatures** keeps a token from a map. **Find online** has the AI search the web (official or homebrew) for a creature and bring back its stat block, a link to where it found it, and a picture if it can download one. The server only downloads from the public internet, never from your PC or home network.
+In place of a character sheet, the DM keeps enemies and friendly NPCs: name, size, colour, hit points, AC, speed, darkvision, a stat block (typed, or filled in by the AI), a picture and private notes. **Place on map** (or picking one under **Who is it?** in Add token) puts one or a numbered group on the map; **Save to creatures** keeps a token from a map. **Find online** has the AI search the web (official or homebrew) for a creature and bring back its stat block, a link to where it found it, and a picture if it can download one. The server only downloads from the public internet, never from your PC or home network.
 
 Everyone can drop **pins** with a note on a map; only the person who placed them sees them, not even the DM.
 
