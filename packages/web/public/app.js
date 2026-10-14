@@ -744,6 +744,7 @@ $('#note-form textarea').addEventListener('keydown', (e) => {
 });
 
 initPhone();
+phoneMenu($('#admin-view > .topbar'), { label: 'Look, change password, log out', keep: '.who' });
 phoneMenu($('.chat-actions'), { label: 'This chat: pin, rename, delete, new chat' });
 initSheetActions();
 phoneMenu($('.sheet-bar'), { label: 'Sheet: review, upload, download, print, pop out', keep: '#sheet-status, .sheet-modes' });

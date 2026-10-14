@@ -76,6 +76,8 @@
 /* A toolbar's ⋯ menu (phoneMenu): the rest of the bar's buttons, in a list from the bottom. */
 :root[data-phone] .phone-menu .phone-more { display: inline-grid; flex: none; font-size: 1.3rem; line-height: 1; }
 :root[data-phone] .phone-menu-list:not(.menu-open) { display: none; }
+/* A bar that stays at the top (sticky, with a z-index) holds its menu in its own layer: lift the bar over the scrim while it's open. */
+:root[data-phone] .phone-menu:has(> .phone-menu-list.menu-open) { z-index: 31 !important; } /* over any bar's own z-index */
 :root[data-phone] .phone-menu-list.menu-open { display: grid; gap: 0.3rem; }
 :root[data-phone] .phone-menu-list.menu-open > * { width: 100%; height: auto; min-width: 0; margin: 0; }
 :root[data-phone] .phone-menu-list.menu-open > button {
@@ -241,3 +243,17 @@
 /* Archivist: its first heading leaves room for ☰. */
 :root[data-phone] .archivist-panel > h2:first-child { margin-top: 0.15rem; padding-right: 2.7rem; min-height: 2.3rem; display: flex; align-items: center; }
 :root[data-phone] .archivist-panel .composer-row .muted:empty { display: none; }
+
+/* ---------- Logging in, and the admin screen ---------- */
+/* No card floating in the middle: the form fills the screen. */
+:root[data-phone] .login { place-items: start stretch; padding: calc(1.5rem + env(safe-area-inset-top)) 1rem calc(1rem + env(safe-area-inset-bottom)); }
+:root[data-phone] .login-card { max-width: none; padding: 0.5rem 0.25rem; gap: 0.75rem; background: none; border: none; box-shadow: none; }
+:root[data-phone] .login-icon { width: 48px; height: 48px; }
+/* The admin's header: who, then Look, Change password and Log out in ⋯. */
+:root[data-phone] #admin-view > .topbar { position: sticky; top: 0; z-index: 6; flex-wrap: nowrap; padding: calc(0.45rem + env(safe-area-inset-top)) 0.6rem 0.45rem; background: linear-gradient(var(--bg), var(--bg)); }
+:root[data-phone] #admin-view > .topbar .who { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+:root[data-phone] .admin-intro { margin: 0.5rem 0.6rem 0; }
+:root[data-phone] .admin-section { margin: 0.5rem 0.4rem 0; padding: 0.65rem; }
+:root[data-phone] .campaign-list { margin: 0.5rem 0.4rem 0; }
+:root[data-phone] .access-row > * { min-width: 0; }
+:root[data-phone] .admin td.actions button { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
