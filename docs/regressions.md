@@ -15,6 +15,7 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-14 | Players' phones drew no fog at all after the fog moved into the page: the browser skipped the large SVG mask. The fog is now painted on a canvas. | `web/test/map.test.js`: a player's fog is drawn on a canvas, not an SVG mask (phones drew no fog at all) |
 | 2026-10-14 | A tab opened before the server was updated kept running the old page: after the fog moved into the page, it showed players the whole map. Pages now reload when the server's page files change. | `web/test/app.test.js`: a page opened before the server was updated reloads itself, waiting while someone types |
 | 2026-10-14 | Line of sight was slow and laggy: every ray was tested against every wall (2.4 s for one token on a map with 2,000 wall pieces, over a minute for a dark map), and the fog only moved after a token was dropped and a new picture came from the server. | `shared/test/map.test.js`: sight on a busy map (2,000 wall pieces) is quick and gives the same outline as testing every wall; `web/test/map.test.js`: a player's fog follows their token while it is dragged, and stops at walls |
 | 2026-10-14 | A light's area cut off the corner where a wall crosses the edge of its reach, so lit places right there showed as dark. | `shared/test/map.test.js`: a light reaches right into the corner where a wall crosses the edge of its reach |

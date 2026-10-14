@@ -9,7 +9,7 @@
  * the server decides where a token really ends up.
  */
 import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from './api.js';
-import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, FOG_MASK_FILL, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, inTemplate, snapTemplatePoint } from './shared/map.js';
+import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, inTemplate, snapTemplatePoint } from './shared/map.js';
 import { EDITING_KEY, PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, base, report, state, status } from './map-state.js';
 import { canChangeTemplate, placeTemplate, renderTemplates, selectTemplate, templateControls, templateDialog, templateMove, templateUp } from './map-templates.js';
 import { openShop } from './merchants.js';
@@ -245,32 +245,61 @@ function renderFog() {
   const svg = $('#map-fog');
   const { width, height } = map.image;
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-  svg.classList.toggle('dm', state.canEdit);
   svg.replaceChildren();
   const shapes = state.canEdit ? fogMask(map) : playerFogMask(fogView(map), state.userId);
-  if (shapes.length) {
-    const mask = svgEl('mask', { id: 'map-fog-mask', maskUnits: 'userSpaceOnUse', x: 0, y: 0, width, height });
-    const defs = svgEl('defs', {});
-    const pts = (list) => list.map((p) => p.join(',')).join(' ');
-    shapes.forEach((r, i) => {
-      const fill = FOG_MASK_FILL[r.fill];
-      if (!r.points) return mask.append(svgEl('rect', { x: r.x, y: r.y, width: r.w, height: r.h, fill }));
-      const poly = svgEl('polygon', { points: pts(r.points), fill });
-      // A lit place, cut to what the token can see.
-      if (r.clip) {
-        const clip = svgEl('clipPath', { id: `map-fog-clip-${i}`, clipPathUnits: 'userSpaceOnUse' });
-        clip.append(svgEl('polygon', { points: pts(r.clip) }));
-        defs.append(clip);
-        poly.setAttribute('clip-path', `url(#map-fog-clip-${i})`);
-      }
-      mask.append(poly);
-    });
-    defs.append(mask);
-    svg.append(defs, svgEl('rect', { width, height, class: 'fog', mask: 'url(#map-fog-mask)' }));
-  }
+  state.fogShapes = shapes;
+  drawFog($('#map-fog-canvas'), map.image, shapes, state.canEdit ? DM_FOG_ALPHA : 1);
   if (state.fogDraw) {
     const r = fogRect(map, state.fogDraw.a, state.fogDraw.b);
     svg.append(svgEl('rect', { x: r.x, y: r.y, width: r.w, height: r.h, class: `fog-draft ${state.fogMode}` }));
+  }
+}
+
+const FOG_COLOUR = [20, 17, 13];
+const DM_FOG_ALPHA = 0.55; // the DM sees the fog as a shade
+// How dark each kind of shape leaves the fog: covered, seen before (dim), clear.
+const FOG_ALPHA = { cover: 1, dim: 0.6, clear: 0 };
+// The fog's canvas is at most this many pixels along its long side (phones refuse much bigger canvases).
+const FOG_MAX_PX = 2048;
+
+/**
+ * Draw the fog on a canvas the size of the map: each shape in order replaces
+ * the fog under it (a shape with a clip only inside the clip). A canvas, not
+ * an SVG mask: phones failed to draw a mask this size, so players saw no fog
+ * at all once the server stopped blacking out their picture.
+ */
+function drawFog(canvas, image, shapes, alpha) {
+  const k = Math.min(1, FOG_MAX_PX / Math.max(image.width, image.height));
+  const w = Math.max(1, Math.round(image.width * k));
+  const h = Math.max(1, Math.round(image.height * k));
+  if (canvas.width !== w) canvas.width = w;
+  if (canvas.height !== h) canvas.height = h;
+  const g = canvas.getContext('2d');
+  if (!g) return;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, w, h);
+  g.setTransform(k, 0, 0, k, 0, 0);
+  const path = (s) => {
+    const p = new Path2D();
+    if (s.points) {
+      s.points.forEach(([x, y], i) => (i ? p.lineTo(x, y) : p.moveTo(x, y)));
+      p.closePath();
+    } else p.rect(s.x, s.y, s.w, s.h);
+    return p;
+  };
+  for (const s of shapes) {
+    g.save();
+    if (s.clip) g.clip(path({ points: s.clip }));
+    const p = path(s);
+    g.globalCompositeOperation = 'destination-out';
+    g.fill(p);
+    g.globalCompositeOperation = 'source-over';
+    const a = FOG_ALPHA[s.fill] * alpha;
+    if (a > 0) {
+      g.fillStyle = `rgba(${FOG_COLOUR.join(',')},${a})`;
+      g.fill(p);
+    }
+    g.restore();
   }
 }
 

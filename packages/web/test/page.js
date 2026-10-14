@@ -278,6 +278,8 @@ function polyfill(window, page) {
     scrollTo() {},
   });
   HTMLElement.prototype.focus ??= function () {};
+  // Paths for a canvas (the map's fog) that draws nothing.
+  window.Path2D ??= class { moveTo() {} lineTo() {} closePath() {} rect() {} };
   HTMLCanvasElement.prototype.getContext = function () {
     // A 2D context that draws nothing: any method returns something you can call anything on.
     const stub = new Proxy(function () {}, {
