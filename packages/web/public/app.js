@@ -21,7 +21,7 @@ import { loadArchivist, initArchivistActions } from './archivist.js';
 import { loadCreatures, initCreatureActions } from './creatures.js';
 import { loadItems, initItemActions } from './items.js';
 import { loadMerchants, initMerchantActions, merchantsOpened } from './merchants.js';
-import { initPhone, phoneMenu } from './phone.js';
+import { initPhone, phoneMenu, phoneSheet } from './phone.js';
 import { SHEET_WINDOW, windowCampaign, besidePanel, placeBeside, setSheetCampaign, initSheetPlace } from './sheet-place.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -751,6 +751,7 @@ phoneMenu($('#gear-add'), { label: 'More ways to add', keep: '#gear-name, #dl-ge
 initSheetPlace({ onChange: () => showTab(currentTab) });
 showTab(currentTab);
 initMapActions();
+phoneSheet($('#map-main-bar'), $('#map-more')); // on a phone, ⋯ opens all the map's tools from the bottom
 initArchivistActions();
 initCreatureActions({ place: placeCreature });
 initItemActions();

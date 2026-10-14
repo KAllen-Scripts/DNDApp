@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-import { withPage } from './helpers.js';
+import { withPage, createFakeLLM, mapReading, importMap } from './helpers.js';
 
 const NO_3D = { 'dndapp.dice': JSON.stringify({ threeD: false, sound: false }) };
 const PHONE_QUERY = 'max-width: 640px), (pointer: coarse) and (max-height: 500px';
@@ -117,6 +117,40 @@ test('the sheet bar keeps Next d20 and the save status in the row; the rest is i
     assert.equal(page.$('#gear-name').parentElement, form);
     assert.equal(form.querySelector('button[type=submit]').parentElement, form);
     assert.ok(form.querySelector('.phone-menu-list').contains(page.$('#gear-own')));
+  });
+});
+
+test('the map: ⋯ opens every map tool from the bottom; picking one closes it', async () => {
+  const llm = createFakeLLM({ structured: async () => mapReading() });
+  const opts = (look) => ({
+    setup: { llm },
+    before: async (t) => ({ map: await importMap(t, { patch: { shown: true, grid: { size: 35, x: 0, y: 0 } } }) }),
+    page: (t) => ({ as: t.sam, storage: { ...NO_3D, 'dndapp.look': JSON.stringify(look) } }),
+  });
+  await withPage(opts({ phone: 'on' }), async (page) => {
+    page.click('[data-tab=map]');
+    await page.waitFor(() => page.$('#map-stage') && !page.$('#map-stage').hidden, { what: 'the map' });
+    const bar = page.$('#map-main-bar');
+    for (const id of ['#map-fit', '#map-ruler', '#map-ping', '#map-draw', '#map-combat-open']) assert.ok(page.$(id).classList.contains('phone-main'), `${id} stays in the row`);
+    page.click('#map-more');
+    assert.ok(bar.classList.contains('menu-open'));
+    assert.ok(page.$('#phone-scrim').classList.contains('on'));
+    page.click('#map-ruler');
+    await tick();
+    assert.ok(!bar.classList.contains('menu-open'), 'closed');
+    assert.equal(page.$('#map-ruler').getAttribute('aria-pressed'), 'true', 'and Measure is on');
+    // Ticking Grid leaves it open (it's a box, not a choice).
+    page.click('#map-more');
+    page.click('#map-show-grid');
+    await tick();
+    assert.ok(bar.classList.contains('menu-open'));
+  });
+  // Off a phone, More is only full screen's, and opens no sheet.
+  await withPage(opts({ phone: 'off' }), async (page) => {
+    page.click('[data-tab=map]');
+    page.click('#map-more');
+    assert.ok(!page.$('#map-main-bar').classList.contains('menu-open'));
+    assert.ok(!page.$('#phone-scrim')?.classList.contains('on'));
   });
 });
 

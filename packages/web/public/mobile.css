@@ -17,7 +17,7 @@
   gap: 0.5rem;
 }
 /* Pages not converted yet keep their first row clear of the ☰ button. */
-:root[data-phone] #app-view > .panel:not(.ask-panel, #tab-notes, .handouts-panel, .sheet-panel) { padding-top: calc(3rem + env(safe-area-inset-top)); }
+:root[data-phone] #app-view > .panel:not(.ask-panel, #tab-notes, .handouts-panel, .sheet-panel, .map-panel) { padding-top: calc(3rem + env(safe-area-inset-top)); }
 
 /* ---------- ☰: the menu button, always in the top right corner ---------- */
 :root[data-phone] .phone-nav {
@@ -38,7 +38,8 @@
 
 /* ---------- menus come up from the bottom, in reach of a thumb ---------- */
 :root[data-phone] #app-view > .topbar,
-:root[data-phone] .phone-menu-list.menu-open {
+:root[data-phone] .phone-menu-list.menu-open,
+:root[data-phone] #map-main-bar.menu-open {
   position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; top: auto; margin: 0;
   max-height: 85dvh; overflow-y: auto; overscroll-behavior: contain;
   padding: 0.75rem calc(0.75rem + env(safe-area-inset-right)) calc(0.75rem + env(safe-area-inset-bottom)) calc(0.75rem + env(safe-area-inset-left));
@@ -150,3 +151,53 @@
 :root[data-phone] #gear-add button[type=submit]::after { content: "Add"; font-size: 0.95rem; }
 :root[data-phone] #gear-add #gear-status:empty { display: none; }
 :root[data-phone] #gear-add #gear-status { position: absolute; left: 0.6rem; right: 3.2rem; bottom: -1.5rem; padding: 0.15rem 0.5rem; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 2px 8px rgb(0 0 0 / 0.15); }
+
+/* ---------- Map ---------- */
+/* The map is the whole screen. Its main tools float in a row at the bottom (Fit, Measure, Ping, Draw,
+   Initiative, ⋯); ⋯ opens every tool as a sheet. The DM's fog and wall tools are strips that scroll sideways. */
+:root[data-phone] #app-view > .map-panel { position: relative; padding: 0; gap: 0; }
+:root[data-phone] .map-view { min-height: 0; border: none; border-radius: 0; }
+:root[data-phone] .map-bars {
+  position: absolute; z-index: 5; left: 0.4rem; right: 0.4rem; top: auto; bottom: calc(0.4rem + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column-reverse; gap: 0.35rem; max-height: none; overflow: visible; pointer-events: none;
+}
+:root[data-phone] .map-bar { pointer-events: auto; }
+:root[data-phone] .map-bar > * { opacity: 1; }
+:root[data-phone] #map-main-bar:not(.menu-open) {
+  flex-wrap: nowrap; gap: 0.25rem; align-self: center; max-width: 100%; padding: 0.25rem; border-radius: 12px; overflow-x: auto; scrollbar-width: none;
+  background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--border); box-shadow: 0 2px 10px rgb(0 0 0 / 0.25);
+}
+:root[data-phone] #map-main-bar:not(.menu-open) > :not(.phone-main, #map-more, [aria-pressed="true"]),
+:root[data-phone] #map-main-bar:not(.menu-open) > #map-edit { display: none; }
+:root[data-phone] #map-main-bar:not(.menu-open) > button { flex: none; padding: 0.45rem 0.6rem; font-size: 0.82rem; border-color: transparent; background: transparent; white-space: nowrap; }
+:root[data-phone] #map-main-bar:not(.menu-open) > button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
+:root[data-phone] #map-main-bar > #map-more { display: inline-block; order: 98; font-size: 0; min-width: 2.4rem; }
+:root[data-phone] #map-more::after { content: "⋯"; font-size: 1.3rem; line-height: 1; }
+:root[data-phone] #map-main-bar.menu-open > #map-more::after { content: "Close"; font-size: 0.95rem; }
+/* No room for these on a phone: a panel beside the map, a second window, full screen (the map already fills it). */
+:root[data-phone] :is(#map-beside, #map-sheet-window, #map-full) { display: none; }
+
+/* ⋯ open: every tool, as chips in a sheet from the bottom. */
+:root[data-phone] .map-bars:has(.menu-open) { z-index: 31; }
+:root[data-phone] #map-main-bar.menu-open {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; pointer-events: auto;
+}
+:root[data-phone] #map-main-bar.menu-open > #map-pick { flex: 1 1 100%; max-width: none; }
+:root[data-phone] #map-main-bar.menu-open > #map-status { flex: 1 1 100%; min-width: 0; }
+:root[data-phone] #map-main-bar.menu-open > button { flex: 1 1 30%; padding: 0.55rem 0.4rem; font-size: 0.88rem; }
+:root[data-phone] #map-main-bar.menu-open > #map-more { flex-basis: 100%; order: 99; background: var(--surface-2); }
+:root[data-phone] #map-main-bar.menu-open > .map-check { flex: 1 1 30%; justify-content: center; padding: 0.5rem; border: 1px solid var(--border); border-radius: 8px; }
+
+/* The DM's fog and wall tools: one row each that scrolls sideways, above the main tools. */
+:root[data-phone] .map-fog-tools {
+  flex-wrap: nowrap; overflow-x: auto; gap: 0.3rem; padding: 0.3rem; border-radius: 12px; scrollbar-width: none;
+  background: color-mix(in srgb, var(--surface) 94%, transparent); border: 1px solid var(--border); box-shadow: 0 2px 10px rgb(0 0 0 / 0.2);
+}
+:root[data-phone] .map-fog-tools > * { flex: none; }
+:root[data-phone] .map-fog-tools > button, :root[data-phone] .map-fog-tools select { padding: 0.4rem 0.6rem; font-size: 0.82rem; white-space: nowrap; }
+:root[data-phone] .map-fog-tools > .muted { display: none; }
+
+/* What sits over the map keeps clear of ☰ and the tools. */
+:root[data-phone] .map-selection { bottom: calc(var(--phone-bars-h, 3rem) + 0.8rem + env(safe-area-inset-bottom)); left: 0.4rem; right: 0.4rem; }
+:root[data-phone] .map-combat { top: calc(3.1rem + env(safe-area-inset-top)); right: 0.4rem; max-height: calc(100% - 7.5rem); }
+:root[data-phone] .map-ai-note { top: calc(0.45rem + env(safe-area-inset-top)); max-width: calc(100% - 3.6rem); left: 0.4rem; transform: none; }

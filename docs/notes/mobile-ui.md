@@ -9,6 +9,7 @@ The owner, 2026-10-14: "We want to start working on a mobile UI. It can't work l
 - **Behaviour:** `phone.js`.
   - **☰** (top right corner, always there) opens the top bar as a sheet from the bottom: who you are, the pages as tiles, then Dice, Rest, Settings, Look, password, log out. Choosing anything closes it; so do tapping outside it and Escape.
   - **`phoneMenu(bar, { keep })`** folds a toolbar into a **⋯** button: the bar's children matching `keep` stay in the row, the rest move into a list inside the bar (`display: contents` off a phone, so the desktop page doesn't change) that ⋯ opens from the bottom, with a Close button. Same buttons, so their handlers and ids keep working.
+  - **`phoneSheet(box, button)`** opens a bar that already floats (the map's tools) as the sheet itself, without moving anything.
   - One menu is open at a time.
 - **Pages fill the screen** (`100dvh`), with small margins. The first row of each page leaves room for ☰ on its right.
 - **Nothing beside the map on a phone** (`besidePanel()` returns null there).
@@ -20,7 +21,7 @@ Each stage is one PR, merged when `npm test` is green, with real-phone checks ad
 
 1. **Shell, Ask, Notes, Handouts** (done 2026-10-14). ☰ menu, ⋯ menus, Look option. Ask: the chat's pin, rename, delete and New chat in ⋯; one-line question box that grows as you type. Notes: the box and Save in one row. Handouts: tighter cards. Pages not converted yet are left as they were, pushed below ☰.
 2. **Sheet and Inventory** (done 2026-10-14). The sheet bar sticks to the top: Next d20 and the save status in the row, Review, Upload, Download, Print and Pop out in ⋯; tighter boxes (the sheet layout stays the player's choice under Look). Inventory: the item box and Add in one sticky row, Add by hand in ⋯.
-3. **Map.** The map fills the whole screen. The tools become a small floating row (the main ones) plus ⋯ for the rest; the DM's set-up tools (fog, walls) in their own ⋯ sheet; the picked token's bar and the turn order as small sheets from the bottom. Pinch zoom checked on a real phone.
+3. **Map** (done 2026-10-14). The map fills the whole screen. Fit, Measure, Ping, Draw and Initiative (and any tool that's on) float in a row at the bottom; ⋯ opens every tool as a sheet (`phoneSheet()` on full screen's More button, nothing moved). The DM's fog and wall tools are strips that scroll sideways above it. The picked token's bar sits above the tools; the turn order under ☰. No Beside the map, Sheet window or Full screen on a phone. Pinch zoom still to check on a real phone.
 4. **Dice and dialogs.** The dice tray, Rest, Settings, Look, shop and item dialogs as full-width sheets from the bottom.
 5. **The DM's pages:** Creatures, Items, Merchants, Archivist (search and New in the row, the rest in ⋯; cards in one column). The map creator stays a big-screen tool (it says so on a phone).
 6. **Login, campaign picker, password, admin screen.**
