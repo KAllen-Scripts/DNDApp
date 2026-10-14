@@ -6,7 +6,7 @@
  * this list, only what a merchant sells. Below it: what each player has
  * equipped (from their Inventory), so the DM can check it.
  */
-import { api, fileUrl, h, readBase64, LoggedOut } from './api.js';
+import { api, fileUrl, h, readBase64, LoggedOut, note } from './api.js';
 import { markdownBox } from './markdown.js';
 import { formatPrice, splitPrice, COIN_VALUES } from './shared/coins.js';
 import { EFFECT_TARGETS } from './shared/gear.js';
@@ -28,9 +28,7 @@ const state = {
 const base = () => `/campaigns/${state.campaignId}/items`;
 
 function status(text, error = false) {
-  const el = $('#items-status');
-  el.textContent = text;
-  el.classList.toggle('error', error);
+  note($('#items-status'), text, error);
 }
 
 const report = (err) => {
@@ -107,7 +105,11 @@ export async function lookUpItem(name) {
 /** While the AI is searching the web for one, check back every few seconds. */
 function watchSearches() {
   clearTimeout(state.poll);
-  if (!state.list.some((x) => x.finding?.status === 'pending')) return;
+  if (!state.list.some((x) => x.finding?.status === 'pending')) {
+    // Nothing left searching (found, given up or cancelled): the "Searching…" message goes too.
+    if (/^Searching the web/.test($('#items-status').textContent)) status('');
+    return;
+  }
   const cid = state.campaignId;
   state.poll = setTimeout(async () => {
     if (state.campaignId !== cid) return;

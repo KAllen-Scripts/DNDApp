@@ -4,7 +4,7 @@
  * put on the map as tokens (map.js, "Place on map" or Add token). Players
  * never see it.
  */
-import { api, fileUrl, h, readBase64, LoggedOut } from './api.js';
+import { api, fileUrl, h, readBase64, LoggedOut, note } from './api.js';
 import { showStatBlock, statsFound } from './stat-block.js';
 import { markdownFragment } from './markdown.js';
 import { TOKEN_SIZES, TOKEN_SIZE_NAMES, TOKEN_COLORS } from './shared/map.js';
@@ -25,9 +25,7 @@ const state = {
 const base = () => `/campaigns/${state.campaignId}/creatures`;
 
 function status(text, error = false) {
-  const el = $('#creatures-status');
-  el.textContent = text;
-  el.classList.toggle('error', error);
+  note($('#creatures-status'), text, error);
 }
 
 const report = (err) => {
@@ -50,7 +48,11 @@ export async function loadCreatures({ campaignId, guarded }) {
 /** While the AI is searching the web for one, check back every few seconds. */
 function watchSearches() {
   clearTimeout(state.poll);
-  if (!state.list.some((c) => c.finding?.status === 'pending')) return;
+  if (!state.list.some((c) => c.finding?.status === 'pending')) {
+    // Nothing left searching (found, given up or cancelled): the "Searching…" message goes too.
+    if (/^Searching the web/.test($('#creatures-status').textContent)) status('');
+    return;
+  }
   const cid = state.campaignId;
   state.poll = setTimeout(async () => {
     if (state.campaignId !== cid) return;

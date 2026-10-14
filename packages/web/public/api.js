@@ -142,3 +142,22 @@ export function h(tag, attrs = {}, ...children) {
   el.append(...children.flat(Infinity).filter((c) => c != null && c !== false));
   return el;
 }
+
+// ---------- short messages in a status line ----------
+
+/** How long a message stays: done, still working ("Searching…"), and errors. */
+export const NOTE_MS = { done: 8000, working: 120000, error: 20000 };
+
+/**
+ * Show a short message in a status line (Items, Creatures, Merchants, the
+ * Inventory's add box). On a phone these float over the page, so every message
+ * has a ✕ and goes by itself after a while; an empty text clears it.
+ */
+export function note(el, text, error = false) {
+  if (!el) return;
+  clearTimeout(el.noteTimer);
+  el.classList.toggle('error', !!text && error);
+  if (!text) return el.replaceChildren();
+  el.replaceChildren(text, h('button', { type: 'button', class: 'note-close', title: 'Dismiss', 'aria-label': 'Dismiss', onclick: () => note(el, '') }, '✕'));
+  el.noteTimer = setTimeout(() => note(el, ''), error ? NOTE_MS.error : text.endsWith('…') ? NOTE_MS.working : NOTE_MS.done);
+}
