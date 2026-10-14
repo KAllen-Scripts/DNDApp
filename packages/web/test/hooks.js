@@ -43,6 +43,7 @@ const MODULES = {
   'shared/coins.js': '@dndapp/shared/coins.js',
   'shared/point-buy.js': '@dndapp/shared/point-buy.js',
   'shared/class-features.js': '@dndapp/shared/class-features.js',
+  'shared/subclass-features.js': '@dndapp/shared/subclass-features.js',
   'shared/wild-shape.js': '@dndapp/shared/wild-shape.js',
   'shared/citations.js': '@dndapp/shared/citations.js',
   'vendor/marked.js': 'marked',

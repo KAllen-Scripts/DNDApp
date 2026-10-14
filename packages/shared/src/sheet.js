@@ -194,7 +194,7 @@ export function emptySheet({ name = '', player_name = '' } = {}) {
     spellcasting: { class: '', slots_used: {}, pact_used: 0 },
     spells: [],
     wild_shape: { forms: [], active: null }, // druids: Wild Shape forms (wild-shape.js)
-    class_features: { spent: {}, max: {}, custom: [] }, // Rage, Ki, Wild Shape uses... and the player's own rows (class-features.js)
+    class_features: { spent: {}, max: {}, custom: [], rolled: {} }, // Rage, Ki, Wild Shape uses... and the player's own rows (class-features.js)
     point_buy: normalizePointBuy(), // the point buy calculator (point-buy.js): off until the player turns it on
     overrides: {},
   };

@@ -22,6 +22,7 @@ import { POINT_BUY, POINT_COST, changePointBuy, pointBuy, stepPointBuy } from '.
 import { roll, rollModeFromEvent, modeButtons, D20_ICON } from './dice.js';
 import { wildShapeBox, wildShapeBanner } from './sheet-wild-shape.js';
 import { classFeaturesBox } from './sheet-class-features.js';
+import { subclassNames } from './shared/subclass-features.js';
 import { featureRows } from './shared/class-features.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -371,6 +372,19 @@ function header() {
   );
 }
 
+/** The subclass box suggests the Player's Handbook's subclasses for the class typed beside it. */
+function subclassField(c, i) {
+  const el = field(`classes.${i}.subclass`, { label: 'Subclass' });
+  const list = () => {
+    const key = classKey(c.name);
+    if (key && CLASSES[key]) el.setAttribute('list', `dl-subclasses-${key}`);
+    else el.removeAttribute('list');
+  };
+  list();
+  el.addEventListener('focus', list);
+  return el;
+}
+
 function infoBox() {
   const classes = h('div', { class: 'sh-table classes' });
   const drawClasses = () => {
@@ -380,7 +394,7 @@ function infoBox() {
       ...state.sheet.classes.map((c, i) =>
         h('div', { class: 'tr' },
           field(`classes.${i}.name`, { label: 'Class', list: 'dl-classes' }),
-          field(`classes.${i}.subclass`, { label: 'Subclass' }),
+          subclassField(c, i),
           field(`classes.${i}.level`, { label: 'Level', kind: 'int', cls: 'num' }),
           several ? removeButton('Remove this class', () => { state.sheet.classes.splice(i, 1); drawClasses(); changed(); }) : h('span'),
         ),
@@ -701,19 +715,31 @@ async function spendHitDie(die) {
   });
 }
 
-/** Use a class feature that heals (Second Wind): the server spends a use, rolls it and adds the hit points. */
-async function useFeature(row) {
+/**
+ * Use a class feature the server rolls for: one that heals (Second Wind), one
+ * that heals with a spell slot (Combat Wild Shape: extra = { slot }), or
+ * Portent's d20s. A set number of hit points (Wholeness of Body, 2014) isn't
+ * a roll, so it skips the dice.
+ */
+async function useFeature(row, extra = {}) {
   await flush();
-  await roll('', {
-    label: row.name,
-    path: `${base()}/sheet/features/use`,
-    body: { id: row.id },
-    onServer: (res) => {
-      useSheet(res.sheet, res.version);
-      announce();
-      status(`${row.name}: ${res.healed ? `regained ${res.healed} hit point${res.healed === 1 ? '' : 's'}` : 'no hit points regained'}.`);
-    },
-  });
+  const path = `${base()}/sheet/features/use`;
+  const body = { id: row.id, ...extra };
+  const done = (res) => {
+    useSheet(res.sheet, res.version);
+    announce();
+    if (res.rolled_numbers) status(`${row.name}: ${res.rolled_numbers.join(', ')}. They're kept in the box until you use them.`);
+    else status(`${row.name}: ${res.healed ? `regained ${res.healed} hit point${res.healed === 1 ? '' : 's'}` : 'no hit points regained'}.`);
+  };
+  if (row.heal && !/d/i.test(row.heal) && !extra.slot) {
+    try {
+      done(await api('POST', path, body));
+    } catch (err) {
+      alert(err.message);
+    }
+    return;
+  }
+  await roll('', { label: row.name, path, body, onServer: done });
 }
 
 async function takeShortRest() {
@@ -1500,6 +1526,7 @@ function render() {
   $('#sheet').replaceChildren(
     datalist('dl-races', RACES),
     datalist('dl-classes', Object.values(CLASSES).map((c) => c.name)),
+    ...Object.keys(CLASSES).map((key) => datalist(`dl-subclasses-${key}`, subclassNames(key, state.settings?.edition || state.edition || '2014'))),
     datalist('dl-backgrounds', BACKGROUNDS),
     datalist('dl-alignments', ALIGNMENTS),
     datalist('dl-schools', SCHOOLS),

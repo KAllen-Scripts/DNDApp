@@ -250,3 +250,42 @@ test('class features: Second Wind is rolled by the server and heals; rests the D
     await t.cleanup();
   }
 });
+
+test('subclass features: Combat Wild Shape heals the form with a spell slot, Portent keeps its d20s, Wholeness of Body heals a set number', async () => {
+  const t = await setup();
+  try {
+    const use = (body) => t.request('POST', `/campaigns/${t.campaign.id}/sheet/features/use`, { as: t.sam.token, body });
+    // A Circle of the Moon druid 4 (2014 rules) in a wolf form at 3 of 11 hit points.
+    await saveSheet(t, t.sam, {
+      name: 'Ash', classes: [{ name: 'Druid', subclass: 'Circle of the Moon', level: 4 }], abilities: { str: 10, dex: 12, con: 12, int: 10, wis: 16, cha: 10 }, hp: { current: 20, temp: null },
+      wild_shape: { forms: [{ id: 'wolf', name: 'Wolf', cr: '1/4', ac: 13, hp_max: 11 }], active: { form: 'wolf', hp: 3, uses: 1 } },
+    });
+    let res = await use({ id: 'combat_wild_shape', slot: 1 });
+    assert.equal(res.statusCode, 200, res.body);
+    let r = res.json();
+    assert.equal(r.notation, '1d8');
+    assert.equal(r.sheet.spellcasting.slots_used[1], 1);
+    assert.equal(r.sheet.wild_shape.active.hp, Math.min(11, 3 + r.total), 'the form heals, not the druid');
+    assert.equal(r.sheet.hp.current, 20);
+    assert.match((await use({ id: 'combat_wild_shape', slot: 3 })).json().error, /no level 3 spell slots left/);
+    assert.match((await use({ id: 'combat_wild_shape' })).json().error, /Pick the level/);
+
+    // A diviner keeps two d20s; a long rest clears them.
+    await t.sheets.save(t.campaign.id, t.sam.id, { name: 'Vell', classes: [{ name: 'Wizard', subclass: 'Divination', level: 2 }], abilities: { str: 8, dex: 12, con: 12, int: 16, wis: 10, cha: 10 } });
+    r = (await use({ id: 'portent' })).json();
+    assert.equal(r.notation, '2d20');
+    assert.equal(r.rolled_numbers.length, 2);
+    assert.deepEqual((await sheetOf(t, t.sam)).sheet.class_features.rolled.portent, r.rolled_numbers);
+    await t.request('POST', `/campaigns/${t.campaign.id}/rests`, { body: { kind: 'long' } });
+    assert.deepEqual((await sheetOf(t, t.sam)).sheet.class_features.rolled, {});
+
+    // Way of the Open Hand 6 (2014): 18 hit points, no dice.
+    await t.sheets.save(t.campaign.id, t.sam.id, { name: 'Lin', classes: [{ name: 'Monk', subclass: 'Open Hand', level: 6 }], abilities: { str: 10, dex: 16, con: 12, int: 10, wis: 14, cha: 10 }, hp: { current: 1, temp: null } });
+    r = (await use({ id: 'wholeness_of_body' })).json();
+    assert.equal(r.roll, undefined, 'nothing to roll');
+    assert.equal(r.sheet.hp.current, 19);
+    assert.equal(r.sheet.class_features.spent.wholeness_of_body, 1);
+  } finally {
+    await t.cleanup();
+  }
+});

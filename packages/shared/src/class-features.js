@@ -12,8 +12,12 @@
  * the 2024 Player's Handbook. The artificer is from Tasha's Cauldron of
  * Everything (both editions).
  *
+ * Subclasses add their rows from subclass-features.js, matched on the
+ * subclass typed on the sheet; the box shows them under their own heading.
+ *
  * What's saved is small: sheet.class_features = { spent: { id: n }, max: {
- * id: n }, custom: [rows] }. Maximums are worked out from class levels,
+ * id: n }, custom: [rows], rolled: { id: [numbers] } } (rolled: dice kept for
+ * later, like a diviner's Portent). Maximums are worked out from class levels,
  * ability scores and the edition every time; max holds only numbers the
  * player typed over them (the DM has the last word, so nothing is locked).
  *
@@ -23,9 +27,11 @@
  * short rest gives one back, a long rest all), none (the player resets it).
  */
 import { abilityMod, classKey } from './sheet.js';
-import { wildShapeRules } from './wild-shape.js';
+import { activeForm, formHasHp, setFormHp, wildShapeRules } from './wild-shape.js';
+import { SUBCLASS_BY_KEY, SUBCLASS_FEATURES } from './subclass-features.js';
 
 export const FEATURE_KINDS = ['uses', 'pool', 'info'];
+export const MAX_ROLLED = 3;
 export const RECHARGES = ['short', 'long', 'short_one', 'none'];
 export const RECHARGE_NAMES = {
   short: 'Short or long rest',
@@ -265,13 +271,16 @@ export const FEATURES = [
     max: (c) => atLeast1(c.mod('int')),
     note: (c) => `A reaction: add +${c.mod('int')} to an ability check or saving throw you or a creature near you makes.`,
   },
+
+  // ---------- Subclasses (subclass-features.js) ----------
+  ...SUBCLASS_FEATURES,
 ];
 
 export const FEATURE_IDS = new Set(FEATURES.map((f) => f.id));
 
 /** sheet.class_features, cleaned up. */
 export function normalizeClassFeatures(cf = {}) {
-  const out = { spent: {}, max: {}, custom: [] };
+  const out = { spent: {}, max: {}, custom: [], rolled: {} };
   out.custom = (Array.isArray(cf?.custom) ? cf.custom : []).slice(0, MAX_CUSTOM).map(normalizeCustom).filter((r) => r.name);
   const ids = new Set([...FEATURE_IDS, ...out.custom.map((r) => r.id)]);
   for (const [id, n] of Object.entries(cf?.spent ?? {})) {
@@ -281,6 +290,10 @@ export function normalizeClassFeatures(cf = {}) {
   for (const [id, n] of Object.entries(cf?.max ?? {})) {
     const v = int(n, { min: 0, max: 999 });
     if (FEATURE_IDS.has(id) && v != null) out.max[id] = v;
+  }
+  for (const [id, list] of Object.entries(cf?.rolled ?? {})) {
+    const nums = (Array.isArray(list) ? list : []).slice(0, MAX_ROLLED).map((n) => int(n, { min: 1, max: 20 })).filter((n) => n != null);
+    if (FEATURE_IDS.has(id) && nums.length) out.rolled[id] = nums;
   }
   return out;
 }
@@ -338,16 +351,24 @@ const call = (v, c) => (typeof v === 'function' ? v(c) : v);
  */
 export function featureRows(sheet, { edition = '2014', values = null } = {}) {
   const cf = sheet?.class_features ?? { spent: {}, max: {}, custom: [] };
-  const { levels } = classLevels(sheet);
+  const { levels, subclasses } = classLevels(sheet);
   const rows = [];
   for (const f of FEATURES) {
     const level = levels[f.class];
-    if (!level || level < f.from) continue;
+    if (!level) continue;
     if (f.edition && f.edition !== (edition === '2024' ? '2024' : '2014')) continue;
+    const sub = f.sc ? SUBCLASS_BY_KEY[f.sc] : null;
+    if (sub && !sub.match.test(subclasses[f.class] ?? '')) continue;
     const c = featureContext(sheet, values, f.class, level, edition);
-    const base = { id: f.id, name: call(f.name, c), class: f.class, level, kind: f.kind, note: f.note ? f.note(c) : '', page: f.page, custom: false };
-    if (f.kind === 'info') {
-      rows.push({ ...base, max: null, auto: null, own: false, spent: 0, left: null, recharge: null, heal: null, action: null });
+    // Every 2024 subclass starts at 3rd level (2014 clerics, sorcerers and warlocks pick theirs at 1st, druids and wizards at 2nd).
+    if (level < (sub && c.edition === '2024' ? Math.max(3, call(f.from, c)) : call(f.from, c))) continue;
+    const kind = call(f.kind, c);
+    const base = {
+      id: f.id, name: call(f.name, c), class: f.class, subclass: sub?.name ?? null, level, kind, note: f.note ? f.note(c) : '', page: f.page, custom: false,
+      action: f.action ?? null, dieSize: f.dieSize ?? null, dice: f.dice ? f.dice(c) : null, rolled: cf.rolled?.[f.id] ?? [],
+    };
+    if (kind === 'info') {
+      rows.push({ ...base, max: null, auto: null, own: false, spent: 0, left: null, recharge: null, heal: null });
       continue;
     }
     const auto = f.max(c);
@@ -363,13 +384,12 @@ export function featureRows(sheet, { edition = '2014', values = null } = {}) {
       left: max == null ? null : Math.max(0, max - spent),
       recharge: call(f.recharge, c),
       heal: f.heal ? f.heal(c) : null,
-      action: f.action ?? null,
       refill: f.refill ?? null,
     });
   }
   for (const r of cf.custom ?? []) {
     const spent = cf.spent?.[r.id] ?? 0;
-    rows.push({ ...r, class: null, level: null, auto: r.max, own: false, spent: Math.min(spent, r.max), left: Math.max(0, r.max - spent), page: '', heal: null, action: null, custom: true });
+    rows.push({ ...r, class: null, subclass: null, level: null, rolled: [], dice: null, auto: r.max, own: false, spent: Math.min(spent, r.max), left: Math.max(0, r.max - spent), page: '', heal: null, action: null, custom: true });
   }
   return rows;
 }
@@ -412,12 +432,14 @@ export function restText(recharge) {
 
 /**
  * A rest: each row gets back what its recharge says (short_one: one on a
- * short rest). Rows that don't apply any more keep their numbers.
+ * short rest). Rows that don't apply any more keep their numbers. A long
+ * rest clears dice kept from the last one (Portent), to be rolled again.
  * @returns a new sheet
  */
 export function restClassFeatures(sheet, kind, edition = '2014', values = null) {
   const out = structuredClone(sheet);
   if (!out.class_features) return out;
+  if (kind === 'long' && out.class_features.rolled) out.class_features.rolled = {};
   for (const row of featureRows(sheet, { edition, values })) {
     if (!row.spent || row.kind === 'info') continue;
     const back = kind === 'long'
@@ -479,9 +501,9 @@ export function sorcerousRestoration(sheet, { edition = '2024', values } = {}) {
  * Arcane Recovery (wizard): get back spent slots, `picks` = { level: how many },
  * adding up to half your wizard level (rounded up), none of 6th level or higher.
  */
-export function arcaneRecovery(sheet, picks, { edition = '2014', values } = {}) {
-  const row = featureRow(sheet, 'arcane_recovery', { edition, values });
-  if (!row) throw new Error('Arcane Recovery is a wizard feature.');
+export function arcaneRecovery(sheet, picks, { edition = '2014', values, id = 'arcane_recovery' } = {}) {
+  const row = featureRow(sheet, id, { edition, values });
+  if (!row || row.action !== 'arcane_recovery') throw new Error(id === 'arcane_recovery' ? 'Arcane Recovery is a wizard feature.' : 'That isn\'t one of your class features.');
   const budget = Math.ceil(row.level / 2);
   let total = 0;
   const take = {};
@@ -489,15 +511,15 @@ export function arcaneRecovery(sheet, picks, { edition = '2014', values } = {}) 
     const level = Number(lv);
     const count = Math.max(0, Math.trunc(Number(n) || 0));
     if (!count) continue;
-    if (!(level >= 1 && level <= 5)) throw new Error('Arcane Recovery can\'t give back slots of 6th level or higher.');
+    if (!(level >= 1 && level <= 5)) throw new Error(`${row.name} can't give back slots of 6th level or higher.`);
     const used = sheet.spellcasting?.slots_used?.[level] ?? 0;
     if (count > used) throw new Error(`You have only ${used} ${ordinal(level)}-level slot${used === 1 ? '' : 's'} spent.`);
     take[level] = count;
     total += level * count;
   }
   if (!total) throw new Error('Pick the slots to get back.');
-  if (total > budget) throw new Error(`Those add up to ${total} levels; Arcane Recovery gives back ${budget}.`);
-  const out = spendFeature(sheet, 'arcane_recovery', 1, { edition, values });
+  if (total > budget) throw new Error(`Those add up to ${total} levels; ${row.name} gives back ${budget}.`);
+  const out = spendFeature(sheet, id, 1, { edition, values });
   for (const [level, n] of Object.entries(take)) {
     const left = (out.spellcasting.slots_used[level] ?? 0) - n;
     if (left) out.spellcasting.slots_used[level] = left;
@@ -534,6 +556,56 @@ export function healFeature(sheet, id, total, { edition = '2014', values } = {})
   out.hp.current = after;
   return { sheet: out, healed: after - now };
 }
+
+/**
+ * Heal by spending a spell slot (Circle of the Moon's Combat Wild Shape,
+ * 2014): a slot of `slot` level is used and the rolled `total` (1d8 a level,
+ * rolled by the server) goes to the Wild Shape form's hit points, or your own
+ * when you aren't in a form with its own (the DM has the last word on when
+ * it's allowed). Throws when no slot of that level is left.
+ * @returns {{ sheet, healed }}
+ */
+export function healWithSlot(sheet, id, slot, total, { edition = '2014', values } = {}) {
+  const row = featureRow(sheet, id, { edition, values });
+  if (row?.action !== 'slot_heal') throw new Error('That feature doesn\'t heal with spell slots.');
+  const level = Math.trunc(Number(slot));
+  const max = values?.[`slots.${level}`] ?? 0;
+  const used = sheet.spellcasting?.slots_used?.[level] ?? 0;
+  if (!(level >= 1 && level <= 9) || used >= max) throw new Error(`You have no ${ordinal(level)}-level spell slots left.`);
+  let out = structuredClone(sheet);
+  out.spellcasting.slots_used[level] = used + 1;
+  const heal = Math.max(0, Math.trunc(total));
+  if (formHasHp(out)) {
+    const before = out.wild_shape.active.hp;
+    out = setFormHp(out, before + heal).sheet;
+    return { sheet: out, healed: out.wild_shape.active.hp - before };
+  }
+  const hpMax = values?.hp_max ?? null;
+  const now = out.hp.current ?? hpMax ?? 0;
+  out.hp.current = hpMax == null ? now + heal : Math.max(now, Math.min(hpMax, now + heal));
+  return { sheet: out, healed: out.hp.current - now };
+}
+
+/** Keep dice rolled for a feature (Portent's d20s), replacing any kept before. */
+export function setRolled(sheet, id, numbers) {
+  const out = structuredClone(sheet);
+  out.class_features ??= { spent: {}, max: {}, custom: [], rolled: {} };
+  out.class_features.rolled ??= {};
+  const nums = numbers.slice(0, MAX_ROLLED).map((n) => Math.trunc(Number(n))).filter((n) => n >= 1 && n <= 20);
+  if (nums.length) out.class_features.rolled[id] = nums;
+  else delete out.class_features.rolled[id];
+  return out;
+}
+
+/** Use one of the kept dice (the `index`th): it's gone once used. */
+export function useRolled(sheet, id, index) {
+  const list = sheet.class_features?.rolled?.[id] ?? [];
+  if (!(index >= 0 && index < list.length)) throw new Error('That roll has been used.');
+  return setRolled(sheet, id, list.filter((_, i) => i !== index));
+}
+
+/** True when the sheet's active Wild Shape form has its own hit points (Combat Wild Shape heals those). */
+export const healsForm = (sheet) => activeForm(sheet) != null && formHasHp(sheet);
 
 const ordinal = (n) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
 

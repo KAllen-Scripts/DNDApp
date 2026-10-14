@@ -19,7 +19,7 @@
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { computeSheet, hitDice, longRest, shortRest, spendHitDie, formatBonus } from '@dndapp/shared/sheet.js';
-import { featureRow, healFeature, restText } from '@dndapp/shared/class-features.js';
+import { featureRow, healFeature, healWithSlot, restText, setRolled } from '@dndapp/shared/class-features.js';
 import { BadRequestError } from './store.js';
 import { createEditions } from './editions.js';
 
@@ -93,20 +93,39 @@ export function createRests({ db, archive, store, sheets, rolls, books = null, c
     },
 
     /**
-     * Use a class feature that heals (Second Wind; 2024 Uncanny Metabolism):
-     * spend a use, roll its dice (shared like any roll) and add the hit points.
-     * @returns what POST /roll returns, plus { healed, sheet, version, updated_at }
+     * Use a class feature the server rolls for: one that heals (Second Wind;
+     * Wholeness of Body, a set number with no roll), one that heals by spending
+     * a spell slot of level `slot` (Combat Wild Shape: 1d8 a level, to the Wild
+     * Shape form's hit points), or one that keeps dice for later (Portent's
+     * d20s). Rolls are shared like any roll.
+     * @returns what POST /roll returns (when something was rolled), plus { healed, sheet, version, updated_at }
      */
-    async useFeature(cid, userId, id, { visibility = 'party' } = {}) {
+    async useFeature(cid, userId, id, { visibility = 'party', slot = null } = {}) {
       const current = sheets.get(cid, userId);
       const ed = await edition(cid);
       const { values } = computeSheet(current.sheet);
       const row = featureRow(current.sheet, id, { edition: ed, values });
+      if (row?.action === 'portent') {
+        const rolled = rolls.roll(cid, userId, { notation: `${row.dice}d20`, label: row.name, visibility });
+        const numbers = rolled.terms.flatMap((t) => t.dice ?? []).map((d) => d.value);
+        const saved = sheets.save(cid, userId, setRolled(current.sheet, id, numbers), { reason: `rolled ${row.name}: ${numbers.join(', ')}` });
+        return { ...rolled, rolled_numbers: numbers, healed: 0, ...saved };
+      }
+      if (row?.action === 'slot_heal') {
+        const level = Number(slot);
+        if (!(level >= 1 && level <= 9)) throw new BadRequestError('Pick the level of the spell slot to spend.');
+        if ((current.sheet.spellcasting?.slots_used?.[level] ?? 0) >= (values[`slots.${level}`] ?? 0)) throw new BadRequestError(`You have no level ${level} spell slots left. A long rest gives them back.`);
+        const rolled = rolls.roll(cid, userId, { notation: `${level}d${row.dieSize ?? 8}`, label: `${row.name} (level ${level} slot)`, visibility });
+        const { sheet, healed } = healWithSlot(current.sheet, id, level, rolled.total, { edition: ed, values });
+        const saved = sheets.save(cid, userId, sheet, { reason: `used ${row.name} with a level ${level} slot (rolled ${rolled.total}, regained ${healed} hit points)` });
+        return { ...rolled, healed, ...saved };
+      }
       if (!row?.heal) throw new BadRequestError("That isn't one of your class features that heals.");
       if (row.left === 0) throw new BadRequestError(`You have no ${row.name} left. ${restText(row.recharge)}`);
-      const rolled = rolls.roll(cid, userId, { notation: row.heal, label: row.name, visibility });
+      // A set number of hit points (2014 Wholeness of Body) isn't rolled.
+      const rolled = /d/i.test(row.heal) ? rolls.roll(cid, userId, { notation: row.heal, label: row.name, visibility }) : { total: Number(row.heal) || 0 };
       const { sheet, healed } = healFeature(current.sheet, id, rolled.total, { edition: ed, values });
-      const saved = sheets.save(cid, userId, sheet, { reason: `used ${row.name} (rolled ${rolled.total}, regained ${healed} hit points)` });
+      const saved = sheets.save(cid, userId, sheet, { reason: `used ${row.name} (${rolled.roll ? `rolled ${rolled.total}, ` : ''}regained ${healed} hit points)` });
       return { ...rolled, healed, ...saved };
     },
 
