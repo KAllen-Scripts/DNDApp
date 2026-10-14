@@ -323,18 +323,19 @@ test('sheet: spells roll to hit with the spell attack bonus, or show their DC, a
   });
 });
 
-test('sheet: Wild Shape shows only for druids; forms are looked up, turned into (a use spent), rolled from, hurt until they change back', async () => {
+test('sheet: Wild Shape shows only for druids (a row of Class features); forms are looked up, turned into (a use spent), rolled from, hurt until they change back', async () => {
   const dice = [15, 3, 2];
   mock.method(crypto, 'randomInt', (min) => dice.shift() ?? min);
   try {
     const before = (t) => t.request('PUT', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token, body: { sheet: { ...emptySheet({ name: 'Fern' }), classes: [{ name: 'Wizard', subclass: '', level: 2 }], abilities: { str: 8, dex: 14, con: 10, int: 12, wis: 16, cha: 10 }, hp: { current: 12, temp: null } }, version: 0 } });
     await withPage(sheetPage({ before }), async (page, t) => {
       page.click('[data-tab=sheet]');
-      assert.ok(page.el('#sheet .wild-shape').hidden, 'not a druid: no Wild Shape');
+      assert.equal(page.$$('#sheet .wild-shape, #sheet [data-feature="wild_shape"]').length, 0, 'not a druid: no Wild Shape');
       page.type(byLabel(page, 'Class'), 'Druid');
-      assert.ok(!page.el('#sheet .wild-shape').hidden);
+      assert.ok(page.el('#sheet [data-feature="wild_shape"] .wild-shape'), 'the forms sit under the Wild Shape row of Class features');
+      const usesLeft = () => page.$$('#sheet [data-feature="wild_shape"] .pips input').filter((b) => !b.checked).length;
       assert.match(page.text('#sheet .ws-rules'), /Druid 2, 2014 rules\. Up to challenge 1\/4, no flying or swimming speed, for up to 1 hour/);
-      assert.match(page.text('#sheet .ws-left'), /2 of 2/);
+      assert.equal(usesLeft(), 2);
       assert.doesNotMatch(page.text('#sheet .wild-shape'), /null|undefined/);
 
       await page.waitFor(() => page.$$('#dl-forms option').length, { what: 'form suggestions' });
@@ -351,7 +352,7 @@ test('sheet: Wild Shape shows only for druids; forms are looked up, turned into 
 
       page.click(turnInto('Wolf'));
       assert.match(page.text('#sheet .ws-banner'), /Wild Shape: Wolf, 11 of 11 hit points/);
-      assert.match(page.text('#sheet .ws-left'), /1 of 2/);
+      assert.equal(usesLeft(), 1);
       assert.match(page.text('#sheet .ws-active h4'), /as a Wolf/);
       // The wolf's Strength (12) and Dexterity (15) with Fern's Wisdom (16, proficient save).
       const scoreRolls = page.$$('#sheet .ws-score');
@@ -374,13 +375,49 @@ test('sheet: Wild Shape shows only for druids; forms are looked up, turned into 
       await saved(page);
       const { sheet } = await serverSheet(t);
       assert.equal(sheet.wild_shape.active, null);
-      assert.equal(sheet.wild_shape.uses_spent, 1);
+      assert.equal(sheet.class_features.spent.wild_shape, 1);
       assert.equal(sheet.hp.current, 8);
       assert.deepEqual(sheet.wild_shape.forms.map((f) => f.name), ['Wolf', 'Giant Eagle']);
     });
   } finally {
     mock.restoreAll();
   }
+});
+
+test('sheet: Class features shows this class\'s uses, ticks them, takes a typed maximum and your own rows; Second Wind is rolled by the server', async () => {
+  const before = (t) => t.request('PUT', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token, body: { sheet: { ...emptySheet({ name: 'Brakka' }), classes: [{ name: 'Fighter', subclass: '', level: 2 }], abilities: { str: 16, dex: 12, con: 14, int: 8, wis: 10, cha: 10 }, hp: { current: 5, temp: null } }, version: 0 } });
+  await withPage(sheetPage({ before }), async (page, t) => {
+    page.click('[data-tab=sheet]');
+    const row = (id) => page.el(`#sheet [data-feature="${id}"]`);
+    assert.deepEqual(page.$$('#sheet .cf-row').map((r) => r.dataset.feature), ['second_wind', 'action_surge']);
+    assert.match(page.text(row('second_wind')), /regain 1d10 \+ 2 hit points/);
+
+    // Tick Action Surge; type over its maximum (the DM allows two).
+    page.click(byLabel(page, 'Action Surge use 1 spent'));
+    page.type(byLabel(page, 'Action Surge maximum'), '2');
+    assert.equal(page.$$('#sheet [data-feature="action_surge"] .pips input').length, 2);
+    assert.ok(byLabel(page, "Action Surge: back to the rules' maximum"));
+
+    // A row of your own.
+    page.click(page.el('#sheet .cf-add-open'));
+    page.type(byLabel(page, 'Name'), 'Lucky');
+    page.type(byLabel(page, 'How many'), '3');
+    page.submit('#sheet .cf-add');
+    assert.match(page.text('#sheet .class-features'), /Lucky/);
+    await saved(page);
+    let { sheet } = await serverSheet(t);
+    assert.deepEqual([sheet.class_features.spent.action_surge, sheet.class_features.max.action_surge], [1, 2]);
+    assert.deepEqual(sheet.class_features.custom.map((c) => [c.name, c.max, c.recharge]), [['Lucky', 3, 'long']]);
+
+    // Second Wind: the server rolls it and the hit points go up.
+    page.click([...row('second_wind').querySelectorAll('button')].find((b) => /^Use/.test(b.textContent)));
+    await page.waitFor(() => page.requests.some((r) => r.path.endsWith('/sheet/features/use')), { what: 'Second Wind used' });
+    await page.settle();
+    ({ sheet } = await serverSheet(t));
+    assert.equal(sheet.class_features.spent.second_wind, 1);
+    assert.ok(sheet.hp.current > 5);
+    await page.waitFor(() => page.$$('#sheet [data-feature="second_wind"] .pips input:checked').length === 1, { what: 'the use ticked' });
+  });
 });
 
 test('sheet: changed elsewhere meanwhile: keep mine (OK) or load the other version (Cancel)', async () => {

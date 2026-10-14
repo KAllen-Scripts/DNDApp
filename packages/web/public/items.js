@@ -4,7 +4,8 @@
  * one by hand, look one up (your own items first, then the books, then the
  * AI), or have the AI find one online with a picture. Players never see
  * this list, only what a merchant sells. Below it: what each player has
- * equipped (from their Inventory), so the DM can check it.
+ * equipped (from their Inventory), so the DM can check it, and their class
+ * features' uses left (Rage, Ki, Wild Shape...).
  */
 import { api, fileUrl, h, readBase64, LoggedOut, note } from './api.js';
 import { markdownBox } from './markdown.js';
@@ -51,7 +52,7 @@ export async function loadItems({ campaignId, guarded }) {
 
 const LOAD = { encumbered: 'encumbered', heavy: 'heavily encumbered', over: 'over their carrying capacity' };
 
-/** What each player has equipped, with the AC and attacks it gives them (the rest of their sheet stays private). */
+/** What each player has equipped, with the AC and attacks it gives them, and their class features' uses left (the rest of their sheet stays private). */
 async function loadEquipped() {
   const box = $('#items-equipped');
   try {
@@ -75,6 +76,10 @@ async function loadEquipped() {
           (g.weapon || g.armor || g.to_hit != null) && !g.proficient ? h('span', { class: 'muted' }, ' · not proficient') : '',
           g.attunement ? h('span', { class: 'muted' }, g.attuned ? ' · attuned' : ' · not attuned') : '')))
         : h('p', { class: 'muted small' }, 'Nothing equipped.'),
+      p.features?.length || p.wild_shape
+        ? h('p', { class: 'small equipped-features' }, h('strong', {}, 'Class features: '),
+          [p.wild_shape ? `in Wild Shape as ${p.wild_shape}` : '', ...(p.features ?? []).map((f) => `${f.name} ${f.max == null ? 'unlimited' : `${f.left} of ${f.max}`}`)].filter(Boolean).join(' · '))
+        : null,
     )) : [h('p', { class: 'muted' }, 'No players in this campaign yet.')]));
   } catch (err) {
     if (err instanceof LoggedOut) throw err;

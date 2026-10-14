@@ -991,12 +991,33 @@ input.num, .sheet .num { text-align: center; }
 .add-spell .muted { flex-basis: 100%; }
 .add-spell .muted:empty { display: none; }
 .spell-list { display: grid; gap: 0.6rem; }
-/* Wild Shape (druids): forms, uses, and the form they're in (sheet-wild-shape.js). */
+/* Class features (sheet-class-features.js): a row per feature with its uses or points, and the player's own rows. */
+.class-features { display: grid; gap: 0.5rem; align-content: start; }
+.cf-rows { display: grid; gap: 0.4rem; }
+.cf-row { display: grid; gap: 0.25rem; padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: 6px; }
+.cf-row.cf-info { border-style: dashed; }
+.cf-row.cf-empty .cf-name strong { opacity: 0.6; }
+.cf-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.cf-head .spacer { flex: 1; }
+.cf-count { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+.cf-count input.num { width: 3rem; height: 1.8rem; text-align: center; }
+.cf-count input.cf-max.own { font-style: italic; }
+.cf-step { height: 1.8rem; min-width: 1.8rem; padding: 0 0.4rem; }
+.cf-recharge { white-space: nowrap; }
+.cf-note, .cf-rules { margin: 0; }
+.cf-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.cf-actions button.small, .cf-actions select { height: 1.8rem; padding: 0 0.6rem; }
+.cf-actions input.num { width: 3rem; }
+.cf-add { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.cf-add input[type="text"] { flex: 1 1 10rem; width: auto; }
+.cf-add input.num { width: 4rem; }
+.cf-add .muted { flex-basis: 100%; margin: 0; }
+.cf-add-open { justify-self: start; }
+
+/* Wild Shape (druids): forms, and the form they're in (sheet-wild-shape.js), under the Wild Shape row of Class features. */
 .wild-shape { display: grid; gap: 0.5rem; align-content: start; }
 .wild-shape[hidden] { display: none; }
 .ws-rules { margin: 0; }
-.ws-uses { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
-.ws-uses .muted { flex-basis: 100%; }
 .ws-forms { display: grid; gap: 0.35rem; }
 .ws-form { border: 1px solid var(--border); border-radius: 6px; padding: 0.3rem 0.5rem; }
 .ws-form > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; cursor: pointer; }
@@ -1072,7 +1093,7 @@ details.spell > summary::-webkit-details-marker { display: none; }
 
 @media print {
   body { background: #fff; color: #000; }
-  .topbar, .sheet-bar, .sheet-review, .add-spell, .ws-add, .spell-actions, .slot-help, .reset, .add-row, .icon-x, .icon-roll, .spell-rolls select, .sh-tabbar, button.link { display: none !important; }
+  .topbar, .sheet-bar, .sheet-review, .add-spell, .ws-add, .cf-add, .cf-add-open, .cf-actions, .cf-step, .spell-actions, .slot-help, .reset, .add-row, .icon-x, .icon-roll, .spell-rolls select, .sh-tabbar, button.link { display: none !important; }
   #app-view, #app-view.wide { --page-width: none; height: auto; display: block; }
   .panel { display: block; overflow: visible; padding: 0; }
   .panel:not(#tab-sheet) { display: none !important; }

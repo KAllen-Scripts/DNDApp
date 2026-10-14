@@ -91,6 +91,7 @@ const CONTENT_TYPES = {
 const WEB_MODULES = {
   '/shared/sheet.js': '@dndapp/shared/sheet.js',
   '/shared/wild-shape.js': '@dndapp/shared/wild-shape.js',
+  '/shared/class-features.js': '@dndapp/shared/class-features.js',
   '/shared/citations.js': '@dndapp/shared/citations.js',
   '/shared/dice.js': '@dndapp/shared/dice.js',
   '/shared/rolls.js': '@dndapp/shared/rolls.js',

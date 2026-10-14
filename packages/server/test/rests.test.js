@@ -218,3 +218,35 @@ test('rests go out live: each player hears the ones that include them, the DM he
     await t.cleanup();
   }
 });
+
+test('class features: Second Wind is rolled by the server and heals; rests the DM calls give uses back; the DM sees uses left', async () => {
+  const t = await setup();
+  try {
+    // Fighter 3 / Wizard 2 with a Lucky row of their own: Second Wind is 1d10+3.
+    await saveSheet(t, t.sam, { ...THORIN, class_features: { spent: { action_surge: 1 }, custom: [{ id: 'custom-lucky', name: 'Lucky', max: 3, recharge: 'long' }] } });
+    const use = (as, id) => t.request('POST', `/campaigns/${t.campaign.id}/sheet/features/use`, { as: as.token, body: { id } });
+    const res = await use(t.sam, 'second_wind');
+    assert.equal(res.statusCode, 200, res.body);
+    const r = res.json();
+    assert.equal(r.notation, '1d10+3');
+    assert.equal(r.roll.label, 'Second Wind');
+    assert.equal(r.sheet.hp.current, 10 + r.healed);
+    assert.equal(r.sheet.class_features.spent.second_wind, 1);
+    assert.match((await use(t.sam, 'second_wind')).json().error, /no Second Wind left/);
+    assert.match((await use(t.sam, 'action_surge')).json().error, /isn't one of your class features that heals/);
+    assert.equal((await use(t, 'second_wind')).statusCode, 403, 'the DM has no sheet');
+
+    // The DM sees what's left (and nothing else of the sheet).
+    const sam = async () => (await t.request('GET', `/campaigns/${t.campaign.id}/gear/equipped`)).json().players.find((p) => p.name === 'Sam');
+    assert.deepEqual((await sam()).features.map((f) => [f.name, f.left, f.max]), [['Second Wind', 0, 1], ['Action Surge', 0, 1], ['Arcane Recovery', 1, 1], ['Lucky', 3, 3]]);
+
+    // A short rest the DM calls gives Second Wind and Action Surge back; Lucky waits for a long rest.
+    await t.sheets.save(t.campaign.id, t.sam.id, { ...(await sheetOf(t, t.sam)).sheet, class_features: { spent: { second_wind: 1, action_surge: 1, 'custom-lucky': 2 }, custom: [{ id: 'custom-lucky', name: 'Lucky', max: 3, recharge: 'long' }] } });
+    await t.request('POST', `/campaigns/${t.campaign.id}/rests`, { body: { kind: 'short' } });
+    assert.deepEqual((await sheetOf(t, t.sam)).sheet.class_features.spent, { 'custom-lucky': 2 });
+    await t.request('POST', `/campaigns/${t.campaign.id}/rests`, { body: { kind: 'long' } });
+    assert.deepEqual((await sheetOf(t, t.sam)).sheet.class_features.spent, {});
+  } finally {
+    await t.cleanup();
+  }
+});

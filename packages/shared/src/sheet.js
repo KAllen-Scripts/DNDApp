@@ -1,7 +1,7 @@
 /**
  * Character sheet rules (D&D 5e, 2014 Player's Handbook).
  *
- * Plain JS (it imports only gear.js, the inventory rules): the server uses it, and the web page loads the
+ * Plain JS (it imports only gear.js, the inventory rules, wild-shape.js and class-features.js): the server uses it, and the web page loads the
  * same file from /shared/sheet.js so automatic values update as the player
  * types. The server stays the authority on what is saved.
  *
@@ -12,7 +12,8 @@
  */
 
 import { WEAPONS, activeEffects, armorClass, attunementLimit, carriedWeight, encumbrance, normalizeInventory } from './gear.js';
-import { normalizeWildShape, restWildShape } from './wild-shape.js';
+import { normalizeWildShape } from './wild-shape.js';
+import { normalizeClassFeatures, restClassFeatures } from './class-features.js';
 
 export { WEAPONS };
 
@@ -192,7 +193,8 @@ export function emptySheet({ name = '', player_name = '' } = {}) {
     coins: Object.fromEntries(COINS.map((c) => [c, 0])),
     spellcasting: { class: '', slots_used: {}, pact_used: 0 },
     spells: [],
-    wild_shape: { forms: [], uses_spent: 0, active: null }, // druids: Wild Shape forms (wild-shape.js)
+    wild_shape: { forms: [], active: null }, // druids: Wild Shape forms (wild-shape.js)
+    class_features: { spent: {}, max: {}, custom: [] }, // Rage, Ki, Wild Shape uses... and the player's own rows (class-features.js)
     point_buy: normalizePointBuy(), // the point buy calculator (point-buy.js): off until the player turns it on
     overrides: {},
   };
@@ -330,6 +332,10 @@ export function normalizeSheet(input = {}) {
   out.point_buy = normalizePointBuy(s.point_buy);
   out.spells = (Array.isArray(s.spells) ? s.spells : []).slice(0, 400).map(normalizeSpell).filter((sp) => sp.name);
   out.wild_shape = normalizeWildShape(s.wild_shape);
+  out.class_features = normalizeClassFeatures(s.class_features);
+  // Sheets from before the class features box kept Wild Shape uses spent with the forms.
+  const oldUses = int(s.wild_shape?.uses_spent, { min: 0, max: 20, fallback: 0 });
+  if (oldUses && s.class_features?.spent?.wild_shape == null) out.class_features.spent.wild_shape = oldUses;
   for (const [k, v] of Object.entries(s.overrides ?? {})) {
     const c = coerceDerived(k, v);
     if (c !== undefined) out.overrides[k] = c;
@@ -397,19 +403,20 @@ export function spendHitDie(sheet, die, total) {
 }
 
 /**
- * A short rest: warlocks get their Pact Magic slots back; druids, Wild Shape
- * uses (all of them by the 2014 rules, one by the 2024 rules). (Hit dice are
+ * A short rest: warlocks get their Pact Magic slots back; class features
+ * that come back on a short rest do (Wild Shape, Action Surge, Ki...: all of
+ * them, or one for some by the 2024 rules; class-features.js). (Hit dice are
  * spent one at a time, with spendHitDie.)
  */
 export function shortRest(sheet, { edition = '2014' } = {}) {
-  const out = restWildShape(sheet, 'short', edition);
+  const out = restClassFeatures(sheet, 'short', edition, computeSheet(sheet).values);
   out.spellcasting.pact_used = 0;
   return out;
 }
 
 /**
  * A long rest. Both editions: all hit points back, temporary hit points gone,
- * every spell slot and Wild Shape use back, death saves cleared. Spent hit dice: the 2014 rules
+ * every spell slot and class feature use back, death saves cleared. Spent hit dice: the 2014 rules
  * give back up to half your total (at least one), the biggest first; the 2024
  * rules give them all back. In 2014 a character at 0 hit points gets nothing
  * from it (you need at least 1 hit point when it starts).
@@ -418,7 +425,7 @@ export function shortRest(sheet, { edition = '2014' } = {}) {
 export function longRest(sheet, { edition = '2014' } = {}) {
   const { values } = computeSheet(sheet);
   if (edition !== '2024' && sheet.hp.current != null && sheet.hp.current <= 0) return { sheet, rested: false, regained: { hp: 0, hit_dice: 0 } };
-  const out = restWildShape(sheet, 'long', edition);
+  const out = restClassFeatures(sheet, 'long', edition, values);
   const before = out.hp.current ?? values.hp_max ?? 0;
   if (values.hp_max != null) out.hp.current = values.hp_max;
   out.hp.temp = null;
