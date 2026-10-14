@@ -13,7 +13,7 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, blockingWalls, canSee, doorKnown, healthOf, speedFromText } from '@dndapp/shared/map.js';
+import { MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, blockingWalls, canSee, doorKnown, healthOf, ownToken, speedFromText } from '@dndapp/shared/map.js';
 import { designToMap } from '@dndapp/shared/map-design.js';
 import { computeSheet } from '@dndapp/shared/sheet.js';
 import { createSight } from './sight.js';
@@ -245,8 +245,8 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
      * explored as `fog.explored`; the doors they can see (`doors`, to open
      * and close them); no hidden tokens, and none they can't see (under the
      * fog, or out of their token's sight) except their own; NPCs' and
-     * enemies' hit points only as how hurt they look; no stat blocks or
-     * links to the DM's records. They get the picture as it is (the page
+     * enemies' hit points only as how hurt they look; no stat blocks (but
+     * their own companions') or links to the DM's records. They get the picture as it is (the page
      * draws the fog over it); `image_key` changes when the picture does.
      * Players get only the spell templates they placed or whose origin they
      * can see, and only the visible tokens' places in the turn order.
@@ -303,7 +303,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
       if (role === 'dm') return { ...out, designed: !!map.design, image_key: `dm${variantKey}`, can_edit: true };
       if (!map.shown) return null;
       const seen = sight.forPlayer(map, userId);
-      const tokens = out.tokens.filter((t) => t.user_id === userId || (!t.hidden && canSee(map, seen.polygons, t.x, t.y)));
+      const tokens = out.tokens.filter((t) => ownToken(t, userId) || (!t.hidden && canSee(map, seen.polygons, t.x, t.y)));
       const visible = new Set(tokens.map((t) => t.id));
       return {
         ...out,
@@ -335,8 +335,13 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
           turn: visible.has(map.combat.turn) ? map.combat.turn : null,
           turn_unseen: map.combat.turn != null && !visible.has(map.combat.turn),
         },
-        tokens: tokens
-          .map((t) => (t.kind === 'pc' ? { ...t, stats: null, record: null } : { ...t, hp: null, health: healthOf(t.hp), stats: null, record: null })),
+        // The party's own (characters, companions and summons) show their hit points; a companion's stat block
+        // goes to the player who controls it, so they can roll for it. Anyone else's hit points only as how hurt they look.
+        tokens: tokens.map((t) => {
+          if (t.kind === 'pc') return { ...t, stats: null, record: null };
+          if (t.kind === 'companion') return { ...t, stats: t.user_id === userId ? t.stats : null, record: null };
+          return { ...t, hp: null, health: healthOf(t.hp), stats: null, record: null };
+        }),
         // Links to maps they're shown, where they can see the link; variants by name only.
         links: links
           .filter((l) => l.target?.shown && canSee(map, seen.polygons, l.x, l.y))

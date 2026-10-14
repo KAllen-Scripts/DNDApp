@@ -16,6 +16,7 @@ import { openShop } from './merchants.js';
 import { openCreator } from './map-creator.js';
 import { chooseTokenPicture, fillStats, forgetPlayers, importMap, recordDialog, removeToken, removeTokenPicture, saveCreature, settingsDialog, statsDialog, tokenDialog } from './map-dm.js';
 import { renderCombat } from './map-combat.js';
+import { companionDialog, companionRolls, dismissCompanion, myCompanion } from './map-companions.js';
 import { initMapFull } from './map-full.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -984,7 +985,10 @@ export function renderSelection() {
       canMove(token) && !state.canEdit ? h('span', { class: 'muted small' }, 'Drag to move') : null,
       token.merchant ? h('button', { class: 'primary', title: 'See what this merchant sells, and buy', onclick: () => openShop(token.merchant) }, 'Shop') : null,
       state.canEdit && token.record ? h('button', { class: 'ghost', title: `What the campaign's records say about ${token.record.title}`, onclick: () => recordDialog(token) }, 'Record') : null,
-      state.canEdit && token.stats ? h('button', { class: 'ghost', onclick: () => statsDialog(token) }, 'Stat block') : null,
+      token.kind === 'companion' && token.stats && (state.canEdit || myCompanion(token)) ? h('button', { class: 'primary', title: 'Roll its attacks and checks from its stat block', onclick: () => companionRolls(token) }, 'Roll') : null,
+      (state.canEdit || myCompanion(token)) && token.stats ? h('button', { class: 'ghost', onclick: () => statsDialog(token) }, 'Stat block') : null,
+      myCompanion(token) && !state.canEdit && !token.stats ? h('button', { class: 'ghost', title: 'Look up its stat block, hit points and size with the AI', onclick: () => fillStats(token) }, 'Stat block (AI)') : null,
+      myCompanion(token) && !state.canEdit ? h('button', { class: 'ghost danger', onclick: () => dismissCompanion(token) }, 'Dismiss') : null,
       state.canEdit && !token.stats && token.kind !== 'pc' ? h('button', { class: 'ghost', title: 'Fill in its stat block, hit points and size with the AI', onclick: () => fillStats(token) }, 'Stat block (AI)') : null,
       state.canEdit && token.kind !== 'pc' ? h('button', { class: 'ghost', title: 'Give this token a picture (players see it on the map)', onclick: () => chooseTokenPicture(token) }, token.picture ? 'New picture' : 'Picture') : null,
       state.canEdit && token.kind !== 'pc' && token.picture ? h('button', { class: 'ghost', title: 'Go back to initials', onclick: () => removeTokenPicture(token) }, 'No picture') : null,
@@ -1636,6 +1640,7 @@ export function initMapActions() {
   setEditing(storage.get(EDITING_KEY) !== '0');
   $('#map-edit').addEventListener('click', () => setEditing($('#tab-map').classList.contains('edit-off')));
   $('#map-add-token').addEventListener('click', () => tokenDialog().catch(report));
+  $('#map-add-companion').addEventListener('click', () => companionDialog());
   $('#map-fog-open').addEventListener('click', () => {
     const tools = $('#map-fog-tools');
     tools.hidden = !tools.hidden;

@@ -58,7 +58,7 @@ export function registerCreatures(app, r) {
       const t = map.tokens.find((x) => x.id === from.token_id);
       if (!t) throw new NotFoundError('No such token');
       if (t.kind === 'pc') throw new BadRequestError("A player's character can't be saved as a creature.");
-      fields = { name: t.name.replace(/ \d+$/, '') || t.name, kind: t.kind, size: t.size, color: t.color, hp_max: t.hp?.max ?? null, darkvision: t.darkvision ?? 0, speed: t.speed ?? null, stats: t.stats ?? null, record: t.record ?? null };
+      fields = { name: t.name.replace(/ \d+$/, '') || t.name, kind: t.kind === 'companion' ? 'npc' : t.kind, size: t.size, color: t.color, hp_max: t.hp?.max ?? null, darkvision: t.darkvision ?? 0, speed: t.speed ?? null, stats: t.stats ?? null, record: t.record ?? null };
       if (t.art) art = { buf: fs.readFileSync(archive.tokenImagePath(a.campaign.slug, map.id, t.art.file)) };
     } else {
       fields = CREATURE.partial().required({ name: true, kind: true }).parse(rest);
