@@ -11,12 +11,22 @@
 import { normalizeDesign } from './map-design.js';
 
 export const MAP_KINDS = ['battle', 'dungeon', 'building', 'town', 'region', 'world', 'other'];
-export const TOKEN_KINDS = ['pc', 'npc', 'enemy'];
-export const TOKEN_KIND_NAMES = { pc: 'Player character', npc: 'NPC', enemy: 'Enemy' };
+export const TOKEN_KINDS = ['pc', 'npc', 'enemy', 'companion'];
+export const TOKEN_KIND_NAMES = { pc: 'Player character', npc: 'NPC', enemy: 'Enemy', companion: 'Companion or summon' };
+/**
+ * Kinds of token a player controls (user_id): their character, and their
+ * companions, familiars and summons. They move them, change their hit
+ * points and conditions, roll for them, and see what they see.
+ */
+export const PLAYER_KINDS = ['pc', 'companion'];
+/** Is this token one of this player's own (their character, or a companion of theirs)? */
+export const ownToken = (t, userId) => userId != null && PLAYER_KINDS.includes(t?.kind) && t.user_id === userId;
+/** How many companions and summons one player may have on a map. */
+export const MAX_COMPANIONS = 12;
 /** Token sizes in squares, as the 5e size categories. */
 export const TOKEN_SIZES = [0.5, 1, 2, 3, 4];
 export const TOKEN_SIZE_NAMES = { 0.5: 'Tiny', 1: 'Medium', 2: 'Large', 3: 'Huge', 4: 'Gargantuan' };
-export const TOKEN_COLORS = { pc: '#2f6fb3', npc: '#3f8a4a', enemy: '#b33a3a' };
+export const TOKEN_COLORS = { pc: '#2f6fb3', npc: '#3f8a4a', enemy: '#b33a3a', companion: '#7a5bb5' };
 export const UNITS = ['ft', 'm', 'mi', 'km'];
 export const CONDITIONS = [
   'blinded', 'charmed', 'deafened', 'exhaustion', 'frightened', 'grappled', 'incapacitated', 'invisible',
@@ -68,7 +78,7 @@ export function normalizeToken(t = {}, map) {
     id: isTokenId(t.id) ? String(t.id) : '',
     kind,
     name: str(t.name, 80) || TOKEN_KIND_NAMES[kind],
-    user_id: kind === 'pc' && Number.isInteger(Number(t.user_id)) && Number(t.user_id) > 0 ? Number(t.user_id) : null,
+    user_id: PLAYER_KINDS.includes(kind) && Number.isInteger(Number(t.user_id)) && Number(t.user_id) > 0 ? Number(t.user_id) : null,
     color: color(t.color, TOKEN_COLORS[kind]),
     size,
     x: num(t.x, { min: 0, max: width, fallback: width / 2 }),
@@ -87,10 +97,10 @@ export function normalizeToken(t = {}, map) {
     darkvision: num(t.darkvision, { min: 0, max: 10_000, fallback: 0 }),
     // Walking speed in the map's unit when the DM sets it; null to use the sheet or stat block's.
     speed: num(t.speed, { min: 0, max: 10_000, fallback: null }),
-    // A picture the DM gave an NPC or enemy (a player character shows its player's own token picture instead).
+    // A picture the DM gave an NPC, enemy or companion (a player character shows its player's own token picture instead).
     art: kind !== 'pc' ? normalizeTokenArt(t.art) : null,
     // The DM's merchant this token stands for (players open its shop from the token); null for none.
-    merchant: kind !== 'pc' && /^[a-f0-9]{10}$/.test(String(t.merchant ?? '')) ? String(t.merchant) : null,
+    merchant: !PLAYER_KINDS.includes(kind) && /^[a-f0-9]{10}$/.test(String(t.merchant ?? '')) ? String(t.merchant) : null,
   };
 }
 
@@ -685,7 +695,8 @@ export function pointInPolygon(x, y, poly) {
  */
 export function sightOf(map, userId) {
   if (!map.fog?.enabled || !map.fog.sight || userId == null) return [];
-  const own = map.tokens.filter((t) => t.kind === 'pc' && t.user_id === userId);
+  // A player sees what their character sees, and what their companions see.
+  const own = map.tokens.filter((t) => ownToken(t, userId));
   if (!map.fog.dark) return own.map((t) => sightPolygon(map, t)).filter((p) => p.length >= 3);
   // In the dark: what darkvision reaches, and the lit places the token can see (each light's area, cut to the token's sight).
   const k = pxPerUnit(map);
@@ -964,21 +975,28 @@ export function stepTurn(combat, dir = 1) {
   return combat.round > 1 ? { round: combat.round - 1, turn: order.at(-1) } : { round: 1, turn: order[0] };
 }
 
+/** The six abilities as stat blocks write them. */
+export const ABILITY_KEYS = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+const ABILITY_WORDS = { STR: 'STR(?:ENGTH)?', DEX: 'DEX(?:TERITY)?', CON: 'CON(?:STITUTION)?', INT: 'INT(?:ELLIGENCE)?', WIS: 'WIS(?:DOM)?', CHA: 'CHA(?:RISMA)?' };
+
 /**
- * A creature's Dexterity modifier from its stat block's text, or null if it
- * isn't there. Reads "DEX 14 (+2)" and the usual Markdown table (a row of
- * ability names, then a row of scores).
+ * A creature's modifier for an ability (STR, DEX...) from its stat block's
+ * text, or null if it isn't there. Reads "DEX 14 (+2)" and the usual
+ * Markdown table (a row of ability names, then a row of scores).
  */
-export function dexModifier(text) {
+export function abilityModifier(text, ability) {
+  const word = ABILITY_WORDS[String(ability).toUpperCase()];
+  if (!word) return null;
   const s = String(text ?? '').replace(/[−–]/g, '-');
   const signed = (v) => Number(v.replace(/\s+/g, ''));
   const fromScore = (n) => Math.floor((Number(n) - 10) / 2);
-  const inline = s.match(/\bDEX(?:TERITY)?\b[*_:\s]{0,6}(\d{1,2})\s*\(\s*([+-]\s*\d{1,2})\s*\)/i);
+  const inline = s.match(new RegExp(`\\b${word}\\b[*_:\\s]{0,6}(\\d{1,2})\\s*\\(\\s*([+-]\\s*\\d{1,2})\\s*\\)`, 'i'));
   if (inline) return signed(inline[2]);
+  const head = new RegExp(`^${word}$`, 'i');
   const lines = s.split('\n');
   for (let i = 0; i < lines.length; i++) {
     const cells = lines[i].split('|').map((c) => c.replace(/[*_]/g, '').trim());
-    const col = cells.findIndex((c) => /^dex(terity)?$/i.test(c));
+    const col = cells.findIndex((c) => head.test(c));
     if (col < 0) continue;
     for (const next of lines.slice(i + 1, i + 3)) {
       const cell = next.split('|').map((c) => c.trim())[col] ?? '';
@@ -987,8 +1005,38 @@ export function dexModifier(text) {
       if (/^\d{1,2}$/.test(cell)) return fromScore(cell);
     }
   }
-  const bare = s.match(/\bDEX(?:TERITY)?\b[*_:\s]{0,6}(\d{1,2})\b/i);
+  const bare = s.match(new RegExp(`\\b${word}\\b[*_:\\s]{0,6}(\\d{1,2})\\b`, 'i'));
   return bare ? fromScore(bare[1]) : null;
+}
+
+/** A creature's Dexterity modifier from its stat block's text, or null (see abilityModifier). */
+export const dexModifier = (text) => abilityModifier(text, 'DEX');
+
+/**
+ * What a stat block lets you roll: its ability checks ({ ability, mod }) and
+ * its attacks ({ name, hit, damage: ['1d8+3', ...] }), read from the text
+ * ("Bite. Melee Weapon Attack: +4 to hit ... Hit: 7 (1d8 + 3) piercing
+ * damage", and 2024's "Melee Attack Roll: +4"). Used for a player's
+ * companions and summons, so they roll from the creature's own numbers.
+ */
+export function statBlockRolls(text) {
+  const s = String(text ?? '').replace(/[−–]/g, '-');
+  const abilities = ABILITY_KEYS.map((ability) => ({ ability, mod: abilityModifier(s, ability) })).filter((a) => a.mod != null);
+  const attacks = [];
+  for (const line of s.split('\n')) {
+    const hit = line.match(/(?:attack(?: roll)?)[*_]*\s*:[*_\s]*([+-]\s*\d{1,2})|([+-]\s*\d{1,2})\s+to hit/i);
+    if (!hit) continue;
+    const name = line.replace(/^[\s>*_#-]+/, '').match(/^([^.:*_]{1,60}?)[*_]*\s*[.:]/)?.[1].trim();
+    if (!name) continue;
+    const after = line.slice(Math.max(0, line.search(/hit\s*:/i)));
+    // Damage is usually "7 (2d4 + 2)"; some write the dice bare ("2d8 + 4 bludgeoning").
+    const dice = (re) => [...after.matchAll(re)].map((m) => m[1].replace(/\s+/g, ''));
+    let damage = dice(/\(\s*(\d{1,2}d\d{1,3}(?:\s*[+-]\s*\d{1,3})?)\s*\)/gi);
+    if (!damage.length) damage = dice(/\b(\d{1,2}d\d{1,3}(?:\s*[+-]\s*\d{1,3})?)/gi);
+    attacks.push({ name: name.slice(0, 60), hit: Number((hit[1] ?? hit[2]).replace(/\s+/g, '')), damage: [...new Set(damage)].slice(0, 4) });
+    if (attacks.length >= 12) break;
+  }
+  return { abilities, attacks };
 }
 
 // ---------- spell templates ----------

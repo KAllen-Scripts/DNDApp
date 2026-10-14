@@ -211,8 +211,10 @@ export async function tokenDialog(token = null) {
   if (!map) return;
   players ??= (await state.guarded(() => api('GET', `/campaigns/${state.campaignId}/members`))).filter((m) => m.role === 'player' && !m.revoked_at);
   const dialog = $('#map-dialog');
-  const kind = h('select', {}, ...TOKEN_KINDS.map((k) => new Option(TOKEN_KIND_NAMES[k], k)));
-  kind.value = token?.kind ?? 'enemy';
+  // A companion or summon is asked for with its player (below), not as a kind of its own.
+  const kind = h('select', {}, ...TOKEN_KINDS.filter((k) => k !== 'companion').map((k) => new Option(TOKEN_KIND_NAMES[k], k)));
+  kind.value = token?.kind === 'companion' ? 'pc' : token?.kind ?? 'enemy';
+  const companion = h('input', { type: 'checkbox', checked: token?.kind === 'companion' });
   const name = h('input', { value: token?.name ?? '', maxLength: 80, placeholder: 'Goblin 1' });
   const size = h('select', {}, ...TOKEN_SIZES.map((s) => new Option(`${TOKEN_SIZE_NAMES[s]} (${s === 0.5 ? '½' : s} square${s > 1 ? 's' : ''})`, s)));
   size.value = String(token?.size ?? 1);
@@ -249,13 +251,18 @@ export async function tokenDialog(token = null) {
   let colorTouched = !!token;
   color.addEventListener('input', () => (colorTouched = true));
   const kindField = field('Kind', kind);
+  // A player's token is their character, or a companion or summon they control (a familiar, a druid's wolf).
+  const companionField = h('label', { class: 'map-check', title: 'They move it, track its hit points and roll for it from its stat block' }, companion, ' A companion or summon of theirs, not their character');
+  const isCompanion = () => picked().type === 'p' && companion.checked;
   const sync = () => {
-    // A player's token is always a player character, so there is nothing to ask.
+    // A player's token is always theirs, so there is no kind to ask.
     kindField.hidden = picked().type === 'p';
-    lookUpField.hidden = !!token || kind.value !== 'enemy';
-    if (!colorTouched) color.value = TOKEN_COLORS[kind.value];
+    companionField.hidden = picked().type !== 'p';
+    lookUpField.hidden = !!token || (kind.value !== 'enemy' && !isCompanion());
+    if (!colorTouched) color.value = TOKEN_COLORS[isCompanion() ? 'companion' : kind.value];
   };
   kind.addEventListener('change', sync);
+  companion.addEventListener('change', sync);
   who.addEventListener('change', () => {
     const { type, id } = picked();
     if (type === 'c') {
@@ -267,7 +274,7 @@ export async function tokenDialog(token = null) {
       const p = players.find((x) => x.id === id);
       kind.value = 'pc';
       // Named after their character unless something else is typed.
-      if (p && !name.value.trim()) name.value = p.character_name || p.name;
+      if (p && !name.value.trim() && !companion.checked) name.value = p.character_name || p.name;
     } else if (type === 'r') {
       const r = records.find((x) => x.id === id);
       if (r && (!token || !name.value.trim())) name.value = r.title.slice(0, 80);
@@ -283,7 +290,7 @@ export async function tokenDialog(token = null) {
   const save = async () => {
     const { type, id } = picked();
     const body = {
-      kind: type === 'p' ? 'pc' : kind.value,
+      kind: type === 'p' ? (companion.checked ? 'companion' : 'pc') : kind.value,
       name: name.value.trim(),
       user_id: type === 'p' ? id : null,
       size: Number(size.value),
@@ -308,7 +315,7 @@ export async function tokenDialog(token = null) {
       const res = await api('POST', `${base()}/${map.id}/tokens`, { ...body, ...middle });
       onMap(res.map);
       select(res.token.id);
-      if (kind.value === 'enemy' && lookUp.checked && body.name) fillStats(res.token);
+      if ((body.kind === 'enemy' || body.kind === 'companion') && lookUp.checked && body.name) fillStats(res.token);
     }
   };
   dialog.replaceChildren(
@@ -318,6 +325,7 @@ export async function tokenDialog(token = null) {
     } },
       h('h2', {}, token ? 'Change token' : 'Add a token'),
       field('Who is it?', who),
+      companionField,
       h('div', { class: 'map-row map-row-name' }, field('Name', name), kindField),
       h('div', { class: 'map-row' }, field('Size', size), field('Colour', color), field('Max HP', hpMax), field(`Darkvision (${map.scale?.unit ?? 'ft'})`, darkvision)),
       h('label', { class: 'map-check' }, hidden, ' Hidden from players (an ambush, someone lurking)'),
@@ -481,8 +489,8 @@ export async function fillStats(token, name) {
   }
 }
 
-/** A token's stat block (DM only), with a way to look up a different creature. */
-export const statsDialog = (token) => showStatBlock($('#map-dialog'), { title: token.name, stats: token.stats, onLookup: (name) => fillStats(token, name) });
+/** A token's stat block (the DM's, or a player's own companion's), with a way to look up a different creature. */
+export const statsDialog = (token) => showStatBlock($('#map-dialog'), { title: token.name, stats: token.stats, onLookup: (name) => fillStats(token, name), shared: token.kind === 'companion' && token.user_id != null });
 
 export async function removeToken(token) {
   if (!confirm(`Remove ${token.name} from the map?`)) return;
