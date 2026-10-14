@@ -6,9 +6,9 @@
  * it closes it again.
  *
  * Toolbars with more buttons than fit get a "⋯" button instead
- * (phoneMenu): only the buttons marked .phone-keep stay in the row, and ⋯
- * opens the rest as a list from the bottom. The buttons are the page's own
- * (moved nowhere, just shown differently), so everything they do still works.
+ * (phoneMenu): the main controls stay in the row, and ⋯ opens the rest as a
+ * list from the bottom. The buttons are the page's own, so everything they
+ * do still works.
  */
 const $ = (sel) => document.querySelector(sel);
 const isPhone = () => document.documentElement.hasAttribute('data-phone');
@@ -36,7 +36,7 @@ function open(menu) {
   menu.button.setAttribute('aria-expanded', 'true');
   scrim().classList.add('on');
   // Into the menu, for keyboards and screen readers: the page it's on, or its first button.
-  const first = menu.box.querySelector('[aria-selected="true"]:not([hidden]), button:not([hidden]):not(.phone-more)');
+  const first = menu.box.querySelector('[aria-selected="true"]:not([hidden]), button:not([hidden])');
   first?.focus({ preventScroll: true });
 }
 
@@ -66,21 +66,30 @@ function closesOnChoice(menu) {
 }
 
 /**
- * A toolbar that folds into a "⋯" menu on a phone. Its children marked
- * .phone-keep stay in the row; the rest show when ⋯ is pressed, as a list.
- * Returns the ⋯ button.
+ * A toolbar that folds into a "⋯" menu on a phone. The bar's children that
+ * match `keep` stay in the row; the rest move into a list (display: contents
+ * off a phone, so the bar looks the same there) that ⋯ opens from the bottom.
+ * Ids and listeners go with the buttons, so they work as before. Returns the ⋯ button.
  */
-export function phoneMenu(bar, { label = 'More', before = null } = {}) {
+export function phoneMenu(bar, { label = 'More', keep = null } = {}) {
   bar.classList.add('phone-menu');
+  const list = document.createElement('div');
+  list.className = 'phone-menu-list';
+  for (const child of [...bar.children]) if (!(keep && child.matches(keep))) list.append(child);
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'ghost phone-menu-close';
+  close.textContent = 'Close';
+  list.append(close);
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = 'ghost icon-btn phone-more phone-keep';
+  button.className = 'ghost icon-btn phone-more';
   button.setAttribute('aria-label', label);
   button.title = label;
   button.setAttribute('aria-expanded', 'false');
   button.textContent = '⋯';
-  bar.insertBefore(button, before);
-  const menu = { box: bar, button };
+  bar.append(list, button);
+  const menu = { box: list, button };
   button.addEventListener('click', () => (openMenu === menu ? closeMenu() : open(menu)));
   closesOnChoice(menu);
   return button;
