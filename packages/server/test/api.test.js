@@ -32,6 +32,23 @@ const ask = async (t, question, as) => {
 
 const login = (t, name, password) => t.app.inject({ method: 'POST', url: '/login', payload: { name, password } });
 
+test('every response says which version of the page the server has, so open pages reload after an update', async () => {
+  const t = await setup();
+  try {
+    const me = await t.request('GET', '/me');
+    assert.match(me.headers['x-page-version'], /^[\w-]{16}$/);
+    assert.equal((await t.request('GET', '/me', { as: 'nonsense' })).headers['x-page-version'], me.headers['x-page-version']);
+    // Live streams too (they write their own headers): checked with a real connection.
+    await t.app.listen({ port: 0, host: '127.0.0.1' });
+    const controller = new AbortController();
+    const res = await fetch(`http://127.0.0.1:${t.app.server.address().port}/campaigns/${t.campaign.id}/maps/events`, { headers: { authorization: `Bearer ${t.token}` }, signal: controller.signal });
+    assert.equal(res.headers.get('x-page-version'), me.headers['x-page-version']);
+    controller.abort();
+  } finally {
+    await t.cleanup();
+  }
+});
+
 test('auth: rejects missing/invalid tokens and non-members', async () => {
   const t = await setup();
   try {

@@ -85,6 +85,49 @@ const CONTENT_TYPES = {
   '.woff2': 'font/woff2',
 };
 
+// Modules the page imports from packages: the character sheet rules (shared with the server, so the page can
+// show automatic values as players type), dice notation, map geometry (snapping and measuring while dragging),
+// the citation format, markdown + HTML sanitising, and the 3D dice (Three.js and the physics are bundled into that one file).
+const WEB_MODULES = {
+  '/shared/sheet.js': '@dndapp/shared/sheet.js',
+  '/shared/citations.js': '@dndapp/shared/citations.js',
+  '/shared/dice.js': '@dndapp/shared/dice.js',
+  '/shared/rolls.js': '@dndapp/shared/rolls.js',
+  '/shared/gear.js': '@dndapp/shared/gear.js',
+  '/shared/point-buy.js': '@dndapp/shared/point-buy.js',
+  '/shared/settings.js': '@dndapp/shared/settings.js',
+  '/shared/map.js': '@dndapp/shared/map.js',
+  '/shared/map-design.js': '@dndapp/shared/map-design.js',
+  '/shared/map-paint.js': '@dndapp/shared/map-paint.js',
+  '/shared/map-art.js': '@dndapp/shared/map-art.js',
+  '/shared/map-art-assets.js': '@dndapp/shared/map-art-assets.js',
+  '/shared/map-art-outdoors.js': '@dndapp/shared/map-art-outdoors.js',
+  '/shared/map-art-dungeon.js': '@dndapp/shared/map-art-dungeon.js',
+  '/shared/map-art-furniture.js': '@dndapp/shared/map-art-furniture.js',
+  '/shared/map-art-ships.js': '@dndapp/shared/map-art-ships.js',
+  '/shared/map-art-pieces.js': '@dndapp/shared/map-art-pieces.js',
+  '/shared/map-art-temple.js': '@dndapp/shared/map-art-temple.js',
+  '/shared/map-art-farm.js': '@dndapp/shared/map-art-farm.js',
+  '/shared/coins.js': '@dndapp/shared/coins.js',
+  '/vendor/marked.js': 'marked',
+  '/vendor/purify.js': 'dompurify',
+  '/vendor/dice/dice-box.js': '@3d-dice/dice-box-threejs',
+  };
+/**
+ * A fingerprint of the page's files (the page itself and the modules it
+ * imports), sent as X-Page-Version with every response. A page that was
+ * loaded before the server was updated sees it change and reloads, so
+ * nobody keeps running old page code against a new server (after the fog
+ * moved into the page, an old tab showed players the whole map).
+ */
+export function pageVersion(dir) {
+  const hash = crypto.createHash('sha1');
+  const files = dir && fs.existsSync(dir) ? fs.readdirSync(dir, { recursive: true }).map((name) => path.join(dir, name)).sort() : [];
+  for (const spec of Object.values(WEB_MODULES)) files.push(fileURLToPath(import.meta.resolve(spec)));
+  for (const file of files) if (fs.statSync(file).isFile()) hash.update(file).update(fs.readFileSync(file));
+  return hash.digest('base64url').slice(0, 16);
+}
+
 /**
  * Serve the web page's files (no build step). Each file gets its own public
  * route, so nothing outside the folder can be requested; "/" is index.html.
@@ -101,34 +144,6 @@ function serveWebPage(app, dir) {
     app.get(url, { config: { public: true } }, send);
     if (url === '/index.html') app.get('/', { config: { public: true } }, send);
   }
-  // Modules the page imports from packages: the character sheet rules (shared with the server, so the page can
-  // show automatic values as players type), dice notation, map geometry (snapping and measuring while dragging),
-  // the citation format, markdown + HTML sanitising, and the 3D dice (Three.js and the physics are bundled into that one file).
-  const modules = {
-    '/shared/sheet.js': '@dndapp/shared/sheet.js',
-    '/shared/citations.js': '@dndapp/shared/citations.js',
-    '/shared/dice.js': '@dndapp/shared/dice.js',
-    '/shared/rolls.js': '@dndapp/shared/rolls.js',
-    '/shared/gear.js': '@dndapp/shared/gear.js',
-    '/shared/point-buy.js': '@dndapp/shared/point-buy.js',
-    '/shared/settings.js': '@dndapp/shared/settings.js',
-    '/shared/map.js': '@dndapp/shared/map.js',
-    '/shared/map-design.js': '@dndapp/shared/map-design.js',
-    '/shared/map-paint.js': '@dndapp/shared/map-paint.js',
-    '/shared/map-art.js': '@dndapp/shared/map-art.js',
-    '/shared/map-art-assets.js': '@dndapp/shared/map-art-assets.js',
-    '/shared/map-art-outdoors.js': '@dndapp/shared/map-art-outdoors.js',
-    '/shared/map-art-dungeon.js': '@dndapp/shared/map-art-dungeon.js',
-    '/shared/map-art-furniture.js': '@dndapp/shared/map-art-furniture.js',
-    '/shared/map-art-ships.js': '@dndapp/shared/map-art-ships.js',
-    '/shared/map-art-pieces.js': '@dndapp/shared/map-art-pieces.js',
-    '/shared/map-art-temple.js': '@dndapp/shared/map-art-temple.js',
-    '/shared/map-art-farm.js': '@dndapp/shared/map-art-farm.js',
-    '/shared/coins.js': '@dndapp/shared/coins.js',
-    '/vendor/marked.js': 'marked',
-    '/vendor/purify.js': 'dompurify',
-    '/vendor/dice/dice-box.js': '@3d-dice/dice-box-threejs',
-  };
   const sendFile = (file, type) => async (request, reply) =>
     reply.type(type).header('Cache-Control', 'no-cache').header('X-Content-Type-Options', 'nosniff').send(fs.readFileSync(file));
   // Library files don't change while the server runs: each is compressed once (brotli or gzip, a few
@@ -155,7 +170,7 @@ function serveWebPage(app, dir) {
       return reply.send(cached.body);
     };
   };
-  for (const [url, spec] of Object.entries(modules)) {
+  for (const [url, spec] of Object.entries(WEB_MODULES)) {
     app.get(url, { config: { public: true } }, sendLibrary(fileURLToPath(import.meta.resolve(spec))));
   }
   // The Deluxe dice (dice-deluxe.js): Three.js (its module imports three.core.js next to it) and the
@@ -272,6 +287,12 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   });
   // Upload routes accept bigger bodies than everything else.
   const upload = { bodyLimit: config.maxUploadBytes };
+
+  // Set on the raw response, so live streams (which write their own headers) carry it too.
+  const version = pageVersion(config.webDir);
+  app.addHook('onRequest', async (request, reply) => {
+    reply.raw.setHeader('X-Page-Version', version);
+  });
 
   app.addHook('onSend', async (request, reply) => {
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) if (!reply.hasHeader(k)) reply.header(k, v);

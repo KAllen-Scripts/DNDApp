@@ -29,6 +29,9 @@ const mapsOf = async (t) => (await t.request('GET', `/campaigns/${t.campaign.id}
 const fieldIn = (root, label) => [...root.querySelectorAll('label')].find((l) => l.firstChild?.textContent === label)?.querySelector('input, select');
 
 /** Drag with the mouse: down on `from`, through `points`, up at the last one (screen = map pixels after Fit). */
+/** The fog shapes the page drew last (on the fog's canvas). */
+const fogShapes = async (page) => (await page.module('map-state.js')).state.fogShapes ?? [];
+
 function drag(page, from, points) {
   const [x0, y0] = points[0];
   page.pointer(from, 'pointerdown', { clientX: x0, clientY: y0 });
@@ -360,7 +363,7 @@ test('fog of war: the DM turns it on, reveals by dragging, undoes, reveals and c
     page.type('#map-fog-on', true);
     await page.settle();
     assert.equal((await fog()).enabled, true);
-    assert.ok(page.$('#map-fog rect.fog'));
+    assert.ok((await fogShapes(page)).length, 'the fog is drawn');
     assert.ok(!page.$('[data-fog-mode=reveal]').disabled);
 
     // Everything starts covered, so turning fog on goes straight to revealing.
@@ -373,7 +376,7 @@ test('fog of war: the DM turns it on, reveals by dragging, undoes, reveals and c
     page.pointer('#map-view', 'pointerup', { clientX: 100, clientY: 90 });
     await page.settle();
     assert.deepEqual((await fog()).shapes, [{ op: 'reveal', x: 35, y: 35, w: 70, h: 70 }]);
-    assert.equal(page.$$('#map-fog mask rect').length, 2);
+    assert.equal((await fogShapes(page)).length, 2);
 
     page.click('[data-fog-action=undo]');
     await page.settle();
@@ -590,6 +593,25 @@ test('regression: pressing on the AI walls message does not start a pan, so it c
   });
 });
 
+test('regression: a player\'s fog is drawn on a canvas, not an SVG mask (phones drew no fog at all)', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const map = await importMap(t, { patch: SHOWN });
+      const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+      await addToken(t, map, { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 320, y: 230 });
+      await t.request('PATCH', `${base}/walls`, { body: { add: { x1: 350, y1: 0, x2: 350, y2: 490 } } });
+      await t.request('PATCH', `${base}/fog`, { body: { enabled: true, sight: true, map: 'grey' } });
+    },
+    page: (t) => ({ as: t.sam }),
+  }, async (page) => {
+    await openMapTab(page);
+    assert.ok((await fogShapes(page)).length, 'there is fog to draw');
+    assert.ok(page.$('#map-fog-canvas').width > 1, 'the fog canvas is sized to the map');
+    assert.equal(page.$('#map-fog mask'), null, 'no SVG mask (some phone browsers silently skip a large one)');
+  });
+});
+
 test('line of sight: a player sees what their token sees, opens the door next to them with a click; walls aren\'t drawn', async () => {
   await withPage({
     setup: { llm: mapLLM() },
@@ -607,7 +629,7 @@ test('line of sight: a player sees what their token sees, opens the door next to
     page: (t) => ({ as: t.sam }),
   }, async (page, t, { base, door }) => {
     await openMapTab(page);
-    assert.ok(page.$('#map-fog mask polygon'), 'his sight is cut out of the fog');
+    assert.ok((await fogShapes(page)).some((s) => s.points), 'his sight is cut out of the fog');
     // Only the door he can see, to click; no walls.
     assert.equal(page.$$('#map-walls line.door').length, 1);
     assert.ok(!page.$('#map-walls line.wall'));
@@ -642,8 +664,8 @@ test('regression: a player\'s fog follows their token while it is dragged, and s
     page: (t) => ({ as: t.sam }),
   }, async (page) => {
     await openMapTab(page);
-    const sight = () => page.$('#map-fog mask polygon')?.getAttribute('points');
-    const before = sight();
+    const sight = async () => JSON.stringify((await fogShapes(page)).find((s) => s.points)?.points);
+    const before = await sight();
     assert.ok(before);
     const frame = () => new Promise((r) => setTimeout(r, 40));
     // Down below the room: the fog moves with him before he lets go.
@@ -651,15 +673,15 @@ test('regression: a player\'s fog follows their token while it is dragged, and s
     page.pointer('#map-view', 'pointermove', { clientX: 90, clientY: 150 });
     page.pointer('#map-view', 'pointermove', { clientX: 150, clientY: 350 });
     await frame();
-    const moved = sight();
+    const moved = await sight();
     assert.notEqual(moved, before, 'the fog moved while dragging');
     // Over the far wall: he can't go there, so it still sees from where he was dragged from.
     page.pointer('#map-view', 'pointermove', { clientX: 500, clientY: 300 });
     await frame();
-    assert.equal(sight(), before);
+    assert.equal(await sight(), before);
     page.pointer('#map-view', 'pointermove', { clientX: 150, clientY: 350 });
     await frame();
-    assert.equal(sight(), moved);
+    assert.equal(await sight(), moved);
     page.pointer('#map-view', 'pointerup', { clientX: 150, clientY: 350 });
     await page.settle();
   });

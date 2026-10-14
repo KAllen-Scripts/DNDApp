@@ -23,6 +23,37 @@ export const setToken = (t) => { memoryToken = t; storage.set(TOKEN_KEY, t); };
 /** Thrown when the server says we're not logged in (expired, logged out elsewhere, blocked). */
 export class LoggedOut extends Error {}
 
+// ---------- staying on the server's version of the page ----------
+
+// The server sends a fingerprint of the page's files with every response. If it
+// changes, the server was updated while this page was open: reload, so old page
+// code never runs against a new server. While someone is typing, wait until they
+// leave the field (or the tab is hidden), so nothing they're writing is lost.
+let pageVersion = null;
+let reloading = false;
+export const reloadPage = { now: () => location.reload() };
+const typing = () => {
+  const el = document.activeElement;
+  return !!el && (el.isContentEditable || (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && el.type !== 'button'));
+};
+function checkVersion(res) {
+  const v = res.headers?.get?.('x-page-version');
+  if (!v) return;
+  pageVersion ??= v;
+  if (v === pageVersion || reloading) return;
+  reloading = true;
+  const go = () => {
+    if (typing() && document.visibilityState !== 'hidden') return;
+    document.removeEventListener('focusout', later, true);
+    document.removeEventListener('visibilitychange', later);
+    reloadPage.now();
+  };
+  const later = () => setTimeout(go, 0);
+  document.addEventListener('focusout', later, true);
+  document.addEventListener('visibilitychange', later);
+  go();
+}
+
 export async function api(method, path, body) {
   const res = await fetch(path, {
     method,
@@ -32,6 +63,7 @@ export async function api(method, path, body) {
     },
     body: body && JSON.stringify(body),
   });
+  checkVersion(res);
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && path !== '/login') throw new LoggedOut(data.error);
   if (!res.ok) throw Object.assign(new Error(data.error ?? `Request failed (${res.status})`), { status: res.status, data });
@@ -55,6 +87,7 @@ export async function listen(path, onEvent, { signal } = {}) {
 }
 
 async function readEvents(res, onEvent) {
+  checkVersion(res);
   if (res.status === 401) throw new LoggedOut();
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Request failed (${res.status})`);
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -81,6 +114,7 @@ async function readEvents(res, onEvent) {
 /** Fetch a file that needs the login (an <img> can't send it) and return a URL for it. */
 export async function fileUrl(path) {
   const res = await fetch(path, { headers: { authorization: `Bearer ${getToken()}` } });
+  checkVersion(res);
   if (res.status === 401) throw new LoggedOut();
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Request failed (${res.status})`);
   return URL.createObjectURL(await res.blob());
