@@ -1013,6 +1013,10 @@ input.num, .sheet .num { text-align: center; }
 .cf-add input.num { width: 4rem; }
 .cf-add .muted { flex-basis: 100%; margin: 0; }
 .cf-add-open { justify-self: start; }
+.cf-subclass { display: grid; gap: 0.4rem; }
+.cf-subclass h4 { margin: 0.3rem 0 0; }
+.cf-unknown { margin: 0; }
+.cf-portent { min-width: 2.2rem; font-weight: 600; }
 
 /* Wild Shape (druids): forms, and the form they're in (sheet-wild-shape.js), under the Wild Shape row of Class features. */
 .wild-shape { display: grid; gap: 0.5rem; align-content: start; }

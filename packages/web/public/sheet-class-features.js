@@ -2,18 +2,20 @@
  * The Class features box on the character sheet: the uses, pools of points
  * and worked-out numbers this character's classes give them (Rage, Second
  * Wind, Ki, Lay on Hands, Sorcery Points...), Wild Shape with its forms
- * (sheet-wild-shape.js) for druids, and rows the player adds by hand (a feat
- * like Lucky, Breath Weapon, homebrew). Rests give them back. The rules (both
- * editions) are in shared/class-features.js; sheet.js owns the sheet and
- * passes in what this needs. Every maximum can be typed over: the DM has the
+ * (sheet-wild-shape.js) for druids, a Subclass features section under them
+ * (Superiority Dice, Portent, Combat Wild Shape...), and rows the player adds
+ * by hand (a feat like Lucky, Breath Weapon, homebrew). Rests give them back.
+ * The rules (both editions) are in shared/class-features.js and
+ * shared/subclass-features.js; sheet.js owns the sheet and passes in what this needs. Every maximum can be typed over: the DM has the
  * last word.
  */
 import { h } from './api.js';
-import { CLASSES } from './shared/sheet.js';
+import { CLASSES, classKey } from './shared/sheet.js';
 import {
-  RECHARGE_NAMES, SLOT_COST, MAX_CUSTOM, arcaneRecovery, featureRows, newCustomFeature, pointsToSlot, regainPactSlots,
-  setSpent, slotToPoints, sorcerousRestoration,
+  RECHARGE_NAMES, SLOT_COST, MAX_CUSTOM, arcaneRecovery, featureRows, healsForm, newCustomFeature, pointsToSlot, regainPactSlots,
+  setSpent, slotToPoints, sorcerousRestoration, useRolled,
 } from './shared/class-features.js';
+import { subclassOf } from './shared/subclass-features.js';
 
 const RECHARGE_SHORT = { short: 'Short rest', long: 'Long rest', short_one: 'Short rest: one', none: 'By hand' };
 const ordinal = (n) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
@@ -24,7 +26,7 @@ const MAX_PIPS = 10; // more than this shows as a number
  * @param {object} ctx.state  the sheet's state (sheet, calc, settings, edition, renders)
  * @param {() => void} ctx.changed  something on the sheet changed: save soon
  * @param {() => void} ctx.render  draw the whole sheet again (after slots or hit points change)
- * @param {(row) => void} ctx.heal  use a feature that heals (the server rolls it)
+ * @param {(row, extra?) => void} ctx.heal  use a feature the server rolls for (healing, a slot's healing with extra = { slot }, Portent)
  * @param {() => HTMLElement} ctx.wildShape  the druid's forms (made once, shown under the Wild Shape row)
  */
 export function classFeaturesBox({ state, changed, render, heal, wildShape }) {
@@ -38,7 +40,7 @@ export function classFeaturesBox({ state, changed, render, heal, wildShape }) {
   const paint = () => {
     // Redrawn only when what it shows changes, so typing elsewhere doesn't lose your place here.
     const list = rows();
-    const key = JSON.stringify([list, edition(), adding, state.sheet.spellcasting, state.calc.values.pact_slots]);
+    const key = JSON.stringify([list, edition(), adding, state.sheet.spellcasting, state.calc.values.pact_slots, state.sheet.classes, healsForm(state.sheet)]);
     if (key === drawn && el.childElementCount) return;
     drawn = key;
     draw(list);
@@ -66,13 +68,33 @@ export function classFeaturesBox({ state, changed, render, heal, wildShape }) {
 
   function draw(list) {
     const multi = new Set(list.filter((r) => r.class).map((r) => r.class)).size > 1;
+    const own = list.filter((r) => !r.subclass);
+    const sub = list.filter((r) => r.subclass);
     el.replaceChildren(
       h('h3', {}, 'Class features'),
-      list.length
-        ? h('div', { class: 'cf-rows' }, list.map((r) => rowView(r, multi)))
+      own.length
+        ? h('div', { class: 'cf-rows' }, own.map((r) => rowView(r, multi)))
         : h('p', { class: 'muted small' }, 'Nothing to track for your class at this level yet. Add your own below (a feat like Lucky, Breath Weapon...).'),
+      subclassSection(sub),
       h('p', { class: 'muted small cf-rules' }, `${edition()} rules. Rests give uses back; the DM has the last word on any number here.`),
       addForm(),
+    );
+  }
+
+  /**
+   * Subclass features, under their own heading, with a line for a subclass
+   * the list doesn't know (from another book): add its rows by hand.
+   */
+  function subclassSection(sub) {
+    const unknown = (state.sheet.classes ?? [])
+      .filter((c) => c.subclass?.trim() && classKey(c.name) && !subclassOf(classKey(c.name), c.subclass))
+      .map((c) => c.subclass.trim());
+    if (!sub.length && !unknown.length) return null;
+    const names = [...new Set(sub.map((r) => r.subclass))];
+    return h('div', { class: 'cf-subclass' },
+      h('h4', {}, 'Subclass features', names.length ? h('span', { class: 'muted small' }, ` (${names.join(', ')})`) : null),
+      sub.length ? h('div', { class: 'cf-rows' }, sub.map((r) => rowView(r, false))) : null,
+      unknown.length ? h('p', { class: 'muted small cf-unknown' }, `${unknown.join(', ')}: not in the list yet (only the Player's Handbook's subclasses are). Add its features as your own rows below.`) : null,
     );
   }
 
@@ -158,7 +180,35 @@ export function classFeaturesBox({ state, changed, render, heal, wildShape }) {
     }
     if (r.action === 'flexible_casting') return flexibleCasting(r, opts);
     if (r.action === 'arcane_recovery') return recovery(r, opts);
+    if (r.action === 'slot_heal') return slotHeal(r);
+    if (r.action === 'portent') return portent(r);
     return null;
+  }
+
+  /** Circle of the Moon (2014): spend a slot to heal (1d8 a level, rolled on the server), the form's hit points while in one. */
+  function slotHeal(r) {
+    const slots = [1, 2, 3, 4, 5, 6, 7, 8, 9].filter((n) => (state.calc.values[`slots.${n}`] ?? 0) > (state.sheet.spellcasting.slots_used?.[n] ?? 0));
+    if (!slots.length) return h('div', { class: 'cf-actions' }, h('span', { class: 'muted small' }, 'No spell slots left to spend.'));
+    const pick = h('select', { 'aria-label': 'Slot to spend' }, slots.map((n) => h('option', { value: n }, `${ordinal(n)} level (${n}d${r.dieSize ?? 8})`)));
+    return h('div', { class: 'cf-actions' },
+      h('span', { class: 'small' }, 'Spend a slot: '), pick,
+      h('button', { type: 'button', class: 'primary small', title: healsForm(state.sheet) ? 'Heal your Wild Shape form' : 'You aren\'t in a form with its own hit points: this heals you', onclick: () => heal(r, { slot: Number(pick.value) }) }, healsForm(state.sheet) ? 'Heal form' : 'Heal'),
+    );
+  }
+
+  /** Divination: the d20s rolled after a long rest, kept until used. */
+  function portent(r) {
+    const chips = r.rolled.map((n, i) => h('button', { type: 'button', class: 'small cf-portent', title: `Use this ${n} (it's gone once used)`, 'aria-label': `Use Portent roll ${n}`, onclick: () => {
+      if (!confirm(`Use your Portent ${n}?`)) return;
+      state.sheet.class_features = useRolled(state.sheet, r.id, i).class_features;
+      changed();
+      paint();
+    } }, String(n)));
+    return h('div', { class: 'cf-actions' },
+      chips.length ? h('span', { class: 'small' }, 'Kept: ') : h('span', { class: 'muted small' }, 'None kept.'),
+      chips,
+      h('button', { type: 'button', class: 'small', title: `Roll ${r.dice}d20 (after a long rest); replaces any kept`, onclick: () => heal(r) }, chips.length ? `Roll ${r.dice}d20 again` : `Roll ${r.dice}d20`),
+    );
   }
 
   /** Sorcerer: a slot into points, or points into a slot. */
@@ -182,7 +232,7 @@ export function classFeaturesBox({ state, changed, render, heal, wildShape }) {
     const inputs = spent.map((n) => [n, h('input', { type: 'number', min: 0, max: state.sheet.spellcasting.slots_used[n], value: 0, class: 'num', 'aria-label': `${ordinal(n)}-level slots to get back` })]);
     return h('form', { class: 'cf-actions', onsubmit: (e) => {
       e.preventDefault();
-      tryIt(() => arcaneRecovery(state.sheet, Object.fromEntries(inputs.map(([n, i]) => [n, i.value])), opts()));
+      tryIt(() => arcaneRecovery(state.sheet, Object.fromEntries(inputs.map(([n, i]) => [n, i.value])), { ...opts(), id: r.id }));
     } },
       h('span', { class: 'small' }, `Get back up to ${budget} level${budget === 1 ? '' : 's'} of slots: `),
       inputs.map(([n, i]) => h('label', { class: 'small cf-slot' }, `${ordinal(n)} `, i)),

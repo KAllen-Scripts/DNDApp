@@ -420,6 +420,26 @@ test('sheet: Class features shows this class\'s uses, ticks them, takes a typed 
   });
 });
 
+test('sheet: Subclass features sit under their own heading; the subclass box suggests the book\'s subclasses; one from another book says to add rows by hand', async () => {
+  const before = (t) => t.request('PUT', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token, body: { sheet: { ...emptySheet({ name: 'Brakka' }), classes: [{ name: 'Fighter', subclass: 'Battle Master', level: 3 }, { name: 'Cleric', subclass: 'Forge', level: 1 }], abilities: { str: 16, dex: 12, con: 14, int: 8, wis: 10, cha: 10 } }, version: 0 } });
+  await withPage(sheetPage({ before }), async (page, t) => {
+    page.click('[data-tab=sheet]');
+    const section = page.el('#sheet .cf-subclass');
+    assert.match(page.text(section.querySelector('h4')), /Subclass features \(Battle Master\)/);
+    assert.deepEqual([...section.querySelectorAll('.cf-row')].map((r) => r.dataset.feature), ['superiority_dice']);
+    assert.equal(section.querySelectorAll('[data-feature="superiority_dice"] .pips input').length, 4);
+    assert.match(page.text(section.querySelector('.cf-unknown')), /Forge: not in the list yet/);
+    const sub = byLabel(page, 'Subclass');
+    assert.equal(sub.getAttribute('list'), 'dl-subclasses-fighter');
+    assert.ok([...page.el('#dl-subclasses-fighter').options].some((o) => o.value === 'Battle Master'));
+    // Ticking a die saves like any class feature.
+    page.click(byLabel(page, 'Superiority Dice use 1 spent'));
+    await saved(page);
+    const { sheet } = await serverSheet(t);
+    assert.equal(sheet.class_features.spent.superiority_dice, 1);
+  });
+});
+
 test('sheet: changed elsewhere meanwhile: keep mine (OK) or load the other version (Cancel)', async () => {
   await withPage(sheetPage(), async (page, t) => {
     page.click('[data-tab=sheet]');

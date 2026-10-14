@@ -34,14 +34,16 @@ export function registerRests(app, r) {
   });
 
   /**
-   * Use a class feature that heals: { id: 'second_wind', visibility? }. The
-   * server spends a use, rolls its dice (shared like any roll) and adds the
-   * hit points. Returns what the hit dice route returns.
+   * Use a class feature the server rolls for: { id: 'second_wind', visibility?,
+   * slot? }. Healing ones spend a use (or a spell slot of level `slot`, for
+   * Combat Wild Shape), roll their dice (shared like any roll) and add the
+   * hit points; Portent rolls its d20s and keeps them on the sheet. Returns
+   * what the hit dice route returns.
    */
   app.post('/campaigns/:cid/sheet/features/use', async (request) => {
     const { cid } = player(request);
-    const { id, visibility } = z.object({ id: z.string().min(1).max(64), visibility: z.enum(ROLL_VISIBILITY).default('party') }).parse(request.body);
-    return rests.useFeature(cid, request.user.id, id, { visibility });
+    const { id, visibility, slot } = z.object({ id: z.string().min(1).max(64), visibility: z.enum(ROLL_VISIBILITY).default('party'), slot: z.number().int().min(1).max(9).optional() }).parse(request.body);
+    return rests.useFeature(cid, request.user.id, id, { visibility, slot });
   });
 
   /** Take a short rest on your own sheet (Pact Magic slots come back). Returns { sheet, version, updated_at }. */
