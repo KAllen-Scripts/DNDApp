@@ -988,6 +988,44 @@ input.num, .sheet .num { text-align: center; }
 .add-spell .muted { flex-basis: 100%; }
 .add-spell .muted:empty { display: none; }
 .spell-list { display: grid; gap: 0.6rem; }
+/* Wild Shape (druids): forms, uses, and the form they're in (sheet-wild-shape.js). */
+.wild-shape { display: grid; gap: 0.5rem; align-content: start; }
+.wild-shape[hidden] { display: none; }
+.ws-rules { margin: 0; }
+.ws-uses { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.ws-uses .muted { flex-basis: 100%; }
+.ws-forms { display: grid; gap: 0.35rem; }
+.ws-form { border: 1px solid var(--border); border-radius: 6px; padding: 0.3rem 0.5rem; }
+.ws-form > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; cursor: pointer; }
+.ws-form > summary .spacer, .ws-attack-head .spacer, .ws-active-head .spacer { flex: 1; }
+.ws-form-name { font-weight: 600; }
+.ws-form.now { border-color: var(--accent); }
+.ws-form.not-yet .ws-form-name { opacity: 0.6; }
+.ws-form button.small { height: 1.8rem; padding: 0 0.7rem; }
+.ws-form p { margin: 0.3rem 0; }
+.ws-active { display: grid; gap: 0.5rem; padding: 0.5rem; border: 2px solid var(--accent); border-radius: 8px; }
+.ws-active-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; justify-content: space-between; }
+.ws-active-head h4 { margin: 0; }
+.ws-vitals { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); gap: 0.4rem; }
+.ws-vitals .stat { padding: 0.3rem; border: 1px solid var(--border); border-radius: 6px; }
+.ws-val, .ws-hp-val { font-size: 1.15rem; font-weight: 600; }
+.ws-hp-val { white-space: nowrap; }
+.ws-speed .ws-val { font-size: 0.85rem; }
+.ws-hp input { width: 3.5rem; height: 2.2rem; font-size: 1.15rem; font-weight: 600; text-align: center; }
+.ws-scores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; }
+.ws-score { display: flex; flex-direction: column; align-items: center; gap: 0.1rem; padding: 0.3rem 0.2rem; border: 1px solid var(--border); border-radius: 6px; }
+.ws-mod { font-size: 1.1rem; font-weight: 600; }
+.ws-skills { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.6rem; margin: 0; }
+.ws-attacks, .ws-traits { display: grid; gap: 0.3rem; }
+.ws-attack-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+.ws-text { margin: 0.1rem 0; }
+.ws-banner { margin: 0.2rem 0 0; color: var(--accent); font-weight: 600; }
+.ws-banner[hidden] { display: none; }
+.ws-add { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.ws-add input { flex: 1 1 12rem; width: auto; }
+.ws-add button { height: var(--ctl); padding: 0 1rem; }
+.ws-add .muted { flex-basis: 100%; }
+.ws-add .muted:empty { display: none; }
 .spell-list > p { margin: 0; }
 .spell-group { display: grid; gap: 0.35rem; }
 .spell-group h4 { margin: 0.3rem 0 0.1rem; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -1031,7 +1069,7 @@ details.spell > summary::-webkit-details-marker { display: none; }
 
 @media print {
   body { background: #fff; color: #000; }
-  .topbar, .sheet-bar, .sheet-review, .add-spell, .spell-actions, .slot-help, .reset, .add-row, .icon-x, .icon-roll, .spell-rolls select, .sh-tabbar, button.link { display: none !important; }
+  .topbar, .sheet-bar, .sheet-review, .add-spell, .ws-add, .spell-actions, .slot-help, .reset, .add-row, .icon-x, .icon-roll, .spell-rolls select, .sh-tabbar, button.link { display: none !important; }
   #app-view, #app-view.wide { --page-width: none; height: auto; display: block; }
   .panel { display: block; overflow: visible; padding: 0; }
   .panel:not(#tab-sheet) { display: none !important; }

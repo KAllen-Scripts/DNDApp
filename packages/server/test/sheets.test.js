@@ -237,6 +237,46 @@ test('spell lookup: SRD first (no AI), then the books (AI tidies the scan), then
   }
 });
 
+test('wild shape forms: SRD beasts with no AI, else the AI\'s memory (never the DM\'s creatures); the sheet comes with the rules edition', async () => {
+  const llm = createFakeLLM({
+    structured: async ({ prompt }) => ({
+      found: /Cave Badger/.test(prompt), name: 'Cave Badger', size: 'small', type: 'beast', cr: '1/4', ac: 12, hp_max: 9, hp_formula: '2d6+2',
+      speed: { walk: 20, fly: 0, swim: 0, climb: 0, burrow: 10 }, abilities: { str: 12, dex: 10, con: 12, int: 2, wis: 12, cha: 5 },
+      saves: [], skills: [{ skill: 'Perception', bonus: 3 }], senses: 'darkvision 30 ft.', traits: [],
+      attacks: [{ name: 'Bite', bonus: 3, save: '', dc: null, damage: '1d6+1 piercing', notes: '' }],
+    }),
+  });
+  const t = await setup({ llm });
+  try {
+    const lookup = (name) => t.request('GET', `/campaigns/${t.campaign.id}/forms/lookup?name=${encodeURIComponent(name)}`, { as: t.sam.token });
+    const wolf = (await lookup('wolf')).json();
+    assert.equal(wolf.name, 'Wolf');
+    assert.equal(wolf.source, 'srd');
+    assert.deepEqual([wolf.cr, wolf.ac, wolf.hp_max, wolf.speed.walk], ['1/4', 13, 11, 40]);
+    assert.deepEqual(wolf.attacks.find((a) => a.name === 'Bite'), { name: 'Bite', bonus: 4, save: '', dc: null, damage: '2d4+2 piercing', notes: wolf.attacks[0].notes });
+    assert.equal((await lookup('Brown Beer')).json().name, 'Brown Bear');
+    assert.equal(llm.calls.length, 0);
+
+    // The DM's own creature of that name is never used for a player.
+    t.creatures.create(t.campaign.id, { name: 'Cave Badger', stats: { text: 'secret DM notes' } }, { by: null });
+    const badger = (await lookup('Cave Badger')).json();
+    assert.equal(badger.source, 'ai');
+    assert.deepEqual(badger.skills, { perception: 3 });
+    assert.equal(llm.calls[0].purpose, 'form:memory');
+    assert.equal((await lookup('Zorblax')).statusCode, 404);
+
+    const names = (await t.request('GET', `/campaigns/${t.campaign.id}/forms`, { as: t.sam.token })).json();
+    assert.ok(names.some((f) => f.name === 'Giant Eagle' && f.speed.fly === 80));
+    assert.ok(names.some((f) => f.name === 'Fire Elemental' && f.type === 'elemental'));
+
+    assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token })).json().edition, '2014');
+    t.store.setSettings(t.campaign.id, { edition: '2024' });
+    assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token })).json().edition, '2024');
+  } finally {
+    await t.cleanup();
+  }
+});
+
 test('character sheets are restored from the archive', async () => {
   const t = await setup();
   try {

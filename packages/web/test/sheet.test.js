@@ -323,6 +323,66 @@ test('sheet: spells roll to hit with the spell attack bonus, or show their DC, a
   });
 });
 
+test('sheet: Wild Shape shows only for druids; forms are looked up, turned into (a use spent), rolled from, hurt until they change back', async () => {
+  const dice = [15, 3, 2];
+  mock.method(crypto, 'randomInt', (min) => dice.shift() ?? min);
+  try {
+    const before = (t) => t.request('PUT', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token, body: { sheet: { ...emptySheet({ name: 'Fern' }), classes: [{ name: 'Wizard', subclass: '', level: 2 }], abilities: { str: 8, dex: 14, con: 10, int: 12, wis: 16, cha: 10 }, hp: { current: 12, temp: null } }, version: 0 } });
+    await withPage(sheetPage({ before }), async (page, t) => {
+      page.click('[data-tab=sheet]');
+      assert.ok(page.el('#sheet .wild-shape').hidden, 'not a druid: no Wild Shape');
+      page.type(byLabel(page, 'Class'), 'Druid');
+      assert.ok(!page.el('#sheet .wild-shape').hidden);
+      assert.match(page.text('#sheet .ws-rules'), /Druid 2, 2014 rules\. Up to challenge 1\/4, no flying or swimming speed, for up to 1 hour/);
+      assert.match(page.text('#sheet .ws-left'), /2 of 2/);
+      assert.doesNotMatch(page.text('#sheet .wild-shape'), /null|undefined/);
+
+      await page.waitFor(() => page.$$('#dl-forms option').length, { what: 'form suggestions' });
+      assert.ok(page.$$('#dl-forms option').some((o) => o.value === 'Wolf'));
+      for (const name of ['Wolf', 'Giant Eagle']) {
+        page.type(byLabel(page, 'Form to add'), name);
+        page.submit('#sheet .ws-add');
+        await page.waitFor(() => page.$$('#sheet .ws-form-name').some((n) => n.textContent === name), { what: `${name} on the sheet` });
+      }
+      const formRow = (name) => page.$$('#sheet .ws-form').find((f) => f.querySelector('.ws-form-name').textContent === name);
+      const turnInto = (name) => [...formRow(name).querySelectorAll('button')].find((b) => /Turn into|Now/.test(b.textContent));
+      assert.ok(turnInto('Giant Eagle').disabled, 'too big and it flies');
+      assert.match(page.text(formRow('Giant Eagle')), /Not yet: Challenge 1 is over your limit/);
+
+      page.click(turnInto('Wolf'));
+      assert.match(page.text('#sheet .ws-banner'), /Wild Shape: Wolf, 11 of 11 hit points/);
+      assert.match(page.text('#sheet .ws-left'), /1 of 2/);
+      assert.match(page.text('#sheet .ws-active h4'), /as a Wolf/);
+      // The wolf's Strength (12) and Dexterity (15) with Fern's Wisdom (16, proficient save).
+      const scoreRolls = page.$$('#sheet .ws-score');
+      assert.equal(page.text(scoreRolls[1].querySelector('.ws-mod')), '+2');
+      assert.equal(page.text(scoreRolls[4].querySelector('.ws-save')), 'Save +5');
+
+      page.click(byLabel(page, 'Roll Bite to hit'));
+      await page.settle();
+      const last = () => page.requests.filter((r) => r.path.endsWith('/roll')).at(-1).body;
+      assert.deepEqual([last().notation, last().label], ['1d20+4', 'Wolf: Bite: to hit']);
+      page.click(byLabel(page, 'Roll Bite damage'));
+      await page.settle();
+      assert.equal(last().notation, '2d4+2');
+
+      // 15 damage on the wolf: it drops and Fern takes the other 4.
+      page.type(byLabel(page, 'Wolf hit points'), '-4');
+      assert.match(page.dialogs.at(-1).message, /Wolf dropped to 0 hit points: you change back and take the other 4 damage yourself/);
+      assert.ok(page.el('#sheet .ws-banner').hidden);
+      assert.equal(byLabel(page, 'Current hit points').value, '8');
+      await saved(page);
+      const { sheet } = await serverSheet(t);
+      assert.equal(sheet.wild_shape.active, null);
+      assert.equal(sheet.wild_shape.uses_spent, 1);
+      assert.equal(sheet.hp.current, 8);
+      assert.deepEqual(sheet.wild_shape.forms.map((f) => f.name), ['Wolf', 'Giant Eagle']);
+    });
+  } finally {
+    mock.restoreAll();
+  }
+});
+
 test('sheet: changed elsewhere meanwhile: keep mine (OK) or load the other version (Cancel)', async () => {
   await withPage(sheetPage(), async (page, t) => {
     page.click('[data-tab=sheet]');

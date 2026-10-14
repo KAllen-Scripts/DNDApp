@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.js",
     "./sheet.js": "./src/sheet.js",
+    "./wild-shape.js": "./src/wild-shape.js",
     "./dice.js": "./src/dice.js",
     "./rolls.js": "./src/rolls.js",
     "./gear.js": "./src/gear.js",

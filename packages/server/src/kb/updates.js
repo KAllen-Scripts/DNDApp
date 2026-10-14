@@ -147,6 +147,12 @@ export function sheetText(sheet, settings = {}) {
   if (values.spell_ability) add('Spell save DC', values.spell_dc);
   add('Spell slots used', Object.entries(sheet.spellcasting?.slots_used ?? {}).map(([n, used]) => `level ${n}: ${used}`).join(', '));
   add('Spells', sheet.spells.map((s) => `${s.name} (${s.level ? `level ${s.level}` : 'cantrip'}${s.prepared ? ', prepared' : ''})`).join(', '));
+  const shape = sheet.wild_shape;
+  if (shape?.forms.length) {
+    add('Wild Shape forms', shape.forms.map((f) => `${f.name} (CR ${f.cr})`).join(', '));
+    const form = shape.forms.find((f) => f.id === shape.active?.form);
+    if (form) add('In Wild Shape as', `${form.name}${shape.active.hp != null ? ` (${shape.active.hp} of ${form.hp_max} hit points)` : ''}`);
+  }
   // A spell of the player's own (homebrew) is known only from the sheet, so its text comes too.
   for (const s of sheet.spells.filter((sp) => sp.source === 'custom' && (sp.description || sp.higher_levels))) {
     add(`Spell ${s.name} (the player's own)`, [s.description, s.higher_levels && `At higher levels: ${s.higher_levels}`].filter(Boolean).join('\n'));
