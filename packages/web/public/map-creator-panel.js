@@ -179,6 +179,7 @@ function options(c, act) {
   if (t === 'floor') {
     return [
       heading('Floor'),
+      h('p', { class: 'muted small' }, 'Pick a floor and paint, then pick another: mix as many as you like (stone inside, grass outside, a dirt path, a pond).'),
       ...floorPalette(c, act, { tool: 'floor' }),
       h('div', { class: 'creator-row' }, choice('Brush', 'brush', c.floorShape, (v) => { c.floorShape = v; act.panel(); }, { 'data-floor-shape': 'brush' }), choice('Rectangle', 'rect', c.floorShape, (v) => { c.floorShape = v; act.panel(); }, { 'data-floor-shape': 'rect' })),
       c.floorShape === 'brush' ? h('div', { class: 'creator-row' }, sizes, check('Round', c.round, (v) => { c.round = v; })) : null,

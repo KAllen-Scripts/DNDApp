@@ -152,6 +152,26 @@ test('creator: the DM starts blank, draws a room with a door, a pond and a campf
   });
 });
 
+// The owner read the start screen's one floor as "a map has one floor" (2026-10-14).
+test('creator: the start screen says its floor is only a start, and a blank map takes several floors', async () => {
+  await withPage(dm(), async (page, t) => {
+    await openNew(page);
+    assert.equal(page.$('#creator-ground').closest('label')?.querySelector('span')?.textContent, 'Floor to start with');
+    assert.match(page.text('#creator-floors-hint'), /as many kinds of floor as you like/);
+    page.type('#creator-ground', 'f');
+    page.click('#creator-blank');
+    tool(page, 'floor');
+    assert.match(page.text('#creator-options'), /mix as many as you like/);
+    page.click('[data-floor="s"]');
+    click(page, [2.5, 2.5]);
+    page.click('[data-floor="W"]');
+    click(page, [5.5, 2.5]);
+    page.type('#creator-name', 'Mixed');
+    await saveAndClose(page);
+    assert.equal(t.maps.list(t.campaign.id)[0].design.floor[2].slice(1, 7), 'fsffWf', 'flagstones, a square of stone, a square of water');
+  });
+});
+
 // A fast drag (one pointer move across many squares) painted only its two ends.
 test('regression: creator: a fast floor drag paints every square between the pointer\'s stops', async () => {
   await withPage(dm(), async (page, t) => {

@@ -32,7 +32,7 @@ export function renderStart(c, act) {
     h('label', { class: 'map-check' }, h('input', { type: 'checkbox', id: `${prefix}-sized`, checked: of.on, onchange: (e) => { of.on = e.target.checked; renderStart(c, act); } }), ' At a size of my own'),
     of.on ? size(prefix, of, min) : null,
   ];
-  const ground = h('select', { id: 'creator-ground', 'aria-label': 'Floor everywhere', onchange: (e) => { s.ground = e.target.value; } },
+  const ground = h('select', { id: 'creator-ground', onchange: (e) => { s.ground = e.target.value; } },
     ...GROUNDS.map((ch) => new Option(ch === '.' ? 'Nothing (black)' : FLOORS[ch].name, ch, false, s.ground === ch)));
   const kinds = h('div', { class: 'creator-kinds' }, s.kinds.map((k) => h('button', {
     type: 'button', class: 'ghost creator-kind', 'data-generate': k.key, 'aria-pressed': String(s.kind === k.key), disabled: s.busy,
@@ -44,7 +44,9 @@ export function renderStart(c, act) {
     h('div', { class: 'creator-start-choices' },
       h('section', { class: 'creator-start-part' },
         h('h3', {}, 'Start blank'),
-        h('div', { class: 'creator-row' }, size('creator-start', s.blank), ground),
+        h('div', { class: 'creator-row' }, size('creator-start', s.blank)),
+        h('label', { class: 'map-field' }, h('span', {}, 'Floor to start with'), ground),
+        h('p', { class: 'muted small', id: 'creator-floors-hint' }, 'Only a start: a map can have as many kinds of floor as you like. Paint others over it with the Floor and Fill tools, and each Room brings its own.'),
         h('button', { type: 'button', class: 'primary', id: 'creator-blank', onclick: () => act.begin(emptyDesign(clampSize(s.blank.cols), clampSize(s.blank.rows), s.ground)) }, 'Start drawing'),
       ),
       h('section', { class: 'creator-start-part' },
