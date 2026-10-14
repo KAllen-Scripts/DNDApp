@@ -43,7 +43,7 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 - **Full screen map** (PR #25, merged 2026-10-09): a Full screen button on the map toolbar; the map fills the screen and its tools float over it, see-through (0.55) until pointed at or focused; tools that are on stay solid. Only the main ones (Fit, Measure, Ping, Draw, Template, Initiative, Exit) show; More shows the rest. The DM's **Edit** button (same PR) shows or hides their set-up tools (Walls, Add token, Fog & walls, Map settings, Import map), kept per browser. Falls back to filling the window where the browser can't go full screen (iPhone). SPEC §6.6.
 - **Point buy calculator** (PR #41, merged 2026-10-13; the owner asked): a **Point buy** button by the ability scores (off to start, saved per sheet) shows a table of what each score cost (27 points, 8 to 15 before bonuses) with − and + buttons, the bonuses and the points left, and says what's wrong. It reads the scores as they're typed. Rules per sheet: the campaign's edition (default), 2014 (bonuses from the race, PHB races; Half-Elf and Variant Human choose) or 2024 (the player chooses +2/+1 or +1/+1/+1, limited to a PHB background's three). SPEC §6.4, `shared/src/point-buy.js`. Only seen in jsdom.
 - **Review sheet** (2026-10-13; the owner asked: "review a character sheet. See if it's valid based on level, class, etc."): a button on the Sheet tab, run only when pressed. Free rules checks on the server (levels, XP, ability scores, multiclass prerequisites, spells above the slots, expertise, typed-over numbers the rules disagree with), then the AI checks the rest (features by level, racial traits, skill and spell counts, spell lists, feats, gear proficiency) against the group's books, looking things up online only when the books don't cover them (3 at most). Findings show above the sheet as "Against the rules" and "Worth checking" with where each rule is. Not yet tried with the real AI (SPEC §6.4).
-- **Phone layout** (2026-10-14, stages 1 to 4 of 6; the owner asked): on a phone the top bar hides behind a ☰ button and opens as a menu from the bottom, toolbars fold into ⋯ menus, and each page fills the screen. Ask, Notes, Handouts, the Sheet, the Inventory, the Map, the dice tray and dialogs are done; the DM's pages are next ([docs/notes/mobile-ui.md](docs/notes/mobile-ui.md)). Look → Phone layout turns it on or off.
+- **Phone layout** (2026-10-14, stages 1 to 5 of 6; the owner asked): on a phone the top bar hides behind a ☰ button and opens as a menu from the bottom, toolbars fold into ⋯ menus, and each page fills the screen. Ask, Notes, Handouts, the Sheet, the Inventory, the Map, the dice tray, dialogs and the DM's pages are done; login and admin are next ([docs/notes/mobile-ui.md](docs/notes/mobile-ui.md)). Look → Phone layout turns it on or off.
 - **Look:** 12 themes, 4 page layouts, chat and sheet styles and layouts, plus tab order, the map toolbar's place, which panel goes beside the map (the toolbar menu or Look) and on which side, token names and an accent colour. All per browser. The top bar stays put when switching tabs (2026-10-10). The owner hasn't decided which to keep (don't prune yet).
 - **Regression tests** (2026-10-13, branch `claude/modest-johnson-ma7jrp`; the owner asked): every fixed bug gets a `regression: …` test listed in [docs/regressions.md](docs/regressions.md); `npm run test:regressions` runs them (about 20 seconds); the `regression-keeper` worker (`.claude/agents/`) writes and checks them, and a Claude Code hook runs them before every commit that touches `packages/`. 2 so far, 6 past fixes waiting to be backfilled.
 - **Security:** audited 2026-10-07 (headers, strict CSP: scripts only from the server, body limits, login limits, live streams that end with access). Hosting must go through Cloudflare Tunnel with `HOST=127.0.0.1`.
@@ -62,7 +62,7 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 
 ## Next steps
 
-0. **Phone layout (2026-10-14; the owner asked):** stages 1 to 4 are in (☰ menu, ⋯ menus, Ask, Notes, Handouts, Sheet, Inventory, Map, dice and dialogs). Next: the DM's pages, then login and admin ([docs/notes/mobile-ui.md](docs/notes/mobile-ui.md)). Each stage puts its real-phone check on the VS Code list.
+0. **Phone layout (2026-10-14; the owner asked):** stages 1 to 5 are in (☰ menu, ⋯ menus, Ask, Notes, Handouts, Sheet, Inventory, Map, dice and dialogs, the DM's pages). Next: the DM's pages, then login and admin ([docs/notes/mobile-ui.md](docs/notes/mobile-ui.md)). Each stage puts its real-phone check on the VS Code list.
 0. **Thorough archiving (2026-10-14): see it with the real AI** (on the VS Code list below). A session run will use more tool calls and tokens than before (up to 500 calls); if a run hits the cap, raise `ARCHIVIST_MAX_TOOL_CALLS`. To re-archive past sessions with the new instructions, run a rebuild (the knowledge base is regenerated from the archive).
 0. **Review sheet: try it with the real AI** (on the VS Code list below). If it's slow or costly, lower `EFFORT_REVIEW` or `SHEET_REVIEW_MAX_TOOL_CALLS`; if it nags about things that are fine, tighten the prompt in `sheets/review.js`.
 0. **PR #33, the AI walls effort picker: waiting on the owner's OK.** Merge `main` into its branch first (it's missing #35), rerun `npm test`, then merge on his word.
@@ -1092,9 +1092,16 @@ The owner: "I want to make sure it archives data THOROUGHLY. No truncating or sh
 
 ### 2026-10-14: Phone layout, fourth stage (dice and dialogs)
 
+- PR #51, merged 2026-10-14.
+
 - On a phone every dialog (Rest, Settings, Look, tokens, creatures, items, merchants, the shop…) is a sheet from the bottom, the full width of the screen, with its buttons in a row that stays at the bottom while the rest scrolls. The map creator is left as a whole page.
 - The dice tray comes up from the bottom too, without the keyboard tips, and opening it focuses its first button instead of the notation box (the keyboard would cover the dice).
 - Checked in headless Chromium at iPhone 13 size: dice, Look, Rest, Settings and New creature; no page errors. Tests: `phone.test.js` (the dice tray doesn't focus a text box on a phone, does on a PC).
+
+### 2026-10-14: Phone layout, fifth stage (the DM's pages)
+
+- Creatures, Items and Merchants on a phone: Find and **+ New** in a row that stays at the top while the list scrolls; Find online (and Items' Look up) in ⋯; the status ("Looking up…") shows as a small note under the row. "What the players have equipped" has a smaller heading with Refresh beside it. The Archivist's first heading leaves room for ☰. The map creator is left as it is (a whole page).
+- Checked in headless Chromium at iPhone 13 size as the DM; no page errors. Tests: `phone.test.js` (what stays in each row, what goes in ⋯, New still opens its dialog).
 
 ## Verified vs. not verified
 

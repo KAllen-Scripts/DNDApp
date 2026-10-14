@@ -17,7 +17,7 @@
   gap: 0.5rem;
 }
 /* Pages not converted yet keep their first row clear of the ☰ button. */
-:root[data-phone] #app-view > .panel:not(.ask-panel, #tab-notes, .handouts-panel, .sheet-panel, .map-panel) { padding-top: calc(3rem + env(safe-area-inset-top)); }
+:root[data-phone] #app-view > .panel:not(.ask-panel, #tab-notes, .handouts-panel, .sheet-panel, .map-panel, .creatures-panel, .archivist-panel) { padding-top: calc(3rem + env(safe-area-inset-top)); }
 
 /* ---------- ☰: the menu button, always in the top right corner ---------- */
 :root[data-phone] .phone-nav {
@@ -129,9 +129,10 @@
 
 /* ---------- Sheet and Inventory ---------- */
 /* The bar stays at the top while the sheet scrolls: Next d20, whether it's saved, and ⋯ (Review, Upload, Download, Print, Pop out). */
-:root[data-phone] #app-view > .sheet-panel { padding-top: 0; }
+:root[data-phone] #app-view > :is(.sheet-panel, .creatures-panel) { padding-top: 0; }
 :root[data-phone] .sheet-panel > .sheet-bar,
-:root[data-phone] .sheet-panel > #gear-add {
+:root[data-phone] .sheet-panel > #gear-add,
+:root[data-phone] .creatures-panel > .creatures-bar {
   position: sticky; top: 0; z-index: 4; flex-wrap: nowrap; gap: 0.35rem; margin: 0 -0.5rem; min-height: 3.1rem;
   padding: calc(0.4rem + env(safe-area-inset-top)) 3.2rem 0.4rem 0.5rem;
   background: linear-gradient(var(--bg), var(--bg)); border-bottom: 1px solid var(--border);
@@ -150,7 +151,8 @@
 :root[data-phone] #gear-add button[type=submit] { flex: none; padding: 0.45rem 0.8rem; font-size: 0; }
 :root[data-phone] #gear-add button[type=submit]::after { content: "Add"; font-size: 0.95rem; }
 :root[data-phone] #gear-add #gear-status:empty { display: none; }
-:root[data-phone] #gear-add #gear-status { position: absolute; left: 0.6rem; right: 3.2rem; bottom: -1.5rem; padding: 0.15rem 0.5rem; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 2px 8px rgb(0 0 0 / 0.15); }
+:root[data-phone] .creatures-panel > .creatures-bar [role=status]:empty { display: none; }
+:root[data-phone] :is(#gear-add #gear-status, .creatures-panel > .creatures-bar [role=status]) { position: absolute; left: 0.6rem; right: 3.2rem; bottom: -1.5rem; padding: 0.15rem 0.5rem; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 2px 8px rgb(0 0 0 / 0.15); }
 
 /* ---------- Map ---------- */
 /* The map is the whole screen. Its main tools float in a row at the bottom (Fit, Measure, Ping, Draw,
@@ -224,3 +226,18 @@
 :root[data-phone] .look-inner { max-height: 92dvh; }
 :root[data-phone] .look-body { padding: 0.3rem 0.75rem calc(1rem + env(safe-area-inset-bottom)); }
 :root[data-phone] .look-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.5rem; }
+
+/* ---------- The DM's pages ---------- */
+/* Creatures, Items, Merchants: Find and New in a row that stays at the top; Find online and Look up in ⋯. */
+:root[data-phone] .creatures-panel > .creatures-bar { margin-bottom: 0.1rem; }
+:root[data-phone] .creatures-panel > .creatures-bar input[type=search] { order: -1; flex: 1; min-width: 0; width: auto; padding: 0.45rem 0.6rem; }
+:root[data-phone] .creatures-panel > .creatures-bar > .primary { flex: none; padding: 0.45rem 0.8rem; font-size: 0; }
+:root[data-phone] .creatures-panel > .creatures-bar > .primary::after { content: "+ New"; font-size: 0.95rem; }
+:root[data-phone] .creatures { gap: 0.45rem; }
+:root[data-phone] .equipped-gear { margin-top: 0.75rem; }
+:root[data-phone] .equipped-gear .creatures-bar { flex-wrap: nowrap; margin-bottom: 0.4rem; }
+:root[data-phone] .equipped-gear h2 { flex: 1; margin: 0; font-size: 1.05rem; }
+:root[data-phone] .equipped-gear .creatures-bar button { padding: 0.35rem 0.7rem; }
+/* Archivist: its first heading leaves room for ☰. */
+:root[data-phone] .archivist-panel > h2:first-child { margin-top: 0.15rem; padding-right: 2.7rem; min-height: 2.3rem; display: flex; align-items: center; }
+:root[data-phone] .archivist-panel .composer-row .muted:empty { display: none; }

@@ -756,6 +756,9 @@ initArchivistActions();
 initCreatureActions({ place: placeCreature });
 initItemActions();
 initMerchantActions({ place: placeMerchant });
+// The DM's lists: Find and New stay in the row on a phone; the rest go in ⋯.
+phoneMenu($('#tab-creatures > .creatures-bar'), { label: 'More: find a creature online', keep: 'input, .primary, [role=status]' });
+phoneMenu($('#tab-items > .creatures-bar'), { label: 'More: look up, find online', keep: 'input, .primary, [role=status]' });
 initDice();
 initRests();
 initSettings();

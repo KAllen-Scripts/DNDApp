@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-import { withPage, createFakeLLM, mapReading, importMap } from './helpers.js';
+import { withPage, createFakeLLM, mapReading, importMap, addDm } from './helpers.js';
 
 const NO_3D = { 'dndapp.dice': JSON.stringify({ threeD: false, sound: false }) };
 const PHONE_QUERY = 'max-width: 640px), (pointer: coarse) and (max-height: 500px';
@@ -165,6 +165,20 @@ test('the dice tray opens without popping the keyboard up on a phone', async () 
   await withPage(asSam({ look: { phone: 'off' } }), async (page) => {
     page.click('#dice-open');
     assert.equal(page.document.activeElement?.tagName, 'INPUT', 'on a PC the notation box has focus');
+  });
+});
+
+test("the DM's lists keep Find and New in the row; Find online and Look up go in ⋯", async () => {
+  await withPage({ before: async (t) => ({ dana: await addDm(t) }), page: (t, { dana }) => ({ as: dana, storage: { ...NO_3D, 'dndapp.look': JSON.stringify({ phone: 'on' }) } }) }, async (page) => {
+    for (const [tab, folded] of [['creatures', ['#creature-find']], ['items', ['#item-lookup', '#item-find']]]) {
+      const bar = page.$(`#tab-${tab} > .creatures-bar`);
+      for (const kept of ['input[type=search]', '.primary', '[role=status]', '.phone-more']) assert.equal(bar.querySelector(kept).parentElement, bar, `${tab}: ${kept} stays in the row`);
+      for (const id of folded) assert.ok(bar.querySelector('.phone-menu-list').contains(page.$(id)), `${tab}: ${id} is in ⋯`);
+    }
+    assert.ok(!page.$('#tab-merchants > .creatures-bar .phone-more'), 'Merchants has nothing to fold');
+    page.click('[data-tab=creatures]');
+    page.click('#creature-new');
+    assert.ok(page.$('#creature-dialog').open, 'New still works');
   });
 });
 
