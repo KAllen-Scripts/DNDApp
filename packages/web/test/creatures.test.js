@@ -96,7 +96,7 @@ test('map: Add token offers the DM\'s creatures, and a token on the map can be s
     await page.settle();
     const pick = page.$$('#map-dialog select').find((s) => [...s.options].some((o) => o.textContent === 'Mira the innkeeper (NPC)'));
     assert.ok(pick, 'the creatures are offered');
-    page.type(pick, pick.options[1].value);
+    page.type(pick, [...pick.options].find((o) => o.textContent === 'Mira the innkeeper (NPC)').value);
     assert.match(page.text('#map-dialog h2'), /Place Mira the innkeeper/);
     page.submit('#map-dialog form');
     await page.settle();

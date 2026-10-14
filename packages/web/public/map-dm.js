@@ -213,8 +213,6 @@ export async function tokenDialog(token = null) {
   const dialog = $('#map-dialog');
   const kind = h('select', {}, ...TOKEN_KINDS.map((k) => new Option(TOKEN_KIND_NAMES[k], k)));
   kind.value = token?.kind ?? 'enemy';
-  const player = h('select', {}, new Option('Nobody (the DM moves it)', ''), ...players.map((p) => new Option(`${p.character_name || p.name} (${p.name})`, p.id)));
-  player.value = token?.user_id ?? '';
   const name = h('input', { value: token?.name ?? '', maxLength: 80, placeholder: 'Goblin 1' });
   const size = h('select', {}, ...TOKEN_SIZES.map((s) => new Option(`${TOKEN_SIZE_NAMES[s]} (${s === 0.5 ? '½' : s} square${s > 1 ? 's' : ''})`, s)));
   size.value = String(token?.size ?? 1);
@@ -224,61 +222,78 @@ export async function tokenDialog(token = null) {
   if (token?.hp_sheet) Object.assign(hpMax, { disabled: true, title: 'From the player’s character sheet' });
   const hidden = h('input', { type: 'checkbox', checked: !!token?.hidden });
   const darkvision = h('input', { type: 'number', min: '0', step: '5', value: token?.darkvision || '', placeholder: 'none' });
-  // Someone from the campaign's records (what the archivist has written down about them).
+
+  // "Who is it?": one list for everyone a token can stand for, so the dialog
+  // asks it once. A player ("p:id"), one of the DM's saved creatures ("c:id",
+  // new tokens only: picking one goes to placing it), or someone from the
+  // campaign's records, what the archivist has written down ("r:id").
   const { records } = (await state.guarded(() => api('GET', `${base()}/records`))) ?? { records: [] };
-  const recordOption = (r) => new Option(`${r.title}${r.person ? '' : ` (${r.kind})`}`, r.id);
-  const record = h('select', {}, new Option('Nobody in particular', ''),
-    h('optgroup', { label: 'People and creatures' }, ...records.filter((r) => r.person).map(recordOption)),
-    h('optgroup', { label: 'Everything else' }, ...records.filter((r) => !r.person).map(recordOption)));
-  if (token?.record && !records.some((r) => r.id === token.record.id)) record.append(new Option(token.record.title, token.record.id));
-  record.value = token?.record?.id ?? '';
-  const recordField = field("From the campaign's records", record);
-  recordField.hidden = !records.length && !token?.record;
-  record.addEventListener('change', () => {
-    const r = records.find((x) => String(x.id) === record.value);
-    if (!r) return;
-    if (!token || !name.value.trim()) name.value = r.title.slice(0, 80);
-    // Someone from the records is an NPC, unless the archivist files them as a monster or a foe.
-    if (!token) kind.value = /monster|creature|enem|villain|beast|foe/i.test(r.kind) ? 'enemy' : 'npc';
-    sync();
-  });
-  // One of the DM's saved creatures instead (the Creatures tab).
   const saved = token ? [] : creatureList().filter((c) => !c.finding);
-  const fromLibrary = h('select', {}, new Option('Make a new one here', ''), ...saved.map((c) => new Option(`${c.name} (${c.kind === 'npc' ? 'NPC' : 'enemy'})`, c.id)));
-  fromLibrary.addEventListener('change', () => {
-    const c = saved.find((x) => x.id === fromLibrary.value);
-    if (c) placeDialog(c);
-  });
-  const libraryField = saved.length ? field('From your creatures', fromLibrary) : null;
+  const recordOption = (r) => new Option(`${r.title}${r.person ? '' : ` (${r.kind})`}`, `r:${r.id}`);
+  const group = (label, options) => (options.length ? h('optgroup', { label }, ...options) : null);
+  const people = records.filter((r) => r.person).map(recordOption);
+  if (token?.record && !records.some((r) => r.id === token.record.id)) people.push(new Option(token.record.title, `r:${token.record.id}`));
+  const who = h('select', {},
+    new Option(token ? 'Nobody in particular' : 'Someone new', ''),
+    group('Players', players.map((p) => new Option(`${p.character_name || p.name} (${p.name})`, `p:${p.id}`))),
+    group('Your creatures', saved.map((c) => new Option(`${c.name} (${c.kind === 'npc' ? 'NPC' : 'enemy'})`, `c:${c.id}`))),
+    group("In the campaign's records", people),
+    group('Other things in the records', records.filter((r) => !r.person).map(recordOption)));
+  who.value = token?.user_id ? `p:${token.user_id}` : token?.record ? `r:${token.record.id}` : '';
+  const picked = () => {
+    const [type, id] = who.value.split(':');
+    return { type: type || null, id: id ? Number(id) || id : null };
+  };
   const lookUp = h('input', { type: 'checkbox', checked: true });
   const lookUpField = h('label', { class: 'map-check' }, lookUp, ' Fill in its stat block, hit points and size with the AI');
   let colorTouched = !!token;
   color.addEventListener('input', () => (colorTouched = true));
-  const playerField = field('Player', player);
+  const kindField = field('Kind', kind);
   const sync = () => {
-    playerField.hidden = kind.value !== 'pc';
+    // A player's token is always a player character, so there is nothing to ask.
+    kindField.hidden = picked().type === 'p';
     lookUpField.hidden = !!token || kind.value !== 'enemy';
     if (!colorTouched) color.value = TOKEN_COLORS[kind.value];
   };
   kind.addEventListener('change', sync);
-  // A player's token is named after their character unless something else is typed.
-  player.addEventListener('change', () => {
-    const p = players.find((x) => String(x.id) === player.value);
-    if (p && !name.value.trim()) name.value = p.character_name || p.name;
+  who.addEventListener('change', () => {
+    const { type, id } = picked();
+    if (type === 'c') {
+      const c = saved.find((x) => x.id === id || String(x.id) === String(id));
+      if (c) placeDialog(c);
+      return;
+    }
+    if (type === 'p') {
+      const p = players.find((x) => x.id === id);
+      kind.value = 'pc';
+      // Named after their character unless something else is typed.
+      if (p && !name.value.trim()) name.value = p.character_name || p.name;
+    } else if (type === 'r') {
+      const r = records.find((x) => x.id === id);
+      if (r && (!token || !name.value.trim())) name.value = r.title.slice(0, 80);
+      // Someone from the records is an NPC, unless the archivist files them as a monster or a foe.
+      if (r && !token) kind.value = /monster|creature|enem|villain|beast|foe/i.test(r.kind) ? 'enemy' : 'npc';
+    } else if (kind.value === 'pc' && !token) {
+      kind.value = 'enemy';
+    }
+    sync();
   });
   sync();
 
   const save = async () => {
+    const { type, id } = picked();
     const body = {
-      kind: kind.value,
+      kind: type === 'p' ? 'pc' : kind.value,
       name: name.value.trim(),
-      user_id: kind.value === 'pc' && player.value ? Number(player.value) : null,
+      user_id: type === 'p' ? id : null,
       size: Number(size.value),
       color: color.value,
       hidden: hidden.checked,
       darkvision: Math.max(0, Number(darkvision.value) || 0),
     };
-    if (record.value !== String(token?.record?.id ?? '')) body.record = record.value ? { id: Number(record.value) } : null;
+    // Picking a player keeps whatever record the token was already linked to.
+    const recordId = type === 'r' ? id : type === 'p' ? token?.record?.id ?? null : null;
+    if (recordId !== (token?.record?.id ?? null)) body.record = recordId ? { id: recordId } : null;
     const max = Number(hpMax.value) > 0 ? Math.round(Number(hpMax.value)) : null;
     if (!token?.hp_sheet && max !== (token?.hp?.max ?? null)) {
       // A new maximum: keep the damage taken so far, or start at full.
@@ -302,11 +317,8 @@ export async function tokenDialog(token = null) {
       state.guarded(save).then(() => dialog.close()).catch(report);
     } },
       h('h2', {}, token ? 'Change token' : 'Add a token'),
-      libraryField,
-      recordField,
-      field('Kind', kind),
-      playerField,
-      field('Name', name),
+      field('Who is it?', who),
+      h('div', { class: 'map-row map-row-name' }, field('Name', name), kindField),
       h('div', { class: 'map-row' }, field('Size', size), field('Colour', color), field('Max HP', hpMax), field(`Darkvision (${map.scale?.unit ?? 'ft'})`, darkvision)),
       h('label', { class: 'map-check' }, hidden, ' Hidden from players (an ambush, someone lurking)'),
       lookUpField,
