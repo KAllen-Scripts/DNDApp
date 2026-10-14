@@ -33,6 +33,17 @@ export function registerRests(app, r) {
     return rests.spendHitDie(cid, request.user.id, die, { visibility });
   });
 
+  /**
+   * Use a class feature that heals: { id: 'second_wind', visibility? }. The
+   * server spends a use, rolls its dice (shared like any roll) and adds the
+   * hit points. Returns what the hit dice route returns.
+   */
+  app.post('/campaigns/:cid/sheet/features/use', async (request) => {
+    const { cid } = player(request);
+    const { id, visibility } = z.object({ id: z.string().min(1).max(64), visibility: z.enum(ROLL_VISIBILITY).default('party') }).parse(request.body);
+    return rests.useFeature(cid, request.user.id, id, { visibility });
+  });
+
   /** Take a short rest on your own sheet (Pact Magic slots come back). Returns { sheet, version, updated_at }. */
   app.post('/campaigns/:cid/sheet/short-rest', async (request) => {
     const { cid } = player(request);

@@ -86,14 +86,15 @@ export function normalizeForm(f = {}) {
   };
 }
 
-/** sheet.wild_shape, cleaned up. active: the form they're in now (hp: the form's own hit points, 2014 rules). */
+/** sheet.wild_shape, cleaned up (its forms; the uses are a row in class-features.js). active: the form they're in now (hp: the form's own hit points, 2014 rules). */
 export function normalizeWildShape(w = {}) {
   const forms = (Array.isArray(w?.forms) ? w.forms : []).slice(0, MAX_FORMS).map(normalizeForm).filter((f) => f.name);
   const a = w?.active;
   const active = a && forms.some((f) => f.id === a.form)
     ? { form: String(a.form), hp: int(a.hp, { min: -9999, max: 9999 }), uses: int(a.uses, { min: 0, max: 2, fallback: 1 }) }
     : null;
-  return { forms, uses_spent: int(w?.uses_spent, { min: 0, max: 20, fallback: 0 }), active };
+  // Uses spent are kept with the other class features (sheet.class_features.spent.wild_shape).
+  return { forms, active };
 }
 
 /** How many druid levels a sheet has, and whether one of its druid classes is Circle of the Moon. */
@@ -141,7 +142,14 @@ export function wildShapeRules(sheet, edition = '2014') {
 }
 
 /** Uses left (null: unlimited). */
-export const usesLeft = (sheet, rules) => (rules.uses == null ? null : Math.max(0, rules.uses - (sheet.wild_shape?.uses_spent ?? 0)));
+export const usesLeft = (sheet, rules) => {
+  if (rules.uses == null) return null;
+  const max = sheet.class_features?.max?.wild_shape ?? rules.uses; // a number the player typed over the rules'
+  return Math.max(0, max - usesSpent(sheet));
+};
+
+/** Wild Shape uses spent (kept with the other class features). */
+export const usesSpent = (sheet) => sheet.class_features?.spent?.wild_shape ?? 0;
 
 /** Uses it costs to turn into this form (an elemental: two, 2014 Moon). */
 export const formCost = (form) => (form.type === 'elemental' ? 2 : 1);
@@ -175,7 +183,8 @@ export function startWildShape(sheet, formId, edition = '2014') {
   // Changing straight from one form to another still costs a use.
   if (left != null && left < cost) throw new Error(`You have no Wild Shape uses left. ${rules.edition === '2024' ? 'A short rest gives one back' : 'A short or long rest gives them back'}.`);
   const out = structuredClone(sheet);
-  out.wild_shape.uses_spent += left == null ? 0 : cost;
+  out.class_features ??= { spent: {}, max: {}, custom: [] };
+  if (left != null) out.class_features.spent.wild_shape = usesSpent(sheet) + cost;
   out.wild_shape.active = { form: form.id, hp: rules.edition === '2024' ? null : form.hp_max, uses: cost };
   if (rules.temp_hp) out.hp.temp = Math.max(out.hp.temp ?? 0, rules.temp_hp);
   return out;
@@ -265,12 +274,3 @@ export function formStats(sheet, form, calc, edition = '2014') {
 /** "Walk 40 ft., climb 30 ft." */
 export const speedText = (speed) =>
   Object.entries(speed ?? {}).map(([k, n], i) => `${i ? k : k.charAt(0).toUpperCase() + k.slice(1)} ${n} ft.`).join(', ') || '—';
-
-/** A rest: 2014, a short or long rest gives every use back; 2024, a short rest one, a long rest all. */
-export function restWildShape(sheet, kind, edition = '2014') {
-  const out = structuredClone(sheet);
-  const w = out.wild_shape;
-  if (!w) return out;
-  w.uses_spent = kind === 'short' && edition === '2024' ? Math.max(0, w.uses_spent - 1) : 0;
-  return out;
-}

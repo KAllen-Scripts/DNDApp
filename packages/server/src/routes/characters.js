@@ -5,6 +5,8 @@
 import { SHEET_FORMAT, computeSheet, normalizeSheet } from '@dndapp/shared/sheet.js';
 import { ARMOR, WEAPONS, carriedWeight, itemStats, magicName, newUnownedWeaponAttacks } from '@dndapp/shared/gear.js';
 import { gearRolls } from '@dndapp/shared/rolls.js';
+import { featureRows } from '@dndapp/shared/class-features.js';
+import { activeForm } from '@dndapp/shared/wild-shape.js';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
 import { BadRequestError, NotFoundError } from '../store.js';
@@ -194,19 +196,22 @@ export function registerCharacters(app, r) {
    * What each player has equipped (DM), so the DM can check it: { players:
    * [{ user_id, name, character, ac, gear: [{ name, kind, equipped, qty,
    * proficient, magic, attuned, attunement, armor, effects, to_hit, damage }],
-   * carried, capacity, load, attuned }] }. Only equipped gear, the AC worked
-   * out from it, the attacks it makes, the total weight carried against the
-   * campaign's limit and how many items they're attuned to; the rest of the
-   * sheet (and what's only carried) stays private.
+   * carried, capacity, load, attuned, features: [{ id, name, kind, max,
+   * left, recharge, custom }], wild_shape }] }. Only equipped gear, the AC
+   * worked out from it, the attacks it makes, the total weight carried against
+   * the campaign's limit, how many items they're attuned to, and their class
+   * features' uses left (and the Wild Shape form they're in, if any); the rest
+   * of the sheet (and what's only carried) stays private.
    */
   app.get('/campaigns/:cid/gear/equipped', async (request) => {
     const a = access(request, { dm: true });
     const members = db.prepare("SELECT u.id, u.name, m.character_name FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.campaign_id = ? AND m.role != 'dm' ORDER BY u.name").all(a.cid);
     const owned = items.many(a.cid, members.flatMap((m) => sheets.get(a.cid, m.id).sheet.inventory.map((g) => g.item_id).filter(Boolean)));
+    const edition = await editions.of(a.cid);
     return {
       players: members.map((m) => {
         const { sheet, version } = sheets.get(a.cid, m.id);
-        if (!version) return { user_id: m.id, name: m.name, character: m.character_name ?? '', ac: null, gear: [] };
+        if (!version) return { user_id: m.id, name: m.name, character: m.character_name ?? '', ac: null, gear: [], features: [], wild_shape: null };
         const calc = computeSheet(sheet, store.getSettings(a.cid));
         return {
           user_id: m.id,
@@ -218,6 +223,9 @@ export function registerCharacters(app, r) {
           capacity: calc.load?.capacity ?? null,
           load: calc.load?.level ?? null,
           attuned: sheet.inventory.filter((g) => g.attuned).length,
+          features: featureRows(sheet, { edition, values: calc.values }).filter((f) => f.kind !== 'info')
+            .map(({ id, name, kind, max, left, recharge, custom }) => ({ id, name, kind, max, left, recharge, custom })),
+          wild_shape: activeForm(sheet)?.name ?? null,
           gear: sheet.inventory.filter((g) => g.equipped).map((g) => {
             const rolls = g.weapon ? gearRolls(g, calc) : null;
             // One of the DM's items (bought from a merchant): its picture, from the Items tab.

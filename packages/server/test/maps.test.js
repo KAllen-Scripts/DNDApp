@@ -365,7 +365,7 @@ test("tokens: a druid in Wild Shape (2014) shows the form's hit points; at 0 on 
     const tok = (await t.request('POST', `${base}/tokens`, { body: { kind: 'pc', name: 'Fern', user_id: t.sam.id } })).json().token;
     const seen = async () => (await t.request('GET', base)).json().tokens.find((x) => x.id === tok.id);
     const wolf = { id: 'wolf1', name: 'Wolf', type: 'beast', cr: '1/4', ac: 13, hp_max: 11, speed: { walk: 40 } };
-    const sheet = { ...emptySheet({ name: 'Fern' }), classes: [{ name: 'Druid', level: 2 }], hp: { current: 15, temp: null }, wild_shape: { forms: [wolf], uses_spent: 1, active: { form: 'wolf1', hp: 11 } } };
+    const sheet = { ...emptySheet({ name: 'Fern' }), classes: [{ name: 'Druid', level: 2 }], hp: { current: 15, temp: null }, class_features: { spent: { wild_shape: 1 } }, wild_shape: { forms: [wolf], active: { form: 'wolf1', hp: 11 } } };
     t.sheets.save(t.campaign.id, t.sam.id, sheet);
     assert.deepEqual((await seen()).hp, { current: 11, max: 11 });
     assert.equal((await seen()).move_speed, 40);

@@ -1,10 +1,11 @@
 /**
- * The druid's Wild Shape box on the character sheet (shown only on sheets
- * with a druid class): the beast forms they can take, looked up by name (the
- * SRD, the group's books, then the AI), uses left, and, while they're in a
- * form, its hit points, scores, saves, skills and attacks to roll. The rules
- * (both editions) are in shared/wild-shape.js; sheet.js owns the sheet and
- * passes in what this needs.
+ * The druid's Wild Shape forms, shown under the Wild Shape row of the Class
+ * features box (sheet-class-features.js; only on sheets with a druid class):
+ * the beast forms they can take, looked up by name (the SRD, the group's
+ * books, then the AI), and, while they're in a form, its hit points, scores,
+ * saves, skills and attacks to roll. The uses are that row's tick boxes. The
+ * rules (both editions) are in shared/wild-shape.js; sheet.js owns the sheet
+ * and passes in what this needs.
  */
 import { api, h } from './api.js';
 import { ABILITIES, ABILITY_NAMES, SKILLS, formatBonus } from './shared/sheet.js';
@@ -29,7 +30,7 @@ function rollName(content, bonus, label, cls = '') {
  * @param {() => void} ctx.render  draw the whole sheet again (after hit points change)
  */
 export function wildShapeBox({ state, changed, render }) {
-  const el = h('section', { class: 'sh-box wild-shape' });
+  const el = h('div', { class: 'wild-shape' });
   const edition = () => state.settings?.edition || state.edition || '2014';
   let drawn = null;
   const paint = () => {
@@ -37,7 +38,7 @@ export function wildShapeBox({ state, changed, render }) {
     el.hidden = !level;
     if (!level) return;
     // Redrawn only when what it shows changes, so typing elsewhere doesn't lose your place here.
-    const key = JSON.stringify([level, moon, edition(), state.sheet.wild_shape, state.sheet.abilities.wis, state.calc.values.proficiency_bonus]);
+    const key = JSON.stringify([level, moon, edition(), state.sheet.wild_shape, state.sheet.class_features?.spent?.wild_shape, state.sheet.class_features?.max?.wild_shape, state.sheet.abilities.wis, state.calc.values.proficiency_bonus]);
     if (key === drawn && el.childElementCount) return;
     drawn = key;
     draw();
@@ -47,6 +48,7 @@ export function wildShapeBox({ state, changed, render }) {
     try {
       const next = startWildShape(state.sheet, form.id, edition());
       state.sheet.wild_shape = next.wild_shape;
+      state.sheet.class_features = next.class_features;
       state.sheet.hp = next.hp;
       changed();
       render();
@@ -73,31 +75,10 @@ export function wildShapeBox({ state, changed, render }) {
           `for up to ${rules.hours} hour${rules.hours === 1 ? '' : 's'}`,
         ].filter(Boolean).join(', ')
       : 'Wild Shape starts at druid level 2.';
-    const rest = rules.edition === '2024' ? 'A short rest gives one use back, a long rest all of them.' : 'A short or long rest gives them all back.';
-
-    const uses = rules.available
-      ? h('div', { class: 'ws-uses' },
-          h('span', { class: 'lbl' }, 'Uses left'),
-          left == null
-            ? h('strong', {}, 'Unlimited')
-            : [
-                h('span', { class: 'pips' }, Array.from({ length: rules.uses }, (_, i) => {
-                  const b = h('input', { type: 'checkbox', 'aria-label': `Wild Shape use ${i + 1} spent` });
-                  b.checked = i < w.uses_spent;
-                  b.addEventListener('change', () => { w.uses_spent = b.checked ? i + 1 : i; changed(); paint(); });
-                  return b;
-                })),
-                h('strong', { class: 'ws-left' }, `${left} of ${rules.uses}`),
-              ],
-          h('span', { class: 'muted small' }, rest),
-        )
-      : null;
 
     const form = activeForm(state.sheet);
     el.replaceChildren(...[
-      h('h3', {}, 'Wild Shape'),
       h('p', { class: 'muted small ws-rules' }, `Druid ${rules.level}${rules.moon ? ' (Circle of the Moon)' : ''}, ${rules.edition} rules. ${limits}${rules.available ? '.' : ''}`),
-      uses,
       form ? activePanel(form, rules) : null,
       formList(rules, left),
       rules.known && w.forms.length > rules.known

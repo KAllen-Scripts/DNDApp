@@ -21,6 +21,8 @@ import { WEIGHT_RULES } from './shared/settings.js';
 import { POINT_BUY, POINT_COST, changePointBuy, pointBuy, stepPointBuy } from './shared/point-buy.js';
 import { roll, rollModeFromEvent, modeButtons, D20_ICON } from './dice.js';
 import { wildShapeBox, wildShapeBanner } from './sheet-wild-shape.js';
+import { classFeaturesBox } from './sheet-class-features.js';
+import { featureRows } from './shared/class-features.js';
 
 const $ = (sel) => document.querySelector(sel);
 const LEVEL_NAMES = ['Cantrips', '1st level', '2nd level', '3rd level', '4th level', '5th level', '6th level', '7th level', '8th level', '9th level'];
@@ -680,7 +682,7 @@ function hitDice() {
   return box('Hit dice', 'hd',
     h('div', { class: 'tiles' }, stat(auto('hit_dice', { kind: 'text', label: 'Hit dice' }), 'Total')),
     rows,
-    h('button', { type: 'button', class: 'ghost hd-short-rest', title: 'Warlocks get their Pact Magic slots back; spend hit dice to heal', onclick: takeShortRest }, 'Short rest'),
+    h('button', { type: 'button', class: 'ghost hd-short-rest', title: 'Class features that recharge on a short rest come back (and warlocks\' Pact Magic slots); spend hit dice to heal', onclick: takeShortRest }, 'Short rest'),
   );
 }
 
@@ -699,15 +701,35 @@ async function spendHitDie(die) {
   });
 }
 
+/** Use a class feature that heals (Second Wind): the server spends a use, rolls it and adds the hit points. */
+async function useFeature(row) {
+  await flush();
+  await roll('', {
+    label: row.name,
+    path: `${base()}/sheet/features/use`,
+    body: { id: row.id },
+    onServer: (res) => {
+      useSheet(res.sheet, res.version);
+      announce();
+      status(`${row.name}: ${res.healed ? `regained ${res.healed} hit point${res.healed === 1 ? '' : 's'}` : 'no hit points regained'}.`);
+    },
+  });
+}
+
 async function takeShortRest() {
   await flush();
   try {
+    const spentBefore = { ...state.sheet.class_features.spent };
     const res = await state.guarded(() => api('POST', `${base()}/sheet/short-rest`));
     if (!res) return;
     useSheet(res.sheet, res.version);
     announce();
-    const back = [state.calc.values.pact_slots ? 'Pact Magic slots' : '', state.sheet.wild_shape.forms.length ? 'Wild Shape uses' : ''].filter(Boolean).join(' and ');
-    status(`Short rest taken${back ? `: ${back} are back` : ''}. Spend hit dice to heal.`);
+    // Name what came back: Pact Magic slots, and class features with fewer spent than before.
+    const features = featureRows(state.sheet, { edition: state.settings?.edition || state.edition, values: state.calc.values })
+      .filter((r) => (spentBefore[r.id] ?? 0) > (state.sheet.class_features.spent[r.id] ?? 0)).map((r) => r.name);
+    const back = [state.calc.values.pact_slots ? 'Pact Magic slots' : '', ...features].filter(Boolean);
+    const list = back.length > 1 ? `${back.slice(0, -1).join(', ')} and ${back.at(-1)}` : back[0];
+    status(`Short rest taken${list ? `: ${list} ${back.length > 1 || /s$/.test(list) ? 'are' : 'is'} back` : ''}. Spend hit dice to heal.`);
   } catch (err) {
     status(`Couldn't take a short rest: ${err.message}`, true);
   }
@@ -1371,20 +1393,24 @@ async function removePicture(kind, draw) {
 // screens are in themes.css. Every column stretches to the tallest one in its
 // row, and its last block grows to fill, so the bottoms line up.
 
-/** Druids only (hidden for everyone else): Wild Shape forms (sheet-wild-shape.js). */
-const wildShape = () => wildShapeBox({ state, changed, render });
+/**
+ * Class features (sheet-class-features.js): Rage, Second Wind, Ki... for this
+ * character's classes, and the player's own rows. Druids get their Wild Shape
+ * forms under the Wild Shape row (sheet-wild-shape.js).
+ */
+const classFeatures = () => classFeaturesBox({ state, changed, render, heal: useFeature, wildShape: () => wildShapeBox({ state, changed, render }) });
 
 const pages = () => [section('Character details', details()), section('Spells', spells())];
 
 const LAYOUTS = {
   // The official 2014 sheet: three columns, then details and spells.
   classic: () => [
-    row('classic', col(core(), passive(), proficiencies()), col(combat(), attacks(), wildShape(), equipment()), col(traits(), features())),
+    row('classic', col(core(), passive(), proficiencies()), col(combat(), attacks(), classFeatures(), equipment()), col(traits(), features())),
     ...pages(),
   ],
   // What you need in a fight across the top.
   combat: () => [
-    row('combat', col(combat()), col(attacks(), wildShape()), col(equipment())),
+    row('combat', col(combat()), col(attacks(), classFeatures()), col(equipment())),
     row('stats', col(core(), passive(), proficiencies()), col(traits(), features())),
     ...pages(),
   ],
@@ -1394,7 +1420,7 @@ const LAYOUTS = {
     row('abilities',
       col(proficiency(), inspiration(), pointBuyBox(), ...['str', 'dex', 'con'].map((a) => abilityGroup(a)), skillNotes(), passive(), proficiencies()),
       col(...['int', 'wis', 'cha'].map((a) => abilityGroup(a))),
-      col(attacks(), wildShape(), features()),
+      col(attacks(), classFeatures(), features()),
       col(traits(), equipment()),
     ),
     ...pages(),
@@ -1408,7 +1434,7 @@ const LAYOUTS = {
       col(proficiency(), inspiration(), saves(), passive(), proficiencies()),
       col(skills()),
       col(tabbed([
-        ['actions', 'Actions', () => [attacks(), wildShape()]],
+        ['actions', 'Actions', () => [attacks(), classFeatures()]],
         ['spells', 'Spells', spells],
         ['inventory', 'Inventory', equipment],
         ['features', 'Features & traits', features],
@@ -1418,7 +1444,7 @@ const LAYOUTS = {
   ],
   // Everything in one scrolling column.
   single: () => [
-    row('single', col(core(), passive(), combat(), attacks(), wildShape(), equipment(), proficiencies(), traits(), features())),
+    row('single', col(core(), passive(), combat(), attacks(), classFeatures(), equipment(), proficiencies(), traits(), features())),
     ...pages(),
   ],
 };

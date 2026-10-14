@@ -65,7 +65,7 @@ test('wild shape (2014): turning into a form uses a use; its own hit points; at 
   s = startWildShape(endWildShape(s), WOLF.id);
   assert.throws(() => startWildShape(s, WOLF.id), /no Wild Shape uses left/);
   // A short rest gives both back (2014).
-  assert.equal(shortRest(s).wild_shape.uses_spent, 0);
+  assert.equal(shortRest(s).class_features.spent.wild_shape, undefined);
 });
 
 test('wild shape (2024): temporary hit points instead of the form\'s; a short rest gives one use back, a long rest all', () => {
@@ -75,9 +75,9 @@ test('wild shape (2024): temporary hit points instead of the form\'s; a short re
   assert.equal(s.hp.temp, 5);
   assert.equal(setFormHp(s, 22).sheet.hp.current, 22, 'damage comes off your own hit points');
   s = startWildShape(s, WOLF.id, '2024');
-  assert.equal(s.wild_shape.uses_spent, 2);
-  assert.equal(shortRest(s, { edition: '2024' }).wild_shape.uses_spent, 1);
-  assert.equal(longRest(s, { edition: '2024' }).sheet.wild_shape.uses_spent, 0);
+  assert.equal(s.class_features.spent.wild_shape, 2);
+  assert.equal(shortRest(s, { edition: '2024' }).class_features.spent.wild_shape, 1);
+  assert.equal(longRest(s, { edition: '2024' }).sheet.class_features.spent.wild_shape, undefined);
 });
 
 test('wild shape: in a form, the beast\'s Str, Dex, Con, AC and speed with your Int, Wis, Cha; proficiencies, the beast\'s bonus when higher', () => {
@@ -99,7 +99,7 @@ test('wild shape: in a form, the beast\'s Str, Dex, Con, AC and speed with your 
 test('wild shape: saved with the sheet; a form that is gone isn\'t active; other classes have none', () => {
   const s = normalizeSheet({ ...druid(2), wild_shape: { forms: [WOLF], uses_spent: 1, active: { form: 'nope', hp: 3 } } });
   assert.equal(s.wild_shape.active, null);
-  assert.equal(s.wild_shape.uses_spent, 1);
+  assert.equal(s.class_features.spent.wild_shape, 1, 'uses spent on a sheet from before the Class features box carry over');
   assert.equal(normalizeSheet(emptySheet()).wild_shape.forms.length, 0);
-  assert.deepEqual(normalizeSheet({}).wild_shape, { forms: [], uses_spent: 0, active: null });
+  assert.deepEqual(normalizeSheet({}).wild_shape, { forms: [], active: null });
 });

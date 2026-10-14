@@ -4,6 +4,8 @@
  *
  *   - A player spends a hit die from their sheet: the server rolls it (through
  *     the roll log, so it's shared like any roll) and adds the hit points.
+ *   - A player uses a class feature that heals (Second Wind): the server rolls
+ *     it the same way and adds the hit points.
  *   - A player takes a short rest on their own sheet (Pact Magic slots back).
  *   - The DM calls a short or long rest for the party (everyone, or chosen
  *     players). Each sheet is changed and saved with the reason, and the rest
@@ -17,6 +19,7 @@
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { computeSheet, hitDice, longRest, shortRest, spendHitDie, formatBonus } from '@dndapp/shared/sheet.js';
+import { featureRow, healFeature, restText } from '@dndapp/shared/class-features.js';
 import { BadRequestError } from './store.js';
 import { createEditions } from './editions.js';
 
@@ -86,6 +89,24 @@ export function createRests({ db, archive, store, sheets, rolls, books = null, c
       const rolled = rolls.roll(cid, userId, { notation: `1d${die}${con ? formatBonus(con) : ''}`, label: `Hit die (d${die})`, visibility });
       const { sheet, healed } = spendHitDie(current.sheet, die, rolled.total);
       const saved = sheets.save(cid, userId, sheet, { reason: `spent a d${die} hit die (rolled ${rolled.total}, regained ${healed} hit points)` });
+      return { ...rolled, healed, ...saved };
+    },
+
+    /**
+     * Use a class feature that heals (Second Wind; 2024 Uncanny Metabolism):
+     * spend a use, roll its dice (shared like any roll) and add the hit points.
+     * @returns what POST /roll returns, plus { healed, sheet, version, updated_at }
+     */
+    async useFeature(cid, userId, id, { visibility = 'party' } = {}) {
+      const current = sheets.get(cid, userId);
+      const ed = await edition(cid);
+      const { values } = computeSheet(current.sheet);
+      const row = featureRow(current.sheet, id, { edition: ed, values });
+      if (!row?.heal) throw new BadRequestError("That isn't one of your class features that heals.");
+      if (row.left === 0) throw new BadRequestError(`You have no ${row.name} left. ${restText(row.recharge)}`);
+      const rolled = rolls.roll(cid, userId, { notation: row.heal, label: row.name, visibility });
+      const { sheet, healed } = healFeature(current.sheet, id, rolled.total, { edition: ed, values });
+      const saved = sheets.save(cid, userId, sheet, { reason: `used ${row.name} (rolled ${rolled.total}, regained ${healed} hit points)` });
       return { ...rolled, healed, ...saved };
     },
 

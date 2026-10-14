@@ -10,6 +10,7 @@
  */
 import { computeSheet, normalizeSheet, ABILITY_NAMES, SKILLS, TEXT_FIELDS } from '@dndapp/shared/sheet.js';
 import { applyJson } from '../sheets/store.js';
+import { featureRows, featureSummary } from '@dndapp/shared/class-features.js';
 
 const EPOCH = '1970-01-01T00:00:00.000Z';
 // Saves of the same field this close together read as one change (autosave fires while typing).
@@ -147,6 +148,7 @@ export function sheetText(sheet, settings = {}) {
   if (values.spell_ability) add('Spell save DC', values.spell_dc);
   add('Spell slots used', Object.entries(sheet.spellcasting?.slots_used ?? {}).map(([n, used]) => `level ${n}: ${used}`).join(', '));
   add('Spells', sheet.spells.map((s) => `${s.name} (${s.level ? `level ${s.level}` : 'cantrip'}${s.prepared ? ', prepared' : ''})`).join(', '));
+  add('Class features', featureSummary(featureRows(sheet, { edition: settings.edition === '2024' ? '2024' : '2014', values })).join(', '));
   const shape = sheet.wild_shape;
   if (shape?.forms.length) {
     add('Wild Shape forms', shape.forms.map((f) => `${f.name} (CR ${f.cr})`).join(', '));
