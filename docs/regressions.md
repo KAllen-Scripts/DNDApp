@@ -15,6 +15,8 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-14 | Line of sight was slow and laggy: every ray was tested against every wall (2.4 s for one token on a map with 2,000 wall pieces, over a minute for a dark map), and the fog only moved after a token was dropped and a new picture came from the server. | `shared/test/map.test.js`: sight on a busy map (2,000 wall pieces) is quick and gives the same outline as testing every wall; `web/test/map.test.js`: a player's fog follows their token while it is dragged, and stops at walls |
+| 2026-10-14 | A light's area cut off the corner where a wall crosses the edge of its reach, so lit places right there showed as dark. | `shared/test/map.test.js`: a light reaches right into the corner where a wall crosses the edge of its reach |
 | 2026-10-14 | The archivist's tool results were cut mid-record at a size ("…(truncated)"), so a long record or transcript part reached it without its end. | `server/test/kb.test.js`: the archivist's tools never cut a record or a transcript line short; what doesn't fit is named |
 | 2026-10-14 | Q&A's tools cut records at 2,500 tokens and the pre-search cut every piece to an equal share, so answers could miss a record's end. | `server/test/kb.test.js`: Q&A tools and the pre-search give whole records, never cut mid-way |
 | 2026-10-14 | Meaning search only saw the first ~256 words of a record or chunk (the embedding model's limit). | `server/test/kb.test.js`: meaning search embeds all of a long text, a window at a time |

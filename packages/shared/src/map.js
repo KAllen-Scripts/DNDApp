@@ -533,39 +533,42 @@ export const wallBetween = (map, a, b) =>
  * the point), bounded by the map's walls and closed doors and by the edges
  * of the image. Rays go to every wall end (and just either side of it), so
  * the polygon's corners are exactly where sight is cut off.
+ *
+ * Kept fast for maps with thousands of wall pieces: walls are put in a grid
+ * of cells and each ray only tests the walls in the cells it passes through,
+ * stopping at the first hit; shared wall ends cast one set of rays; with a
+ * reach, walls out of reach are left out.
  */
 export function sightPolygon(map, origin, reach = Infinity) {
   const { width, height } = map.image;
   const ox = Math.min(width - 0.01, Math.max(0.01, origin.x));
   const oy = Math.min(height - 0.01, Math.max(0.01, origin.y));
-  const segs = sightWalls(map).map((w) => [w.x1, w.y1, w.x2, w.y2]);
+  const limited = Number.isFinite(reach);
+  let segs = sightWalls(map).map((w) => [w.x1, w.y1, w.x2, w.y2]);
+  if (limited) segs = segs.filter((s) => distanceToSegment(ox, oy, s) <= reach);
   segs.push([0, 0, width, 0], [width, 0, width, height], [width, height, 0, height], [0, height, 0, 0]);
+  const grid = wallGrid(segs, width, height);
   const angles = [];
+  const ends = new Set();
   for (const [x1, y1, x2, y2] of segs) {
     for (const [x, y] of [[x1, y1], [x2, y2]]) {
+      const key = `${x},${y}`;
+      if (ends.has(key)) continue;
+      ends.add(key);
+      if (limited && Math.hypot(x - ox, y - oy) > reach) continue;
       const a = Math.atan2(y - oy, x - ox);
       angles.push(a - 1e-5, a, a + 1e-5);
     }
+    // Where a wall crosses the edge of the reach, so the corner there is exact.
+    if (limited) for (const a of circleCrossings(ox, oy, reach, x1, y1, x2, y2)) angles.push(a - 1e-5, a, a + 1e-5);
   }
   // Limited reach (a light, darkvision): the edge of the circle, every 5°.
-  if (Number.isFinite(reach)) for (let i = 0; i < 72; i++) angles.push((i * Math.PI) / 36 - Math.PI);
+  if (limited) for (let i = 0; i < 72; i++) angles.push((i * Math.PI) / 36 - Math.PI);
   const points = [];
   for (const a of angles) {
     const dx = Math.cos(a);
     const dy = Math.sin(a);
-    let best = Infinity;
-    for (const [x1, y1, x2, y2] of segs) {
-      const sx = x2 - x1;
-      const sy = y2 - y1;
-      const denom = cross(dx, dy, sx, sy);
-      if (Math.abs(denom) < 1e-12) continue;
-      const qx = x1 - ox;
-      const qy = y1 - oy;
-      const t = cross(qx, qy, sx, sy) / denom;
-      const u = cross(qx, qy, dx, dy) / denom;
-      if (t >= 0 && u >= -1e-9 && u <= 1 + 1e-9 && t < best) best = t;
-    }
-    best = Math.min(best, reach);
+    const best = Math.min(castRay(grid, segs, ox, oy, dx, dy, reach), reach);
     if (best < Infinity) points.push({ a, x: ox + dx * best, y: oy + dy * best });
   }
   points.sort((p, q) => p.a - q.a);
@@ -577,6 +580,92 @@ export function sightPolygon(map, origin, reach = Infinity) {
   }
   if (out.length > 1 && out[0][0] === out.at(-1)[0] && out[0][1] === out.at(-1)[1]) out.pop();
   return out;
+}
+
+/** How far the point (x, y) is from the segment [x1, y1, x2, y2]. */
+function distanceToSegment(x, y, [x1, y1, x2, y2]) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = dx * dx + dy * dy;
+  const t = len ? Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / len)) : 0;
+  return Math.hypot(x1 + t * dx - x, y1 + t * dy - y);
+}
+
+/** The angles (seen from the centre) where a segment crosses a circle. */
+function circleCrossings(cx, cy, r, x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const fx = x1 - cx;
+  const fy = y1 - cy;
+  const a = dx * dx + dy * dy;
+  const b = 2 * (fx * dx + fy * dy);
+  const c = fx * fx + fy * fy - r * r;
+  const disc = b * b - 4 * a * c;
+  if (!a || disc < 0) return [];
+  const out = [];
+  for (const t of [(-b - Math.sqrt(disc)) / (2 * a), (-b + Math.sqrt(disc)) / (2 * a)]) {
+    if (t >= 0 && t <= 1) out.push(Math.atan2(fy + t * dy, fx + t * dx));
+  }
+  return out;
+}
+
+/** The segments bucketed into square cells: { size, cols, rows, cells: [[segment index...]...], stamp }. */
+function wallGrid(segs, width, height) {
+  const size = Math.max(32, Math.sqrt((width * height) / Math.max(1, segs.length)));
+  const cols = Math.max(1, Math.ceil(width / size));
+  const rows = Math.max(1, Math.ceil(height / size));
+  const cells = Array.from({ length: cols * rows }, () => []);
+  const cell = (v, n) => Math.min(n - 1, Math.max(0, Math.floor(v / size)));
+  segs.forEach(([x1, y1, x2, y2], i) => {
+    const c0 = cell(Math.min(x1, x2), cols);
+    const c1 = cell(Math.max(x1, x2), cols);
+    const r0 = cell(Math.min(y1, y2), rows);
+    const r1 = cell(Math.max(y1, y2), rows);
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) cells[r * cols + c].push(i);
+  });
+  return { size, cols, rows, cells, stamp: new Int32Array(segs.length), ray: 0 };
+}
+
+/** How far a ray from (ox, oy) in direction (dx, dy) goes before it meets a segment (Infinity if none within `reach`). */
+function castRay(grid, segs, ox, oy, dx, dy, reach) {
+  const { size, cols, rows, cells, stamp } = grid;
+  const ray = ++grid.ray;
+  let best = Infinity;
+  let cx = Math.min(cols - 1, Math.floor(ox / size));
+  let cy = Math.min(rows - 1, Math.floor(oy / size));
+  const stepX = dx > 0 ? 1 : -1;
+  const stepY = dy > 0 ? 1 : -1;
+  let nextX = dx !== 0 ? ((cx + (dx > 0 ? 1 : 0)) * size - ox) / dx : Infinity;
+  let nextY = dy !== 0 ? ((cy + (dy > 0 ? 1 : 0)) * size - oy) / dy : Infinity;
+  const deltaX = dx !== 0 ? size / Math.abs(dx) : Infinity;
+  const deltaY = dy !== 0 ? size / Math.abs(dy) : Infinity;
+  let entered = 0;
+  while (cx >= 0 && cy >= 0 && cx < cols && cy < rows && entered <= Math.min(best, reach)) {
+    for (const i of cells[cy * cols + cx]) {
+      if (stamp[i] === ray) continue;
+      stamp[i] = ray;
+      const [x1, y1, x2, y2] = segs[i];
+      const sx = x2 - x1;
+      const sy = y2 - y1;
+      const denom = cross(dx, dy, sx, sy);
+      if (Math.abs(denom) < 1e-12) continue;
+      const qx = x1 - ox;
+      const qy = y1 - oy;
+      const t = cross(qx, qy, sx, sy) / denom;
+      const u = cross(qx, qy, dx, dy) / denom;
+      if (t >= 0 && u >= -1e-9 && u <= 1 + 1e-9 && t < best) best = t;
+    }
+    if (nextX < nextY) {
+      entered = nextX;
+      nextX += deltaX;
+      cx += stepX;
+    } else {
+      entered = nextY;
+      nextY += deltaY;
+      cy += stepY;
+    }
+  }
+  return best;
 }
 
 /** Is a point inside a polygon ([[x, y], ...])? */
@@ -600,15 +689,35 @@ export function sightOf(map, userId) {
   if (!map.fog.dark) return own.map((t) => sightPolygon(map, t)).filter((p) => p.length >= 3);
   // In the dark: what darkvision reaches, and the lit places the token can see (each light's area, cut to the token's sight).
   const k = pxPerUnit(map);
-  const lit = litAreas(map);
+  const lit = litAreas(map).map((points) => ({ points, box: boundsOf(points) }));
   const out = [];
   for (const t of own) {
     if (t.darkvision > 0) out.push(sightPolygon(map, t, t.darkvision * k));
     const full = sightPolygon(map, t);
-    for (const area of lit) out.push({ points: area, clip: full });
+    const box = boundsOf(full);
+    // Lights nowhere near what the token can see can't light anything it sees.
+    for (const area of lit) if (boxesMeet(area.box, box)) out.push({ points: area.points, clip: full });
   }
   return out.filter((v) => (v.points ?? v).length >= 3);
 }
+
+const boundsOf = (points) => {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of points) {
+    if (x < x0) x0 = x;
+    if (x > x1) x1 = x;
+    if (y < y0) y0 = y;
+    if (y > y1) y1 = y;
+  }
+  return { x0, y0, x1, y1 };
+};
+const boxesMeet = (a, b) => a.x0 <= b.x1 && b.x0 <= a.x1 && a.y0 <= b.y1 && b.y0 <= a.y1;
+
+// Lit areas already worked out, per set of walls: a light that hasn't moved
+// keeps its polygon while tokens move (and is shared by every player).
+const litCache = new Map(); // walls key -> Map(light key -> polygon)
+const LIT_CACHE_WALLS = 8;
+const LIT_CACHE_LIGHTS = 1000;
 
 /**
  * Where light falls: one polygon per light (placed, or carried by a
@@ -617,7 +726,26 @@ export function sightOf(map, userId) {
 export function litAreas(map) {
   const k = pxPerUnit(map);
   const sources = [...(map.lights ?? []), ...map.tokens.filter((t) => t.light).map((t) => ({ x: t.x, y: t.y, ...t.light }))];
-  return sources.map((l) => sightPolygon(map, l, (l.bright + l.dim) * k)).filter((p) => p.length >= 3);
+  if (!sources.length) return [];
+  const wallsKey = `${map.image.width}x${map.image.height}|${sightWalls(map).map((w) => `${w.x1},${w.y1},${w.x2},${w.y2}`).join(';')}`;
+  let known = litCache.get(wallsKey);
+  if (known) litCache.delete(wallsKey);
+  else known = new Map();
+  litCache.set(wallsKey, known);
+  if (litCache.size > LIT_CACHE_WALLS) litCache.delete(litCache.keys().next().value);
+  const out = [];
+  for (const l of sources) {
+    const reach = (l.bright + l.dim) * k;
+    const key = `${l.x},${l.y},${reach}`;
+    let poly = known.get(key);
+    if (!poly) {
+      poly = sightPolygon(map, l, reach);
+      if (known.size >= LIT_CACHE_LIGHTS) known.delete(known.keys().next().value);
+      known.set(key, poly);
+    }
+    if (poly.length >= 3) out.push(poly);
+  }
+  return out;
 }
 
 /** Is a point inside what a player sees: a polygon, or { points, clip } (inside both)? */
@@ -647,6 +775,19 @@ export function fogMask(map, { polygons = [], explored = [] } = {}) {
     ...map.fog.shapes.map((s) => ({ fill: s.op === 'reveal' ? 'clear' : map.fog.map === 'grey' ? 'dim' : 'cover', x: s.x, y: s.y, w: s.w, h: s.h })),
     ...polygons.map((v) => (Array.isArray(v) ? { fill: 'clear', points: v } : { fill: 'clear', points: v.points, clip: v.clip })),
   ];
+}
+
+/**
+ * The fog as a player's page draws it, from their view of the map (see the
+ * server's maps.view): their own tokens' sight through the walls they're
+ * sent, the places they've explored (`fog.explored`) and the DM's
+ * rectangles. Empty when the fog is off or the map shows unseen parts as
+ * they are. The page passes a copy with its token where it's being dragged,
+ * so the fog follows the drag.
+ */
+export function playerFogMask(view, userId) {
+  if (!view.fog?.enabled || view.fog.map === 'shown') return [];
+  return fogMask(view, { polygons: sightOf(view, userId), explored: view.fog.explored ?? [] });
 }
 
 /** Mask colours: white is fully fogged, black is clear, grey is the dim view of places seen before. */
