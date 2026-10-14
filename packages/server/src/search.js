@@ -7,13 +7,39 @@
  * a player only ever see docs that player may know about.
  *
  * Vectors are searched by brute force in memory. At ~100 docs per session,
- * even 500 sessions is ~50k vectors, which takes a few milliseconds.
+ * even 500 sessions is ~50k docs, which takes a few milliseconds per window.
+ *
+ * The embedding model reads only the first ~256 words it is given, so a long
+ * doc (a big record, a transcript chunk) is embedded in overlapping windows
+ * of words, each with the doc's title, and scores by its best window. Every
+ * word of it can be found by meaning, not just its opening.
  */
 import { toBlob, fromBlob, dot } from './embeddings.js';
 import { json } from './db/index.js';
 
 const RRF_K = 60;
 const CANDIDATES = 40;
+export const WINDOW_WORDS = 150;
+const WINDOW_STEP = 120;
+// Docs embedded before windows (only their opening) carry the plain model name and are embedded again (reembedStale).
+const tagFor = (embedder) => `${embedder.model}#w${WINDOW_WORDS}`;
+
+/** A doc's text as the windows to embed: all of it, a window at a time, each led by the title. */
+export function embedWindows(title, text) {
+  const words = String(text).split(/\s+/).filter(Boolean);
+  const out = [];
+  for (let i = 0; i === 0 || i + (WINDOW_WORDS - WINDOW_STEP) < words.length; i += WINDOW_STEP) {
+    out.push(`${title}\n${words.slice(i, i + WINDOW_WORDS).join(' ')}`);
+  }
+  return out;
+}
+
+/** The best similarity between a query vector and any of a doc's windows (stored end to end). */
+function bestDot(q, vecs) {
+  let best = -Infinity;
+  for (let o = 0; o + q.length <= vecs.length; o += q.length) best = Math.max(best, dot(q, vecs.subarray(o, o + q.length)));
+  return best;
+}
 
 /** Turn free text into a safe FTS5 query: any of the words. */
 export function ftsQuery(text) {
@@ -39,11 +65,28 @@ export function createSearch({ db, embedder }) {
      VALUES (@campaign_id, @kind, @ref_id, @session_num, @start_sec, @end_sec, @title, @text, @visible_to, @embedding, @embed_model)`,
   );
 
+  /** One vector blob per doc: its windows' vectors end to end. */
+  async function embedDocs(docs) {
+    const windows = docs.map((d) => embedWindows(d.title, d.text));
+    const vectors = await embedder.embed(windows.flat());
+    let at = 0;
+    return windows.map((w) => {
+      const vs = vectors.slice(at, (at += w.length));
+      const all = new Float32Array(vs.reduce((n, v) => n + v.length, 0));
+      let o = 0;
+      for (const v of vs) {
+        all.set(v, o);
+        o += v.length;
+      }
+      return all;
+    });
+  }
+
   function loadVectors(campaignId) {
     if (!vectorCache.has(campaignId)) {
       const rows = db
         .prepare('SELECT id, kind, session_num, visible_to, embedding FROM docs WHERE campaign_id = ? AND embed_model = ?')
-        .all(campaignId, embedder.model);
+        .all(campaignId, tagFor(embedder));
       vectorCache.set(
         campaignId,
         rows.map((r) => ({ ...r, visible_to: json.parse(r.visible_to, null), vec: fromBlob(r.embedding) })),
@@ -73,7 +116,7 @@ export function createSearch({ db, embedder }) {
      * @param {Array<{ title: string, text: string, visible_to?: number[]|null, session_num?: number, start_sec?: number, end_sec?: number }>} docs
      */
     async replaceDocs(campaignId, scope, docs) {
-      const vectors = embedder && docs.length ? await embedder.embed(docs.map((d) => `${d.title}\n${d.text}`)) : [];
+      const vectors = embedder && docs.length ? await embedDocs(docs) : [];
       db.transaction(() => {
         deleteScope(campaignId, scope);
         docs.forEach((d, i) =>
@@ -88,7 +131,7 @@ export function createSearch({ db, embedder }) {
             text: d.text,
             visible_to: d.visible_to == null ? null : json.str(d.visible_to),
             embedding: vectors[i] ? toBlob(vectors[i]) : null,
-            embed_model: vectors[i] ? embedder.model : null,
+            embed_model: vectors[i] ? tagFor(embedder) : null,
           }),
         );
       })();
@@ -98,6 +141,33 @@ export function createSearch({ db, embedder }) {
     removeDocs(campaignId, scope) {
       deleteScope(campaignId, scope);
       vectorCache.delete(campaignId);
+    },
+
+    /**
+     * Embed again every doc embedded the old way (only its opening) or not at
+     * all, a batch at a time. Run on start-up; returns how many it did.
+     */
+    async reembedStale({ batch = 32 } = {}) {
+      if (!embedder) return 0;
+      const tag = tagFor(embedder);
+      const next = db.prepare('SELECT id, campaign_id, title, text FROM docs WHERE embed_model IS NULL OR embed_model != ? ORDER BY id LIMIT ?');
+      const save = db.prepare('UPDATE docs SET embedding = ?, embed_model = ? WHERE id = ? AND text = ?');
+      let done = 0;
+      const skip = new Set();
+      for (;;) {
+        const rows = next.all(tag, batch + skip.size).filter((r) => !skip.has(r.id)).slice(0, batch);
+        if (!rows.length) break;
+        const vectors = await embedDocs(rows);
+        db.transaction(() => {
+          rows.forEach((r, i) => {
+            // A doc replaced meanwhile (different text) was embedded by replaceDocs already.
+            if (!save.run(toBlob(vectors[i]), tag, r.id, r.text).changes) skip.add(r.id);
+          });
+        })();
+        for (const c of new Set(rows.map((r) => r.campaign_id))) vectorCache.delete(c);
+        done += rows.length;
+      }
+      return done;
     },
 
     /** Forget cached vectors (after bulk deletes such as a rebuild). */
@@ -130,7 +200,7 @@ export function createSearch({ db, embedder }) {
         const [q] = await embedder.embed([query]);
         const ranked = loadVectors(campaignId)
           .filter((d) => matches(d, opts))
-          .map((d) => ({ id: d.id, s: dot(q, d.vec) }))
+          .map((d) => ({ id: d.id, s: bestDot(q, d.vec) }))
           .sort((a, b) => b.s - a.s)
           .slice(0, CANDIDATES);
         add(ranked.map((r) => r.id));

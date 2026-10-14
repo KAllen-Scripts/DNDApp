@@ -70,7 +70,7 @@ const record = (over) => ({
 export async function defaultArchivist({ prompt, tools }) {
   const session = /<session number="(\d+)"/.exec(prompt)?.[1];
   if (prompt.includes('<dm_correction')) {
-    const list = await callTool(tools, 'list_records', { kind: 'npc', status: null });
+    const list = await callTool(tools, 'list_records', { kind: 'npc', status: null, offset: null });
     const id = Number(/#(\d+)/.exec(list)?.[1]);
     if (id) await callTool(tools, 'update_record', { ...nulls(), id, title: 'Brother Hal (corrected)', reason: 'DM correction' });
     return 'Applied the correction.';

@@ -15,6 +15,10 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-14 | The archivist's tool results were cut mid-record at a size ("…(truncated)"), so a long record or transcript part reached it without its end. | `server/test/kb.test.js`: the archivist's tools never cut a record or a transcript line short; what doesn't fit is named |
+| 2026-10-14 | Q&A's tools cut records at 2,500 tokens and the pre-search cut every piece to an equal share, so answers could miss a record's end. | `server/test/kb.test.js`: Q&A tools and the pre-search give whole records, never cut mid-way |
+| 2026-10-14 | Meaning search only saw the first ~256 words of a record or chunk (the embedding model's limit). | `server/test/kb.test.js`: meaning search embeds all of a long text, a window at a time |
+| 2026-10-14 | The archivist got sheet text cut at 4,000 characters and changes (and note edits) cut at 600, and no item descriptions. | `server/test/updates.test.js`: the archivist gets a sheet, its items and long changes in full, never cut short |
 | 2026-10-14 | The map creator's Room tool always added walls all round, so a patch of another floor needed its walls rubbed out. | `web/test/creator-tools.test.js`: creator: the Room tool can lay its floor without walls |
 | 2026-10-13 | The Cloudflare details file `API_key` wasn't git-ignored, so git offered to commit it. | `server/test/security.test.js`: the API_key file (Cloudflare details) is git-ignored |
 | 2026-10-12 | The map creator skipped squares on a fast drag (one pointer move across many squares painted only its ends). | `web/test/creator.test.js`: creator: a fast floor drag paints every square between the pointer's stops |

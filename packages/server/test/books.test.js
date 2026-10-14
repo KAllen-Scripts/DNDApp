@@ -251,7 +251,7 @@ test("Q&A: the books' editions and a long contents trimmed to its chapters", asy
   assert.match(groupEdition([{ title: "Player's Handbook (2014)" }], '2024'), /set this campaign to the 2024 rules/);
   assert.match(groupEdition([], '2014'), /2014 rules\.$/);
 
-  const sections = Array.from({ length: 400 }, (_, i) => ({ title: `A rather long section heading number ${i}`, page: 2 }));
+  const sections = Array.from({ length: 1000 }, (_, i) => ({ title: `A rather long section heading number ${i}`, page: 2 }));
   const llm = createFakeLLM({
     qaScript: [[{ tool: 'book_contents', input: { book: 'Monster Manual', from_page: null, to_page: null } }, { answer: 'Chapter 1.' }]],
   });
