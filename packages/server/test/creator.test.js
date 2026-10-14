@@ -73,7 +73,7 @@ test('the DM makes a map in the creator: drawn by the server, with a grid, walls
     const seen = (await t.request('GET', `/campaigns/${t.campaign.id}/maps/${view.id}`, { as: t.sam.token })).json();
     assert.equal(seen.design, undefined);
     assert.equal(seen.designed, false);
-    assert.ok(seen.walls.every((w) => Object.keys(w).sort().join() === 'kind,x1,x2,y1,y2'), 'only the lines, for their page to work out the fog');
+    assert.deepEqual(seen.walls, []);
     assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/maps/${view.id}/design`, { as: t.sam.token })).statusCode, 403);
     assert.equal((await t.request('POST', `/campaigns/${t.campaign.id}/maps/design`, { as: t.sam.token, body: { name: 'x', design: sampleDesign() } })).statusCode, 403);
 
