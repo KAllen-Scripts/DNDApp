@@ -90,9 +90,9 @@ export function createRests({ db, archive, store, sheets, rolls, books = null, c
     },
 
     /** A player's own short rest. */
-    shortRest(cid, userId) {
+    async shortRest(cid, userId) {
       const current = sheets.get(cid, userId);
-      return sheets.save(cid, userId, shortRest(current.sheet), { reason: 'short rest' });
+      return sheets.save(cid, userId, shortRest(current.sheet, { edition: await edition(cid) }), { reason: 'short rest' });
     },
 
     /**
@@ -112,7 +112,7 @@ export function createRests({ db, archive, store, sheets, rolls, books = null, c
         const current = sheets.get(cid, uid);
         if (!current.version) continue;
         if (kind === 'short') {
-          sheets.save(cid, uid, shortRest(current.sheet), { by, reason: 'short rest (called by the DM)' });
+          sheets.save(cid, uid, shortRest(current.sheet, { edition: ed }), { by, reason: 'short rest (called by the DM)' });
           continue;
         }
         const res = longRest(current.sheet, { edition: ed });

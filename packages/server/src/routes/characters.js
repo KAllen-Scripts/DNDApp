@@ -16,7 +16,7 @@ import { SheetConflictError } from '../sheets/store.js';
 import { SpendingCapError } from '../llm/index.js';
 
 export function registerCharacters(app, r) {
-  const { access, archive, auth, config, db, editions, itemFinder, items, maps, pictureDescriber, pictures, publicMessage, sheetImport, sheetReview, sheets, spells, store, upload } = r;
+  const { access, archive, auth, config, db, editions, forms, itemFinder, items, maps, pictureDescriber, pictures, publicMessage, sheetImport, sheetReview, sheets, spells, store, upload } = r;
 
   // ---------- character sheets (private to their player) ----------
 
@@ -44,7 +44,11 @@ export function registerCharacters(app, r) {
   }
 
   /** Your sheet in this campaign (a blank one, version 0, if you haven't saved one). */
-  app.get('/campaigns/:cid/sheet', async (request) => sheets.get(sheetOwner(request).cid, request.user.id));
+  app.get('/campaigns/:cid/sheet', async (request) => {
+    const { cid } = sheetOwner(request);
+    // The rules edition the campaign plays by, for Wild Shape.
+    return { ...sheets.get(cid, request.user.id), edition: await editions.of(cid) };
+  });
 
   /**
    * Save your whole sheet: { sheet, version } where version is the one you
@@ -135,6 +139,21 @@ export function registerCharacters(app, r) {
     const spell = await spells.lookup(name, { campaignId: cid, userId: request.user.id, beforeAi: sheetAiAllowed(request.user.id) });
     if (!spell) throw new NotFoundError(`No spell called "${name}" was found in the SRD, your books, or the AI's memory.`);
     return spell;
+  });
+
+  /** The SRD's Wild Shape forms (beasts, and the four elementals), for suggestions while typing. */
+  app.get('/campaigns/:cid/forms', async (request) => {
+    access(request);
+    return forms.list();
+  });
+
+  /** A Wild Shape form by name: the SRD, else the group's books, else the AI's memory (never the DM's creatures). 404 if nobody knows it. */
+  app.get('/campaigns/:cid/forms/lookup', async (request) => {
+    const { cid } = access(request);
+    const { name } = z.object({ name: z.string().trim().min(1).max(100) }).parse(request.query);
+    const form = await forms.lookup(name, { campaignId: cid, userId: request.user.id, beforeAi: sheetAiAllowed(request.user.id) });
+    if (!form) throw new NotFoundError(`No creature called "${name}" was found in the SRD, your books, or the AI's memory.`);
+    return form;
   });
 
   // ---------- gear (the sheet's inventory: carried and equipped) ----------

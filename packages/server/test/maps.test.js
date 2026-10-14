@@ -356,6 +356,37 @@ test("tokens: a player character with a saved sheet shows the sheet's hit points
   }
 });
 
+test("tokens: a druid in Wild Shape (2014) shows the form's hit points; at 0 on the map they change back and the rest comes off their own", async () => {
+  const t = await setup({ llm: mapLLM() });
+  try {
+    const map = await importMap(t, await terrain(700, 490, { size: 35 }));
+    const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+    await t.request('PATCH', base, { body: { shown: true } });
+    const tok = (await t.request('POST', `${base}/tokens`, { body: { kind: 'pc', name: 'Fern', user_id: t.sam.id } })).json().token;
+    const seen = async () => (await t.request('GET', base)).json().tokens.find((x) => x.id === tok.id);
+    const wolf = { id: 'wolf1', name: 'Wolf', type: 'beast', cr: '1/4', ac: 13, hp_max: 11, speed: { walk: 40 } };
+    const sheet = { ...emptySheet({ name: 'Fern' }), classes: [{ name: 'Druid', level: 2 }], hp: { current: 15, temp: null }, wild_shape: { forms: [wolf], uses_spent: 1, active: { form: 'wolf1', hp: 11 } } };
+    t.sheets.save(t.campaign.id, t.sam.id, sheet);
+    assert.deepEqual((await seen()).hp, { current: 11, max: 11 });
+    assert.equal((await seen()).move_speed, 40);
+
+    await t.request('PATCH', `${base}/tokens/${tok.id}`, { body: { hp: { current: 6, max: 11 } } });
+    assert.equal(t.sheets.get(t.campaign.id, t.sam.id).sheet.wild_shape.active.hp, 6);
+    assert.equal(t.sheets.get(t.campaign.id, t.sam.id).sheet.hp.current, 15);
+
+    // 10 damage on 6: the wolf drops, Fern takes the other 4.
+    await t.request('PATCH', `${base}/tokens/${tok.id}`, { body: { hp: { current: -4, max: 11 } } });
+    const after = t.sheets.get(t.campaign.id, t.sam.id).sheet;
+    assert.equal(after.wild_shape.active, null);
+    assert.equal(after.hp.current, 11);
+    assert.deepEqual((await seen()).hp, { current: 11, max: 13 });
+    const lines = fs.readFileSync(path.join(t.paths.archive, t.campaign.slug, 'character-sheets', `${t.sam.id}.jsonl`), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.match(lines.at(-1).reason, /Wolf \(Wild Shape\) dropped to 0 hit points on the map: changed back, 4 damage carried over/);
+  } finally {
+    await t.cleanup();
+  }
+});
+
 test('stat blocks: the AI fills one in for the DM; players never get it', async () => {
   const ogreBlock = {
     found: true, name: 'Ogre', size: 'large', ac: 11, hp_average: 59, hp_formula: '7d10 + 21', speed: '40 ft.', challenge: '2 (450 XP)',

@@ -16,6 +16,7 @@ import { EventEmitter } from 'node:events';
 import { MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, blockingWalls, canSee, doorKnown, healthOf, ownToken, speedFromText } from '@dndapp/shared/map.js';
 import { designToMap } from '@dndapp/shared/map-design.js';
 import { computeSheet } from '@dndapp/shared/sheet.js';
+import { activeForm, formHasHp, setFormHp } from '@dndapp/shared/wild-shape.js';
 import { createSight } from './sight.js';
 import { mapEvents } from './events.js';
 import { diffJson, applyJson } from '../sheets/store.js';
@@ -271,13 +272,19 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
       // How far it walks in a turn: what the DM set, else the player's sheet, else the stat block.
       const moveSpeed = (t) => {
         if (t.speed != null) return t.speed;
-        if (t.kind === 'pc' && t.user_id != null) return linked(t) ? Number(linked(t).calc.values.speed) || null : null;
+        if (t.kind === 'pc' && t.user_id != null) {
+          if (!linked(t)) return null;
+          const form = activeForm(linked(t).sheet);
+          return form ? form.speed.walk ?? 0 : Number(linked(t).calc.values.speed) || null;
+        }
         return speedFromText(t.stats?.speed) ?? null;
       };
-      // A player character with a saved sheet has the sheet's hit points (current and maximum).
+      // A player character with a saved sheet has the sheet's hit points (current and maximum), or
+      // their Wild Shape form's while they're in one (2014 rules: the form has its own).
       const hpOf = (t) => {
         const l = linked(t);
         if (!l) return { hp: t.hp, hp_sheet: false };
+        if (formHasHp(l.sheet)) return { hp: { current: l.sheet.wild_shape.active.hp, max: activeForm(l.sheet).hp_max }, hp_sheet: true };
         const max = l.calc.values.hp_max == null ? null : Number(l.calc.values.hp_max) || null;
         const current = l.sheet.hp.current ?? max;
         return { hp: current == null && max == null ? null : { current, max }, hp_sheet: true };
@@ -390,7 +397,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
     sheetChanged(campaignId, userId) {
       const { sheet, version } = sheets.get(campaignId, userId);
       const values = version ? computeSheet(sheet, store.getSettings(campaignId)).values : {};
-      const shown = JSON.stringify([sheet.hp.current, values.hp_max ?? null, values.speed ?? null]);
+      const shown = JSON.stringify([sheet.hp.current, values.hp_max ?? null, values.speed ?? null, sheet.wild_shape?.active ?? null]);
       const key = `${campaignId}:${userId}`;
       if (sheetShown.get(key) === shown) return;
       sheetShown.set(key, shown);
@@ -403,11 +410,21 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
     /**
      * Hit points changed on a player character's token: they go on the
      * player's sheet (current only; the maximum is the sheet's), saved with
-     * the reason so the archive and the archivist see it.
+     * the reason so the archive and the archivist see it. A druid in a Wild
+     * Shape form with its own hit points (2014 rules): the form's change, and
+     * at 0 they change back with the rest of the damage carried over.
      */
     setSheetHp(campaignId, userId, current, { by }) {
       const { sheet, version } = sheets.get(campaignId, userId);
       if (!version) return null;
+      if (formHasHp(sheet)) {
+        const form = activeForm(sheet);
+        const res = setFormHp(sheet, current, computeSheet(sheet, store.getSettings(campaignId)).values.hp_max);
+        const reason = res.reverted
+          ? `${form.name} (Wild Shape) dropped to 0 hit points on the map: changed back${res.carried ? `, ${res.carried} damage carried over` : ''}`
+          : `${form.name} (Wild Shape) hit points changed on the map`;
+        return sheets.save(campaignId, userId, res.sheet, { by, reason });
+      }
       return sheets.save(campaignId, userId, { ...sheet, hp: { ...sheet.hp, current } }, { by, reason: 'hit points changed on the map' });
     },
 

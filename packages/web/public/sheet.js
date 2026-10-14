@@ -20,6 +20,7 @@ import { EFFECT_TARGETS, GEAR_NAMES, MAX_EFFECTS, attackWeapon, attunementLimit,
 import { WEIGHT_RULES } from './shared/settings.js';
 import { POINT_BUY, POINT_COST, changePointBuy, pointBuy, stepPointBuy } from './shared/point-buy.js';
 import { roll, rollModeFromEvent, modeButtons, D20_ICON } from './dice.js';
+import { wildShapeBox, wildShapeBanner } from './sheet-wild-shape.js';
 
 const $ = (sel) => document.querySelector(sel);
 const LEVEL_NAMES = ['Cantrips', '1st level', '2nd level', '3rd level', '4th level', '5th level', '6th level', '7th level', '8th level', '9th level'];
@@ -40,6 +41,7 @@ const state = {
   savedSheet: null, // the sheet as the server has it (attacks it already had with weapons not carried may stay)
   calc: null,
   settings: { weight: 'capacity' }, // the campaign's (campaign-settings.js)
+  edition: '2014', // the rules edition the campaign plays by, from the server (when the DM hasn't chosen one in settings)
   layout: null, // the layout the sheet was last drawn in
   renders: [], // functions that refresh automatic values
   gearDraws: [], // functions that redraw what shows the inventory (the Inventory tab, equipped weapons in Attacks)
@@ -68,8 +70,9 @@ export async function loadSheet({ campaignId, userId, guarded }) {
   Object.assign(state, { campaignId, userId, guarded, dirty: false, unusedDescription: '', itemPicturesLoading: null });
   const review = $('#sheet-review-result');
   if (review) review.hidden = true;
-  const [{ sheet, version }, pictures] = await Promise.all([api('GET', `${base()}/sheet`), api('GET', `${base()}/character/pictures`)]);
+  const [{ sheet, version, edition }, pictures] = await Promise.all([api('GET', `${base()}/sheet`), api('GET', `${base()}/character/pictures`)]);
   state.pictures = pictures;
+  state.edition = edition ?? '2014';
   useSheet(sheet, version);
 }
 
@@ -361,7 +364,7 @@ function header() {
     summary.textContent = [state.sheet.race.trim(), classes, `Level ${state.calc.level}`].filter(Boolean).join(' · ');
   });
   return h('header', { class: 'sh-head' },
-    h('section', { class: 'sh-box name-box' }, field('name', { label: 'Character name', cls: 'big' }), lbl('Character name'), summary),
+    h('section', { class: 'sh-box name-box' }, field('name', { label: 'Character name', cls: 'big' }), lbl('Character name'), summary, wildShapeBanner({ state })),
     infoBox(),
   );
 }
@@ -703,7 +706,8 @@ async function takeShortRest() {
     if (!res) return;
     useSheet(res.sheet, res.version);
     announce();
-    status(`Short rest taken${state.calc.values.pact_slots ? ': Pact Magic slots are back' : ''}. Spend hit dice to heal.`);
+    const back = [state.calc.values.pact_slots ? 'Pact Magic slots' : '', state.sheet.wild_shape.forms.length ? 'Wild Shape uses' : ''].filter(Boolean).join(' and ');
+    status(`Short rest taken${back ? `: ${back} are back` : ''}. Spend hit dice to heal.`);
   } catch (err) {
     status(`Couldn't take a short rest: ${err.message}`, true);
   }
@@ -1367,17 +1371,20 @@ async function removePicture(kind, draw) {
 // screens are in themes.css. Every column stretches to the tallest one in its
 // row, and its last block grows to fill, so the bottoms line up.
 
+/** Druids only (hidden for everyone else): Wild Shape forms (sheet-wild-shape.js). */
+const wildShape = () => wildShapeBox({ state, changed, render });
+
 const pages = () => [section('Character details', details()), section('Spells', spells())];
 
 const LAYOUTS = {
   // The official 2014 sheet: three columns, then details and spells.
   classic: () => [
-    row('classic', col(core(), passive(), proficiencies()), col(combat(), attacks(), equipment()), col(traits(), features())),
+    row('classic', col(core(), passive(), proficiencies()), col(combat(), attacks(), wildShape(), equipment()), col(traits(), features())),
     ...pages(),
   ],
   // What you need in a fight across the top.
   combat: () => [
-    row('combat', col(combat()), col(attacks()), col(equipment())),
+    row('combat', col(combat()), col(attacks(), wildShape()), col(equipment())),
     row('stats', col(core(), passive(), proficiencies()), col(traits(), features())),
     ...pages(),
   ],
@@ -1387,7 +1394,7 @@ const LAYOUTS = {
     row('abilities',
       col(proficiency(), inspiration(), pointBuyBox(), ...['str', 'dex', 'con'].map((a) => abilityGroup(a)), skillNotes(), passive(), proficiencies()),
       col(...['int', 'wis', 'cha'].map((a) => abilityGroup(a))),
-      col(attacks(), features()),
+      col(attacks(), wildShape(), features()),
       col(traits(), equipment()),
     ),
     ...pages(),
@@ -1401,7 +1408,7 @@ const LAYOUTS = {
       col(proficiency(), inspiration(), saves(), passive(), proficiencies()),
       col(skills()),
       col(tabbed([
-        ['actions', 'Actions', attacks],
+        ['actions', 'Actions', () => [attacks(), wildShape()]],
         ['spells', 'Spells', spells],
         ['inventory', 'Inventory', equipment],
         ['features', 'Features & traits', features],
@@ -1411,7 +1418,7 @@ const LAYOUTS = {
   ],
   // Everything in one scrolling column.
   single: () => [
-    row('single', col(core(), passive(), combat(), attacks(), equipment(), proficiencies(), traits(), features())),
+    row('single', col(core(), passive(), combat(), attacks(), wildShape(), equipment(), proficiencies(), traits(), features())),
     ...pages(),
   ],
 };

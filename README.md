@@ -253,6 +253,8 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/spells?q=` | Spell name suggestions (SRD and your books) |
 | POST | `/campaigns/:cid/sheet/review` | Review your saved sheet (players): rules checks, then the AI against your books (and the web for what they don't cover) → `{edition, summary, findings: [{severity: problem \| check, area, message, source}], ai, error?, lookups}`. Nothing is saved; the AI part counts towards `SHEET_AI_PER_HOUR` |
 | GET | `/campaigns/:cid/spells/lookup?name=` | A spell's details: SRD, else your books (tidied by the AI), else the AI's memory. 404 if not found; 429 past `SHEET_AI_PER_HOUR` AI calls |
+| GET | `/campaigns/:cid/forms` | The SRD's Wild Shape forms (beasts and the four elementals) for suggestions: `[{ name, cr, type, speed }]` |
+| GET | `/campaigns/:cid/forms/lookup?name=` | A Wild Shape form: SRD, else your books (copied by the AI), else the AI's memory; never the DM's creatures. 404 if not found; 429 past `SHEET_AI_PER_HOUR` AI calls |
 | GET | `/campaigns/:cid/gear/lookup?name=` | An item for your Inventory (players): PHB weapons and armour from the tables (also "+1 Longsword"), else your books, else the AI's memory, never the DM's own items → `{item, from: srd \| book \| ai}` (an unsaved inventory line); 404 if not found; 429 past `SHEET_AI_PER_HOUR` AI calls |
 | GET | `/campaigns/:cid/gear/pictures` | Pictures of the DM's items in your Inventory (players; bought from a merchant) → `{pictures: {item id: key}}`, only those with one |
 | GET | `/campaigns/:cid/gear/items/:iid/picture?v=` | One of them, cut to a square (webp); 404 unless that item is in your own inventory and has a picture |
@@ -368,6 +370,6 @@ In Claude Code, the `regression-keeper` worker (`.claude/agents/`) writes and ch
 
 ## Licences
 
-Spell text in `packages/server/src/sheets/srd-spells.json` is from the System Reference Document 5.1 by Wizards of the Coast LLC, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/legalcode), as prepared by the [5e-bits/5e-database](https://github.com/5e-bits/5e-database) project (MIT).
+Spell text in `packages/server/src/sheets/srd-spells.json` and the beast stat blocks in `packages/server/src/sheets/srd-beasts.json` are from the System Reference Document 5.1 by Wizards of the Coast LLC, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/legalcode), as prepared by the [5e-bits/5e-database](https://github.com/5e-bits/5e-database) project (MIT).
 
 The 3D dice and their sounds are [@3d-dice/dice-box-threejs](https://github.com/3d-dice/dice-box-threejs) (MIT), which bundles [Three.js](https://threejs.org) and [cannon-es](https://github.com/pmndrs/cannon-es) (both MIT).
