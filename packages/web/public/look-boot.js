@@ -25,6 +25,7 @@
     mapBar: ['top', 'bottom', 'left'],
     besideSide: ['right', 'left'],
     tokenLabels: ['always', 'hover', 'never'],
+    phone: ['auto', 'on', 'off'],
     startTab: ['ask', 'notes', 'sheet', 'inventory', 'creatures', 'items', 'merchants', 'map', 'handouts', 'archivist'],
   };
   // The tabs, and the map tools that can be hidden (each is an element with data-tool on the map bar).
@@ -32,7 +33,7 @@
   var TOOLS = ['grid', 'fit', 'pin', 'measure', 'ping', 'draw', 'template', 'initiative', 'fullscreen', 'sheet-window'];
   var DEFAULTS = {
     theme: 'tavern', layout: 'classic', density: 'cozy', chat: 'bubbles', sheetStyle: 'match', sheetLayout: 'classic',
-    mapBar: 'top', besideSide: 'right', tokenLabels: 'always', startTab: 'ask',
+    mapBar: 'top', besideSide: 'right', tokenLabels: 'always', phone: 'auto', startTab: 'ask',
     accent: '', tabOrder: TABS.slice(), hiddenTabs: [], hiddenTools: [],
   };
 
@@ -77,6 +78,14 @@
   }
 
   var deviceDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : { matches: false };
+  // A phone (narrow, or a phone on its side): the page switches to its phone layout (mobile.css, phone.js).
+  var PHONE_QUERY = '(max-width: 640px), (pointer: coarse) and (max-height: 500px)';
+  var phoneSize = window.matchMedia ? window.matchMedia(PHONE_QUERY) : { matches: false };
+
+  /** Is the phone layout on? "auto" follows the screen; "on" and "off" are the person's choice under Look. */
+  function isPhone(look) {
+    return look.phone === 'on' || (look.phone === 'auto' && phoneSize.matches);
+  }
   var current = read();
 
   function scheme(theme) {
@@ -130,6 +139,8 @@
     root.setAttribute('data-map-bar', look.mapBar);
     root.setAttribute('data-beside-side', look.besideSide);
     root.setAttribute('data-token-labels', look.tokenLabels);
+    if (isPhone(look)) root.setAttribute('data-phone', '');
+    else root.removeAttribute('data-phone');
     if (look.accent) {
       root.setAttribute('data-accent', look.accent);
       root.style.setProperty('--accent', look.accent);
@@ -159,6 +170,13 @@
   if (deviceDark.addEventListener) {
     deviceDark.addEventListener('change', function () { apply(current); });
   }
+  // Turning a phone on its side, or making a window narrow, switches the layout; the page may need to react.
+  if (phoneSize.addEventListener) {
+    phoneSize.addEventListener('change', function () {
+      apply(current);
+      try { window.dispatchEvent(new CustomEvent('dndlook', { detail: get() })); } catch (e) { /* very old browser */ }
+    });
+  }
   apply(current);
   document.addEventListener('DOMContentLoaded', applyPage);
 
@@ -171,5 +189,6 @@
     get: get,
     save: save,
     scheme: scheme,
+    isPhone: function () { return isPhone(current); },
   };
 })();

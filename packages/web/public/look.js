@@ -29,6 +29,12 @@ const LAYOUTS = {
   app: ['App', 'Phone-app style, with tabs along the bottom.'],
 };
 
+const PHONES = {
+  auto: ['Automatic', 'On a phone, each page fills the screen and the menu hides behind ☰.'],
+  on: ['Always', 'The phone layout everywhere, even on a big screen.'],
+  off: ['Never', 'The normal page, even on a phone.'],
+};
+
 const DENSITIES = {
   compact: ['Compact', 'Smaller text, more on screen.'],
   cozy: ['Cosy', 'The default.'],
@@ -244,6 +250,7 @@ function build() {
     section('page', 'Theme', 'Colours, fonts and atmosphere for the whole page.', 'theme', THEMES, themePreview, 'themes'),
     accentSection(),
     section('page', 'Layout', null, 'layout', LAYOUTS, (k) => diagram('layout', k)),
+    section('page', 'Phone layout', null, 'phone', PHONES, (k) => diagram('phone', k), 'small-cards'),
     section('page', 'Text size', null, 'density', DENSITIES, densityPreview, 'small-cards'),
     tabsSection(),
     section('ask', 'Chat style', 'How questions and answers are shown on the Ask tab.', 'chat', CHATS, chatPreview),

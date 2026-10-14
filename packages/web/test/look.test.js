@@ -52,7 +52,7 @@ test('look: the dialog opens from the login screen; a click chooses, applies and
     assert.ok(dialog.open);
     // In groups, one shown at a time; one choice per section, each showing what's current.
     const shown = () => page.$$('#look-body .look-section h3').filter((h) => page.visible(h)).map((h) => h.textContent);
-    assert.deepEqual(shown(), ['Theme', 'Accent colour', 'Layout', 'Text size', 'Tabs']);
+    assert.deepEqual(shown(), ['Theme', 'Accent colour', 'Layout', 'Phone layout', 'Text size', 'Tabs']);
     page.click('[data-group-tab=ask]');
     assert.deepEqual(shown(), ['Chat style']);
     page.click('[data-group-tab=sheet]');
@@ -62,7 +62,7 @@ test('look: the dialog opens from the login screen; a click chooses, applies and
     assert.equal(page.$('[data-group-tab=map]').getAttribute('aria-selected'), 'true');
     page.click('[data-group-tab=page]');
     assert.equal(page.$$('#look-body .look-card[data-key=theme]').length, 12);
-    assert.equal(page.$$('#look-body .look-card[aria-checked=true]').length, 9);
+    assert.equal(page.$$('#look-body .look-card[aria-checked=true]').length, 10); // one choice made in each section
     assert.equal(page.$('.look-card[data-key=theme][aria-checked=true]').dataset.value, 'tavern');
     // Theme previews carry their own colours (dark themes say so).
     assert.equal(page.$('.look-card[data-value=infernal] .theme-preview').dataset.scheme, 'dark');
@@ -77,7 +77,7 @@ test('look: the dialog opens from the login screen; a click chooses, applies and
     assert.equal(page.$('#tab-sheet').dataset.sheetLayout, 'single');
     assert.deepEqual(saved(page), {
       theme: 'frost', layout: 'classic', density: 'cozy', chat: 'letters', sheetStyle: 'match', sheetLayout: 'single',
-      mapBar: 'top', besideSide: 'right', tokenLabels: 'always', startTab: 'ask',
+      mapBar: 'top', besideSide: 'right', tokenLabels: 'always', phone: 'auto', startTab: 'ask',
       accent: '', tabOrder: ['ask', 'notes', 'sheet', 'inventory', 'creatures', 'items', 'merchants', 'map', 'handouts', 'archivist'], hiddenTabs: [], hiddenTools: [],
     });
 

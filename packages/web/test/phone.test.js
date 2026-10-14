@@ -1,0 +1,115 @@
+/**
+ * The phone layout (look-boot.js, phone.js, mobile.css): on a phone the top
+ * bar hides behind a ☰ button and opens as a menu; toolbars fold into ⋯ menus.
+ */
+import { test } from 'node:test';
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import { withPage } from './helpers.js';
+
+const NO_3D = { 'dndapp.dice': JSON.stringify({ threeD: false, sound: false }) };
+const PHONE_QUERY = 'max-width: 640px), (pointer: coarse) and (max-height: 500px';
+const asSam = ({ look = {}, media = {} } = {}) => ({
+  page: (t) => ({ as: t.sam, storage: { ...NO_3D, 'dndapp.look': JSON.stringify(look) }, media }),
+});
+const root = (page) => page.document.documentElement;
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
+test('the phone layout follows the screen, or the choice under Look', async () => {
+  await withPage(asSam(), async (page) => {
+    assert.ok(!root(page).hasAttribute('data-phone'), 'a big screen gets the normal page');
+  });
+  await withPage(asSam({ media: { [PHONE_QUERY]: true } }), async (page) => {
+    assert.ok(root(page).hasAttribute('data-phone'), 'a phone gets the phone layout');
+  });
+  await withPage(asSam({ look: { phone: 'off' }, media: { [PHONE_QUERY]: true } }), async (page) => {
+    assert.ok(!root(page).hasAttribute('data-phone'), '"Never" keeps the normal page on a phone');
+  });
+  await withPage(asSam({ look: { phone: 'on' } }), async (page) => {
+    assert.ok(root(page).hasAttribute('data-phone'), '"Always" uses it on a big screen');
+    // Changed from the Look dialog.
+    page.click('#app-view .look-open');
+    page.click('.look-card[data-key="phone"][data-value="off"]');
+    assert.ok(!root(page).hasAttribute('data-phone'));
+    assert.equal(JSON.parse(page.window.localStorage.getItem('dndapp.look')).phone, 'off');
+  });
+});
+
+test('☰ opens the pages and settings as a menu; picking a page closes it', async () => {
+  await withPage(asSam({ look: { phone: 'on' } }), async (page) => {
+    const nav = page.$('#phone-nav');
+    const bar = page.$('#app-view > .topbar');
+    assert.ok(nav, 'the ☰ button');
+    assert.equal(nav.getAttribute('aria-expanded'), 'false');
+    assert.ok(!bar.classList.contains('menu-open'));
+
+    page.click('#phone-nav');
+    assert.ok(bar.classList.contains('menu-open'));
+    assert.equal(nav.getAttribute('aria-expanded'), 'true');
+    assert.ok(page.$('#phone-scrim').classList.contains('on'));
+
+    page.click('[data-tab=notes]');
+    await tick();
+    assert.ok(page.visible('#tab-notes'), 'went to Notes');
+    assert.ok(!bar.classList.contains('menu-open'), 'and the menu closed');
+    assert.notEqual(page.document.activeElement, page.$('#note-form textarea'), 'no keyboard popping up on a phone');
+
+    // Tapping beside it, or Escape, closes it too.
+    page.click('#phone-nav');
+    page.click('#phone-scrim');
+    assert.ok(!bar.classList.contains('menu-open'));
+    page.click('#phone-nav');
+    bar.dispatchEvent(new page.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    assert.ok(!bar.classList.contains('menu-open'));
+
+    // Settings in it still work (Look opens its dialog) and close the menu.
+    page.click('#phone-nav');
+    page.click('#app-view .look-open');
+    await tick();
+    assert.ok(page.$('#look-dialog').open);
+    assert.ok(!bar.classList.contains('menu-open'));
+  });
+});
+
+test('the open chat\'s buttons fold into a ⋯ menu on a phone', async () => {
+  await withPage(asSam({ look: { phone: 'on' } }), async (page) => {
+    const actions = page.$('.chat-actions');
+    assert.ok(actions.classList.contains('phone-menu'));
+    const more = actions.querySelector('.phone-more');
+    page.click(more);
+    assert.ok(actions.classList.contains('menu-open'));
+    // One menu at a time: opening ☰ closes ⋯.
+    page.click('#phone-nav');
+    assert.ok(!actions.classList.contains('menu-open'));
+    assert.ok(page.$('#app-view > .topbar').classList.contains('menu-open'));
+    page.click('#phone-scrim');
+    // New chat from the menu works and closes it.
+    page.click(more);
+    page.click('.new-chat-head');
+    await tick();
+    assert.ok(!actions.classList.contains('menu-open'));
+    assert.equal(page.text('#chat-title'), 'New chat');
+  });
+});
+
+test('a phone has no room for a panel beside the map', async () => {
+  await withPage({ page: (t) => ({ as: t.sam, storage: { ...NO_3D, 'dndapp.beside': 'notes', 'dndapp.look': JSON.stringify({ phone: 'on' }) } }) }, async (page) => {
+    page.click('[data-tab=map]');
+    assert.ok(page.visible('#tab-map'));
+    assert.ok(!page.visible('#tab-notes'));
+    assert.ok(!page.$('#app-view').classList.contains('beside'));
+  });
+});
+
+test('the phone styles only apply in the phone layout', () => {
+  const css = fs.readFileSync(new URL('../public/mobile.css', import.meta.url), 'utf8');
+  const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  assert.ok(html.indexOf('mobile.css') > html.indexOf('themes.css'), 'loaded after the themes, so it wins over the layouts');
+  // Every rule is for the phone layout, apart from hiding its buttons elsewhere and the Look dialog's pictures.
+  const rules = css.replace(/\/\*[\s\S]*?\*\//g, '').split('}').map((r) => r.split('{')[0].trim()).filter(Boolean);
+  const parts = (sel) => sel.split(/,(?![^(]*\))/).map((s) => s.trim());
+  for (const one of rules.flatMap(parts)) {
+    if (/^\.phone-(nav|more|scrim|auto|on|off)\b/.test(one)) continue;
+    assert.match(one, /^:root\[data-phone\]/, `"${one}" should be for phones only`);
+  }
+});

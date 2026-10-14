@@ -7,6 +7,7 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="themes.css">
+  <link rel="stylesheet" href="mobile.css">
   <!-- Applies the chosen look before the page draws, so it doesn't flash. -->
   <script src="look-boot.js"></script>
   <script type="module" src="app.js"></script>
@@ -147,7 +148,7 @@
       <div class="chats-scrim" aria-hidden="true"></div>
       <div class="ask-main">
         <div class="panel-head">
-          <button type="button" id="chats-toggle" class="ghost chats-toggle" aria-controls="chats" aria-expanded="false">☰ <span>Chats</span></button>
+          <button type="button" id="chats-toggle" class="ghost chats-toggle" aria-controls="chats" aria-expanded="false"><span class="chats-icon" aria-hidden="true">☰</span> <span>Chats</span></button>
           <h2 id="chat-title" class="chat-title">New chat</h2>
           <div class="chat-actions">
             <button type="button" id="chat-pin" class="ghost icon-btn" hidden></button>
