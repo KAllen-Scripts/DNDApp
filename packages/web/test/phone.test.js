@@ -182,6 +182,21 @@ test("the DM's lists keep Find and New in the row; Find online and Look up go in
   });
 });
 
+test("the admin's Look, Change password and Log out are in ⋯ on a phone", async () => {
+  await withPage({ page: (t) => ({ as: { token: t.dmToken }, storage: { 'dndapp.look': JSON.stringify({ phone: 'on' }) } }) }, async (page) => {
+    await page.waitFor(() => page.visible('#admin-view'), { what: 'the admin screen' });
+    const bar = page.$('#admin-view > .topbar');
+    assert.equal(bar.querySelector('.who').parentElement, bar);
+    const list = bar.querySelector('.phone-menu-list');
+    for (const sel of ['.look-open', '.change-password', '.logout']) assert.ok(list.querySelector(sel), `${sel} is in ⋯`);
+    page.click('#admin-view .phone-more');
+    page.click('#admin-view .look-open');
+    await tick();
+    assert.ok(page.$('#look-dialog').open, 'Look opens from the menu');
+    assert.ok(!list.classList.contains('menu-open'));
+  });
+});
+
 test('a phone has no room for a panel beside the map', async () => {
   await withPage({ page: (t) => ({ as: t.sam, storage: { ...NO_3D, 'dndapp.beside': 'notes', 'dndapp.look': JSON.stringify({ phone: 'on' }) } }) }, async (page) => {
     page.click('[data-tab=map]');
@@ -202,4 +217,18 @@ test('the phone styles only apply in the phone layout', () => {
     if (/^\.phone-(nav|more|scrim|menu-close|menu-list|auto|on|off)\b/.test(one)) continue;
     assert.match(one, /^:root\[data-phone\]/, `"${one}" should be for phones only`);
   }
+});
+
+test('regression: an open ⋯ menu in a bar that stays at the top sits above the scrim, so its buttons can be tapped', () => {
+  // The Sheet's, Inventory's, the DM's lists' and the admin's bars are sticky with a z-index, which puts their
+  // menu in the bar's own layer, under the page-wide scrim: the menu looked dimmed and a tap hit the scrim.
+  const css = fs.readFileSync(new URL('../public/mobile.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const z = (selector) => {
+    const rule = css.split('}').find((r) => r.split('{')[0].split(/,(?![^(]*\))/).some((s) => s.trim() === selector));
+    return Number(rule?.match(/z-index:\s*(\d+)/)?.[1] ?? NaN);
+  };
+  const scrim = z(':root[data-phone] .phone-scrim');
+  const bar = z(':root[data-phone] .phone-menu:has(> .phone-menu-list.menu-open)');
+  assert.ok(scrim > 0, 'the scrim has a z-index');
+  assert.ok(bar > scrim, `a bar with its menu open is lifted over the scrim (${bar} > ${scrim})`);
 });

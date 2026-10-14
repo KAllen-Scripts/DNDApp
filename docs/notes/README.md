@@ -4,7 +4,7 @@ Written alongside the code in the first Claude project ("Interactive map for DND
 
 | File | What it is | State |
 |---|---|---|
-| [mobile-ui.md](mobile-ui.md) | The phone layout: how it works, and the order the pages are converted in (Kenny, 2026-10-14) | Stages 1 to 5 of 6 built |
+| [mobile-ui.md](mobile-ui.md) | The phone layout: how it works, and the order the pages are converted in (Kenny, 2026-10-14) | All 6 stages built; not yet tried on a real phone |
 | [notes-only-sessions.md](notes-only-sessions.md) | Kenny's design for sessions built from notes, with no transcript; private notes | Designed, not built. One open question (private notes hidden from the DM too?) |
 | [dm-screen-ideas.md](dm-screen-ideas.md) | 16 DM screen ideas, layouts, questions | On hold (Kenny, 2026-10-07). Several have since been built another way (initiative, Archivist tab, handouts, shared rolls, creatures) |
 | [picture-assets-research.md](picture-assets-research.md) | Picture assets for the map creator: CC0 textures, asset packs from a folder | Research; waiting on Kenny's pick |

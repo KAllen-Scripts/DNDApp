@@ -24,7 +24,9 @@ Each stage is one PR, merged when `npm test` is green, with real-phone checks ad
 3. **Map** (done 2026-10-14). The map fills the whole screen. Fit, Measure, Ping, Draw and Initiative (and any tool that's on) float in a row at the bottom; ⋯ opens every tool as a sheet (`phoneSheet()` on full screen's More button, nothing moved). The DM's fog and wall tools are strips that scroll sideways above it. The picked token's bar sits above the tools; the turn order under ☰. No Beside the map, Sheet window or Full screen on a phone. Pinch zoom still to check on a real phone.
 4. **Dice and dialogs** (done 2026-10-14). Every dialog except the map creator is a full-width sheet from the bottom, its buttons in a row that stays at the bottom. The dice tray comes up from the bottom without the keyboard tips, and doesn't focus its text box.
 5. **The DM's pages** (done 2026-10-14). Creatures, Items, Merchants: Find and + New in a sticky row, Find online and Look up in ⋯. Archivist: its heading leaves room for ☰. The map creator is left as it is.
-6. **Login, campaign picker, password, admin screen.**
+6. **Login, campaign picker, password, admin screen** (done 2026-10-14). The forms fill the screen; the admin's header stays at the top with Look, Change password and Log out in ⋯.
+
+A bar that stays at the top has its own z-index, so its ⋯ menu would sit under the scrim: `.phone-menu:has(> .menu-open)` lifts it over (a regression test checks this).
 
 ## Not doing (unless asked)
 
