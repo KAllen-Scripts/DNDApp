@@ -2,12 +2,13 @@
  * Another panel while on the map, without switching tabs: the sheet (or the
  * DM's Creatures), Ask, Notes, Handouts or the DM's Archivist beside the map on the same
  * page (drag the handle between them to resize; which side is chosen under
- * Look), or the sheet popped out into a window of its own. The choice and
+ * Look), or any page popped out into a window of its own. The choice and
  * the width are saved in this browser.
  *
- * The popped-out window is this same page at ?view=sheet&campaign=<id>: it
- * shows only the sheet. The sheet keeps itself up to date across windows
- * (sheet.js).
+ * A popped-out window is this same page at ?view=<tab>&campaign=<id>: it
+ * shows only that tab (the sheet's is ?view=sheet). The sheet keeps itself up
+ * to date across windows (sheet.js); the other pages load as they do in the
+ * main window.
  */
 import { storage } from './api.js';
 
@@ -19,10 +20,13 @@ const MIN_WIDTH = 320; // px
 const MIN_MAP = 320; // the map keeps at least this much
 const DEFAULT_WIDTH = 540;
 const PANELS = ['sheet', 'inventory', 'creatures', 'items', 'merchants', 'ask', 'notes', 'handouts', 'archivist'];
+const TABS = [...PANELS, 'map'];
 
 const params = new URLSearchParams(location.search);
+/** The tab this page shows on its own when it is a popped-out window, or null. */
+export const WINDOW_TAB = TABS.includes(params.get('view')) ? params.get('view') : null;
 /** Is this page the popped-out sheet window? */
-export const SHEET_WINDOW = params.get('view') === 'sheet';
+export const SHEET_WINDOW = WINDOW_TAB === 'sheet';
 /** The campaign the popped-out window was opened for. */
 export const windowCampaign = () => params.get('campaign');
 
@@ -34,7 +38,7 @@ const available = (name) => PANELS.includes(name) && !$(`[data-tab="${name}"]`)?
 
 /** Which panel goes beside the map (when the map tab is open), or null. A phone has no room for one. */
 export function besidePanel() {
-  if (SHEET_WINDOW || document.documentElement.hasAttribute('data-phone')) return null;
+  if (WINDOW_TAB || document.documentElement.hasAttribute('data-phone')) return null;
   let saved = storage.get(BESIDE_KEY);
   if (saved == null && storage.get(OLD_KEY) === '1') saved = 'sheet';
   return available(saved) ? saved : null;
@@ -81,29 +85,37 @@ function applyWidth(w) {
 const saveWidth = (w) => storage.set(WIDTH_KEY, String(applyWidth(w)));
 const currentWidth = () => Number($('#sheet-splitter').getAttribute('aria-valuenow')) || DEFAULT_WIDTH;
 
-/** Open the sheet in its own window (or bring that window forward if it's open). */
-export function popOut() {
-  if (campaignId == null) return;
-  const url = `${location.pathname}?view=sheet&campaign=${encodeURIComponent(campaignId)}`;
-  const win = window.open(url, `dndapp-sheet-${campaignId}`, 'popup,width=760,height=900');
+// The map needs more room than a sheet-sized window.
+const SIZES = { map: 'popup,width=1200,height=900' };
+
+/** Open a tab (the sheet unless named) in its own window, or bring that window forward if it's open. */
+export function popOut(tab = 'sheet') {
+  if (campaignId == null || !TABS.includes(tab)) return;
+  const url = `${location.pathname}?view=${tab}&campaign=${encodeURIComponent(campaignId)}`;
+  const win = window.open(url, `dndapp-${tab}-${campaignId}`, SIZES[tab] ?? 'popup,width=760,height=900');
   if (!win) {
-    alert('Your browser stopped the sheet window from opening. Allow pop-ups for this site, or pick "Sheet beside" on the map to show it beside the map.');
+    const label = $(`[data-tab="${tab}"] [data-label]`)?.dataset.label || tab;
+    const beside = PANELS.includes(tab) ? `, or pick "${label} beside" on the map to show it beside the map` : '';
+    alert(`Your browser stopped the ${label.toLowerCase()} window from opening. Allow pop-ups for this site${beside}.`);
     return;
   }
   win.focus?.();
-  // One place for the sheet is enough.
-  if (besidePanel() === 'sheet') setBeside(null);
+  // One place for a panel is enough.
+  if (besidePanel() === tab) setBeside(null);
 }
 
-export function initSheetPlace({ onChange }) {
+export function initSheetPlace({ onChange, currentTab }) {
   relayout = onChange;
-  if (SHEET_WINDOW) {
-    document.documentElement.classList.add('sheet-window');
+  if (WINDOW_TAB) {
+    document.documentElement.classList.add('popped-window');
+    if (SHEET_WINDOW) document.documentElement.classList.add('sheet-window');
     $('#sheet-popout').hidden = true;
+    $('#tab-popout').hidden = true;
   }
   $('#map-beside').addEventListener('change', (e) => setBeside(e.target.value));
-  $('#map-sheet-window').addEventListener('click', popOut);
-  $('#sheet-popout').addEventListener('click', popOut);
+  $('#map-sheet-window').addEventListener('click', () => popOut('sheet'));
+  $('#sheet-popout').addEventListener('click', () => popOut('sheet'));
+  $('#tab-popout').addEventListener('click', () => popOut(currentTab()));
 
   // The handle: drag it, or use the arrow keys.
   const splitter = $('#sheet-splitter');

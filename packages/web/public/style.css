@@ -643,9 +643,9 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
   /* Half the height: the map shrinks rather than pushing its toolbar out of sight. */
   #app-view.beside .map-view { min-height: 6rem; }
 }
-/* The popped-out window: just the sheet. */
-.sheet-window #app-view { --page-width: none; --bar-width: 100%; }
-.sheet-window :is(.tabs, #switch-campaign, .change-password) { display: none !important; }
+/* A popped-out window: just the one page. */
+.popped-window #app-view { --page-width: none; --bar-width: 100%; }
+.popped-window :is(.tabs, #switch-campaign, .change-password, #tab-popout, #map-beside) { display: none !important; }
 
 /*
  * One set of measurements for the whole sheet, so boxes line up in every

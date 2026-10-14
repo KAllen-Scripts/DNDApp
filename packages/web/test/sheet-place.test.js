@@ -169,3 +169,44 @@ test('sheet in two windows: each says when it saved, and the other shows the new
     assert.match(page.dialogs.at(-1).message, /changed in another tab/);
   });
 });
+
+test('pop out any page: Pop out in the bar opens the tab you are on in its own window, and turns off that panel beside the map', async () => {
+  await withPage(asSam({ storage: { 'dndapp.beside': 'notes' } }), async (page, t) => {
+    page.click('[data-tab=notes]');
+    assert.ok(page.visible('#tab-popout'));
+    page.click('#tab-popout');
+    assert.deepEqual(page.opened, [{ url: `/?view=notes&campaign=${t.campaign.id}`, name: `dndapp-notes-${t.campaign.id}`, features: 'popup,width=760,height=900' }]);
+    assert.equal(page.window.localStorage.getItem('dndapp.beside'), null, 'one place for the notes is enough');
+
+    page.click('[data-tab=map]');
+    page.click('#tab-popout');
+    assert.deepEqual(page.opened.at(-1), { url: `/?view=map&campaign=${t.campaign.id}`, name: `dndapp-map-${t.campaign.id}`, features: 'popup,width=1200,height=900' });
+
+    page.answers.open = false;
+    page.click('[data-tab=handouts]');
+    page.click('#tab-popout');
+    assert.match(page.dialogs.at(-1).message, /stopped the handouts window from opening/);
+  });
+});
+
+test('pop out any page: the page at ?view=notes shows only Notes, for the campaign it was opened from, with nothing beside it', async () => {
+  await withPage({ page: (t) => ({ as: t.sam, path: `/?view=notes&campaign=${t.campaign.id}`, storage: { ...NO_3D, 'dndapp.beside': 'sheet' } }) }, async (page, t) => {
+    assert.ok(page.visible('#tab-notes'));
+    for (const tab of ['ask', 'sheet', 'map', 'handouts']) assert.ok(!page.visible(`#tab-${tab}`), tab);
+    assert.ok(page.document.documentElement.classList.contains('popped-window'));
+    assert.ok(!page.document.documentElement.classList.contains('sheet-window'));
+    assert.ok(!page.visible('#tab-popout'));
+    assert.equal(page.document.title, `Notes · ${t.campaign.name}`);
+    // Clicking the (hidden) map tab can't happen; changing the look keeps the window on Notes.
+    page.window.dispatchEvent(new page.window.Event('dndlook'));
+    assert.ok(page.visible('#tab-notes') && !page.visible('#tab-ask'));
+  });
+});
+
+test("pop out any page: a window for a page that isn't this person's says so instead of showing it", async () => {
+  await withPage({ page: (t) => ({ as: t.sam, path: `/?view=creatures&campaign=${t.campaign.id}`, storage: NO_3D }) }, async (page) => {
+    assert.ok(page.visible('#tab-creatures'));
+    assert.match(page.text('#tab-creatures'), /isn't yours in this campaign/);
+    assert.ok(!page.visible('#tab-ask'));
+  });
+});

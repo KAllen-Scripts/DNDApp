@@ -22,7 +22,7 @@ import { loadCreatures, initCreatureActions } from './creatures.js';
 import { loadItems, initItemActions } from './items.js';
 import { loadMerchants, initMerchantActions, merchantsOpened } from './merchants.js';
 import { initPhone, phoneMenu, phoneSheet } from './phone.js';
-import { SHEET_WINDOW, windowCampaign, besidePanel, placeBeside, setSheetCampaign, initSheetPlace } from './sheet-place.js';
+import { WINDOW_TAB, SHEET_WINDOW, windowCampaign, besidePanel, placeBeside, setSheetCampaign, initSheetPlace } from './sheet-place.js';
 
 const $ = (sel) => document.querySelector(sel);
 const CAMPAIGN_KEY = 'dndapp.campaign'; // last campaign chosen in this browser (pre-selected next time)
@@ -89,8 +89,8 @@ async function start() {
       return showAdmin({ me: state.me.user, guarded });
     }
     const campaigns = state.me.campaigns;
-    // A popped-out sheet window is for the campaign it was opened from.
-    const current = campaigns.find((c) => String(c.id) === ((SHEET_WINDOW && windowCampaign()) || tabCampaign.get()));
+    // A popped-out window is for the campaign it was opened from.
+    const current = campaigns.find((c) => String(c.id) === ((WINDOW_TAB && windowCampaign()) || tabCampaign.get()));
     if (current) return enterCampaign(current);
     if (campaigns.length === 1) return enterCampaign(campaigns[0]);
     showCampaignPicker();
@@ -216,6 +216,20 @@ async function enterCampaign(campaign) {
     ]);
     return;
   }
+  if (WINDOW_TAB) {
+    // Any other popped-out page: only that tab, loaded as in the main window.
+    const tab = $(`[data-tab="${WINDOW_TAB}"]`);
+    document.title = `${tab.querySelector('[data-label]').dataset.label} · ${campaign.name}`;
+    if (tab.hidden) {
+      // A window left open from before this person's role changed: the page isn't theirs now.
+      for (const t of document.querySelectorAll('[data-tab]')) $(`#tab-${t.dataset.tab}`).hidden = true;
+      $(`#tab-${WINDOW_TAB}`).hidden = false;
+      $(`#tab-${WINDOW_TAB}`).replaceChildren(h('p', { class: 'muted' }, "This page isn't yours in this campaign. Close this window."));
+      return;
+    }
+    showTab(WINDOW_TAB);
+    if (WINDOW_TAB === 'handouts') handoutsOpened();
+  }
   await Promise.all([
     setDiceCampaign({ campaignId: campaign.id, guarded, roller: state.me.dice?.roller, isDm, userId: state.me.user.id }),
     loadConversations(),
@@ -289,7 +303,7 @@ const firstTab = () => [...document.querySelectorAll('[data-tab]')].find((t) => 
 
 // Changing the look can hide the tab you're on, or change what goes beside the map.
 window.addEventListener('dndlook', () => {
-  if (SHEET_WINDOW) return;
+  if (WINDOW_TAB) return;
   showTab($(`[data-tab="${currentTab}"]`).classList.contains('user-hidden') ? firstTab() : currentTab);
 });
 
@@ -749,7 +763,7 @@ phoneMenu($('.chat-actions'), { label: 'This chat: pin, rename, delete, new chat
 initSheetActions();
 phoneMenu($('.sheet-bar'), { label: 'Sheet: review, upload, download, print, pop out', keep: '#sheet-status, .sheet-modes' });
 phoneMenu($('#gear-add'), { label: 'More ways to add', keep: '#gear-name, #dl-gear, button[type=submit], #gear-status' });
-initSheetPlace({ onChange: () => showTab(currentTab) });
+initSheetPlace({ onChange: () => showTab(currentTab), currentTab: () => currentTab });
 showTab(currentTab);
 initMapActions();
 phoneSheet($('#map-main-bar'), $('#map-more')); // on a phone, ⋯ opens all the map's tools from the bottom
