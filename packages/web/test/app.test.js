@@ -45,6 +45,37 @@ test('login: a saved login that has expired goes back to the login form with a m
   });
 });
 
+test('regression: a page opened before the server was updated reloads itself, waiting while someone types', async () => {
+  // After an update moved the map fog into the page, a tab left open from before showed players the whole map.
+  await withPage({ page: (t) => ({ as: t.sam }) }, async (page) => {
+    const { api, reloadPage } = await page.module('api.js');
+    let reloads = 0;
+    reloadPage.now = () => reloads++;
+    await api('GET', '/me');
+    assert.equal(reloads, 0, 'the same version: nothing happens');
+
+    // The server is updated: its page files have a new fingerprint.
+    const before = globalThis.fetch;
+    globalThis.fetch = async (...args) => {
+      const res = await before(...args);
+      const headers = new Headers(res.headers);
+      headers.set('x-page-version', 'updated');
+      return new Response(res.body, { status: res.status, headers });
+    };
+    // Someone is typing: it waits until they leave the field.
+    const field = page.document.createElement('textarea');
+    page.document.body.append(field);
+    field.focus();
+    await api('GET', '/me');
+    assert.equal(reloads, 0, 'not while typing');
+    field.blur();
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(reloads, 1);
+    await api('GET', '/me');
+    assert.equal(reloads, 1, 'once');
+  });
+});
+
 test('logout: ends the login on the server and shows the login form', async () => {
   await withPage({ page: (t) => ({ as: t.sam }) }, async (page, t) => {
     assert.ok(page.visible('#app-view'));
