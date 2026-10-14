@@ -829,6 +829,88 @@ test('maps: panning, wheel zoom (around the pointer) and Fit', async () => {
   });
 });
 
+test('maps: twisting two fingers turns the map (past a small twist), pins land under the finger, and N turns it back', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => ({ map: await importMap(t, { patch: SHOWN }) }),
+    page: (t) => ({ as: t.sam }),
+  }, async (page, t, { map }) => {
+    await openMapTab(page);
+    const { state } = await page.module('map-state.js');
+    const transform = () => page.$('#map-stage').style.transform;
+    const finger = (type, id, x, y) => page.pointer('#map-view', type, { pointerId: id, clientX: x, clientY: y, isPrimary: id === 1 });
+    const at = (deg, r = 100) => [300 + r * Math.cos((deg * Math.PI) / 180), 200 + r * Math.sin((deg * Math.PI) / 180)];
+    finger('pointerdown', 1, 300, 200);
+    finger('pointerdown', 2, ...at(0));
+    // A pinch twists a little: no turn.
+    finger('pointermove', 2, ...at(10));
+    assert.equal(state.view.r, 0);
+    assert.doesNotMatch(transform(), /rotate/);
+    // Past the start, it turns the whole way the fingers have.
+    for (const deg of [20, 40, 60, 90]) finger('pointermove', 2, ...at(deg));
+    assert.ok(Math.abs(state.view.r - Math.PI / 2) < 1e-9, `turned ${state.view.r}`);
+    assert.match(transform(), /rotate\(1\.57\d*rad\)/);
+    finger('pointerup', 2, ...at(90));
+    finger('pointerup', 1, 300, 200);
+    assert.equal(page.$('#map-north').hidden, false, 'N shows while the map is turned');
+    assert.match(page.$('#map-stage').style.getPropertyValue('--unturn'), /^-1\.57/, 'tokens and pins stay upright');
+
+    // A pin dropped on the turned map lands on the map where the finger was.
+    const { x, y, k, r } = state.view;
+    const [sx, sy] = [400, 300];
+    const want = { x: ((sx - x) * Math.cos(r) + (sy - y) * Math.sin(r)) / k, y: ((sy - y) * Math.cos(r) - (sx - x) * Math.sin(r)) / k };
+    page.click('#map-pin');
+    page.pointer('#map-view', 'pointerdown', { clientX: sx, clientY: sy });
+    page.pointer('#map-view', 'pointerup', { clientX: sx, clientY: sy });
+    await page.settle();
+    const [pin] = (await t.request('GET', `/campaigns/${t.campaign.id}/maps/${map.id}/pins`, { as: t.sam.token })).json().pins;
+    assert.ok(Math.abs(pin.x - want.x) < 0.01 && Math.abs(pin.y - want.y) < 0.01, `pin at ${pin.x},${pin.y}, wanted ${want.x},${want.y}`);
+
+    page.click('#map-north');
+    assert.equal(state.view.r, 0);
+    assert.equal(page.$('#map-north').hidden, true);
+    assert.doesNotMatch(transform(), /rotate/);
+
+    // Turned a little and let go near north: it straightens.
+    finger('pointerdown', 1, 300, 200);
+    finger('pointerdown', 2, ...at(0));
+    for (const deg of [10, 20, 25, 5]) finger('pointermove', 2, ...at(deg));
+    assert.ok(state.view.r > 0);
+    finger('pointerup', 2, ...at(5));
+    finger('pointerup', 1, 300, 200);
+    assert.equal(state.view.r, 0);
+
+    // Fit turns it north up too.
+    finger('pointerdown', 1, 300, 200);
+    finger('pointerdown', 2, ...at(0));
+    for (const deg of [20, 60]) finger('pointermove', 2, ...at(deg));
+    finger('pointerup', 2, ...at(60));
+    finger('pointerup', 1, 300, 200);
+    assert.ok(state.view.r > 0.5);
+    page.click('#map-fit');
+    assert.equal(transform(), 'translate(0px, 0px) scale(1)');
+  });
+});
+
+test('regression: the finger that stays still in a pinch is not a tap when it lifts (it dropped a pin in Pin mode)', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => ({ map: await importMap(t, { patch: SHOWN }) }),
+    page: (t) => ({ as: t.sam }),
+  }, async (page) => {
+    await openMapTab(page);
+    const finger = (type, id, x, y) => page.pointer('#map-view', type, { pointerId: id, clientX: x, clientY: y, isPrimary: id === 1 });
+    page.click('#map-pin');
+    finger('pointerdown', 1, 300, 200);
+    finger('pointerdown', 2, 400, 200);
+    finger('pointermove', 2, 450, 205);
+    finger('pointerup', 2, 450, 205);
+    finger('pointerup', 1, 300, 200);
+    await page.settle();
+    assert.equal(page.$$('#map-pins .map-pin').length, 0);
+  });
+});
+
 test('pins: a player drops a pin only they see, labels it, recolours it, moves it and removes it', async () => {
   await withPage({
     setup: { llm: mapLLM() },

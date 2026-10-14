@@ -1043,14 +1043,18 @@ export function select(id) {
 // again once it settles, so it's drawn sharp at the new zoom.
 let settling = 0;
 function applyView() {
-  const { x, y, k } = state.view;
+  const { x, y, k, r = 0 } = state.view;
   const stage = $('#map-stage');
-  stage.style.transform = `translate(${x}px, ${y}px) scale(${k})`;
+  stage.style.transform = `translate(${x}px, ${y}px)${r ? ` rotate(${r}rad)` : ''} scale(${k})`;
   stage.style.willChange = 'transform';
   clearTimeout(settling);
   settling = setTimeout(() => (stage.style.willChange = ''), 250);
-  // Pins stay the same size on screen at any zoom.
+  // Pins stay the same size on screen at any zoom, and tokens, pins and links stay upright on a turned map.
   stage.style.setProperty('--unzoom', String(1 / k));
+  stage.style.setProperty('--unturn', `${-r}rad`);
+  const north = $('#map-north');
+  north.hidden = !r;
+  north.style.setProperty('--turn', `${r}rad`);
   if (state.ruler && !state.drag) placeMeasure(state.ruler.b);
 }
 
@@ -1059,7 +1063,7 @@ function fit() {
   const box = $('#map-view').getBoundingClientRect();
   if (!map || !box.width || !box.height) return;
   const k = Math.min(box.width / map.image.width, box.height / map.image.height);
-  state.view = { k, x: (box.width - map.image.width * k) / 2, y: (box.height - map.image.height * k) / 2 };
+  state.view = { k, x: (box.width - map.image.width * k) / 2, y: (box.height - map.image.height * k) / 2, r: 0 };
   state.fitted = true;
   applyView();
 }
@@ -1071,9 +1075,35 @@ function zoomAt(px, py, factor) {
   const min = Math.min(box.width / map.image.width, box.height / map.image.height) / 2;
   const k = Math.min(MAX_ZOOM, Math.max(min, state.view.k * factor));
   const f = k / state.view.k;
-  state.view = { k, x: px - (px - state.view.x) * f, y: py - (py - state.view.y) * f };
+  state.view = { ...state.view, k, x: px - (px - state.view.x) * f, y: py - (py - state.view.y) * f };
   applyView();
 }
+
+/** Turn the map by `angle` (radians, clockwise) around a point of the view (a player's own view, like zoom). */
+function turnAt(px, py, angle) {
+  if (!state.current || !angle) return;
+  const { x, y, r = 0 } = state.view;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  let turned = (r + angle) % (2 * Math.PI);
+  if (turned > Math.PI) turned -= 2 * Math.PI;
+  if (turned <= -Math.PI) turned += 2 * Math.PI;
+  state.view = { ...state.view, r: turned, x: px + (x - px) * cos - (y - py) * sin, y: py + (x - px) * sin + (y - py) * cos };
+  applyView();
+}
+
+/** Turn the map back to north up, around the middle of the view. */
+function northUp() {
+  const box = $('#map-view').getBoundingClientRect();
+  turnAt(box.width / 2, box.height / 2, -(state.view.r ?? 0));
+  if (Math.abs(state.view.r) < 1e-9) state.view.r = 0;
+  applyView();
+}
+
+/** How far two fingers must twist before the map turns (a pinch to zoom always twists a little). */
+const TWIST_START = (15 * Math.PI) / 180;
+/** A turn this close to north up when the fingers lift snaps to it. */
+const NORTH_SNAP = (8 * Math.PI) / 180;
 
 /** How close (screen pixels) a wall end snaps to another wall's end or a grid corner, and how close a click picks a wall. */
 const SNAP_PX = 12;
@@ -1125,11 +1155,22 @@ function wallUp(e) {
 /** Screen coordinates → the map image's pixels. */
 export function toImage(clientX, clientY) {
   const box = $('#map-view').getBoundingClientRect();
-  return { x: (clientX - box.left - state.view.x) / state.view.k, y: (clientY - box.top - state.view.y) / state.view.k };
+  const { x, y, k, r = 0 } = state.view;
+  const dx = clientX - box.left - x;
+  const dy = clientY - box.top - y;
+  const cos = Math.cos(r);
+  const sin = Math.sin(r);
+  return { x: (dx * cos + dy * sin) / k, y: (dy * cos - dx * sin) / k };
+}
+
+/** The map image's pixels → a point of the view (the other way from toImage, without the view's offset on the page). */
+function toView(at) {
+  const { x, y, k, r = 0 } = state.view;
+  return { x: x + k * (at.x * Math.cos(r) - at.y * Math.sin(r)), y: y + k * (at.x * Math.sin(r) + at.y * Math.cos(r)) };
 }
 
 function viewDown(e) {
-  if (!state.current || e.target.closest('.map-selection, .map-combat, .map-ai-note')) return;
+  if (!state.current || e.target.closest('.map-selection, .map-combat, .map-ai-note, .map-north')) return;
   // Measuring and placing a template can start on a token; otherwise tokens and pins handle their own pointers.
   // Alt+click pings, whatever tool is on.
   if (e.altKey && !state.pointers.size) {
@@ -1188,6 +1229,11 @@ function viewDown(e) {
     return;
   }
   state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY });
+  if (state.pointers.size === 2) {
+    state.twist = { total: 0, on: false };
+    // Two fingers make a pinch or a twist, so neither is a tap when it lifts.
+    for (const q of state.pointers.values()) q.pinched = true;
+  }
 }
 
 function viewMove(e) {
@@ -1231,12 +1277,26 @@ function viewMove(e) {
   const box = $('#map-view').getBoundingClientRect();
   if (state.pointers.size === 2) {
     // Pinch: zoom by the change in distance between the fingers, around their middle.
+    // Twisting them turns the map, once they've twisted far enough to mean it.
     const [a, b] = [...state.pointers.values()];
     const before = Math.hypot(a.x - b.x, a.y - b.y);
+    const angleBefore = Math.atan2(b.y - a.y, b.x - a.x);
     p.x = e.clientX;
     p.y = e.clientY;
     const after = Math.hypot(a.x - b.x, a.y - b.y);
-    if (before > 0) zoomAt((a.x + b.x) / 2 - box.left, (a.y + b.y) / 2 - box.top, after / before);
+    const mx = (a.x + b.x) / 2 - box.left;
+    const my = (a.y + b.y) / 2 - box.top;
+    if (before > 0) zoomAt(mx, my, after / before);
+    let twist = Math.atan2(b.y - a.y, b.x - a.x) - angleBefore;
+    if (twist > Math.PI) twist -= 2 * Math.PI;
+    if (twist < -Math.PI) twist += 2 * Math.PI;
+    const g = (state.twist ??= { total: 0, on: false });
+    g.total += twist;
+    if (!g.on && Math.abs(g.total) >= TWIST_START) {
+      g.on = true;
+      twist = g.total;
+    }
+    if (g.on) turnAt(mx, my, twist);
     return;
   }
   state.view.x += e.clientX - p.x;
@@ -1275,8 +1335,13 @@ function viewUp(e) {
   }
   const p = state.pointers.get(e.pointerId);
   state.pointers.delete(e.pointerId);
+  if (state.twist && state.pointers.size < 2) {
+    // Nearly north up: straighten it.
+    if (state.twist.on && Math.abs(state.view.r ?? 0) < NORTH_SNAP) northUp();
+    state.twist = null;
+  }
   // A click on the map itself (not a drag) drops a pin when placing one, else clears the selection.
-  if (p && Math.hypot(e.clientX - p.startX, e.clientY - p.startY) < 4 && !state.pointers.size) {
+  if (p && !p.pinched && Math.hypot(e.clientX - p.startX, e.clientY - p.startY) < 4 && !state.pointers.size) {
     if (state.pinMode && e.type === 'pointerup') return dropPin(toImage(e.clientX, e.clientY));
     if (state.pinging && e.type === 'pointerup') return ping(toImage(e.clientX, e.clientY));
     // A click on a door: the DM picks it (to open, close, lock or unlock it); a player opens or closes it.
@@ -1454,8 +1519,9 @@ const rulerPoint = (at) => (state.current.grid ? snapToken(state.current, { size
 /** Put the distance label next to a point on the map. */
 function placeMeasure(at) {
   const label = $('#map-measure');
-  label.style.left = `${at.x * state.view.k + state.view.x + 14}px`;
-  label.style.top = `${at.y * state.view.k + state.view.y - 30}px`;
+  const p = toView(at);
+  label.style.left = `${p.x + 14}px`;
+  label.style.top = `${p.y - 30}px`;
 }
 
 /** The measuring line (only on this screen): the Measure tool's, or a token's path while it's dragged. */
@@ -1534,6 +1600,7 @@ export function initMapActions() {
   });
   $('#map-pick').addEventListener('change', (e) => show(state.maps.find((m) => m.id === e.target.value) ?? null));
   $('#map-fit').addEventListener('click', fit);
+  $('#map-north').addEventListener('click', northUp);
   initMapFull();
   const showWalls = $('#map-show-walls');
   showWalls.checked = storage.get(SHOW_WALLS_KEY) !== '0';

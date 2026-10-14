@@ -1160,6 +1160,15 @@ details.spell > summary::-webkit-details-marker { display: none; }
 :root[data-token-labels="never"] .token-name { display: none; }
 :root[data-token-labels="hover"] .token:not(:hover, :focus-visible, .selected, .dragging) .token-name { display: none; }
 
+/* A map turned (two fingers twisting, on a touch screen) shows N, pointing at north; a tap turns it back. */
+.token, .map-pin, .map-link { rotate: var(--unturn, 0rad); }
+.map-north {
+  position: absolute; left: 0.5rem; top: 0.5rem; z-index: 3; width: 2.2rem; height: 2.2rem; padding: 0; border-radius: 50%;
+  display: grid; place-items: center; background: var(--surface); color: var(--text); border: 1px solid var(--border); box-shadow: var(--shadow);
+  font-weight: 700; font-size: 0.85rem;
+}
+.map-north span { rotate: var(--turn, 0rad); display: block; }
+.map-north span::before { content: ''; display: block; margin: 0 auto 1px; border: 0.3rem solid transparent; border-bottom: 0.45rem solid var(--accent); border-top: 0; width: 0; }
 .map-measure {
   position: absolute; z-index: 3; pointer-events: none; padding: 0.15rem 0.5rem; border-radius: 6px;
   background: var(--accent); color: var(--accent-text); font-weight: 700; font-size: 0.9rem; box-shadow: var(--shadow);

@@ -14,7 +14,8 @@ export const state = {
   maps: [],
   current: null, // the map on screen
   images: new Map(), // map id -> { key, url } of its image (players' changes with the fog)
-  view: { x: 0, y: 0, k: 1 }, // screen = image * k + (x, y)
+  view: { x: 0, y: 0, k: 1, r: 0 }, // screen = (image * k turned by r radians clockwise) + (x, y); r is this screen's own turn of the map
+  twist: null, // two fingers on the map: how far they've twisted { total, on } (the map turns once they mean it)
   fitted: false,
   selected: null, // token id
   drag: null, // a token being moved: { id, start, pointer, x, y, moved }
