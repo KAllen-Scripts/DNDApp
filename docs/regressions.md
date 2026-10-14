@@ -15,6 +15,8 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-14 | Line of sight was slow and laggy: every ray was tested against every wall (2.4 s for one token on a map with 2,000 wall pieces, over a minute for a dark map), and the fog only moved after a token was dropped and a new picture came from the server. | `shared/test/map.test.js`: sight on a busy map (2,000 wall pieces) is quick and gives the same outline as testing every wall; `web/test/map.test.js`: a player's fog follows their token while it is dragged, and stops at walls |
+| 2026-10-14 | A light's area cut off the corner where a wall crosses the edge of its reach, so lit places right there showed as dark. | `shared/test/map.test.js`: a light reaches right into the corner where a wall crosses the edge of its reach |
 | 2026-10-13 | The Cloudflare details file `API_key` wasn't git-ignored, so git offered to commit it. | `server/test/security.test.js`: the API_key file (Cloudflare details) is git-ignored |
 | 2026-10-12 | The map creator skipped squares on a fast drag (one pointer move across many squares painted only its ends). | `web/test/creator.test.js`: creator: a fast floor drag paints every square between the pointer's stops |
 | 2026-10-10 | The AI walls message couldn't be closed: pressing ✕ started a map pan, so the map got the click. | `web/test/map.test.js`: pressing on the AI walls message does not start a pan, so it can be closed |

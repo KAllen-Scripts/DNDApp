@@ -395,6 +395,72 @@ test('sightPolygon with a reach stops at that distance (a light, darkvision)', (
   assert.ok(!pointInPolygon(460, 245, poly));
 });
 
+test('regression: a light reaches right into the corner where a wall crosses the edge of its reach', () => {
+  // The wall's ends are both out of the light's reach; the corner where it meets the circle was cut off by the 5° steps.
+  const map = normalizeMap({ image: { width: 700, height: 490 }, walls: [{ id: 'wwwwww', x1: 410, y1: 0, x2: 410, y2: 490 }] });
+  const poly = sightPolygon(map, { x: 350, y: 245 }, 100);
+  assert.ok(pointInPolygon(409.5, 324, poly), 'just inside the wall and the reach');
+  assert.ok(!pointInPolygon(411, 245, poly), 'not past the wall');
+});
+
+/** Sight the slow, obvious way (every ray against every wall), to check the fast one against. */
+function plainSight(map, origin) {
+  const { width, height } = map.image;
+  const segs = map.walls.filter((w) => !w.open && w.kind !== 'low').map((w) => [w.x1, w.y1, w.x2, w.y2]);
+  segs.push([0, 0, width, 0], [width, 0, width, height], [width, height, 0, height], [0, height, 0, 0]);
+  const cross = (ax, ay, bx, by) => ax * by - ay * bx;
+  const points = [];
+  for (const [x1, y1, x2, y2] of segs) {
+    for (const [x, y] of [[x1, y1], [x2, y2]]) {
+      const a0 = Math.atan2(y - origin.y, x - origin.x);
+      for (const a of [a0 - 1e-5, a0, a0 + 1e-5]) {
+        const dx = Math.cos(a);
+        const dy = Math.sin(a);
+        let best = Infinity;
+        for (const [sx1, sy1, sx2, sy2] of segs) {
+          const denom = cross(dx, dy, sx2 - sx1, sy2 - sy1);
+          if (Math.abs(denom) < 1e-12) continue;
+          const t = cross(sx1 - origin.x, sy1 - origin.y, sx2 - sx1, sy2 - sy1) / denom;
+          const u = cross(sx1 - origin.x, sy1 - origin.y, dx, dy) / denom;
+          if (t >= 0 && u >= -1e-9 && u <= 1 + 1e-9 && t < best) best = t;
+        }
+        points.push({ a, x: Math.round((origin.x + dx * best) * 10) / 10, y: Math.round((origin.y + dy * best) * 10) / 10 });
+      }
+    }
+  }
+  return points.sort((p, q) => p.a - q.a);
+}
+
+test('regression: sight on a busy map (2,000 wall pieces) is quick and gives the same outline as testing every wall', () => {
+  // A maze of short walls and round pillars (2,000 pieces).
+  const walls = [];
+  const id = () => `w${String(walls.length).padStart(5, '0')}`;
+  for (let i = 0; i < 1000; i++) {
+    const x = 20 + ((i * 137) % 1960);
+    const y = 20 + ((i * 251) % 1960);
+    walls.push({ id: id(), x1: x, y1: y, x2: x + (i % 2 ? 30 : 0), y2: y + (i % 2 ? 0 : 30) });
+  }
+  for (let p = 0; p < 62; p++) {
+    const cx = 60 + ((p * 397) % 1900);
+    const cy = 60 + ((p * 613) % 1900);
+    for (let k = 0; k < 16; k++) {
+      const a0 = (k / 16) * 2 * Math.PI;
+      const a1 = ((k + 1) / 16) * 2 * Math.PI;
+      walls.push({ id: id(), x1: cx + 15 * Math.cos(a0), y1: cy + 15 * Math.sin(a0), x2: cx + 15 * Math.cos(a1), y2: cy + 15 * Math.sin(a1) });
+    }
+  }
+  const map = normalizeMap({ image: { width: 2000, height: 2000 }, walls });
+  assert.equal(map.walls.length, 1992);
+  const origin = { x: 1003, y: 997 };
+  const started = performance.now();
+  const fast = sightPolygon(map, origin);
+  const took = performance.now() - started;
+  // The same corners (the plain version keeps repeats, which the fast one drops).
+  const corners = (list) => [...new Set(list)].sort();
+  assert.deepEqual(corners(fast.map(([x, y]) => `${x},${y}`)), corners(plainSight(map, origin).map((p) => `${p.x},${p.y}`)));
+  assert.ok(took < 1000, `${Math.round(took)} ms`);
+});
+
 test('sightOf in darkness: darkvision, and lit places cut to what the token sees', () => {
   const map = normalizeMap({
     image: { width: 700, height: 490 }, grid: { size: 35, x: 0, y: 0 }, scale: { distance: 5, unit: 'ft', per: 'square' },

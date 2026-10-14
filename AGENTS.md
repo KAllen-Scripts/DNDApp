@@ -10,9 +10,9 @@ Before doing anything, read:
 Rules for this project:
 
 - All JavaScript (ES modules, Node 22+). npm packages are welcome.
-- Clients are display-only. All processing, indexing and AI calls happen on the server.
+- Clients are display-only. All processing, indexing and AI calls happen on the server. (One exception, the owner's call on 2026-10-14: a player's page works out their map fog from the walls the server sends, so it can follow a dragged token.)
 - The knowledge base belongs to the archivist AI. Don't add fixed human-readable structures to it; change the archivist's instructions or tools instead.
-- Privacy is enforced in server code (`known_by`, attendance, note ownership). Every new read path must filter by the viewer.
+- Privacy is enforced in server code (`known_by`, attendance, note ownership). Every new read path must filter by the viewer. On maps, players get the picture and the wall layout (the owner accepts that a determined player could see them in their browser); the server still decides which tokens and other things under the fog they get.
 - Never modify or delete anything in `data/archive/`. Everything else can be regenerated from it.
 - Bump `PIPELINE_VERSION` in `packages/server/src/config.js` when prompts, schemas, chunking or the memory design change.
 - Don't change the Q&A model without asking the project owner (Kenny). Kenny hosts the server; he is not the DM.

@@ -9,7 +9,7 @@
  * the server decides where a token really ends up.
  */
 import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from './api.js';
-import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, FOG_MASK_FILL, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, inTemplate, snapTemplatePoint } from './shared/map.js';
+import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, FOG_MASK_FILL, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, inTemplate, snapTemplatePoint } from './shared/map.js';
 import { EDITING_KEY, PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, base, report, state, status } from './map-state.js';
 import { canChangeTemplate, placeTemplate, renderTemplates, selectTemplate, templateControls, templateDialog, templateMove, templateUp } from './map-templates.js';
 import { openShop } from './merchants.js';
@@ -236,9 +236,9 @@ export const svgEl = (tag, attrs) => {
 };
 
 /**
- * Fog of war: the DM sees their rectangles shaded; players see what the
- * server worked out for them (covered parts dark, places seen before dim;
- * their image is blacked out there too).
+ * Fog of war: the DM sees their rectangles shaded; players' pages work out
+ * what their tokens see from the walls the server sends (covered parts
+ * dark, places seen before dim), following a token while it's dragged.
  */
 function renderFog() {
   const map = state.current;
@@ -247,7 +247,7 @@ function renderFog() {
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
   svg.classList.toggle('dm', state.canEdit);
   svg.replaceChildren();
-  const shapes = state.canEdit ? fogMask(map) : (map.fog?.mask ?? []);
+  const shapes = state.canEdit ? fogMask(map) : playerFogMask(fogView(map), state.userId);
   if (shapes.length) {
     const mask = svgEl('mask', { id: 'map-fog-mask', maskUnits: 'userSpaceOnUse', x: 0, y: 0, width, height });
     const defs = svgEl('defs', {});
@@ -272,6 +272,32 @@ function renderFog() {
     const r = fogRect(map, state.fogDraw.a, state.fogDraw.b);
     svg.append(svgEl('rect', { x: r.x, y: r.y, width: r.w, height: r.h, class: `fog-draft ${state.fogMode}` }));
   }
+}
+
+/**
+ * The map as a player's fog sees it: while they drag one of their own
+ * tokens, that token where it would land, unless a wall is in the way
+ * (the server would refuse the move, so it still sees from where it was).
+ */
+function fogView(map) {
+  const drag = state.drag;
+  const token = drag?.moved && map.tokens.find((t) => t.id === drag.id && t.user_id === state.userId);
+  if (!token) return map;
+  const end = snapToken(map, token, drag.x, drag.y);
+  const legs = [drag.start, ...drag.waypoints, end];
+  if (legs.some((p, i) => i > 0 && wallBetween(map, legs[i - 1], p))) return map;
+  return { ...map, tokens: map.tokens.map((t) => (t.id === token.id ? { ...t, x: end.x, y: end.y } : t)) };
+}
+
+/** Redraw a player's fog at most once a frame (it follows their token while it's dragged). */
+let fogFrame = 0;
+function queueFog() {
+  if (state.canEdit || fogFrame) return;
+  const go = () => {
+    fogFrame = 0;
+    if (state.current) renderFog();
+  };
+  fogFrame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(go) : setTimeout(go, 16);
 }
 
 function renderFogTools() {
@@ -983,11 +1009,19 @@ export function select(id) {
 
 // ---------- panning and zooming ----------
 
+// While the map is panned or zoomed, the stage is its own layer, so the browser
+// moves it as a picture instead of redrawing the fog's mask every frame. Off
+// again once it settles, so it's drawn sharp at the new zoom.
+let settling = 0;
 function applyView() {
   const { x, y, k } = state.view;
-  $('#map-stage').style.transform = `translate(${x}px, ${y}px) scale(${k})`;
+  const stage = $('#map-stage');
+  stage.style.transform = `translate(${x}px, ${y}px) scale(${k})`;
+  stage.style.willChange = 'transform';
+  clearTimeout(settling);
+  settling = setTimeout(() => (stage.style.willChange = ''), 250);
   // Pins stay the same size on screen at any zoom.
-  $('#map-stage').style.setProperty('--unzoom', String(1 / k));
+  stage.style.setProperty('--unzoom', String(1 / k));
   if (state.ruler && !state.drag) placeMeasure(state.ruler.b);
 }
 
@@ -1272,6 +1306,7 @@ function tokenMove(e) {
   label.style.left = `${e.clientX - box.left + 14}px`;
   label.style.top = `${e.clientY - box.top - 30}px`;
   renderRuler();
+  queueFog();
 }
 
 /** While dragging a token, Space (or W) turns here: a waypoint where it would land now. */
@@ -1300,6 +1335,7 @@ async function tokenUp(e) {
   // Show it where it will land straight away; the server's answer (and everyone else's screens) follow.
   Object.assign(token, snapToken(map, token, drag.x, drag.y));
   renderTokens();
+  queueFog();
   try {
     const path = drag.waypoints.map((p) => [p.x, p.y]);
     const res = await state.guarded(() => api('PATCH', `${base()}/${map.id}/tokens/${token.id}`, { x: drag.x, y: drag.y, ...(path.length && { path }) }));
@@ -1307,6 +1343,7 @@ async function tokenUp(e) {
   } catch (err) {
     Object.assign(token, drag.start);
     renderTokens();
+    queueFog();
     report(err);
   }
 }

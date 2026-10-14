@@ -68,7 +68,7 @@ The automated tests (`npm test`) already cover permissions, snapping, fog filter
 - [ ] The token is named after them, and you can open what the records say about them from the map.
 
 ### Fog of war
-- [ ] Turn Fog on. The player sees the map blacked out.
+- [ ] Turn Fog on. The player sees the map covered by the fog.
 - [ ] Drag a Reveal rectangle. It snaps to squares and that part appears for the player.
 - [ ] Cover part of it again. It goes dark for the player.
 - [ ] Undo, Reveal all and Cover all each work (both ask to confirm where expected).

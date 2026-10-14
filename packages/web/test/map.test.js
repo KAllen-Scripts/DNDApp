@@ -590,7 +590,7 @@ test('regression: pressing on the AI walls message does not start a pan, so it c
   });
 });
 
-test('line of sight: a player sees what their token sees, opens the door next to them with a click; never the walls', async () => {
+test('line of sight: a player sees what their token sees, opens the door next to them with a click; walls aren\'t drawn', async () => {
   await withPage({
     setup: { llm: mapLLM() },
     before: async (t) => {
@@ -624,6 +624,44 @@ test('line of sight: a player sees what their token sees, opens the door next to
     drag(page, '#map-view', [[350, 245]]);
     await page.settle();
     assert.match(page.text('#map-status'), /locked/);
+  });
+});
+
+test('regression: a player\'s fog follows their token while it is dragged, and stops at walls', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const map = await importMap(t, { patch: SHOWN });
+      const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+      await addToken(t, map, { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 87.5, y: 87.5 });
+      // A room in the top left corner, open to the south; a wall further right.
+      await t.request('PATCH', `${base}/walls`, { body: { add: { x1: 210, y1: 0, x2: 210, y2: 210 } } });
+      await t.request('PATCH', `${base}/walls`, { body: { add: { x1: 420, y1: 0, x2: 420, y2: 490 } } });
+      await t.request('PATCH', `${base}/fog`, { body: { enabled: true, sight: true } });
+    },
+    page: (t) => ({ as: t.sam }),
+  }, async (page) => {
+    await openMapTab(page);
+    const sight = () => page.$('#map-fog mask polygon')?.getAttribute('points');
+    const before = sight();
+    assert.ok(before);
+    const frame = () => new Promise((r) => setTimeout(r, 40));
+    // Down below the room: the fog moves with him before he lets go.
+    page.pointer(tokenEl(page, 'Thorin'), 'pointerdown', { clientX: 87, clientY: 87 });
+    page.pointer('#map-view', 'pointermove', { clientX: 90, clientY: 150 });
+    page.pointer('#map-view', 'pointermove', { clientX: 150, clientY: 350 });
+    await frame();
+    const moved = sight();
+    assert.notEqual(moved, before, 'the fog moved while dragging');
+    // Over the far wall: he can't go there, so it still sees from where he was dragged from.
+    page.pointer('#map-view', 'pointermove', { clientX: 500, clientY: 300 });
+    await frame();
+    assert.equal(sight(), before);
+    page.pointer('#map-view', 'pointermove', { clientX: 150, clientY: 350 });
+    await frame();
+    assert.equal(sight(), moved);
+    page.pointer('#map-view', 'pointerup', { clientX: 150, clientY: 350 });
+    await page.settle();
   });
 });
 
