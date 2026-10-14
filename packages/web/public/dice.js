@@ -619,7 +619,9 @@ export function initDice() {
     panel.hidden = !show;
     open.setAttribute('aria-expanded', String(show));
     if (show) {
-      input.focus();
+      // Into the notation box, except on a phone, where the keyboard would cover the dice buttons.
+      if (document.documentElement.hasAttribute('data-phone')) panel.querySelector('button')?.focus();
+      else input.focus();
       warmUp();
     }
   };

@@ -154,6 +154,20 @@ test('the map: ⋯ opens every map tool from the bottom; picking one closes it',
   });
 });
 
+test('the dice tray opens without popping the keyboard up on a phone', async () => {
+  await withPage(asSam({ look: { phone: 'on' } }), async (page) => {
+    page.click('#phone-nav');
+    page.click('#dice-open');
+    await tick();
+    assert.ok(page.visible('.dice-panel'), 'the tray is open');
+    assert.notEqual(page.document.activeElement?.tagName, 'INPUT', 'no text box has focus');
+  });
+  await withPage(asSam({ look: { phone: 'off' } }), async (page) => {
+    page.click('#dice-open');
+    assert.equal(page.document.activeElement?.tagName, 'INPUT', 'on a PC the notation box has focus');
+  });
+});
+
 test('a phone has no room for a panel beside the map', async () => {
   await withPage({ page: (t) => ({ as: t.sam, storage: { ...NO_3D, 'dndapp.beside': 'notes', 'dndapp.look': JSON.stringify({ phone: 'on' }) } }) }, async (page) => {
     page.click('[data-tab=map]');
