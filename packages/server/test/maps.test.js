@@ -7,6 +7,17 @@ import { setup, createFakeLLM, fakeEmbedder, terrain } from './helpers.js';
 import { createContext } from '../src/context.js';
 import { detectGrid } from '../src/maps/read.js';
 import { emptySheet } from '@dndapp/shared/sheet.js';
+import { playerFogMask, inView } from '@dndapp/shared/map.js';
+
+/** What a player's page draws at a point of the map: 'cover', 'dim' or 'clear'. */
+function fogAt(view, userId, x, y) {
+  let fill = 'clear';
+  for (const s of playerFogMask(view, userId)) {
+    const inside = s.points ? inView(x, y, s.clip ? { points: s.points, clip: s.clip } : s.points) : x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h;
+    if (inside) fill = s.fill;
+  }
+  return fill;
+}
 
 /** What the AI might say about a battle map: a grid of roughly `columns` squares, no scale printed. */
 const readOut = (over = {}) => ({
@@ -223,7 +234,7 @@ test('maps: a failed read can be run again; DM corrections survive; restore repl
   }
 });
 
-test('fog of war: players get covered parts blacked out and no tokens hidden in the fog', async () => {
+test('fog of war: players get the fog to draw over the picture and no tokens hidden in the fog', async () => {
   const t = await setup({ llm: mapLLM() });
   try {
     const png = await terrain(700, 490, { size: 35 });
@@ -241,21 +252,15 @@ test('fog of war: players get covered parts blacked out and no tokens hidden in 
     assert.deepEqual((await seen()).tokens.map((x) => x.name), ['Thorin']);
     assert.equal((await t.request('PATCH', `${base}/tokens/${goblin.id}`, { as: t.sam.token, body: { x: 1, y: 1 } })).statusCode, 404);
     const fogged = await seen();
-    assert.notEqual(fogged.image_key, 'clear');
-
-    // The image players get is dark where covered; the DM's is the original.
-    const pixel = async (buf, x, y) => (await sharp(buf).extract({ left: x, top: y, width: 1, height: 1 }).raw().toBuffer())[0];
-    const playerImg = (await t.request('GET', `${base}/image`, { as: t.sam.token })).rawPayload;
-    assert.ok((await pixel(playerImg, 600, 400)) < 30);
-    assert.deepEqual((await t.request('GET', `${base}/image`)).rawPayload, png);
+    // Players get the picture as it is (owner, 2026-10-14) and draw the fog over it: here all of it is covered.
+    assert.deepEqual((await t.request('GET', `${base}/image`, { as: t.sam.token })).rawPayload, png);
+    assert.deepEqual(playerFogMask(fogged, t.sam.id).map((x) => x.fill), ['cover']);
 
     // Reveal the bottom-right room (snapped to squares on the page; any rectangle here).
     await t.request('PATCH', `${base}/fog`, { body: { add: { op: 'reveal', x: 560, y: 350, w: 140, h: 140 } } });
     const revealed = await seen();
     assert.deepEqual(revealed.tokens.map((x) => x.name).sort(), ['Goblin', 'Thorin']);
-    assert.notEqual(revealed.image_key, fogged.image_key);
-    const after = (await t.request('GET', `${base}/image`, { as: t.sam.token })).rawPayload;
-    assert.equal(await pixel(after, 600, 401), await pixel(png, 600, 401));
+    assert.deepEqual(playerFogMask(revealed, t.sam.id).at(-1), { fill: 'clear', x: 560, y: 350, w: 140, h: 140 });
     // Cover part of it again, then undo that.
     await t.request('PATCH', `${base}/fog`, { body: { add: { op: 'cover', x: 605, y: 395, w: 15, h: 15 } } }); // the goblin snapped to (612.5, 402.5)
     assert.deepEqual((await seen()).tokens.map((x) => x.name), ['Thorin']);
@@ -264,7 +269,7 @@ test('fog of war: players get covered parts blacked out and no tokens hidden in 
     await t.request('PATCH', `${base}/fog`, { body: { reset: 'cover' } });
     assert.equal((await seen()).tokens.length, 1);
     await t.request('PATCH', `${base}/fog`, { body: { enabled: false } });
-    assert.equal((await seen()).image_key, 'clear');
+    assert.deepEqual(playerFogMask(await seen(), t.sam.id), []);
   } finally {
     await t.cleanup();
   }
@@ -524,11 +529,10 @@ test('walls and line of sight: players see their own side, through open doors, a
     const thorin = await add({ kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 50, y: 50 });
     await add({ kind: 'enemy', name: 'Goblin', x: 600, y: 400 });
     const seen = async () => (await t.request('GET', base, { as: t.sam.token })).json();
-    const image = async () => (await t.request('GET', `${base}/image`, { as: t.sam.token })).rawPayload;
-    const pixel = async (buf, x, y) => (await sharp(buf).extract({ left: x, top: y, width: 1, height: 1 }).raw().toBuffer())[0];
+    const fog = (v, x, y) => fogAt(v, t.sam.id, x, y);
     const walls = (body, as) => t.request('PATCH', `${base}/walls`, { body, ...(as && { as }) });
 
-    // A wall down the middle with a door in it. Only the DM draws walls, and players never get them.
+    // A wall down the middle with a door in it. Only the DM draws walls; players get just the lines, for their page's fog.
     assert.equal((await walls({ add: { x1: 350, y1: 0, x2: 350, y2: 210 } }, t.sam.token)).statusCode, 403);
     await walls({ add: { x1: 350, y1: 0, x2: 350, y2: 210 } });
     await walls({ add: { x1: 350, y1: 210, x2: 350, y2: 280, door: true } });
@@ -536,7 +540,7 @@ test('walls and line of sight: players see their own side, through open doors, a
     assert.equal(dm.walls.length, 3);
     const door = dm.walls.find((w) => w.door);
     assert.deepEqual({ ...door, id: 'x' }, { id: 'x', x1: 350, y1: 210, x2: 350, y2: 280, kind: 'wall', door: true, open: false, locked: false, source: 'dm' });
-    assert.deepEqual((await seen()).walls, []);
+    assert.deepEqual((await seen()).walls, dm.walls.map(({ x1, y1, x2, y2, kind }) => ({ x1, y1, x2, y2, kind })));
     assert.equal((await walls({ toggle: dm.walls[0].id })).statusCode, 400, 'only doors open');
     assert.equal((await walls({ remove: 'nosuchwall' })).statusCode, 404);
 
@@ -547,30 +551,23 @@ test('walls and line of sight: players see their own side, through open doors, a
     assert.deepEqual(view.tokens.map((x) => x.name), ['Thorin']);
     assert.deepEqual(view.fog.shapes, []);
     assert.equal(view.fog.sight, true);
-    assert.ok(view.fog.mask.some((s) => s.points), 'his sight comes as a polygon');
-    let img = await image();
-    assert.equal(await pixel(img, 100, 300), await pixel(png, 100, 300));
-    assert.ok((await pixel(img, 600, 100)) < 30);
-    const closedKey = view.image_key;
+    assert.ok(playerFogMask(view, t.sam.id).some((s) => s.points), 'his sight is a polygon');
+    assert.equal(fog(view, 100, 300), 'clear');
+    assert.equal(fog(view, 600, 100), 'cover');
 
     // Open the door: he sees through it to the goblin (on the line from him through the doorway).
     await walls({ toggle: door.id });
     view = await seen();
     assert.deepEqual(view.tokens.map((x) => x.name).sort(), ['Goblin', 'Thorin']);
-    assert.notEqual(view.image_key, closedKey);
-    img = await image();
-    assert.equal(await pixel(img, 500, 332), await pixel(png, 500, 332));
-    assert.ok((await pixel(img, 600, 60)) < 30, 'not round the corner');
+    assert.equal(fog(view, 500, 332), 'clear');
+    assert.equal(fog(view, 600, 60), 'cover', 'not round the corner');
 
     // Close it again: the goblin is gone, and what he saw through the door stays, dimmed.
     await walls({ toggle: door.id });
     view = await seen();
     assert.deepEqual(view.tokens.map((x) => x.name), ['Thorin']);
-    assert.ok(view.fog.mask.some((s) => s.fill === 'dim'));
-    img = await image();
-    const dim = await pixel(img, 500, 332);
-    const original = await pixel(png, 500, 332);
-    assert.ok(Math.abs(dim - (0.4 * original + 0.6 * 0x14)) < 15, `dim ${dim} from ${original}`);
+    assert.ok(view.fog.explored.length);
+    assert.equal(fog(view, 500, 332), 'dim');
 
     // He can't walk through the wall or the closed door; the DM can put a token anywhere.
     const move = (body, as = t.sam.token) => t.request('PATCH', `${base}/tokens/${thorin.id}`, { as, body });
@@ -582,9 +579,7 @@ test('walls and line of sight: players see their own side, through open doors, a
 
     // The DM makes everyone forget where they've been.
     await t.request('PATCH', `${base}/fog`, { body: { forget: true } });
-    const inDim = (v, x, y) => v.fog.mask.some((s) => s.fill === 'dim' && x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h);
-    assert.ok(!inDim(await seen(), 500, 332), 'only where he can see now');
-    assert.ok((await pixel(await image(), 500, 332)) < 30);
+    assert.equal(fog(await seen(), 500, 332), 'cover', 'only where he can see now');
 
     // Through the open door he can walk.
     await walls({ toggle: door.id });
@@ -598,8 +593,8 @@ test('walls and line of sight: players see their own side, through open doors, a
     assert.deepEqual((await seen()).tokens.map((x) => x.name).sort(), ['Goblin', 'Thorin']);
     await t.request('PATCH', `${base}/fog`, { body: { sight: false } });
     view = await seen();
-    assert.ok(!view.fog.mask.some((s) => s.points || s.fill === 'dim'));
-    assert.ok((await pixel(await image(), 100, 300)) < 30);
+    assert.ok(!playerFogMask(view, t.sam.id).some((s) => s.points || s.fill === 'dim'));
+    assert.equal(fog(view, 100, 300), 'cover');
 
     await walls({ clear: 'all' });
     assert.deepEqual(t.maps.get(t.campaign.id, map.id).walls, []);
@@ -676,7 +671,7 @@ test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and
     assert.equal(done.walls.filter((w) => w.source === 'dm').length, 1);
     // Lights it saw, as the light they give.
     assert.deepEqual(done.lights.map(({ x, y, bright, dim, source }) => ({ x, y, bright, dim, source })), [{ x: 70, y: 441, bright: 20, dim: 20, source: 'ai' }]);
-    assert.deepEqual((await t.request('GET', base, { as: t.sam.token })).json().lights, [], 'players never get the lights');
+    assert.deepEqual((await t.request('GET', base, { as: t.sam.token })).json().lights.map(Object.keys), [['x', 'y', 'bright', 'dim']], 'players get where the lights are, for their page\'s fog');
     assert.deepEqual(done.terrain.map(({ points, source }) => ({ points, source })), [{ points: [[0, 0], [70, 0], [70, 49]], source: 'ai' }]);
     const call = t.llm.calls.find((c) => c.purpose === 'map:walls');
     assert.equal(call.attachments.length, 1);
@@ -743,8 +738,6 @@ test('doors players open, locked doors, obstacles they see over, and what player
     const thorin = await add({ kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 300, y: 245 });
     await add({ kind: 'enemy', name: 'Goblin', x: 600, y: 60 });
     const seen = async () => (await t.request('GET', base, { as: t.sam.token })).json();
-    const image = async () => (await t.request('GET', `${base}/image`, { as: t.sam.token })).rawPayload;
-    const pixel = async (buf, x, y) => (await sharp(buf).extract({ left: x, top: y, width: 1, height: 1 }).raw().toBuffer())[0];
     const walls = (body) => t.request('PATCH', `${base}/walls`, { body });
     await walls({ add: { x1: 350, y1: 0, x2: 350, y2: 210 } });
     await walls({ add: { x1: 350, y1: 280, x2: 350, y2: 490 } });
@@ -753,9 +746,10 @@ test('doors players open, locked doors, obstacles they see over, and what player
     const roof = (await walls({ add: { x1: 420, y1: 140, x2: 560, y2: 140, kind: 'low' } })).json().walls.find((w) => w.kind === 'low');
     await t.request('PATCH', `${base}/fog`, { body: { enabled: true, sight: true } });
 
-    // Players get the doors they can see (to open them), never the walls.
+    // Players get the doors they can see (to open them), and the walls as plain lines (a closed door is wall to their fog).
     let view = await seen();
-    assert.deepEqual(view.walls, []);
+    assert.equal(view.walls.length, 4);
+    assert.ok(view.walls.every((w) => !('door' in w) && !('id' in w)));
     assert.deepEqual(view.doors, [{ id: door.id, x1: 350, y1: 210, x2: 350, y2: 280, open: false, locked: false }]);
     const toggle = (as = t.sam.token, id = door.id) => t.request('POST', `${base}/doors/${id}/toggle`, { as });
     assert.equal((await toggle(t.sam.token, roof.id)).statusCode, 404, 'not a door');
@@ -787,46 +781,21 @@ test('doors players open, locked doors, obstacles they see over, and what player
 
     // Outside his sight: dark (default), greyed out, or the map as it is. Tokens stay hidden in all three.
     await t.request('PATCH', `${base}/fog`, { body: { forget: true } });
-    assert.ok((await pixel(await image(), 600, 400)) < 30);
+    assert.equal(fogAt(await seen(), t.sam.id, 600, 400), 'cover');
     await t.request('PATCH', `${base}/fog`, { body: { map: 'grey', memory: false } });
     view = await seen();
     assert.equal(view.fog.map, 'grey');
-    assert.equal(view.fog.mask[0].fill, 'dim');
+    assert.equal(fogAt(view, t.sam.id, 600, 400), 'dim');
     assert.ok(!view.tokens.some((x) => x.name === 'Goblin'));
-    const grey = await pixel(await image(), 600, 400);
-    const original = await pixel(png, 600, 400);
-    assert.ok(Math.abs(grey - (0.4 * original + 0.6 * 0x14)) < 15, `grey ${grey} from ${original}`);
     await t.request('PATCH', `${base}/fog`, { body: { map: 'shown' } });
     view = await seen();
-    assert.deepEqual(view.fog.mask, []);
-    assert.equal(view.image_key, 'clear');
-    assert.deepEqual((await image()), png);
+    assert.deepEqual(playerFogMask(view, t.sam.id), []);
+    assert.deepEqual((await t.request('GET', `${base}/image`, { as: t.sam.token })).rawPayload, png);
     assert.ok(!view.tokens.some((x) => x.name === 'Goblin'));
 
     // Memory off: nothing is remembered.
     await t.request('PATCH', `${base}/fog`, { body: { map: 'dark' } });
-    assert.ok(!(await seen()).fog.mask.some((x) => x.fill === 'dim'));
-  } finally {
-    await t.cleanup();
-  }
-});
-
-test('regression: a player\'s picture has the fog drawn in by the server (a phone drew no fog over the plain picture)', async () => {
-  const t = await setup({ llm: mapLLM() });
-  try {
-    const png = await terrain(700, 490, { size: 35 });
-    const map = await importMap(t, png);
-    const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
-    await t.request('PATCH', base, { body: { shown: true, grid: { size: 35, x: 0, y: 0 } } });
-    await t.request('POST', `${base}/tokens`, { body: { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 87.5, y: 87.5 } });
-    await t.request('PATCH', `${base}/walls`, { body: { add: { x1: 210, y1: 0, x2: 210, y2: 490 } } });
-    await t.request('PATCH', `${base}/fog`, { body: { enabled: true, sight: true, map: 'grey' } });
-    const view = (await t.request('GET', base, { as: t.sam.token })).json();
-    assert.deepEqual(view.walls, [], 'players get no walls: the fog comes drawn in');
-    const res = await t.request('GET', `${base}/image?v=${view.image_key}`, { as: t.sam.token });
-    const pixel = async (buf, x, y) => (await sharp(buf).extract({ left: x, top: y, width: 1, height: 1 }).raw().toBuffer())[0];
-    assert.notEqual(await pixel(res.rawPayload, 500, 300), await pixel(png, 500, 300), 'behind the wall is greyed out in the picture itself');
-    assert.equal(await pixel(res.rawPayload, 100, 100), await pixel(png, 100, 100), 'what he sees is as it is');
+    assert.deepEqual((await seen()).fog.explored, []);
   } finally {
     await t.cleanup();
   }

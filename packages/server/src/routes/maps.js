@@ -11,7 +11,6 @@ import { AuthError } from '../auth.js';
 import { BadRequestError, NotFoundError } from '../store.js';
 import { MAX_PICTURE_BYTES, createImageCache, inspectMapImage, inspectPicture } from '../images.js';
 import { RateLimitError } from '../qa/agent.js';
-import { createPlayerImages } from '../maps/image.js';
 import { isMapId, newTokenId } from '../maps/store.js';
 import { isPdf, renderPdfPage } from '../maps/pdf.js';
 import { isUvtt, readUvtt, toUvtt, uvttImage, uvttContents } from '../maps/uvtt.js';
@@ -305,18 +304,12 @@ export function registerMaps(app, r) {
 
   app.get('/campaigns/:cid/maps/:mid', async (request) => viewableMap(request).view);
 
-  const playerImages = createPlayerImages();
-
-  /** The map's image: as imported for the DM; for players, with what they can't see blacked out (and what they saw before dimmed). */
+  /** The map's image (the picture showing now). Players get it as it is too: their page draws the fog over it. */
   app.get('/campaigns/:cid/maps/:mid/image', async (request, reply) => {
-    const { cid, map, role, view } = viewableMap(request);
+    const { cid, map } = viewableMap(request);
     const { path: file, type } = maps.imagePath(cid, map.id);
-    reply.type(type).header('X-Content-Type-Options', 'nosniff');
-    if (role === 'dm') {
-      // The file never changes, so the browser can keep it.
-      return reply.header('Cache-Control', 'private, max-age=31536000, immutable').send(fs.createReadStream(file));
-    }
-    return reply.header('Cache-Control', 'private, no-cache').send(await playerImages.get(map, file, { mask: view.fog.mask, key: view.image_key }, type));
+    // The file behind a key never changes (a new picture gets a new key), so the browser can keep it.
+    return reply.type(type).header('X-Content-Type-Options', 'nosniff').header('Cache-Control', 'private, max-age=31536000, immutable').send(fs.createReadStream(file));
   });
 
   const GRID = z.object({ size: z.number().positive(), x: z.number(), y: z.number() }).nullable();
