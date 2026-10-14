@@ -19,7 +19,7 @@ const $ = (sel) => document.querySelector(sel);
 /** The tools: [key, name, shortcut key, what it does]. */
 export const TOOLS = [
   ['select', 'Pick', 'V', 'Click a thing, label, road or wall to change it, and drag to move it. Drag over the floor to pick several (Shift adds to them).'],
-  ['room', 'Room', 'Q', 'Drag a rectangle: a room, floored and walled all round.'],
+  ['room', 'Room', 'Q', 'Drag a rectangle: a room, floored and walled all round (or only floored, if you untick its walls).'],
   ['wall', 'Wall', 'W', 'Drag from corner to corner to draw a wall or fence (hold Shift for half squares).'],
   ['door', 'Door', 'D', 'Click a wall for a door a square wide, or drag along it for a wider one. Also secret doors, windows and archways.'],
   ['curve', 'Curve', 'C', 'Drag from one end of a curved wall to the other, then move to bend it and click.'],
@@ -158,7 +158,15 @@ function options(c, act) {
   if (t === 'select') {
     return [heading('Pick'), h('p', { class: 'muted small' }, 'Click to pick; drag to move (Shift: off the grid). R turns, F flips, arrow keys nudge, Delete removes, Ctrl+D copies.')];
   }
-  if (t === 'room') return [heading('Room floor'), ...floorPalette(c, act), heading('Walls'), wallStyles(c, act)];
+  if (t === 'room') {
+    return [
+      heading('Room floor'),
+      ...floorPalette(c, act),
+      heading('Walls'),
+      check('Walls all round', c.roomWalls, (v) => { c.roomWalls = v; act.panel(); }, { id: 'creator-room-walls' }),
+      c.roomWalls ? wallStyles(c, act) : h('p', { class: 'muted small' }, 'Only the floor: a patch of another floor inside a room or out in the open.'),
+    ];
+  }
   if (t === 'wall' || t === 'curve' || t === 'circle') {
     return [
       heading(name),
@@ -179,6 +187,7 @@ function options(c, act) {
   if (t === 'floor') {
     return [
       heading('Floor'),
+      h('p', { class: 'muted small' }, 'Pick a floor and paint, then pick another: mix as many as you like (stone inside, grass outside, a dirt path, a pond).'),
       ...floorPalette(c, act, { tool: 'floor' }),
       h('div', { class: 'creator-row' }, choice('Brush', 'brush', c.floorShape, (v) => { c.floorShape = v; act.panel(); }, { 'data-floor-shape': 'brush' }), choice('Rectangle', 'rect', c.floorShape, (v) => { c.floorShape = v; act.panel(); }, { 'data-floor-shape': 'rect' })),
       c.floorShape === 'brush' ? h('div', { class: 'creator-row' }, sizes, check('Round', c.round, (v) => { c.round = v; })) : null,

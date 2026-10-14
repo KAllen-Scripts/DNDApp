@@ -26,12 +26,12 @@ const AI_PX = 1568;
 
 const ReadOut = z.object({
   writing: z.string().describe('Every word written in the picture, word for word, in reading order, keeping line breaks. Empty if there is no writing.'),
-  description: z.string().describe('What the picture shows, in plain words: two to six sentences.'),
+  description: z.string().describe('What the picture shows, in plain words and full detail: as long as it takes to describe everything in it.'),
 });
 
 const READ_SYSTEM = `You read a picture the Dungeon Master of a D&D game handed to some players (a letter, a wanted poster, a map scrap, a portrait, a riddle). The campaign's archivist can't see pictures and will keep a record from what you write.
 - writing: copy every word you can read, exactly, including names, numbers, signatures and seals' lettering. Mark a word you can't make out as [illegible]. Don't translate or correct it.
-- description: say what it shows that a player could learn from it: what kind of thing it is, people and creatures (looks, clothing, marks), places, labels and routes on a map, symbols, damage or stains. Plain words, no guesses about the plot.`;
+- description: say everything it shows that a player could learn from it: what kind of thing it is, people and creatures (looks, clothing, marks), places, labels and routes on a map, symbols, damage or stains. Leave nothing out and don't summarise; the archivist only knows what you write. Plain words, no guesses about the plot.`;
 
 export const isHandoutId = (id) => /^[a-f0-9]{10}$/.test(String(id));
 

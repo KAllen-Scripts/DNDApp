@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { formatTimestamp, formatUtterance, parseTimestamp, CITATION_RE } from '@dndapp/shared';
 import { renderRecord } from '../kb/store.js';
 import { preparedTranscript } from '../pipeline/prepare.js';
+import { fitWhole } from '../fit.js';
 import { creatureKey } from '../creatures.js';
 
 const SessionRange = {
@@ -173,21 +174,36 @@ export function createTools({ db, store, kb, search, books, config, campaignId, 
     hits.map((h) => `--- [S${h.session_num} ${formatTimestamp(h.start_sec)}-${formatTimestamp(h.end_sec)}]\n${h.text}`).join('\n\n');
   const formatNotes = (hits) => hits.map((h) => `--- [${h.title}]\n${h.text}`).join('\n\n');
   const recordsFromHits = (hits) => kb.getMany(campaignId, hits.map((h) => Number(h.ref_id)), viewer);
+  // Campaign data comes in whole records, chunks and lines, never cut mid-way; what doesn't fit is named (fit.js).
+  const chunkRef = (h) => `S${h.session_num} ${formatTimestamp(h.start_sec)}-${formatTimestamp(h.end_sec)}`;
+  const records = (list, empty) =>
+    list.length
+      ? fitWhole(list, maxChars, {
+          render: renderRecord,
+          leftOver: (left) => `Not shown, to keep this reply short (read them with get_records): ${left.map((r) => `#${r.id} ${r.title}`).join('; ')}`,
+        }).text
+      : empty;
+  const chunks = (hits) =>
+    hits.length
+      ? fitWhole(hits, maxChars, {
+          sep: '\n\n',
+          render: (h) => formatChunks([h]),
+          leftOver: (left) => `Also matched, not shown (read them with read_transcript): ${left.map(chunkRef).join('; ')}`,
+        }).text
+      : 'No matches.';
 
   const handlers = {
     search_kb: async ({ query, kind }) => {
       const hits = await search.search(campaignId, query, { kinds: ['kb'], viewer, limit: 6 });
-      const records = recordsFromHits(hits).filter((r) => !kind || r.kind === kind);
-      return clip(records.map(renderRecord).join('\n\n---\n\n') || 'No matches.');
+      return records(recordsFromHits(hits).filter((r) => !kind || r.kind === kind), 'No matches.');
     },
-    list_records: ({ kind, status }) =>
-      clip(
-        kb
-          .list(campaignId, { kind, status, viewer })
-          .map((r) => `#${r.id} | ${r.kind} | ${r.status || '-'} | ${r.title}`)
-          .join('\n') || 'No records.',
-      ),
-    get_records: ({ ids }) => clip(kb.getMany(campaignId, ids, viewer).map(renderRecord).join('\n\n---\n\n') || 'No such records.'),
+    list_records: ({ kind, status }) => {
+      const all = kb.list(campaignId, { kind, status, viewer });
+      if (!all.length) return 'No records.';
+      const { text, left } = fitWhole(all, maxChars, { sep: '\n', render: (r) => `#${r.id} | ${r.kind} | ${r.status || '-'} | ${r.title}` });
+      return left.length ? `${text}\n\n…and ${left.length} more. Narrow it by kind or status, or use search_kb.` : text;
+    },
+    get_records: ({ ids }) => records(kb.getMany(campaignId, ids, viewer), 'No such records.'),
     list_sessions: () =>
       db
         .prepare('SELECT * FROM sessions WHERE campaign_id = ? ORDER BY number')
@@ -195,16 +211,14 @@ export function createTools({ db, store, kb, search, books, config, campaignId, 
         .map((s) => `S${s.number} (${s.played_on})${s.title ? `: ${s.title}` : ''}${s.status === 'ready' ? '' : ` [${s.status}]`}${attended(s) ? '' : ' [you were not there]'}`)
         .join('\n') || 'No sessions yet.',
     search_transcript: async ({ query, from_session, to_session }) =>
-      clip(
-        formatChunks(
-          await search.search(campaignId, query, {
-            kinds: ['chunk'],
-            viewer,
-            fromSession: from_session ?? undefined,
-            toSession: to_session ?? undefined,
-            limit: 4,
-          }),
-        ) || 'No matches.',
+      chunks(
+        await search.search(campaignId, query, {
+          kinds: ['chunk'],
+          viewer,
+          fromSession: from_session ?? undefined,
+          toSession: to_session ?? undefined,
+          limit: 4,
+        }),
       ),
     read_transcript: ({ session, from, to }) => {
       const s = sessionByNumber(session);
@@ -213,11 +227,13 @@ export function createTools({ db, store, kb, search, books, config, campaignId, 
       const a = parseTimestamp(from);
       const b = parseTimestamp(to);
       if (Number.isNaN(a) || Number.isNaN(b)) return 'Timestamps must be HH:MM:SS.';
-      const lines = transcript(session).filter((u) => u.time >= a && u.time <= b).map(formatUtterance);
-      return lines.length ? clip(`Session ${session}:\n${lines.join('\n')}`) : 'No lines in that range.';
+      const lines = transcript(session).filter((u) => u.time >= a && u.time <= b);
+      if (!lines.length) return 'No lines in that range.';
+      const { text, left } = fitWhole(lines, maxChars, { sep: '\n', render: formatUtterance });
+      return `Session ${session}:\n${text}${left.length ? `\n\n(Stopped here to keep this reply short. Continue with read_transcript from ${formatTimestamp(left[0].time)}.)` : ''}`;
     },
     search_my_notes: async ({ query }) =>
-      clip(formatNotes(await search.search(campaignId, query, { kinds: ['note'], viewer: ownNotesOnly, limit: 6 })) || 'No matching notes.'),
+      fitWhole(await search.search(campaignId, query, { kinds: ['note'], viewer: ownNotesOnly, limit: 6 }), maxChars, { sep: '\n\n', render: (h) => formatNotes([h]) }).text || 'No matching notes.',
     get_my_creatures: async ({ names }) => {
       const found = names.map((n) => dmCreatures.find((c) => creatureKey(c.name) === creatureKey(n)) ?? `--- ${n}: not one of the DM's creatures.`);
       return clip(found.map((c) => (typeof c === 'string' ? c : renderCreature(c))).join('\n\n'));
@@ -254,14 +270,20 @@ export function createTools({ db, store, kb, search, books, config, campaignId, 
         search.search(campaignId, question, { kinds: ['chunk'], viewer, limit: 3 }),
         search.search(campaignId, question, { kinds: ['note'], viewer: ownNotesOnly, limit: 3 }),
       ]);
-      const parts = [
-        ...recordsFromHits(kbHits).map(renderRecord),
-        ...chunkHits.map((h) => formatChunks([h])),
-        ...noteHits.map((h) => formatNotes([h])),
+      // Best of each kind first, then the next best of each, and so on; each piece whole, never cut short.
+      const lists = [
+        recordsFromHits(kbHits).map((r) => ({ text: renderRecord(r), ref: `record #${r.id} ${r.title}` })),
+        chunkHits.map((h) => ({ text: formatChunks([h]), ref: `transcript ${chunkRef(h)}` })),
+        noteHits.map((h) => ({ text: formatNotes([h]), ref: `your note ${h.title}` })),
       ];
+      const parts = [];
+      for (let i = 0; lists.some((l) => i < l.length); i++) for (const l of lists) if (l[i]) parts.push(l[i]);
       if (!parts.length) return '';
-      const each = Math.floor(budget / parts.length);
-      return parts.map((p) => (p.length > each ? `${p.slice(0, each)}…` : p)).join('\n\n');
+      return fitWhole(parts, budget, {
+        sep: '\n\n',
+        render: (p) => p.text,
+        leftOver: (left) => `Also matched, not shown here: ${left.map((p) => p.ref).join('; ')}`,
+      }).text;
     },
 
     /**

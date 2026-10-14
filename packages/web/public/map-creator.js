@@ -55,6 +55,7 @@ export async function openCreator(map = null) {
     wallStyle: 'stone',
     door: 'door', // the door tool: 'door' | 'secret' | 'window' | 'arch'
     circleFloor: true,
+    roomWalls: true, // the room tool: walled all round, or only its floor
     pathKind: 'road',
     pathWidth: PATH_KINDS.road.w,
     label: { text: '', font: 'old', size: 0.8, colour: '#f4ead5', italic: false, halo: true },
@@ -893,7 +894,7 @@ function up(e) {
   } else if (d.kind === 'rect') {
     const r = rectOf(d.a, d.kind === 'rect' && c.tool === 'scatter' ? { x: Math.round(p.x * 2) / 2, y: Math.round(p.y * 2) / 2 } : snapCorner(p, false));
     if (r.x2 - r.x1 < 0.5 || r.y2 - r.y1 < 0.5) return redraw();
-    if (c.tool === 'room') change(addRoom(c.design, r, c.floor, c.wallStyle));
+    if (c.tool === 'room') change(c.roomWalls ? addRoom(c.design, r, c.floor, c.wallStyle) : paintFloor(c.design, rectCells(c.design, r), c.floor));
     else if (c.tool === 'floor') change(paintFloor(c.design, rectCells(c.design, r), c.floor));
     else if (c.tool === 'area') {
       c.area = r;

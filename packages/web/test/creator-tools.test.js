@@ -396,3 +396,25 @@ test('creator tools: the look (light, grid on the picture, shadows, glow, blendi
     assert.deepEqual(t.maps.list(t.campaign.id)[0].design.look, { void: '#203040', grid: 'dark', shadows: false, glow: false, mood: 'night', soft: false });
   });
 });
+
+// The owner (2026-10-14): a Room always came walled all round, so a patch of another floor needed walls rubbed out.
+test('regression: creator: the Room tool can lay its floor without walls', async () => {
+  await withPage(dm(), async (page) => {
+    const design = await startBlank(page);
+    tool(page, 'room');
+    page.click('[data-floor="d"]');
+    assert.ok(page.$('#creator-room-walls').checked, 'walls all round to start with');
+    page.click('#creator-room-walls');
+    assert.ok(!page.$('[data-wall-style]'), 'no wall styles without walls');
+    drag(page, [2, 2], [5, 4]);
+    let d = design();
+    assert.equal(d.walls.length, 0);
+    assert.equal(d.floor[2].slice(1, 6), 'gdddg');
+    assert.equal(d.floor[3].slice(1, 6), 'gdddg');
+    // Ticked again, a room is walled as before.
+    page.click('#creator-room-walls');
+    drag(page, [10, 2], [13, 4]);
+    d = design();
+    assert.equal(d.walls.filter((w) => w.type === 'wall').length, 4);
+  });
+});

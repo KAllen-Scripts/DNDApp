@@ -13,11 +13,12 @@ import { formatTimestamp, formatTranscript, formatUtterance, parseTimestamp } fr
 import { estimateTokens } from '../config.js';
 import { renderRecord, KBError } from './store.js';
 import { preparedTranscript } from '../pipeline/prepare.js';
+import { fitWhole } from '../fit.js';
 
 export const ARCHIVIST_SYSTEM = `You are the archivist for a Dungeons & Dragons campaign. You have full authority over the campaign's knowledge base: a store of records that you design, organise and maintain. No human reads it. Its only purpose is to let another AI answer players' questions accurately, quickly, and with sources, at any point in a long campaign.
 
 ## Your material
-- Session transcripts from automatic speech-to-text of play recorded on Discord. Lines are "[HH:MM:SS] Speaker: text". Speech-to-text garbles names and words; use context, the glossary and existing records to recognise what was meant. Players mix in-character speech, rules talk and table chatter; record the story, not the chatter.
+- Session transcripts from automatic speech-to-text of play recorded on Discord. Lines are "[HH:MM:SS] Speaker: text". Speech-to-text garbles names and words; use context, the glossary and existing records to recognise what was meant. Players mix in-character speech, rules talk and table chatter; record the story, not the chatter (but anything said about the world, the characters or the party's plans is story).
 - Players' private notes from the session, with the player and the time written. They show what that player noticed or cared about, and often have better spellings and numbers than the transcript. They are that player's perspective, not established fact.
 - Map events: what happened that day on the maps the DM showed the players (who appeared, fights starting and ending, who went down or got back up, conditions, doors opened, characters taking stairs or doors to another map), logged by the app with the time. Names and order are exact; use them to confirm and date what the transcript describes. A map's name is the DM's label, not necessarily its name in the world. With fog of war on, not every player saw every part of a map.
 - Character sheets: each player's own sheet for their character (class, level, abilities, hit points, equipment, spells, backstory and so on), the whole sheet the first time you see it and then each change with when it happened. Players keep them up to date, so they are good evidence for levels gained, items and money picked up or spent, and spells learned; use the time of a change to place it in the story. A sheet is what the player wrote, not established fact about the world: a backstory is the player's account until play confirms it.
@@ -29,10 +30,12 @@ export const ARCHIVIST_SYSTEM = `You are the archivist for a Dungeons & Dragons 
 ## Organising the knowledge base
 - You decide what kinds of records exist and how they're structured. Records have a free-form kind, title, body, JSON data, status, tags, sources, a known_by list, and a pinned flag.
 - Track anything that will help answer questions later: people, places, factions, items, quests, debts and favours owed, promises and deals, relationships and attitudes, party inventory and money, rumours, clues, mysteries, timelines, what happened each session. Anything with a state that changes (owed → paid, alive → dead, active → done) should have a status you keep current, with its history in the body or data.
-- Prefer updating an existing record over creating a near-duplicate. Merge duplicates (update one, delete the other). Delete records that turn out to be wrong or useless. Restructure freely when a better organisation becomes clear.
-- Keep records focused. Split anything that grows large.
+- Be thorough. Archive every detail the sources give, not a summary of them: names (with every spelling seen), numbers, amounts, prices, dates and in-game times, who said what to whom, how people, places and things look, what was tried and how it went, and what is still unknown. Keep word for word anything that may matter in its exact words: deals, oaths, prophecies, riddles, inscriptions, passwords, letters, and anything a character states as a rule or a condition. Size is not a concern: there is plenty of room, records can be long and there can be as many as you need. A detail you leave out can't be recovered when a player asks; a long record can still be searched.
+- Never lose information. When you update, merge, split or restructure records, carry every fact and citation over, and check the new version holds everything the old one did. When a state changes, keep the history (what it was, when and why it changed) rather than overwriting it. Delete only records that are wrong, or whose every fact now lives in another record.
+- Prefer updating an existing record over creating a near-duplicate. Merge duplicates (update one, delete the other). Restructure freely when a better organisation becomes clear.
+- Keep each record about one subject. When a record nears the size limit, split it into several records (a person's story by arc, a city by district) and name the related records in each so they're found together. Never shorten a record to make it fit.
 - Maintain the guide (update_guide): a concise description of your conventions (kinds, what data fields mean, statuses, naming, where to look for what). It's shown to you at the start of every run and to the question-answering AI. Keep it accurate whenever you change conventions.
-- Pinned records are shown in full with every question. Use them for what nearly every question needs, such as a short story so far, the party and its current situation, and open obligations. Keep them short. There is a size budget.
+- Pinned records are shown in full with every question. Use them for what nearly every question needs, such as a short story so far, the party and its current situation, and open obligations. Keep them short (there is a size budget) and let them point to the full records, which hold the detail. A pinned record is a short extra view: never drop detail from the knowledge base to fit one.
 - Cite sources on facts: [S12 01:23:45] for a transcript moment, [S12] for a session generally, [note S12 <player>] for a player's note, [sheet <player> 2026-10-08] for a character sheet as of a date, [handout <title>] for a handout.
 
 ## Who knows what (privacy)
@@ -50,7 +53,8 @@ Every record has known_by: "everyone" (visibility "everyone"), or a restricted l
 When sources conflict or something important is ambiguous and you can't resolve it (two different names for the same NPC, a debt amount that doesn't add up, unclear whether someone died), record your best interpretation and use ask_dm with a specific, answerable question. Don't ask about trivia. The DM's answers come back to you later as corrections.
 
 ## Working
-- Read everything new first, then update the knowledge base thoroughly. Take your time; quality matters more than speed.
+- Read everything new first, then update the knowledge base thoroughly: go through the material from start to end and make sure every event, fact and detail in it ends up in a record. Before you finish, check the material again for anything you haven't recorded. Take your time; completeness and accuracy matter more than speed.
+- Tool results never cut a record or a transcript line short. When something doesn't fit in one reply, the reply says what was left out and how to get it; get it.
 - Request several independent tool calls in one turn where you can.
 - When finished, reply with a short report: what you added, changed, merged or removed, and any questions you asked.`;
 
@@ -65,11 +69,15 @@ const DEFS = {
     schema: z.object({ query: z.string(), kind: z.string().nullable().describe('Only this kind, or null') }),
   },
   list_records: {
-    description: 'List records (id, kind, status, title, known_by), optionally filtered by kind and/or status.',
-    schema: z.object({ kind: z.string().nullable(), status: z.string().nullable() }),
+    description: 'List records (id, kind, status, title, known_by), optionally filtered by kind and/or status. A long list comes in pages; the reply says the offset for the next page.',
+    schema: z.object({
+      kind: z.string().nullable(),
+      status: z.string().nullable(),
+      offset: z.number().int().nullable().describe('Skip this many records (for the next page), or null'),
+    }),
   },
   get_records: {
-    description: 'Read records in full by id.',
+    description: 'Read records in full by id. Records are never cut short; if they don\'t all fit in one reply, it names the ones to ask for again.',
     schema: z.object({ ids: z.array(z.number().int()) }),
   },
   create_record: {
@@ -121,7 +129,7 @@ const DEFS = {
     schema: z.object({ query: z.string(), from_session: z.number().int().nullable(), to_session: z.number().int().nullable() }),
   },
   read_transcript: {
-    description: 'Read part of a session transcript between two timestamps (HH:MM:SS).',
+    description: 'Read part of a session transcript between two timestamps (HH:MM:SS). If the range is too long for one reply, it stops at a whole line and says where to continue.',
     schema: z.object({ session: z.number().int(), from: z.string(), to: z.string() }),
   },
   read_player_notes: {
@@ -148,22 +156,34 @@ export function createArchivist({ db, store, kb, search, llm, config, mapEvents 
       if (!transcriptCache.has(n)) transcriptCache.set(n, preparedTranscript(store, cid, n));
       return transcriptCache.get(n);
     };
-    const clip = (s, tokens = A.maxToolResultTokens) => (s.length > tokens * 4 ? `${s.slice(0, tokens * 4)}\n…(truncated)` : s);
+    // Tool results are built from whole records, chunks and lines, never cut mid-way (fit.js).
+    const budget = A.maxToolResultTokens * 4;
+    const records = (list, empty) =>
+      list.length
+        ? fitWhole(list, budget, {
+            render: renderRecord,
+            leftOver: (left) => `Not shown, to keep this reply readable (read them with get_records): ${left.map((r) => `#${r.id} ${r.title}`).join('; ')}`,
+          }).text
+        : empty;
 
     const handlers = {
       search_kb: async ({ query, kind }) => {
         const hits = await search.search(cid, query, { kinds: ['kb'], limit: 8 });
-        const records = kb.getMany(cid, hits.map((h) => Number(h.ref_id))).filter((r) => !kind || r.kind === kind);
-        return clip(records.map(renderRecord).join('\n\n---\n\n') || 'No matches.');
+        return records(kb.getMany(cid, hits.map((h) => Number(h.ref_id))).filter((r) => !kind || r.kind === kind), 'No matches.');
       },
-      list_records: ({ kind, status }) =>
-        clip(
-          kb
-            .list(cid, { kind, status })
-            .map((r) => `#${r.id} | ${r.kind} | ${r.status || '-'} | ${r.title} | known_by: ${r.known_by == null ? 'everyone' : r.known_by.join(',')}${r.pinned ? ' | pinned' : ''}`)
-            .join('\n') || 'No records.',
-        ),
-      get_records: ({ ids }) => clip(kb.getMany(cid, ids).map(renderRecord).join('\n\n---\n\n') || 'No such records.'),
+      list_records: ({ kind, status, offset }) => {
+        const all = kb.list(cid, { kind, status });
+        if (!all.length) return 'No records.';
+        const from = Math.max(0, offset ?? 0);
+        if (from >= all.length) return `No records past offset ${from} (there are ${all.length}).`;
+        const { shown, left, text } = fitWhole(all.slice(from), budget, {
+          sep: '\n',
+          render: (r) => `#${r.id} | ${r.kind} | ${r.status || '-'} | ${r.title} | known_by: ${r.known_by == null ? 'everyone' : r.known_by.join(',')}${r.pinned ? ' | pinned' : ''}`,
+        });
+        const to = from + shown.length;
+        return left.length ? `${text}\n\nRecords ${from + 1}-${to} of ${all.length}. For the rest, call list_records again with offset ${to}.` : text;
+      },
+      get_records: ({ ids }) => records(kb.getMany(cid, ids), 'No such records.'),
       create_record: async (i) => {
         const r = await kb.create(
           cid,
@@ -211,10 +231,12 @@ export function createArchivist({ db, store, kb, search, llm, config, mapEvents 
           toSession: to_session ?? undefined,
           limit: 5,
         });
-        return clip(
-          hits.map((h) => `--- S${h.session_num} ${formatTimestamp(h.start_sec)}-${formatTimestamp(h.end_sec)}\n${h.text}`).join('\n\n') ||
-            'No matches.',
-        );
+        if (!hits.length) return 'No matches.';
+        return fitWhole(hits, budget, {
+          sep: '\n\n',
+          render: (h) => `--- S${h.session_num} ${formatTimestamp(h.start_sec)}-${formatTimestamp(h.end_sec)}\n${h.text}`,
+          leftOver: (left) => `Also matched, not shown (read them with read_transcript): ${left.map((h) => `S${h.session_num} ${formatTimestamp(h.start_sec)}-${formatTimestamp(h.end_sec)}`).join('; ')}`,
+        }).text;
       },
       read_transcript: ({ session: n, from, to }) => {
         const a = parseTimestamp(from);
@@ -225,8 +247,12 @@ export function createArchivist({ db, store, kb, search, llm, config, mapEvents 
         } catch {
           return `No session ${n}.`;
         }
-        const lines = transcript(n).filter((u) => u.time >= a && u.time <= b).map(formatUtterance);
-        return lines.length ? clip(lines.join('\n'), 30_000) : 'No lines in that range.';
+        const lines = transcript(n).filter((u) => u.time >= a && u.time <= b);
+        if (!lines.length) return 'No lines in that range.';
+        const { text, left } = fitWhole(lines, budget, { sep: '\n', render: formatUtterance });
+        return left.length
+          ? `${text}\n\n(This reply stops here to stay readable. Continue with read_transcript from ${formatTimestamp(left[0].time)}.)`
+          : text;
       },
       read_player_notes: ({ session_date }) => formatNotes(store.playerNotes(cid, { date: session_date })) || 'No notes for that date.',
     };
