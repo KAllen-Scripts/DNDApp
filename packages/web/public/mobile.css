@@ -182,6 +182,8 @@
 :root[data-phone] #map-main-bar.menu-open > #map-more::after { content: "Close"; font-size: 0.95rem; }
 /* No room for these on a phone: a panel beside the map, a second window, full screen (the map already fills it). */
 :root[data-phone] :is(#map-beside, #map-sheet-window, #map-full) { display: none; }
+/* Nor for a page in a window of its own. */
+:root[data-phone] :is(#tab-popout, #sheet-popout) { display: none; }
 
 /* ⋯ open: every tool, as chips in a sheet from the bottom. */
 :root[data-phone] .map-bars:has(.menu-open) { z-index: 31; }
