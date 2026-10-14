@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import sharp from 'sharp';
+import { playerFogMask, inView } from '@dndapp/shared/map.js';
 import { setup, createFakeLLM, terrain } from './helpers.js';
 
 const readOut = { readable: true, kind: 'battle', name: 'Crypt', description: '', grid: { visible: true, columns: 20, rows: 14 }, scale: { distance: null, unit: null, per: null }, notes: '' };
@@ -41,15 +41,13 @@ test('darkness: players see lit places and what their darkvision reaches; lights
     assert.equal(lit.lights.length, 1);
     assert.deepEqual(await seen(), ['Lit', 'Near', 'Thorin']);
     const player = (await t.request('GET', base, { as: t.sam.token })).json();
-    assert.deepEqual(player.lights, [], 'players never get the lights themselves');
-    assert.ok(player.fog.mask.some((s) => s.clip), 'the lit place, cut to what Thorin sees');
-    // Their image is dark there too: the far goblin's square is blacked out, the lit one isn't.
-    const img = await sharp((await t.request('GET', `${base}/image?v=${player.image_key}`, { as: t.sam.token })).rawPayload).raw().toBuffer({ resolveWithObject: true });
-    const px = (x, y) => img.data[(y * img.info.width + x) * img.info.channels];
-    const orig = await sharp(png).raw().toBuffer({ resolveWithObject: true });
-    const opx = (x, y) => orig.data[(y * orig.info.width + x) * orig.info.channels];
-    assert.notEqual(px(472, 60), opx(472, 60), 'the far goblin is in the dark (dimmed: Thorin saw it by day)');
-    assert.equal(px(612, 410), opx(612, 410), 'the brazier lights the corner');
+    assert.deepEqual(player.lights, [{ x: 595, y: 385, bright: 10, dim: 10 }], 'their page needs the lights to work out the fog');
+    const mask = playerFogMask(player, t.sam.id);
+    assert.ok(mask.some((s) => s.clip), 'the lit place, cut to what Thorin sees');
+    // Their page draws the far goblin in the dark (dimmed: Thorin saw it by day) and the corner lit.
+    const fogAt = (x, y) => mask.reduce((fill, s) => (s.points ? (inView(x, y, s.clip ? s : s.points) ? s.fill : fill) : x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h ? s.fill : fill), 'clear');
+    assert.equal(fogAt(472, 60), 'dim');
+    assert.equal(fogAt(612, 410), 'clear');
 
     // A wall between Thorin and the light: he can't see the lit corner any more.
     await t.request('PATCH', `${base}/walls`, { body: { add: { x1: 300, y1: 0, x2: 300, y2: 490 } } });
