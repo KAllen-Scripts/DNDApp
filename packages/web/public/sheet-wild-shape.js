@@ -159,7 +159,7 @@ export function wildShapeBox({ state, changed, render }) {
       skills,
       attackList(form, true),
       traitList(form),
-      h('p', { class: 'muted small' }, `You keep your Intelligence, Wisdom and Charisma, and your proficiencies; Strength, Dexterity, Constitution, armour class, speed and attacks are the ${name}'s. You can't cast spells in this form.${s.hp ? ` At 0 hit points you change back, and any damage left over comes off your own hit points.` : ''}`),
+      h('p', { class: 'muted small' }, `You keep your Intelligence, Wisdom and Charisma, and your proficiencies; Strength, Dexterity, Constitution, armour class, speed and attacks are the ${name}'s. ${rules.level >= 18 ? 'Beast Spells (druid 18): you can cast your spells in this form.' : 'By the rules you can\'t cast spells in this form until druid level 18 (your spells stay open on the sheet; the DM has the last word).'}${s.hp ? ` At 0 hit points you change back, and any damage left over comes off your own hit points.` : ''}`),
     );
   }
 

@@ -63,7 +63,8 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 
 ## Next steps
 
-0. **Wild Shape (2026-10-14; the owner asked): try it at the table** (on the VS Code list). Not built: Combat Wild Shape's healing from spell slots, counting down the hours, Beast Spells at 18, and the 2024 rule of swapping one known form on a long rest (the sheet only notes when there are more forms than known).
+0. **Class and subclass features on the sheet (owner, 2026-10-14):** more contextual sections like Wild Shape, shown only for the classes (and subclasses) that get them, are wanted later. Subclass features (for example Circle of the Moon's Combat Wild Shape healing) come with that work. Nothing built yet; ask the owner which first.
+0. **Wild Shape (2026-10-14; the owner asked): try it at the table** (on the VS Code list). Not built: Combat Wild Shape's healing from spell slots (the owner: part of later work on subclasses), counting down the hours, and the 2024 rule of swapping one known form on a long rest (the sheet only notes when there are more forms than known).
 0. **Companions and summons (2026-10-14; the owner asked):** built; the owner tries it (VS Code list). Next, if wanted: companions kept on the character sheet so they follow the character between maps, and druids' Wild Shape forms (asked for separately).
 0. **Phone layout (2026-10-14; the owner asked):** all six stages are in (every page, the dice, dialogs, login and admin). Next: the owner tries it on his phone (VS Code list) and says what to change. Built so far: the DM's pages, then login and admin ([docs/notes/mobile-ui.md](docs/notes/mobile-ui.md)). Each stage puts its real-phone check on the VS Code list.
 0. **Thorough archiving (2026-10-14): see it with the real AI** (on the VS Code list below). A session run will use more tool calls and tokens than before (up to 500 calls); if a run hits the cap, raise `ARCHIVIST_MAX_TOOL_CALLS`. To re-archive past sessions with the new instructions, run a rebuild (the knowledge base is regenerated from the archive).
@@ -1158,6 +1159,7 @@ The owner (from his phone): the "Searching the web for …" message on the Items
 - `web/public/sheet-wild-shape.js`: the box (in every layout under Attacks; in Tabs, on the Actions tab) and a line under the name while in a form. Map tokens show a 2014 form's hit points and speed; damage on the token goes to the form (`maps/store.js`). Short and long rests give uses back (`shortRest` takes the edition now). The archivist's sheet text lists the forms and the one in use.
 - Defaults Claude picked: the limits are enforced (Turn into is greyed out with the reason) except 2024's forms known, which is only noted; the form's details come from the lookup and aren't edited on the sheet (remove and add again).
 - Tests: shared (rules, both editions), server (lookup, map token hit points), web (the box end to end); seen in headless Chromium at phone and desktop width.
+- Follow-up (owner): spells stay usable in a form; the box's note says casting needs druid 18 (Beast Spells) and that the DM decides, and from 18 that they can. Class and subclass features are noted under Next steps as later work.
 
 ## Verified vs. not verified
 
