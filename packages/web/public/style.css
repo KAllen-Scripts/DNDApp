@@ -1219,6 +1219,10 @@ button.busy:disabled { opacity: 1; }
 .map-field input[type="color"] { height: 2.2rem; padding: 0.1rem; }
 .map-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 0.5rem; }
 .map-row[hidden] { display: none; }
+/* Add a token: the name gets the room, the kind sits beside it (and goes when a player is picked). */
+.map-row-name { display: flex; gap: 0.5rem; }
+.map-row-name > .map-field { flex: 1 1 0; min-width: 0; }
+.map-row-name > .map-field:first-child { flex-grow: 2; }
 .map-ai { white-space: pre-wrap; max-height: 10rem; overflow-y: auto; }
 .map-dialog-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
 .map-fog { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }

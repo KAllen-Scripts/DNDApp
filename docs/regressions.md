@@ -16,6 +16,7 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 | Date | What was wrong | Test |
 |---|---|---|
 | 2026-10-14 | On a phone, the "Searching the web for …" message floated over the Items page forever: status messages had no ✕ and never went away. | `web/test/app.test.js`: a status message can be dismissed and goes by itself |
+| 2026-10-14 | Add a token asked who the token is three times over ("From your creatures", "From the campaign's records", Kind, and Player for a player character); the owner found it untidy. | `web/test/map.test.js`: Add a token asks who it is once (players, your creatures and the records in one list, not three overlapping fields) |
 | 2026-10-14 | On the map, the finger that stayed still in a two-finger pinch counted as a tap when it lifted (in Pin or Ping mode it dropped a pin or pinged). | `web/test/map.test.js`: the finger that stays still in a pinch is not a tap when it lifts (it dropped a pin in Pin mode) |
 | 2026-10-14 | On a phone, the ⋯ menus of bars that stay at the top (Sheet, Inventory, the DM's lists, admin) opened under the dimmed scrim, so a tap closed the menu instead of pressing the button. | `web/test/phone.test.js`: an open ⋯ menu in a bar that stays at the top sits above the scrim, so its buttons can be tapped |
 | 2026-10-14 | Players' phones drew no fog at all after the fog moved into the page: the browser skipped the large SVG mask. The fog is now painted on a canvas. | `web/test/map.test.js`: a player's fog is drawn on a canvas, not an SVG mask (phones drew no fog at all) |
