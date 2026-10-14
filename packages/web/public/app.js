@@ -746,6 +746,8 @@ $('#note-form textarea').addEventListener('keydown', (e) => {
 initPhone();
 phoneMenu($('.chat-actions'), { label: 'This chat: pin, rename, delete, new chat' });
 initSheetActions();
+phoneMenu($('.sheet-bar'), { label: 'Sheet: review, upload, download, print, pop out', keep: '#sheet-status, .sheet-modes' });
+phoneMenu($('#gear-add'), { label: 'More ways to add', keep: '#gear-name, #dl-gear, button[type=submit], #gear-status' });
 initSheetPlace({ onChange: () => showTab(currentTab) });
 showTab(currentTab);
 initMapActions();

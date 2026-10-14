@@ -73,9 +73,10 @@ test('☰ opens the pages and settings as a menu; picking a page closes it', asy
 
 test('the open chat\'s buttons fold into a ⋯ menu on a phone', async () => {
   await withPage(asSam({ look: { phone: 'on' } }), async (page) => {
-    const actions = page.$('.chat-actions');
-    assert.ok(actions.classList.contains('phone-menu'));
-    const more = actions.querySelector('.phone-more');
+    assert.ok(page.$('.chat-actions').classList.contains('phone-menu'));
+    const actions = page.$('.chat-actions .phone-menu-list');
+    assert.ok(actions.contains(page.$('#chat-delete')), 'the buttons are in the menu');
+    const more = page.$('.chat-actions .phone-more');
     page.click(more);
     assert.ok(actions.classList.contains('menu-open'));
     // One menu at a time: opening ☰ closes ⋯.
@@ -89,6 +90,33 @@ test('the open chat\'s buttons fold into a ⋯ menu on a phone', async () => {
     await tick();
     assert.ok(!actions.classList.contains('menu-open'));
     assert.equal(page.text('#chat-title'), 'New chat');
+  });
+});
+
+test('the sheet bar keeps Next d20 and the save status in the row; the rest is in ⋯', async () => {
+  await withPage(asSam({ look: { phone: 'on' } }), async (page) => {
+    page.click('[data-tab=sheet]');
+    const bar = page.$('.sheet-bar');
+    const list = bar.querySelector('.phone-menu-list');
+    for (const kept of ['#sheet-status', '.sheet-modes', '.phone-more']) assert.equal(bar.querySelector(kept).parentElement, bar, `${kept} stays in the row`);
+    for (const id of ['#sheet-review', '#sheet-upload', '#sheet-download', '#sheet-print', '#sheet-popout']) assert.ok(list.contains(page.$(id)), `${id} is in ⋯`);
+    page.click('.sheet-bar .phone-more');
+    assert.ok(list.classList.contains('menu-open'));
+    page.click('#sheet-print');
+    await tick();
+    assert.equal(page.printed, 1, 'Print still prints');
+    assert.ok(!list.classList.contains('menu-open'));
+    page.click('.sheet-bar .phone-more');
+    page.click('.sheet-bar .phone-menu-close');
+    await tick();
+    assert.ok(!list.classList.contains('menu-open'), 'Close closes it');
+
+    // Inventory: the item box and Add stay; Add by hand is in ⋯ and still works.
+    page.click('[data-tab=inventory]');
+    const form = page.$('#gear-add');
+    assert.equal(page.$('#gear-name').parentElement, form);
+    assert.equal(form.querySelector('button[type=submit]').parentElement, form);
+    assert.ok(form.querySelector('.phone-menu-list').contains(page.$('#gear-own')));
   });
 });
 
@@ -109,7 +137,7 @@ test('the phone styles only apply in the phone layout', () => {
   const rules = css.replace(/\/\*[\s\S]*?\*\//g, '').split('}').map((r) => r.split('{')[0].trim()).filter(Boolean);
   const parts = (sel) => sel.split(/,(?![^(]*\))/).map((s) => s.trim());
   for (const one of rules.flatMap(parts)) {
-    if (/^\.phone-(nav|more|scrim|auto|on|off)\b/.test(one)) continue;
+    if (/^\.phone-(nav|more|scrim|menu-close|menu-list|auto|on|off)\b/.test(one)) continue;
     assert.match(one, /^:root\[data-phone\]/, `"${one}" should be for phones only`);
   }
 });
