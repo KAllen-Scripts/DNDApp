@@ -18,7 +18,7 @@ const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
  * Bump this whenever chunking, prompts, schemas or the memory design change.
  * Every generated output is tagged with it so we know which approach made it.
  */
-export const PIPELINE_VERSION = 16;
+export const PIPELINE_VERSION = 17;
 
 const DEFAULT_MODEL = env.MODEL || 'claude-opus-5-5';
 
@@ -88,10 +88,12 @@ export const config = {
   },
 
   archivist: {
-    // Generous: processing time doesn't matter, thoroughness does.
-    maxToolCalls: num(env.ARCHIVIST_MAX_TOOL_CALLS, 250),
-    maxCostUsd: num(env.ARCHIVIST_MAX_COST_USD, 25),
-    maxToolResultTokens: num(env.ARCHIVIST_MAX_TOOL_RESULT_TOKENS, 8000),
+    // Generous: processing time doesn't matter, thoroughness does (owner, 2026-10-14: archive everything, nothing shortened).
+    maxToolCalls: num(env.ARCHIVIST_MAX_TOOL_CALLS, 500),
+    maxCostUsd: num(env.ARCHIVIST_MAX_COST_USD, 50),
+    // A reply is built from whole records and lines up to this size; what doesn't fit is named, never cut (fit.js).
+    // Under Claude Code's limit on one tool result (raised in llm/claude-code.js too).
+    maxToolResultTokens: num(env.ARCHIVIST_MAX_TOOL_RESULT_TOKENS, 24_000),
     // Transcripts up to this size are given in full; longer ones are read in parts.
     inlineTranscriptTokens: num(env.ARCHIVIST_INLINE_TRANSCRIPT_TOKENS, 200_000),
     // Sheet changes, late note edits and handouts reach the archivist this long after the last one (a quiet spell).
@@ -101,7 +103,8 @@ export const config = {
   kb: {
     // Pinned records are shown with every question, so they share a budget.
     pinnedTokens: num(env.KB_PINNED_TOKENS, 6000),
-    maxRecordTokens: num(env.KB_MAX_RECORD_TOKENS, 4000),
+    // Past this the archivist splits a record into several (it's told never to shorten one).
+    maxRecordTokens: num(env.KB_MAX_RECORD_TOKENS, 8000),
   },
 
   notes: {
@@ -117,9 +120,10 @@ export const config = {
 
   qa: {
     maxToolCalls: num(env.QA_MAX_TOOL_CALLS, 12),
-    maxToolResultTokens: num(env.QA_MAX_TOOL_RESULT_TOKENS, 2500),
-    // Search results included with the question before the model is called (0 to disable).
-    preSearchTokens: num(env.QA_PRESEARCH_TOKENS, 3000),
+    // Replies are whole records, chunks and lines up to this size; the first always comes whole (fit.js).
+    maxToolResultTokens: num(env.QA_MAX_TOOL_RESULT_TOKENS, 5000),
+    // Search results included with the question before the model is called (0 to disable). Whole pieces, as above.
+    preSearchTokens: num(env.QA_PRESEARCH_TOKENS, 5000),
     maxCostUsd: num(env.QA_MAX_COST_USD, 0.5),
     historyTurns: num(env.QA_HISTORY_TURNS, 3),
     questionsPerUserPerHour: num(env.QA_RATE_PER_HOUR, 30),

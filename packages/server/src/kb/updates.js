@@ -16,7 +16,6 @@ const EPOCH = '1970-01-01T00:00:00.000Z';
 const MERGE_MS = 10 * 60_000;
 // The DM has Creatures, not a sheet; one saved before that (or by someone who became the DM) isn't a player's.
 const PLAYERS_ONLY = "user_id NOT IN (SELECT user_id FROM memberships WHERE campaign_id = ? AND role = 'dm')";
-const clip = (s, n) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
 /** "2026-10-08 14:03" in the server's time zone, like the notes. */
 export function localTime(iso) {
@@ -25,11 +24,33 @@ export function localTime(iso) {
   return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())} ${p(t.getHours())}:${p(t.getMinutes())}`;
 }
 
-const show = (v) => {
-  if (v === undefined || v === null || v === '') return '(empty)';
-  if (typeof v === 'string') return JSON.stringify(clip(v, 600));
-  return clip(JSON.stringify(v), 600);
-};
+/** A value in full (the archivist gets everything, never a shortened copy). */
+const show = (v) => (v === undefined || v === null || v === '' ? '(empty)' : JSON.stringify(v));
+
+// Text this long or longer is shown as what changed in it, not twice in full.
+const LONG_TEXT = 600;
+
+/**
+ * "was → now" for a change. Long text (a backstory, a note) gives the lines
+ * that changed, word for word, with the line before them for where: the
+ * lines kept at the start and end are left out, and nothing else.
+ */
+export function showChange(before, after) {
+  if (typeof before !== 'string' || typeof after !== 'string' || Math.max(before.length, after.length) < LONG_TEXT) {
+    return `${show(before)} → ${show(after)}`;
+  }
+  const a = before.split('\n');
+  const b = after.split('\n');
+  let start = 0;
+  while (start < a.length && start < b.length && a[start] === b[start]) start++;
+  let end = 0;
+  while (end < a.length - start && end < b.length - start && a[a.length - 1 - end] === b[b.length - 1 - end]) end++;
+  const was = a.slice(start, a.length - end).join('\n');
+  const now = b.slice(start, b.length - end).join('\n');
+  const where = start ? `after the line ${JSON.stringify(a[start - 1])}` : 'at the start';
+  const kept = start + end ? ` (the other ${start + end} lines unchanged)` : '';
+  return `lines ${where}${kept}: ${show(was)} → ${show(now)}`;
+}
 
 /** A field's path as words: ["spells", 3, "prepared"] -> spells[Fireball].prepared */
 function label(sheet, p) {
@@ -115,14 +136,24 @@ export function sheetText(sheet, settings = {}) {
   add('Passive perception', values.passive_perception);
   const skills = Object.entries(sheet.skills).map(([k, p]) => `${SKILLS[k]?.name ?? k}${p === 'expertise' ? ' (expertise)' : ''}`);
   add('Skill proficiencies', skills.join(', '));
+  if (sheet.inspiration) add('Inspiration', 'yes');
+  add('Hit dice spent', Object.entries(sheet.hit_dice_spent ?? {}).map(([die, n]) => `${n}d${die}`).join(', '));
+  if (sheet.death_saves?.successes || sheet.death_saves?.failures) add('Death saves', `${sheet.death_saves.successes} successes, ${sheet.death_saves.failures} failures`);
   add('Attacks', sheet.attacks.map((a) => [a.name, a.bonus, a.damage, a.notes].filter(Boolean).join(' ')).join('; '));
-  add('Inventory', sheet.inventory.map((g) => `${g.name}${g.qty > 1 ? ` ×${g.qty}` : ''}${g.equipped ? (g.qty > 1 ? ` (${g.equipped} equipped)` : ' (equipped)') : ''}${g.attuned ? ' (attuned)' : ''}${g.charges ? ` (${g.charges.max - g.charges.used} of ${g.charges.max} charges)` : ''}`).join(', '));
+  // Each item on its own line with what the player or the DM wrote about it, in full.
+  const gear = sheet.inventory.map((g) => `- ${g.name}${g.qty > 1 ? ` ×${g.qty}` : ''}${g.equipped ? (g.qty > 1 ? ` (${g.equipped} equipped)` : ' (equipped)') : ''}${g.attuned ? ' (attuned)' : ''}${g.charges ? ` (${g.charges.max - g.charges.used} of ${g.charges.max} charges)` : ''}${g.text ? `: ${g.text}` : ''}`);
+  if (gear.length) lines.push(`Inventory:\n${gear.join('\n')}`);
   add('Coins', Object.entries(sheet.coins).filter(([, n]) => n).map(([c, n]) => `${n} ${c}`).join(', '));
   if (values.spell_ability) add('Spell save DC', values.spell_dc);
+  add('Spell slots used', Object.entries(sheet.spellcasting?.slots_used ?? {}).map(([n, used]) => `level ${n}: ${used}`).join(', '));
   add('Spells', sheet.spells.map((s) => `${s.name} (${s.level ? `level ${s.level}` : 'cantrip'}${s.prepared ? ', prepared' : ''})`).join(', '));
+  // A spell of the player's own (homebrew) is known only from the sheet, so its text comes too.
+  for (const s of sheet.spells.filter((sp) => sp.source === 'custom' && (sp.description || sp.higher_levels))) {
+    add(`Spell ${s.name} (the player's own)`, [s.description, s.higher_levels && `At higher levels: ${s.higher_levels}`].filter(Boolean).join('\n'));
+  }
   for (const k of Object.keys(TEXT_FIELDS)) {
     if (['name', 'race', 'background', 'alignment', 'xp'].includes(k)) continue;
-    if (sheet[k]) add(k.replace(/_/g, ' '), clip(sheet[k], 4000));
+    if (sheet[k]) add(k.replace(/_/g, ' '), sheet[k]);
   }
   return lines.join('\n');
 }
@@ -150,7 +181,7 @@ export function createUpdates({ db, store, archive, handoutsBetween = () => [] }
       const created = changes.find((ch) => ch.created);
       const list = changes
         .filter((ch) => !ch.created)
-        .map((ch) => `[${localTime(ch.at)}] ${ch.field}: ${show(ch.before)} → ${show(ch.after)}`);
+        .map((ch) => `[${localTime(ch.at)}] ${ch.field}: ${showChange(ch.before, ch.after)}`);
       blocks.push(
         [
           head,
@@ -179,7 +210,8 @@ export function createUpdates({ db, store, archive, handoutsBetween = () => [] }
           return n.before == null ? null : `[${localTime(n.at)}] ${who} deleted their note [${where}]: ${show(n.before)}. Remove anything only this note supported.`;
         }
         if (n.before == null) return `[${localTime(n.at)}] ${who} added a note to the session of ${n.session_date} [${where}]: ${show(n.after)}`;
-        return `[${localTime(n.at)}] ${who} edited their note [${where}] from ${show(n.before)} to ${show(n.after)}`;
+        if (Math.max(n.before.length, (n.after ?? '').length) < LONG_TEXT) return `[${localTime(n.at)}] ${who} edited their note [${where}] from ${show(n.before)} to ${show(n.after)}`;
+        return `[${localTime(n.at)}] ${who} edited their note [${where}], changing the ${showChange(n.before, n.after)}`;
       })
       .filter(Boolean);
   }

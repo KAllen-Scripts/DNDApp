@@ -17,7 +17,8 @@ const SERVER = 'dnd';
 /** Claude Code's environment, minus API credentials so it uses the subscription login. */
 function subscriptionEnv() {
   const { ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ...env } = process.env;
-  return { ...env, CLAUDE_AGENT_SDK_CLIENT_APP: 'dndapp/0.1' };
+  // Claude Code cuts an MCP tool result past 25,000 tokens by default; the tools size their own replies (fit.js).
+  return { ...env, CLAUDE_AGENT_SDK_CLIENT_APP: 'dndapp/0.1', MAX_MCP_OUTPUT_TOKENS: '100000' };
 }
 
 /** One user message as the SDK's streaming input. */

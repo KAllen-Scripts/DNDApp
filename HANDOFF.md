@@ -17,12 +17,12 @@ Read this first when picking the project up on another machine or with another A
 
 ---
 
-## Current state (2026-10-13)
+## Current state (2026-10-14)
 
 Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept current since. Everything below is on `main` unless it says otherwise (the AI walls effort picker, PR #33, is still open). On 2026-10-13 it was checked against the whole first Claude project (its chat, every thread, its memory and shared files) before the owner moved to a new project; the design notes and research from that project are now in [docs/notes/](docs/notes/README.md).
 
 **What's built** (SPEC has the design of each; §6.1 is the list):
-- **Server, end to end with real AI calls:** player notes → transcript upload (with date) → attendance → the **archivist** (an AI with full authority over the knowledge base) → per-player Q&A with privacy. Verified with a realistic two-session privacy scenario through Claude Code. Between sessions the archivist also reads character sheets (in full, then each change with its time), late note changes, handouts (text, and what the AI read in their pictures), and (with each session) what happened on the maps.
+- **Server, end to end with real AI calls:** player notes → transcript upload (with date) → attendance → the **archivist** (an AI with full authority over the knowledge base) → per-player Q&A with privacy. Verified with a realistic two-session privacy scenario through Claude Code. Between sessions the archivist also reads character sheets (in full, then each change with its time), late note changes, handouts (text, and what the AI read in their pictures), and (with each session) what happened on the maps. **Archiving is thorough** (2026-10-14, the owner: "No truncating or shortening"): the archivist is told to keep every detail and never lose one, nothing it or Q&A reads is cut short (`fit.js`), and meaning search covers all of a long record (SPEC §5.1).
 - **Web page** (no Electron; served by the server at `/`): name + password logins set by the admin (who can force a password change), several campaigns per account, Ask (streamed answers, citations with transcript evidence, chats you can pin, rename, delete), Notes (edit and delete keep versions), and an admin screen (accounts, campaigns, roles, session uploads with speaker linking).
 - **Q&A** answers campaign questions from the sources and general D&D questions from the model's own knowledge, except that with book PDFs in `DND books` (no database) every rules question is looked up in them, using the campaign's rules edition (the DM's setting, else the edition of the group's Player's Handbook; checked on the owner's real PHB 2014 and DMG 2024 scans, 2026-10-08).
 - **Character sheets** (players only): laid out like the 5e sheet, automatic values the player can override (always kept), autosave with version checks, AI upload of existing sheets, spell lookup (SRD, then the books, then the AI), a token picture and a private full picture the AI describes. Can sit beside the map or open in its own window.
@@ -59,6 +59,7 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 
 ## Next steps
 
+0. **Thorough archiving (2026-10-14): see it with the real AI** (on the VS Code list below). A session run will use more tool calls and tokens than before (up to 500 calls); if a run hits the cap, raise `ARCHIVIST_MAX_TOOL_CALLS`. To re-archive past sessions with the new instructions, run a rebuild (the knowledge base is regenerated from the archive).
 0. **Review sheet: try it with the real AI** (on the VS Code list below). If it's slow or costly, lower `EFFORT_REVIEW` or `SHEET_REVIEW_MAX_TOOL_CALLS`; if it nags about things that are fine, tighten the prompt in `sheets/review.js`.
 0. **PR #33, the AI walls effort picker: waiting on the owner's OK.** Merge `main` into its branch first (it's missing #35), rerun `npm test`, then merge on his word.
 0. **Picture assets for the map creator: waiting on the owner's pick.** Researched 2026-10-13 ([docs/notes/picture-assets-research.md](docs/notes/picture-assets-research.md)): part 1, CC0 ground textures (Poly Haven, ambientCG) shipped in the repo and tiled by the server under made maps; part 2, asset packs (Forgotten Adventures, 2-Minute Tabletop, Dungeondraft) kept in a folder on the host's PC, like the books, and read into the creator's asset list by sub-folder (their licences don't allow bundling them). The question left with him: build part 1, part 2, or both? AI-made pictures were ruled out (Claude can't make images; it would need a paid image service).
@@ -112,6 +113,8 @@ When you change the web page, add or update a test in `packages/web/test/` (READ
 ## Checks to run in VS Code
 
 Checks that only the owner's machine can do (a real browser or GPU, his book PDFs, the real AI), added by any session that needs one. **A VS Code session:** run each check, report what happened, and take it off this list (log the result in the change log). Don't run them again until someone adds them back. Keep each to one line: what to do, what should happen, and why it's here.
+
+- **Thorough archivist with the real AI** (2026-10-14): process a real session (or rebuild), then look at the knowledge base (`GET /campaigns/:cid/kb`): names, numbers, prices and quoted wording from the transcript should be there word for word, nothing summarised away; note the run's time and tool calls (`data/server.log`). Also check `data/server.log` after the restart shows no errors from re-embedding search docs in the background. Here because only the real AI and the real embedding model show it.
 
 - **The site from outside** (2026-10-13): on a phone over mobile data (not home wifi), open https://thepartyledger.fyi, log in as a player, ask something and open a map; it should all work over https with no warnings. Here because only a real phone off the home network shows what players get.
 - **Point buy calculator** (2026-10-13): on the Sheet tab press Point buy in each sheet layout and on a phone; the table should fit beside or under the abilities without spilling sideways (only jsdom has seen it).
@@ -1013,6 +1016,17 @@ The owner, after the entry below: the trouble with several floors was that each 
 
 The owner noticed the map creator asks for one floor and said maps need several kinds. The creator could already do that (every square has its own floor: the Floor brush and rectangle, Fill, a Room's own floor, Round's floor; generated maps and AI drafts mix them), but the start screen's lone, unlabelled "floor everywhere" box read as "the map's floor". Now it's labelled **Floor to start with** with a line saying a map can have as many kinds of floor as you like and how to paint them, and the Floor tool's panel says to pick a floor, paint, then pick another. SPEC §6.6 says so too.
 - Test: `web/test/creator.test.js`, "creator: the start screen says its floor is only a start, and a blank map takes several floors" (flagstones, then a square of stone and one of water, saved as one map).
+
+### 2026-10-14: The archivist archives thoroughly; nothing is cut short
+
+The owner: "I want to make sure it archives data THOROUGHLY. No truncating or shortening. We can make the databases we store information in as complicated as large as we like, as long as they're usable. What matters is speed and accuracy here." There's one archivist; its knowledge base answers both the DM's and the players' questions, so both sides were covered.
+- **Instructions** (`kb/archivist.js`): be thorough (every detail, not a summary; exact wording kept for deals, oaths, prophecies, riddles, inscriptions, letters; size is not a concern), never lose information when updating, merging, splitting or restructuring (keep the history of changed states), split a record that nears the size limit rather than shortening it, go through the material start to end and check it again before finishing. Pinned records stay short but point to the full ones. `PIPELINE_VERSION` 17.
+- **Nothing cut short** (`fit.js`): every archivist and Q&A tool result is built from whole records, chunks and lines; what doesn't fit is named with the tool to fetch it (`list_records` pages with `offset`; `read_transcript` says where to continue). Before, results were cut mid-record at 8,000 tokens (archivist) and 2,500 (Q&A), and the Q&A pre-search cut every piece to an equal share. Budgets now 24,000 and 5,000 tokens, pre-search 5,000; Claude Code's own 25,000-token cut on a tool result is lifted (`MAX_MCP_OUTPUT_TOKENS`).
+- **What the archivist reads between sessions** (`kb/updates.js`): sheet text fields were cut at 4,000 characters and each change (and note edit) at 600; now everything is whole, a long text that changed gives its changed lines word for word, and the sheet adds each item's description, inspiration, hit dice spent, death saves, spell slots used and the player's own spells' text. Handout pictures are described in full, not in "two to six sentences".
+- **Search over long text** (`search.js`): the embedding model reads only a text's first ~256 words, so meaning search missed the rest of long records and chunks. Docs are now embedded in overlapping 150-word windows and score by their best one; old docs are embedded again in the background on start-up.
+- **Bigger limits:** a record may be 8,000 tokens (was 4,000); an archivist run 500 tool calls (was 250) and $50 on the API (was $25). The pinned budget (6,000) is unchanged, since it goes into every question (speed).
+- Regression tests: `server/test/kb.test.js` (archivist tools, Q&A tools and pre-search, meaning search windows) and `server/test/updates.test.js` (sheets and long changes in full); each fails without the fix.
+- Docs: SPEC v0.38 (§3.1, §3.5, §5.1, §5.2, §5.3), `docs/regressions.md`. On the VS Code list: a real run.
 
 ## Verified vs. not verified
 

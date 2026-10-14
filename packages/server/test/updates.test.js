@@ -65,6 +65,22 @@ test('sheetText: what the player entered plus the numbers worked out from it', (
   assert.match(text, /backstory: Exiled from the mountain\./);
 });
 
+// Sheet text was cut at 4,000 characters and each change at 600, so a long backstory or note edit reached the archivist without its end.
+test('regression: the archivist gets a sheet, its items and long changes in full, never cut short', async () => {
+  const backstory = Array.from({ length: 80 }, (_, i) => `Line ${i} of a long backstory, with enough words to make it long.`).join('\n');
+  const text = sheetText(sheetFor({ backstory, inventory: [{ name: 'Sealed letter', text: `${'Addressed to the Baron. '.repeat(40)}Signed: V.` }] }));
+  assert.ok(text.includes(backstory), 'the whole backstory');
+  assert.match(text, /- Sealed letter: (Addressed to the Baron\. ){40}Signed: V\./);
+
+  const { showChange } = await import('../src/kb/updates.js');
+  const edited = backstory.replace('Line 40 of a long backstory', 'Line 40, rewritten: the hidden heir of House Vane');
+  const change = showChange(backstory, edited);
+  assert.match(change, /Line 40, rewritten: the hidden heir of House Vane/);
+  assert.match(change, /after the line "Line 39 of a long backstory/);
+  const long = `${'A very long single paragraph. '.repeat(40)}THE END`;
+  assert.match(showChange('', long), /THE END"$/);
+});
+
 test('a new sheet and its changes reach the archivist with their times, once the player stops editing', async () => {
   const t = await setup({ config: { archivist: { ...(await import('../src/config.js')).config.archivist, updatesDelayMinutes: 0.002 } } });
   try {

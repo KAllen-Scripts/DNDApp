@@ -99,6 +99,8 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   maps.failInterrupted();
   creatures.failInterrupted();
   items.failInterrupted();
+  // Search docs embedded before long text was embedded in windows (only their opening) are embedded again, in the background.
+  search.reembedStale().catch((err) => log?.error?.(err));
   // Changes made while the server was off (or before its last run finished) still reach the archivist.
   for (const { id } of db.prepare('SELECT id FROM campaigns').all()) if (updates.pendingSince(id)) jobs.scheduleUpdates(id);
 
