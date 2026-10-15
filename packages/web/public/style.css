@@ -1341,6 +1341,15 @@ button.busy:disabled { opacity: 1; }
   position: absolute; top: -0.12em; left: -0.12em; width: 0.6em; height: 0.6em; border-radius: 1em;
   background: #c9a227; color: #1b1405; font-size: 0.42em; line-height: 0.6em; text-align: center; pointer-events: none;
 }
+.token-up {
+  position: absolute; bottom: -0.1em; left: -0.2em; padding: 0 0.15em; border-radius: 0.3em;
+  background: #2b5f8a; color: #fff; font-size: 0.36em; line-height: 1.2em; white-space: nowrap; pointer-events: none;
+}
+.map-selection .map-num { width: 4.2rem; padding: 0.25rem 0.4rem; }
+.map-fog-tools .map-num { width: 4.2rem; padding: 0.2rem 0.3rem; }
+.map-terrain .raised { fill: rgb(70 130 200 / 0.18); stroke: #4a90d9; stroke-width: 2px; vector-effect: non-scaling-stroke; }
+.map-terrain .raised.low { fill: rgb(120 80 40 / 0.2); stroke: #a0703a; }
+.map-terrain .raised-label { fill: #fff; stroke: rgb(0 0 0 / 0.7); stroke-width: 3px; paint-order: stroke; font-weight: 700; pointer-events: none; }
 .map-selection .hp-text { font-weight: 600; font-size: 0.9rem; }
 .map-selection .hp-change { width: 6.5rem; padding: 0.25rem 0.4rem; }
 .map-selection select { width: auto; padding: 0.25rem 0.4rem; font-size: 0.85rem; }

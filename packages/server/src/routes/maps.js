@@ -4,7 +4,7 @@
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { CONDITIONS, FOG_MAP, FOG_OPS, MAX_COMPANIONS, MAX_FOG_SHAPES, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_TERRAIN, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, PLAYER_KINDS, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, ownToken, pathCost, snapToken, stepTurn, tokenPx, wallBetween } from '@dndapp/shared/map.js';
+import { CONDITIONS, FOG_MAP, FOG_OPS, MAX_COMPANIONS, MAX_FOG_SHAPES, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_RAISED, MAX_TERRAIN, MAX_HEIGHT_FT, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, PLAYER_KINDS, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, ownToken, pathCost, snapToken, stepTurn, tokenPx, wallBetween } from '@dndapp/shared/map.js';
 import sharp from 'sharp';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
@@ -631,6 +631,34 @@ export function registerMaps(app, r) {
     return maps.view(saved, a);
   });
 
+  /**
+   * Raised areas (DM): { add?: {points: [[x, y], ...], height}, set?: {id, height}, remove?: id, clear?: all }.
+   * Roofs, wall-walks, cliffs: flat-topped parts of the map higher (or lower) than the ground, in feet.
+   * Tokens standing in one are that high; players' sight goes over them only if the line clears their edges.
+   */
+  app.patch('/campaigns/:cid/maps/:mid/raised', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const HEIGHT = z.number().min(-MAX_HEIGHT_FT).max(MAX_HEIGHT_FT);
+    const body = z
+      .object({
+        add: z.object({ points: z.array(z.tuple([POINT, POINT])).min(3).max(200), height: HEIGHT }).optional(),
+        set: z.object({ id: z.string().max(20), height: HEIGHT }).optional(),
+        remove: z.string().max(20).optional(),
+        clear: z.literal('all').optional(),
+      })
+      .parse(request.body ?? {});
+    if (body.add && map.raised.length >= MAX_RAISED) throw new BadRequestError(`A map can have at most ${MAX_RAISED} raised areas.`);
+    for (const id of [body.remove, body.set?.id]) if (id && !map.raised.some((r) => r.id === id)) throw new NotFoundError('No such area');
+    const saved = maps.change(a.cid, map.id, (m) => {
+      if (body.clear === 'all') m.raised = [];
+      if (body.remove) m.raised = m.raised.filter((r) => r.id !== body.remove);
+      if (body.set) m.raised.find((r) => r.id === body.set.id).height = body.set.height;
+      if (body.add) m.raised.push({ id: newTokenId(), points: body.add.points, height: body.add.height, source: 'dm' });
+    }, { by: request.user.id, reason: 'raised areas' });
+    return maps.view(saved, a);
+  });
+
   /** Draft the walls and doors with the AI (DM), in the background. Replaces the AI's earlier draft; walls the DM drew stay. */
   app.post('/campaigns/:cid/maps/:mid/walls/draft', async (request) => {
     const a = access(request, { dm: true });
@@ -714,10 +742,13 @@ export function registerMaps(app, r) {
     light: z.object(RADII).nullable(),
     darkvision: z.number().min(0).max(10_000),
     speed: z.number().min(0).max(10_000).nullable(),
+    // How tall it is (feet; null: its sheet's or its size's), and how far above the ground it is (flying, climbing).
+    height: z.number().min(0.5).max(MAX_HEIGHT_FT).nullable(),
+    elevation: z.number().min(-MAX_HEIGHT_FT).max(MAX_HEIGHT_FT),
     merchant: z.string().regex(/^[a-f0-9]{10}$/).nullable(),
   });
   // What a player may change on their own token; everything else is the DM's.
-  const OWNER_FIELDS = new Set(['x', 'y', 'hp', 'conditions', 'light', 'darkvision']);
+  const OWNER_FIELDS = new Set(['x', 'y', 'hp', 'conditions', 'light', 'darkvision', 'height', 'elevation']);
   // On their companions and summons, a player may also rename it, resize it, recolour it and write its stat block.
   const COMPANION_FIELDS = new Set([...OWNER_FIELDS, 'name', 'size', 'color', 'stats', 'speed']);
   // What a player sends to add a companion or summon of their own.

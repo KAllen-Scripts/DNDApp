@@ -9,7 +9,7 @@
  * the server decides where a token really ends up.
  */
 import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from './api.js';
-import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, inTemplate, snapTemplatePoint } from './shared/map.js';
+import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, inTemplate, snapTemplatePoint, groundAt, tokenTall } from './shared/map.js';
 import { EDITING_KEY, PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, base, report, state, status } from './map-state.js';
 import { canChangeTemplate, placeTemplate, renderTemplates, selectTemplate, templateControls, templateDialog, templateMove, templateUp } from './map-templates.js';
 import { openShop } from './merchants.js';
@@ -335,6 +335,8 @@ function renderFogTools() {
   const tools = $('#map-fog-tools');
   const walls = $('#map-wall-tools');
   walls.hidden = tools.hidden;
+  // Raised areas show (with their heights) while the walls panel is open.
+  if (map) renderTerrain();
   $('#map-fog-open').setAttribute('aria-pressed', String(!tools.hidden));
   $('#map-view').classList.toggle('fog-drawing', !!map && ((!!state.fogMode && !!map.fog?.enabled) || !!state.wallMode));
   if (tools.hidden || !map) return;
@@ -552,9 +554,36 @@ function renderTerrain() {
   defs.append(pattern);
   const pts = (list) => list.map((p) => p.join(',')).join(' ');
   svg.replaceChildren(defs, ...(map.terrain ?? []).map((a) => svgEl('polygon', { points: pts(a.points), class: `difficult${a.source === 'ai' ? ' ai' : ''}` })));
+  // Raised areas: the DM sees their outlines and heights while working on the walls (players only feel them in the fog).
+  if (state.canEdit && (state.wallMode || !$('#map-wall-tools').hidden)) {
+    const font = Math.max(10, squarePx(map) * 0.4);
+    for (const a of map.raised ?? []) {
+      svg.append(svgEl('polygon', { points: pts(a.points), class: `raised${a.height < 0 ? ' low' : ''}` }));
+      const xs = a.points.map((p) => p[0]);
+      const ys = a.points.map((p) => p[1]);
+      const label = svgEl('text', { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2, class: 'raised-label', 'font-size': font, 'text-anchor': 'middle', 'dominant-baseline': 'middle' });
+      label.textContent = `${a.height > 0 ? '↑' : a.height < 0 ? '↓' : ''}${Math.abs(a.height)} ft`;
+      svg.append(label);
+    }
+  }
   if (state.terrainDraw) {
     const r = fogRect(map, state.terrainDraw.a, state.terrainDraw.b);
-    svg.append(svgEl('polygon', { points: pts([[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]]), class: 'difficult' }));
+    svg.append(svgEl('polygon', { points: pts([[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]]), class: state.wallMode === 'raised' ? 'raised' : 'difficult' }));
+  }
+}
+
+/** The height a new raised area gets (the box next to Raised area), in feet. */
+function raisedHeight() {
+  const n = Math.round(Number($('#map-raised-height').value));
+  return Number.isFinite(n) ? Math.max(-1000, Math.min(1000, n)) : 15;
+}
+
+async function raised(body) {
+  try {
+    const saved = await state.guarded(() => api('PATCH', `${base()}/${state.current.id}/raised`, body));
+    if (saved) onMap(saved);
+  } catch (err) {
+    report(err);
   }
 }
 
@@ -652,6 +681,16 @@ function tokenPicture(t) {
   return null;
 }
 
+/** How high a token stands (the raised area under it plus flying or climbing), in feet. */
+const tokenElevation = (map, t, x = t.x, y = t.y) => groundAt(map, x, y) + (t.elevation ?? 0);
+
+/** A badge on a token that isn't on the ground: ↑25 on a wall-walk, ↓10 in a pit. */
+function heightBadge(map, t, x, y) {
+  const up = Math.round(tokenElevation(map, t, x, y) * 10) / 10;
+  if (!up) return null;
+  return h('span', { class: 'token-up', title: `${Math.abs(up)} ft ${up > 0 ? 'up' : 'down'}` }, `${up > 0 ? '↑' : '↓'}${Math.abs(up)}`);
+}
+
 const canMove = (token) => state.canEdit || (token.user_id != null && token.user_id === state.userId);
 
 export function renderTokens() {
@@ -677,7 +716,8 @@ export function renderTokens() {
       h('span', { class: 'token-name' }, t.name),
       health ? h('span', { class: `token-hp ${health}` }, h('span', { style: `width:${hpFraction(t, health) * 100}%` })) : null,
       t.conditions.length ? h('span', { class: 'token-conditions', title: t.conditions.join(', ') }, String(t.conditions.length)) : null,
-      t.merchant ? h('span', { class: 'token-shop', 'aria-hidden': 'true' }, '⚖') : null);
+      t.merchant ? h('span', { class: 'token-shop', 'aria-hidden': 'true' }, '⚖') : null,
+      heightBadge(map, t, x, y));
       el.style.cssText = `left:${x - d / 2}px;top:${y - d / 2}px;width:${d}px;height:${d}px;--token:${t.color};font-size:${d * 0.38}px`;
       el.addEventListener('pointerdown', (e) => tokenDown(e, t));
       el.addEventListener('keydown', (e) => {
@@ -917,6 +957,30 @@ function lightSelect(token) {
   return sel;
 }
 
+/**
+ * How tall the token is and how far above the ground it is (flying,
+ * climbing), in feet: they decide what it sees over raised areas and who
+ * sees it. Height left empty means its sheet's, or its size's.
+ */
+function heightInputs(token) {
+  const tall = h('input', { type: 'number', min: 0.5, max: 1000, step: 0.5, class: 'map-num', value: token.height ?? '', placeholder: String(tokenTall(token)), 'aria-label': 'Height in feet', title: "How tall it is, in feet (empty: its sheet's height, or its size's). Tall creatures see and are seen over walls and roofs." });
+  tall.addEventListener('change', () => {
+    const v = tall.value.trim();
+    const n = Number(v);
+    if (v && (!Number.isFinite(n) || n < 0.5)) return;
+    patchToken(token, { height: v ? Math.min(1000, n) : null });
+  });
+  const up = h('input', { type: 'number', min: -1000, max: 1000, step: 5, class: 'map-num', value: token.elevation || '', placeholder: '0', 'aria-label': 'Feet above the ground', title: 'How far above the ground under it, in feet: flying, climbing or levitating (a raised area it stands on counts by itself)' });
+  up.addEventListener('change', () => {
+    const n = Number(up.value || 0);
+    if (Number.isFinite(n)) patchToken(token, { elevation: Math.max(-1000, Math.min(1000, n)) });
+  });
+  return [
+    h('label', { class: 'map-check small' }, 'Tall ', tall, ' ft'),
+    h('label', { class: 'map-check small' }, 'Up ', up, ' ft'),
+  ];
+}
+
 /** Hit points and conditions: the DM for any token, a player for their own. */
 function tokenControls(token) {
   const editable = state.canEdit || (token.user_id != null && token.user_id === state.userId);
@@ -937,7 +1001,7 @@ function tokenControls(token) {
       patchToken(token, { hp: next });
     });
     parts.push(h('span', { class: 'hp-text' }, hpText(token) || 'No HP'), change);
-    parts.push(lightSelect(token));
+    parts.push(lightSelect(token), ...heightInputs(token));
     const add = h('select', { 'aria-label': 'Add a condition' }, new Option('+ Condition', ''), ...CONDITIONS.filter((c) => !token.conditions.includes(c)).map((c) => new Option(c, c)));
     add.addEventListener('change', () => add.value && patchToken(token, { conditions: [...token.conditions, add.value] }));
     parts.push(add);
@@ -1147,6 +1211,9 @@ function wallUp(e) {
     else if (state.wallMode === 'erase' && (map.terrain ?? []).some((a) => pointInPolygon(at.x, at.y, a.points))) {
       terrain({ remove: map.terrain.findLast((a) => pointInPolygon(at.x, at.y, a.points)).id });
     }
+    else if (state.wallMode === 'erase' && (map.raised ?? []).some((a) => pointInPolygon(at.x, at.y, a.points))) {
+      raised({ remove: map.raised.findLast((a) => pointInPolygon(at.x, at.y, a.points)).id });
+    }
     else if (state.wallMode === 'door' && door) walls({ toggle: door.id });
     else if (state.wallMode === 'lock' && door) walls({ lock: door.id });
     return;
@@ -1214,7 +1281,7 @@ function viewDown(e) {
     state.fogDraw = { pointer: e.pointerId, a: at, b: at };
     return;
   }
-  if (state.wallMode === 'difficult' && !state.pointers.size && !state.terrainDraw) {
+  if ((state.wallMode === 'difficult' || state.wallMode === 'raised') && !state.pointers.size && !state.terrainDraw) {
     const at = toImage(e.clientX, e.clientY);
     state.terrainDraw = { pointer: e.pointerId, a: at, b: at };
     return;
@@ -1331,10 +1398,21 @@ function viewUp(e) {
   }
   if (state.wallDraw?.pointer === e.pointerId) return wallUp(e);
   if (state.terrainDraw?.pointer === e.pointerId) {
-    const r = fogRect(state.current, state.terrainDraw.a, state.terrainDraw.b);
+    const d = state.terrainDraw;
+    const r = fogRect(state.current, d.a, d.b);
     state.terrainDraw = null;
     renderTerrain();
-    if (e.type === 'pointerup' && r.w > 0 && r.h > 0) terrain({ add: { points: [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]] } });
+    const points = [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]];
+    if (e.type !== 'pointerup') return;
+    if (state.wallMode === 'raised') {
+      // A click on a raised area gives it the height in the box; a drag makes a new one.
+      const click = Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y) * state.view.k < 4;
+      const hit = click && (state.current.raised ?? []).findLast((x) => pointInPolygon(d.a.x, d.a.y, x.points));
+      if (hit) raised({ set: { id: hit.id, height: raisedHeight() } });
+      else if (r.w > 0 && r.h > 0) raised({ add: { points, height: raisedHeight() } });
+      return;
+    }
+    if (r.w > 0 && r.h > 0) terrain({ add: { points } });
     return;
   }
   const p = state.pointers.get(e.pointerId);

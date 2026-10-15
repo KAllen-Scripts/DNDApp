@@ -97,6 +97,10 @@ export function normalizeToken(t = {}, map) {
     darkvision: num(t.darkvision, { min: 0, max: 10_000, fallback: 0 }),
     // Walking speed in the map's unit when the DM sets it; null to use the sheet or stat block's.
     speed: num(t.speed, { min: 0, max: 10_000, fallback: null }),
+    // How tall it is, in feet, when set by hand; null for its sheet's height or its size's (see tokenTall).
+    height: t.height == null ? null : round(num(t.height, { min: 0.5, max: MAX_HEIGHT_FT, fallback: 6 }), 1),
+    // Feet above the ground under it (flying, climbing, levitating); 0 standing on it.
+    elevation: round(num(t.elevation, { min: -MAX_HEIGHT_FT, max: MAX_HEIGHT_FT, fallback: 0 }), 1),
     // A picture the DM gave an NPC, enemy or companion (a player character shows its player's own token picture instead).
     art: kind !== 'pc' ? normalizeTokenArt(t.art) : null,
     // The DM's merchant this token stands for (players open its shop from the token); null for none.
@@ -322,6 +326,7 @@ export function normalizeMap(input = {}) {
     walls: normalizeWalls(m.walls, image),
     lights: normalizeLights(m.lights, image),
     terrain: normalizeTerrain(m.terrain, image),
+    raised: normalizeRaised(m.raised, image),
     // The AI drafting walls from the picture (the DM's; players never get it).
     wall_draft: {
       status: pick(m.wall_draft?.status, ['', 'pending', 'done', 'failed'], ''),
@@ -792,13 +797,16 @@ export function fogMask(map, { polygons = [], explored = [] } = {}) {
  * The fog as a player's page draws it, from their view of the map (see the
  * server's maps.view): their own tokens' sight through the walls they're
  * sent, the places they've explored (`fog.explored`) and the DM's
- * rectangles. Empty when the fog is off or the map shows unseen parts as
+ * rectangles, then the squares they can't see over raised areas
+ * (heightShadows). Empty when the fog is off or the map shows unseen parts as
  * they are. The page passes a copy with its token where it's being dragged,
  * so the fog follows the drag.
  */
 export function playerFogMask(view, userId) {
   if (!view.fog?.enabled || view.fog.map === 'shown') return [];
-  return fogMask(view, { polygons: sightOf(view, userId), explored: view.fog.explored ?? [] });
+  const polygons = sightOf(view, userId);
+  const explored = view.fog.explored ?? [];
+  return [...fogMask(view, { polygons, explored }), ...heightShadows(view, userId, polygons, explored)];
 }
 
 /** Mask colours: white is fully fogged, black is clear, grey is the dim view of places seen before. */
@@ -1199,6 +1207,217 @@ export function normalizeTerrain(list, image = {}) {
     if (points.length < 3) continue;
     seen.add(a.id);
     out.push({ id: String(a.id), points, source: pick(a.source, WALL_SOURCES, 'dm') });
+  }
+  return out;
+}
+
+// ---------- height ----------
+
+/** Heights (tokens, raised areas, flying) are in feet, from -1000 to 1000. */
+export const MAX_HEIGHT_FT = 1000;
+export const MAX_RAISED = 300;
+/** How tall a creature of each token size is when nothing says otherwise (feet). Small shares Medium's token size. */
+export const SIZE_HEIGHTS = { 0.5: 2, 1: 6, 2: 10, 3: 20, 4: 30 };
+
+/**
+ * Raised areas (owner's request, 2026-10-15): parts of the map higher or
+ * lower than the ground, each flat on top: a roof, a castle's wall-walk, a
+ * tower top, a cliff top, a pit. `height` is in feet above the map's ground
+ * (0). Where areas overlap, the highest counts.
+ */
+export function normalizeRaised(list, image = {}) {
+  const { width = 1, height = 1 } = image;
+  const seen = new Set();
+  const out = [];
+  for (const a of Array.isArray(list) ? list : []) {
+    if (!a || !isTokenId(a.id) || seen.has(a.id) || out.length >= MAX_RAISED) continue;
+    const points = (Array.isArray(a.points) ? a.points : []).slice(0, 200)
+      .map((p) => [round(num(p?.[0], { min: 0, max: width, fallback: 0 }), 1), round(num(p?.[1], { min: 0, max: height, fallback: 0 }), 1)]);
+    if (points.length < 3) continue;
+    seen.add(a.id);
+    out.push({ id: String(a.id), points, height: round(num(a.height, { min: -MAX_HEIGHT_FT, max: MAX_HEIGHT_FT, fallback: 0 }), 1), source: pick(a.source, WALL_SOURCES, 'dm') });
+  }
+  return out;
+}
+
+/** How high the ground is at a point (feet): the highest raised area there, else 0. */
+export function groundAt(map, x, y) {
+  let best = null;
+  for (const a of map.raised ?? []) if ((best == null || a.height > best) && pointInPolygon(x, y, a.points)) best = a.height;
+  return best ?? 0;
+}
+
+/**
+ * A height in feet from what a player typed on their sheet ("5'10\"", "5 ft 10 in",
+ * "6 feet", "178 cm", "1.8 m", "70 in"), or null if it doesn't read as one.
+ */
+export function parseHeight(text) {
+  const s = String(text ?? '').toLowerCase().replace(/,/g, '.').trim();
+  if (!s) return null;
+  let ft = null;
+  let m;
+  if ((m = s.match(/(\d+(?:\.\d+)?)\s*cm\b/))) ft = Number(m[1]) / 30.48;
+  else if ((m = s.match(/(\d+(?:\.\d+)?)\s*(?:m|metres?|meters?)\b/))) ft = Number(m[1]) * 3.2808;
+  else if ((m = s.match(/(\d+(?:\.\d+)?)\s*(?:'|’|ft\b|feet\b|foot\b)\s*(?:(\d+(?:\.\d+)?)\s*(?:"|”|''|in\b|inch(?:es)?\b)?)?/))) ft = Number(m[1]) + (m[2] ? Number(m[2]) / 12 : 0);
+  else if ((m = s.match(/(\d+(?:\.\d+)?)\s*(?:"|”|in\b|inch(?:es)?\b)/))) ft = Number(m[1]) / 12;
+  return ft != null && ft >= 0.5 && ft <= MAX_HEIGHT_FT ? Math.round(ft * 10) / 10 : null;
+}
+
+/**
+ * How tall a token is (feet): set by hand, else what the server worked out
+ * from its player's sheet (`tall`, on the views it sends), else by its size.
+ */
+export const tokenTall = (t) => t.height ?? t.tall ?? SIZE_HEIGHTS[t.size] ?? 6;
+
+/** Where a token's eyes are: { x, y, z } with z in feet (1 ft below the top of its head, but at least half way up). */
+export function eyeOf(map, t) {
+  const tall = tokenTall(t);
+  return { x: t.x, y: t.y, z: groundAt(map, t.x, t.y) + (t.elevation ?? 0) + Math.max(tall - 1, tall / 2) };
+}
+
+/** The top of a token's head: { x, y, z }, z in feet. */
+export function headOf(map, t) {
+  return { x: t.x, y: t.y, z: groundAt(map, t.x, t.y) + (t.elevation ?? 0) + tokenTall(t) };
+}
+
+// The edges of raised areas, per set of areas: a key -> edges.
+const edgeCache = new Map();
+
+/**
+ * Every place the ground changes height, as segments with `top`: the
+ * higher of the heights on its two sides (what a line of sight over it
+ * must clear).
+ */
+export function heightEdges(map) {
+  const raised = map.raised ?? [];
+  if (!raised.length) return [];
+  const key = raised.map((a) => `${a.height}:${a.points.join(';')}`).join('|');
+  if (edgeCache.has(key)) return edgeCache.get(key);
+  const out = [];
+  for (const a of raised) {
+    const n = a.points.length;
+    for (let i = 0; i < n; i++) {
+      const [x1, y1] = a.points[i];
+      const [x2, y2] = a.points[(i + 1) % n];
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      if (!len) continue;
+      // Just either side of the edge's middle.
+      const nx = (-(y2 - y1) / len) * 0.01;
+      const ny = ((x2 - x1) / len) * 0.01;
+      const mx = (x1 + x2) / 2;
+      const my = (y1 + y2) / 2;
+      const top = Math.max(groundAt(map, mx + nx, my + ny), groundAt(map, mx - nx, my - ny));
+      out.push({ x1, y1, x2, y2, top });
+    }
+  }
+  if (edgeCache.size > 16) edgeCache.delete(edgeCache.keys().next().value);
+  edgeCache.set(key, out);
+  return out;
+}
+
+/**
+ * Can a line of sight from a (eyes) to b (a point to see, such as the top
+ * of a head), each { x, y, z } with z in feet, pass over the raised areas?
+ * The standard terrain line-of-sight test (as GIS viewsheds and Foundry's
+ * height modules do it): the straight line between them must stay above
+ * the ground. Raised areas are flat on top, so the line can only touch
+ * them at an edge: at each edge it crosses, its height there
+ * (a.z + (b.z - a.z) × how far along) must be at least the edge's top.
+ * Walls are separate (they block whatever the height).
+ */
+export function heightClear(edges, a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
+  for (const e of edges) {
+    if (Math.max(e.x1, e.x2) < x0 || Math.min(e.x1, e.x2) > x1 || Math.max(e.y1, e.y2) < y0 || Math.min(e.y1, e.y2) > y1) continue;
+    const sx = e.x2 - e.x1;
+    const sy = e.y2 - e.y1;
+    const denom = cross(dx, dy, sx, sy);
+    if (Math.abs(denom) < 1e-12) continue;
+    const qx = e.x1 - a.x;
+    const qy = e.y1 - a.y;
+    const t = cross(qx, qy, sx, sy) / denom;
+    const u = cross(qx, qy, dx, dy) / denom;
+    if (t < 0 || t > 1 || u < 0 || u > 1) continue;
+    if (a.z + (b.z - a.z) * t < e.top - 1e-6) return false;
+  }
+  return true;
+}
+
+/** Can token a see token b over the raised areas (walls aside)? The same line both ways, so it's mutual. */
+export const tokenSeesOver = (map, a, b, edges = heightEdges(map)) => heightClear(edges, eyeOf(map, a), headOf(map, b));
+
+/**
+ * Does a player see this token, with line of sight on? It must be in what
+ * their tokens see (sight polygons) or in a part the DM revealed, and with
+ * raised areas on the map, one of their tokens must also see over them to
+ * the top of its head. The DM's reveals show it whatever the heights.
+ */
+export function canSeeToken(map, userId, polygons, t) {
+  if (!canSee(map, polygons, t.x, t.y)) return false;
+  if (!map.fog?.enabled || !map.fog.sight || !map.raised?.length || !isFogged(map, t.x, t.y)) return true;
+  const edges = heightEdges(map);
+  return map.tokens.some((o) => ownToken(o, userId) && tokenSeesOver(map, o, t, edges));
+}
+
+/** How tall the creature is that the fog shows for: where a Medium creature standing there would be seen. */
+export const FOG_TARGET_HEIGHT = 6;
+
+/**
+ * Where a player's tokens can't see over the raised areas, as fog shapes
+ * on top of their sight: a grid of cells (the map's squares, or 1/64 of
+ * its long side), each covered when none of their tokens sees a Medium
+ * creature standing there. Cells they explored before stay dim, and the
+ * DM's reveals stay clear. Neighbouring cells in a row are joined.
+ */
+export function heightShadows(map, userId, polygons, explored = []) {
+  if (!map.raised?.length || !polygons.length) return [];
+  const own = map.tokens.filter((t) => ownToken(t, userId));
+  if (!own.length) return [];
+  const edges = heightEdges(map);
+  const eyes = own.map((t) => eyeOf(map, t));
+  const { width, height } = map.image;
+  const cell = map.grid ? map.grid.size : Math.max(width, height) / 64;
+  const ox = map.grid ? ((map.grid.x % cell) + cell) % cell : 0;
+  const oy = map.grid ? ((map.grid.y % cell) + cell) % cell : 0;
+  // Only where they can see at all.
+  let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+  for (const v of polygons) {
+    const b = boundsOf(v.points ?? v);
+    bx0 = Math.min(bx0, b.x0); by0 = Math.min(by0, b.y0); bx1 = Math.max(bx1, b.x1); by1 = Math.max(by1, b.y1);
+  }
+  const fill = map.fog?.map === 'grey' ? 'dim' : 'cover';
+  const out = [];
+  const c0 = Math.max(0, Math.floor((bx0 - ox) / cell)) - (ox > 0 ? 1 : 0);
+  const r0 = Math.max(0, Math.floor((by0 - oy) / cell)) - (oy > 0 ? 1 : 0);
+  for (let r = r0; oy + r * cell < Math.min(by1, height); r++) {
+    let run = null;
+    const flush = () => {
+      if (run) out.push(run);
+      run = null;
+    };
+    for (let c = c0; ox + c * cell < Math.min(bx1, width); c++) {
+      const x = Math.max(0, ox + c * cell);
+      const y = Math.max(0, oy + r * cell);
+      const w = Math.min(width, ox + (c + 1) * cell) - x;
+      const h = Math.min(height, oy + (r + 1) * cell) - y;
+      if (w <= 0 || h <= 0) continue;
+      const cx = x + w / 2;
+      const cy = y + h / 2;
+      let hide = false;
+      if (polygons.some((v) => inView(cx, cy, v)) && isFogged(map, cx, cy)) {
+        const target = { x: cx, y: cy, z: groundAt(map, cx, cy) + FOG_TARGET_HEIGHT };
+        hide = !eyes.some((eye) => heightClear(edges, eye, target));
+      }
+      const f = hide ? (explored.some((e) => cx >= e.x && cx <= e.x + e.w && cy >= e.y && cy <= e.y + e.h) ? 'dim' : fill) : null;
+      if (f && run && run.fill === f && Math.abs(run.x + run.w - x) < 1e-6) run.w = x + w - run.x;
+      else {
+        flush();
+        if (f) run = { fill: f, x, y, w, h };
+      }
+    }
+    flush();
   }
   return out;
 }
