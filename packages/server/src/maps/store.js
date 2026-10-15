@@ -13,7 +13,7 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, blockingWalls, canSee, doorKnown, healthOf, ownToken, speedFromText } from '@dndapp/shared/map.js';
+import { MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, blockingWalls, canSee, canSeeToken, doorKnown, parseHeight, healthOf, ownToken, speedFromText } from '@dndapp/shared/map.js';
 import { designToMap } from '@dndapp/shared/map-design.js';
 import { computeSheet } from '@dndapp/shared/sheet.js';
 import { activeForm, formHasHp, setFormHp } from '@dndapp/shared/wild-shape.js';
@@ -279,6 +279,8 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         }
         return speedFromText(t.stats?.speed) ?? null;
       };
+      // How tall a player character is from its sheet's Height (null: the token's own height or its size's; see tokenTall).
+      const tallOf = (t) => (t.height == null && t.kind === 'pc' && linked(t) ? parseHeight(linked(t).sheet.height) : null);
       // A player character with a saved sheet has the sheet's hit points (current and maximum), or
       // their Wild Shape form's while they're in one (2014 rules: the form has its own).
       const hpOf = (t) => {
@@ -301,7 +303,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
       const out = {
         ...map,
         // The picture's file name stays on the server; `picture` is its key.
-        tokens: map.tokens.map(({ art: _art, ...t }) => ({ ...t, ...hpOf(t), picture: picture({ ...t, art: _art }), move_speed: moveSpeed(t) })),
+        tokens: map.tokens.map(({ art: _art, ...t }) => ({ ...t, ...hpOf(t), picture: picture({ ...t, art: _art }), move_speed: moveSpeed(t), tall: tallOf(t) })),
         links: links.map(({ target: m, ...l }) => ({ ...l, to_name: m?.name ?? null })),
       };
       delete out.campaign_id;
@@ -310,7 +312,9 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
       if (role === 'dm') return { ...out, designed: !!map.design, image_key: `dm${variantKey}`, can_edit: true };
       if (!map.shown) return null;
       const seen = sight.forPlayer(map, userId);
-      const tokens = out.tokens.filter((t) => ownToken(t, userId) || (!t.hidden && canSee(map, seen.polygons, t.x, t.y)));
+      // In their tokens' sight, and with raised areas, over them to the top of its head (the tokens carry their heights).
+      const withHeights = { ...map, tokens: out.tokens };
+      const tokens = out.tokens.filter((t) => ownToken(t, userId) || (!t.hidden && canSeeToken(withHeights, userId, seen.polygons, t)));
       const visible = new Set(tokens.map((t) => t.id));
       return {
         ...out,
@@ -325,6 +329,8 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
           ...map.lights.map(({ x, y, bright, dim }) => ({ x, y, bright, dim })),
           ...map.tokens.filter((t) => t.light && !visible.has(t.id)).map((t) => ({ x: t.x, y: t.y, ...t.light })),
         ],
+        // Raised areas (roofs, wall-walks, cliffs), so their page works out where it can't see over them.
+        raised: map.raised.map(({ points, height }) => ({ points, height })),
         // Difficult terrain where they can see any of it.
         terrain: map.terrain.filter((a) => a.points.some(([x, y]) => canSee(map, seen.polygons, x, y))),
         // A secret door looks like wall until it's found.

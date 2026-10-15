@@ -131,6 +131,7 @@ For running a fight, the DM has:
 - **Token pictures** for NPCs and enemies (optionally every token with the same name).
 - **Initiative**: start a fight; NPCs roll with their stat block's Dex, players roll their own (or type it); turns and rounds, a ring on whose turn it is.
 - **Darkness and lights**: night or underground, torches and other lights (placed, carried, or suggested by the AI's wall draft), darkvision per token.
+- **Height**: raised areas (roofs, castle wall-walks, cliffs) and how tall tokens are; players see over them only where the line from their eyes clears the edges.
 - **Difficult terrain** (costs double), **other pictures** of the same map (night, after a fire) and **links** between maps (stairs, a trapdoor) that take a token through.
 
 Everyone can **Measure** distances, place **spell templates** (sphere, cone, line, cube; from their own spells too) that show who they catch, **ping** a spot or **sketch** a line (gone after a few seconds), and plan a move round corners with waypoints (Space or W while dragging; in a fight it shows movement used against speed).
@@ -295,6 +296,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | PATCH | `/campaigns/:cid/maps/:mid/walls` | Walls and doors (DM) `{add?: {x1, y1, x2, y2, door?, kind?: wall \| low}, remove?: id, toggle?: id, lock?: id, secret?: id, reveal?: id, clear?: ai \| all}` (`low`: an obstacle, blocks movement only; `toggle` opens or closes a door, `lock` locks or unlocks it, `secret` makes a door secret or ordinary again, `reveal` shows a secret door to players or hides it again) |
 | PATCH | `/campaigns/:cid/maps/:mid/lights` | Light sources (DM) `{add?: {x, y, bright, dim}, move?: {id, x, y}, remove?: id, clear?: ai \| all}` (radii in the map's unit; players get where they are, for their page's fog) |
 | PATCH | `/campaigns/:cid/maps/:mid/terrain` | Difficult terrain (DM) `{add?: {points: [[x, y], ...]}, remove?: id, clear?: ai \| all}` |
+| PATCH | `/campaigns/:cid/maps/:mid/raised` | Raised areas (DM): roofs, wall-walks, cliffs, flat-topped, in feet `{add?: {points: [[x, y], ...], height}, set?: {id, height}, remove?: id, clear?: all}` (SPEC §6.6 "Height") |
 | POST / DELETE | `/campaigns/:cid/maps/:mid/variants[/:vid]` | Add another picture of the map (DM) `{filename, data (base64), name?}`, stretched to the map's size, the upload archived as it came → `{map, variant}` / remove one (kept in the archive) |
 | PATCH | `/campaigns/:cid/maps/:mid/links` | Links to other maps (DM) `{add?: {x, y, to, label?}, move?: {id, x, y}, remove?: id}` |
 | POST | `/campaigns/:cid/maps/:mid/links/:lid/use` | Take a token through a link `{token}` → `{map (the other one), token (its id there)}`. A player: their own character, within a square and a half, to a shown map. The DM: any token |

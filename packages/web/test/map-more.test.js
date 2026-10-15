@@ -287,3 +287,44 @@ test('links: the DM puts stairs to the cellar; a player next to them takes their
     assert.deepEqual((await mapOf(t, map)).tokens, []);
   });
 });
+
+test('raised areas: the DM drags one at the height in the box, clicks it to change its height, and erases it; tokens on it show how high they are', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const map = await importMap(t, { patch: SHOWN });
+      await addToken(t, map, { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 52.5, y: 52.5 });
+      return { map, dana: await addDm(t) };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t, { map }) => {
+    await openMapTab(page);
+    page.click('#map-fog-open');
+    page.click('[data-wall-mode=raised]');
+    page.type('#map-raised-height', '25');
+    page.pointer('#map-view', 'pointerdown', { clientX: 40, clientY: 40 });
+    page.pointer('#map-view', 'pointermove', { clientX: 100, clientY: 90 });
+    assert.ok(page.$('#map-terrain polygon.raised'), 'drawn while dragging');
+    page.pointer('#map-view', 'pointerup', { clientX: 100, clientY: 90 });
+    await page.settle();
+    const [area] = (await mapOf(t, map)).raised;
+    assert.deepEqual([area.points, area.height], [[[35, 35], [105, 35], [105, 105], [35, 105]], 25]);
+    assert.equal(page.text('#map-terrain .raised-label'), '↑25 ft');
+    assert.equal(tokenEl(page, 'Thorin').querySelector('.token-up').textContent, '↑25', 'standing on it');
+    // A click on it gives it the height now in the box.
+    page.type('#map-raised-height', '10');
+    click(page, 70, 70);
+    await page.settle();
+    assert.equal((await mapOf(t, map)).raised[0].height, 10);
+    // Flying 5 ft above it.
+    page.key(tokenEl(page, 'Thorin'), 'Enter');
+    page.type('#map-selection [aria-label="Feet above the ground"]', '5');
+    await page.settle();
+    assert.equal((await mapOf(t, map)).tokens[0].elevation, 5);
+    assert.equal(tokenEl(page, 'Thorin').querySelector('.token-up').textContent, '↑15');
+    page.click('[data-wall-mode=erase]');
+    click(page, 90, 90);
+    await page.settle();
+    assert.deepEqual((await mapOf(t, map)).raised, []);
+  });
+});
