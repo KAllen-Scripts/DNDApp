@@ -24,6 +24,7 @@ import { wildShapeBox, wildShapeBanner } from './sheet-wild-shape.js';
 import { classFeaturesBox } from './sheet-class-features.js';
 import { subclassNames } from './shared/subclass-features.js';
 import { featureRows } from './shared/class-features.js';
+import { MORE_RACES } from './shared/race-features.js';
 
 const $ = (sel) => document.querySelector(sel);
 const LEVEL_NAMES = ['Cantrips', '1st level', '2nd level', '3rd level', '4th level', '5th level', '6th level', '7th level', '8th level', '9th level'];
@@ -1524,7 +1525,7 @@ function render() {
   state.calc = computeSheet(state.sheet, state.settings);
   state.layout = currentLayout();
   $('#sheet').replaceChildren(
-    datalist('dl-races', RACES),
+    datalist('dl-races', [...RACES, ...MORE_RACES]),
     datalist('dl-classes', Object.values(CLASSES).map((c) => c.name)),
     ...Object.keys(CLASSES).map((key) => datalist(`dl-subclasses-${key}`, subclassNames(key, state.settings?.edition || state.edition || '2014'))),
     datalist('dl-backgrounds', BACKGROUNDS),

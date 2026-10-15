@@ -10,24 +10,24 @@ D&D Adventurers League modules, cookbooks, Young Adventurer's Guides and lore ar
 ## Core rules
 
 ### 2014 rules
-- [ ] Player's Handbook (2014)
-- [ ] Monster Manual (2014)
-- [ ] Dungeon Master's Guide (2014)
+- [x] Player's Handbook (2014)
+- [x] Monster Manual (2014)
+- [x] Dungeon Master's Guide (2014)
 
 ### 2024 revision
-- [ ] Player's Handbook (2024)
-- [ ] Dungeon Master's Guide (2024)
-- [ ] Monster Manual (2025)
+- [x] Player's Handbook (2024)
+- [x] Dungeon Master's Guide (2024)
+- [x] Monster Manual (2025)
 
 ## Rules supplements (character options, monsters, DM tools)
-- [ ] Volo's Guide to Monsters (2016)
-- [ ] Xanathar's Guide to Everything (2017)
-- [ ] Mordenkainen's Tome of Foes (2018)
-- [ ] Tasha's Cauldron of Everything (2020)
-- [ ] Fizban's Treasury of Dragons (2021)
-- [ ] Mordenkainen Presents: Monsters of the Multiverse (2022)
-- [ ] Bigby Presents: Glory of the Giants (2023)
-- [ ] The Book of Many Things (2023)
+- [x] Volo's Guide to Monsters (2016)
+- [x] Xanathar's Guide to Everything (2017)
+- [x] Mordenkainen's Tome of Foes (2018)
+- [x] Tasha's Cauldron of Everything (2020)
+- [x] Fizban's Treasury of Dragons (2021)
+- [x] Mordenkainen Presents: Monsters of the Multiverse (2022)
+- [x] Bigby Presents: Glory of the Giants (2023)
+- [x] The Book of Many Things (2023)
 - [ ] Astarion's Book of Hungers (2025, digital only)
 - [ ] Lorwyn: First Light (2025, digital only)
 - [ ] Arcana Unleashed (2026)

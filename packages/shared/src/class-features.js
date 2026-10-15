@@ -29,6 +29,7 @@
 import { abilityMod, classKey } from './sheet.js';
 import { activeForm, formHasHp, setFormHp, wildShapeRules } from './wild-shape.js';
 import { SUBCLASS_BY_KEY, SUBCLASS_FEATURES } from './subclass-features.js';
+import { RACE_BY_KEY, RACE_FEATURES, RACIAL_FEATS, featsNamed, racesOf } from './race-features.js';
 
 export const FEATURE_KINDS = ['uses', 'pool', 'info'];
 export const MAX_ROLLED = 3;
@@ -274,6 +275,10 @@ export const FEATURES = [
 
   // ---------- Subclasses (subclass-features.js) ----------
   ...SUBCLASS_FEATURES,
+
+  // ---------- Races and racial feats (race-features.js) ----------
+  ...RACE_FEATURES,
+  ...RACIAL_FEATS,
 ];
 
 export const FEATURE_IDS = new Set(FEATURES.map((f) => f.id));
@@ -337,7 +342,8 @@ function featureContext(sheet, values, key, level, edition) {
     level,
     pb: values?.proficiency_bonus ?? 2,
     mod: (a) => values?.[`mod.${a}`] ?? abilityMod(sheet?.abilities?.[a] ?? 10),
-    subclass: classLevels(sheet).subclasses[key] ?? '',
+    subclass: key ? classLevels(sheet).subclasses[key] ?? '' : '',
+    race: String(sheet?.race ?? ''),
   };
 }
 
@@ -353,18 +359,24 @@ export function featureRows(sheet, { edition = '2014', values = null } = {}) {
   const cf = sheet?.class_features ?? { spent: {}, max: {}, custom: [] };
   const { levels, subclasses } = classLevels(sheet);
   const rows = [];
+  // Race rows use the character level; a racial feat needs its name in the features text and a race it's for.
+  const total = Math.min(20, Object.values(levels).reduce((a, b) => a + b, 0)) || 1;
+  const races = new Set(racesOf(sheet?.race));
+  const feats = new Set(featsNamed(sheet).map((f) => f.id));
   for (const f of FEATURES) {
-    const level = levels[f.class];
+    const race = f.race ? RACE_BY_KEY[f.race] : null;
+    if (f.race ? !races.has(f.race) : f.feat ? !(feats.has(f.id) && f.races.some((r) => races.has(r))) : false) continue;
+    const level = f.race || f.feat ? total : levels[f.class];
     if (!level) continue;
     if (f.edition && f.edition !== (edition === '2024' ? '2024' : '2014')) continue;
     const sub = f.sc ? SUBCLASS_BY_KEY[f.sc] : null;
     if (sub && !sub.match.test(subclasses[f.class] ?? '')) continue;
-    const c = featureContext(sheet, values, f.class, level, edition);
+    const c = featureContext(sheet, values, f.class ?? null, level, edition);
     // Every 2024 subclass starts at 3rd level (2014 clerics, sorcerers and warlocks pick theirs at 1st, druids and wizards at 2nd).
     if (level < (sub && c.edition === '2024' ? Math.max(3, call(f.from, c)) : call(f.from, c))) continue;
     const kind = call(f.kind, c);
     const base = {
-      id: f.id, name: call(f.name, c), class: f.class, subclass: sub?.name ?? null, level, kind, note: f.note ? f.note(c) : '', page: f.page, custom: false,
+      id: f.id, name: call(f.name, c), class: f.class ?? null, subclass: sub?.name ?? null, race: race?.name ?? (f.feat ? 'Racial feat' : null), level, kind, note: f.note ? f.note(c) : '', page: f.page, custom: false,
       action: f.action ?? null, dieSize: f.dieSize ?? null, dice: f.dice ? f.dice(c) : null, rolled: cf.rolled?.[f.id] ?? [],
     };
     if (kind === 'info') {
@@ -389,7 +401,7 @@ export function featureRows(sheet, { edition = '2014', values = null } = {}) {
   }
   for (const r of cf.custom ?? []) {
     const spent = cf.spent?.[r.id] ?? 0;
-    rows.push({ ...r, class: null, subclass: null, level: null, rolled: [], dice: null, auto: r.max, own: false, spent: Math.min(spent, r.max), left: Math.max(0, r.max - spent), page: '', heal: null, action: null, custom: true });
+    rows.push({ ...r, class: null, subclass: null, race: null, level: null, rolled: [], dice: null, auto: r.max, own: false, spent: Math.min(spent, r.max), left: Math.max(0, r.max - spent), page: '', heal: null, action: null, custom: true });
   }
   return rows;
 }
