@@ -9,6 +9,8 @@
     "./wild-shape.js": "./src/wild-shape.js",
     "./class-features.js": "./src/class-features.js",
     "./subclass-features.js": "./src/subclass-features.js",
+    "./subclass-features-books.js": "./src/subclass-features-books.js",
+    "./race-features.js": "./src/race-features.js",
     "./dice.js": "./src/dice.js",
     "./rolls.js": "./src/rolls.js",
     "./gear.js": "./src/gear.js",

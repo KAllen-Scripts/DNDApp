@@ -14,5 +14,6 @@ Written alongside the code in the first Claude project ("Interactive map for DND
 | [housekeeping-audit-2026-10-08.md](housekeeping-audit-2026-10-08.md) | Bloat, stubs and contradictions audit | Done in PR #16 |
 | [contradictions-2026-10-09.md](contradictions-2026-10-09.md) | Features vs specs audit, with Kenny's answers | Done in PR #31 |
 | [map-testing-checklist.md](map-testing-checklist.md) | Manual checklist for maps with the real AI and phones | Written for PRs #1 and #2 (schema v8); still the to-try list for real maps, see HANDOFF Next steps for newer features |
+| [books-worked-through.md](books-worked-through.md) | Which books in `DND books` have been read for the sheet's class, subclass and race rows | Kept current as books arrive (2026-10-15: 14 books) |
 | [5e-book-checklist.md](5e-book-checklist.md) | Every official 5e book, to tick off as PDFs go into `DND books` | Kenny to tick |
 | [weekly-recap-2026-10-12.md](weekly-recap-2026-10-12.md) | The weekly map recap (a Monday routine in the old project) | Snapshot of 5 to 12 October |

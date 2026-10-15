@@ -93,6 +93,8 @@ const WEB_MODULES = {
   '/shared/wild-shape.js': '@dndapp/shared/wild-shape.js',
   '/shared/class-features.js': '@dndapp/shared/class-features.js',
   '/shared/subclass-features.js': '@dndapp/shared/subclass-features.js',
+  '/shared/subclass-features-books.js': '@dndapp/shared/subclass-features-books.js',
+  '/shared/race-features.js': '@dndapp/shared/race-features.js',
   '/shared/citations.js': '@dndapp/shared/citations.js',
   '/shared/dice.js': '@dndapp/shared/dice.js',
   '/shared/rolls.js': '@dndapp/shared/rolls.js',

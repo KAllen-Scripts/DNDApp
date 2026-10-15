@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { computeSheet, longRest, normalizeSheet, shortRest } from '../src/sheet.js';
-import { arcaneRecovery, featureRow, featureRows, healWithSlot, setRolled, setSpent, useRolled } from '../src/class-features.js';
+import { FEATURES, arcaneRecovery, featureRow, featureRows, healWithSlot, setRolled, setSpent, useRolled } from '../src/class-features.js';
 import { SUBCLASSES, subclassNames, subclassOf } from '../src/subclass-features.js';
+import { REPRINTED_IN_PHB_2024 } from '../src/subclass-features-books.js';
 
 const ABILITIES = { str: 16, dex: 14, con: 14, int: 16, wis: 16, cha: 16 }; // +3 Str, Int, Wis, Cha; +2 Dex, Con
-const CLASS_NAMES = { barbarian: 'Barbarian', bard: 'Bard', cleric: 'Cleric', druid: 'Druid', fighter: 'Fighter', monk: 'Monk', paladin: 'Paladin', ranger: 'Ranger', rogue: 'Rogue', sorcerer: 'Sorcerer', warlock: 'Warlock', wizard: 'Wizard' };
+const CLASS_NAMES = { artificer: 'Artificer', barbarian: 'Barbarian', bard: 'Bard', cleric: 'Cleric', druid: 'Druid', fighter: 'Fighter', monk: 'Monk', paladin: 'Paladin', ranger: 'Ranger', rogue: 'Rogue', sorcerer: 'Sorcerer', warlock: 'Warlock', wizard: 'Wizard' };
 const sheetOf = (classes, extra = {}) => normalizeSheet({ abilities: ABILITIES, ...extra, classes: classes.map(([name, level, subclass = '']) => ({ name, level, subclass })) });
 const opts = (s, edition = '2014') => ({ edition, values: computeSheet(s).values });
 const subRows = (s, edition = '2014') => featureRows(s, opts(s, edition)).filter((r) => r.subclass);
@@ -16,12 +17,13 @@ test('subclass features: matched on what the player typed, by class and edition'
   assert.equal(subclassOf('fighter', 'Battle Master Fighter')?.key, 'battle_master');
   assert.equal(subclassOf('wizard', 'School of Divination')?.key, 'divination');
   assert.equal(subclassOf('cleric', 'War Domain')?.key, 'war');
-  assert.equal(subclassOf('cleric', 'Swords')?.key, undefined, 'a subclass from another book');
+  assert.equal(subclassOf('cleric', 'Swords')?.key, undefined, 'a bard subclass');
+  assert.equal(subclassOf('fighter', 'Echo Knight'), null, 'a book that is not in yet');
   assert.equal(subclassOf('rogue', 'Moon'), null, 'only the class\'s own subclasses');
   assert.deepEqual(subRows(sheetOf([['Fighter', 7, 'Battle Master']])).map((r) => [r.id, r.subclass, r.max]), [['superiority_dice', 'Battle Master', 5]]);
   assert.deepEqual(subRows(sheetOf([['Fighter', 7, 'Battle Master']]), '2024').map((r) => r.id), ['superiority_dice', 'know_your_enemy']);
   assert.deepEqual(subRows(sheetOf([['Fighter', 2, 'Battle Master']])), [], 'not before 3rd level');
-  assert.deepEqual(subRows(sheetOf([['Barbarian', 5, 'Zealot']])), [], 'the 2014 Zealot is in Xanathar\'s, not the Player\'s Handbook');
+  assert.deepEqual(subRows(sheetOf([['Barbarian', 5, 'Zealot']])).map((r) => r.id), ['divine_fury_2014'], 'the 2014 Zealot is Xanathar\'s');
   assert.ok(subRows(sheetOf([['Barbarian', 5, 'Zealot']]), '2024').some((r) => r.id === 'warrior_of_the_gods'));
   // Subclass levels: 1st for 2014 clerics, 3rd for every 2024 class.
   assert.deepEqual(subRows(sheetOf([['Cleric', 1, 'Light']])).map((r) => [r.id, r.max, r.recharge]), [['warding_flare', 3, 'long']]);
@@ -82,4 +84,32 @@ test('subclass features: Combat Wild Shape spends a slot and heals the form; Por
   assert.deepEqual(normalizeSheet(JSON.parse(JSON.stringify(s))).class_features.rolled.portent, [17, 9]);
   assert.deepEqual(shortRest(s).class_features.rolled.portent, [17, 9]);
   assert.deepEqual(longRest(s).sheet.class_features.rolled, {});
+});
+
+test('subclass features from other books: each one matched by its own name, for both editions where the PHB 2024 reprinted it', () => {
+  for (const sc of SUBCLASSES) assert.equal(subclassOf(sc.class, sc.name), sc, `${sc.name} matches itself, not another ${sc.class} subclass`);
+  const ids = FEATURES.map((f) => f.id);
+  assert.deepEqual(ids.filter((id, i) => ids.indexOf(id) !== i), [], 'every row has its own id');
+  for (const key of Object.keys(REPRINTED_IN_PHB_2024)) {
+    assert.ok(FEATURES.some((f) => f.sc === key && f.edition === '2014'), `${key} has 2014 rows`);
+    assert.ok(FEATURES.some((f) => f.sc === key && f.edition === '2024'), `${key} has 2024 rows`);
+  }
+  // Xanathar's, Tasha's, Fizban's, the 2014 DMG and Glory of the Giants.
+  assert.deepEqual(subRows(sheetOf([['Fighter', 10, 'Samurai']])).map((r) => [r.id, r.max, r.recharge]), [['fighting_spirit', 3, 'long']]);
+  assert.match(row(sheetOf([['Fighter', 10, 'Samurai']]), 'fighting_spirit').note, /10 temporary hit points/);
+  assert.equal(row(sheetOf([['Warlock', 3, 'Hexblade']]), 'hexblades_curse').recharge, 'short');
+  assert.equal(row(sheetOf([['Wizard', 6, 'Bladesinging']]), 'bladesong').max, 3, 'proficiency bonus');
+  assert.equal(row(sheetOf([['Druid', 5, 'Circle of Dreams']]), 'balm_of_the_summer_court').max, 5);
+  assert.match(row(sheetOf([['Cleric', 5, 'Death']]), 'reaper').note, /15 necrotic/, 'Touch of Death: 5 + 2 × level');
+  assert.ok(row(sheetOf([['Paladin', 20, 'Oathbreaker']]), 'dread_lord'));
+  assert.equal(row(sheetOf([['Monk', 5, 'Ascendant Dragon']]), 'breath_of_the_dragon').max, 3);
+  assert.ok(row(sheetOf([['Barbarian', 3, 'Path of the Giant']]), 'giants_havoc'));
+  assert.deepEqual(subRows(sheetOf([['Artificer', 3, 'Battle Smith']])).map((r) => r.id), ['steel_defender']);
+  // A 2014 cleric domain from Xanathar's starts at 1st level, but at 3rd in a 2024 game.
+  assert.ok(row(sheetOf([['Cleric', 1, 'Forge']]), 'blessing_of_the_forge'));
+  assert.equal(row(sheetOf([['Cleric', 1, 'Forge']]), 'blessing_of_the_forge', '2024'), null);
+  // The 2024 PHB's version under 2024 rules, the book's under 2014.
+  assert.equal(row(sheetOf([['Rogue', 5, 'Soulknife']]), 'psionic_energy_soulknife_2014').max, 6);
+  assert.equal(row(sheetOf([['Rogue', 5, 'Soulknife']]), 'psionic_energy_soulknife_2014', '2024'), null);
+  assert.ok(subclassNames('fighter', '2014').includes('Rune Knight'));
 });

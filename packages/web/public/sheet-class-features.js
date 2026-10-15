@@ -3,10 +3,11 @@
  * and worked-out numbers this character's classes give them (Rage, Second
  * Wind, Ki, Lay on Hands, Sorcery Points...), Wild Shape with its forms
  * (sheet-wild-shape.js) for druids, a Subclass features section under them
- * (Superiority Dice, Portent, Combat Wild Shape...), and rows the player adds
- * by hand (a feat like Lucky, Breath Weapon, homebrew). Rests give them back.
- * The rules (both editions) are in shared/class-features.js and
- * shared/subclass-features.js; sheet.js owns the sheet and passes in what this needs. Every maximum can be typed over: the DM has the
+ * (Superiority Dice, Portent, Combat Wild Shape...), a Race features section
+ * (Breath Weapon, Relentless Endurance, Fey Step, racial feats...), and rows
+ * the player adds by hand (a feat like Lucky, homebrew). Rests give them back.
+ * The rules (both editions) are in shared/class-features.js,
+ * shared/subclass-features.js and shared/race-features.js; sheet.js owns the sheet and passes in what this needs. Every maximum can be typed over: the DM has the
  * last word.
  */
 import { h } from './api.js';
@@ -16,6 +17,7 @@ import {
   setSpent, slotToPoints, sorcerousRestoration, useRolled,
 } from './shared/class-features.js';
 import { subclassOf } from './shared/subclass-features.js';
+import { knownRace } from './shared/race-features.js';
 
 const RECHARGE_SHORT = { short: 'Short rest', long: 'Long rest', short_one: 'Short rest: one', none: 'By hand' };
 const ordinal = (n) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
@@ -40,7 +42,7 @@ export function classFeaturesBox({ state, changed, render, heal, wildShape }) {
   const paint = () => {
     // Redrawn only when what it shows changes, so typing elsewhere doesn't lose your place here.
     const list = rows();
-    const key = JSON.stringify([list, edition(), adding, state.sheet.spellcasting, state.calc.values.pact_slots, state.sheet.classes, healsForm(state.sheet)]);
+    const key = JSON.stringify([list, edition(), adding, state.sheet.spellcasting, state.calc.values.pact_slots, state.sheet.classes, state.sheet.race, healsForm(state.sheet)]);
     if (key === drawn && el.childElementCount) return;
     drawn = key;
     draw(list);
@@ -68,14 +70,16 @@ export function classFeaturesBox({ state, changed, render, heal, wildShape }) {
 
   function draw(list) {
     const multi = new Set(list.filter((r) => r.class).map((r) => r.class)).size > 1;
-    const own = list.filter((r) => !r.subclass);
+    const own = list.filter((r) => !r.subclass && !r.race);
     const sub = list.filter((r) => r.subclass);
+    const race = list.filter((r) => r.race);
     el.replaceChildren(
       h('h3', {}, 'Class features'),
       own.length
         ? h('div', { class: 'cf-rows' }, own.map((r) => rowView(r, multi)))
-        : h('p', { class: 'muted small' }, 'Nothing to track for your class at this level yet. Add your own below (a feat like Lucky, Breath Weapon...).'),
+        : h('p', { class: 'muted small' }, 'Nothing to track for your class at this level yet. Add your own below (a feat like Lucky...).'),
       subclassSection(sub),
+      raceSection(race),
       h('p', { class: 'muted small cf-rules' }, `${edition()} rules. Rests give uses back; the DM has the last word on any number here.`),
       addForm(),
     );
@@ -94,7 +98,24 @@ export function classFeaturesBox({ state, changed, render, heal, wildShape }) {
     return h('div', { class: 'cf-subclass' },
       h('h4', {}, 'Subclass features', names.length ? h('span', { class: 'muted small' }, ` (${names.join(', ')})`) : null),
       sub.length ? h('div', { class: 'cf-rows' }, sub.map((r) => rowView(r, false))) : null,
-      unknown.length ? h('p', { class: 'muted small cf-unknown' }, `${unknown.join(', ')}: not in the list yet (only the Player's Handbook's subclasses are). Add its features as your own rows below.`) : null,
+      unknown.length ? h('p', { class: 'muted small cf-unknown' }, `${unknown.join(', ')}: not in the list yet (it has the Player's Handbook's, Xanathar's, Tasha's, Fizban's, the 2014 DMG's and Glory of the Giants' subclasses). Add its features as your own rows below.`) : null,
+    );
+  }
+
+  /**
+   * Race features (from the race typed on the sheet) and racial feats (named
+   * in Features & traits), under their own heading, with a line for a race
+   * the list doesn't know.
+   */
+  function raceSection(rows) {
+    const typed = String(state.sheet.race ?? '').trim();
+    const unknown = typed && !knownRace(typed);
+    if (!rows.length && !unknown) return null;
+    const names = [...new Set(rows.map((r) => r.race).filter((n) => n !== 'Racial feat'))];
+    return h('div', { class: 'cf-subclass cf-race' },
+      h('h4', {}, 'Race features', names.length ? h('span', { class: 'muted small' }, ` (${names.join(', ')})`) : null),
+      rows.length ? h('div', { class: 'cf-rows' }, rows.map((r) => rowView(r, false))) : null,
+      unknown ? h('p', { class: 'muted small cf-unknown' }, `${typed}: not in the list yet. Add its traits as your own rows below.`) : null,
     );
   }
 

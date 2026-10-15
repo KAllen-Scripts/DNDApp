@@ -18,6 +18,8 @@
  * `sc`, the key of its subclass in SUBCLASSES.
  */
 
+import { BOOK_SUBCLASSES, BOOK_SUBCLASS_FEATURES, REPRINTED_IN_PHB_2024 } from './subclass-features-books.js';
+
 /** A number from a table by level: step([[1, 2], [3, 3], [6, 4]], 5) → 3. */
 const step = (table, level) => table.reduce((v, [from, n]) => (level >= from ? n : v), table[0][1]);
 const atLeast1 = (n) => Math.max(1, n);
@@ -25,13 +27,14 @@ const rageDamage = (level) => step([[1, 2], [9, 3], [16, 4]], level);
 const martialArts = (c) => (c.edition === '2024' ? step([[1, 6], [5, 8], [11, 10], [17, 12]], c.level) : step([[1, 4], [5, 6], [11, 8], [17, 10]], c.level));
 const plus = (n) => (n < 0 ? `− ${-n}` : `+ ${n}`);
 
+
 /**
  * The subclasses the sheet knows: key, class, name (as the book prints it),
  * match (tested against what the player typed, so "Battle Master",
  * "battlemaster" and "Battle Master Fighter" all count) and the editions with
  * that subclass in their Player's Handbook.
  */
-export const SUBCLASSES = [
+const PHB_SUBCLASSES = [
   // Barbarian
   { key: 'berserker', class: 'barbarian', name: 'Path of the Berserker', match: /berserk/i, editions: ['2014', '2024'] },
   { key: 'totem_warrior', class: 'barbarian', name: 'Path of the Totem Warrior', match: /totem/i, editions: ['2014'] },
@@ -100,6 +103,17 @@ export const SUBCLASSES = [
   { key: 'illusion', class: 'wizard', name: 'School of Illusion', match: /illusion/i, editions: ['2014', '2024'] },
   { key: 'necromancy', class: 'wizard', name: 'School of Necromancy', match: /necroman/i, editions: ['2014'] },
   { key: 'transmutation', class: 'wizard', name: 'School of Transmutation', match: /transmut/i, editions: ['2014'] },
+];
+
+/**
+ * Every subclass the sheet knows: the Player's Handbook's (above) and other
+ * books' (subclass-features-books.js), with `book` for those. A PHB 2024
+ * subclass that first came out in a 2014 book (the 2014 Zealot is in
+ * Xanathar's) has rows for both editions.
+ */
+export const SUBCLASSES = [
+  ...PHB_SUBCLASSES.map((s) => (REPRINTED_IN_PHB_2024[s.key] ? { ...s, editions: ['2014', '2024'], book: REPRINTED_IN_PHB_2024[s.key] } : s)),
+  ...BOOK_SUBCLASSES,
 ];
 
 export const SUBCLASS_BY_KEY = Object.fromEntries(SUBCLASSES.map((s) => [s.key, s]));
@@ -596,4 +610,7 @@ export const SUBCLASS_FEATURES = [
     id: 'shapechanger', class: 'wizard', sc: 'transmutation', name: 'Shapechanger', edition: '2014', from: 10, kind: 'uses', max: () => 1, recharge: 'short', page: P14(119),
     note: () => 'Cast Polymorph on yourself without a slot, into a beast of challenge 1 or lower.',
   },
+
+  // ---------- Other books (subclass-features-books.js) ----------
+  ...BOOK_SUBCLASS_FEATURES,
 ];
