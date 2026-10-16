@@ -13,7 +13,7 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { MAX_CLIMBS, MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, blockingWalls, canSee, canSeeToken, doorKnown, parseHeight, healthOf, ownToken, speedFromText, hasClimbSpeed } from '@dndapp/shared/map.js';
+import { MAX_CLIMBS, MAX_RAISED, MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, blockingWalls, canSee, canSeeToken, doorKnown, parseHeight, healthOf, ownToken, speedFromText, hasClimbSpeed } from '@dndapp/shared/map.js';
 import { designToMap } from '@dndapp/shared/map-design.js';
 import { computeSheet } from '@dndapp/shared/sheet.js';
 import { activeForm, formHasHp, setFormHp } from '@dndapp/shared/wild-shape.js';
@@ -81,6 +81,8 @@ export function applyDesign(m, design) {
   m.terrain = [...ownTerrain, ...g.terrain.slice(0, Math.max(0, MAX_TERRAIN - ownTerrain.length)).map((t) => ({ ...t, id: newTokenId(), source: 'creator' }))];
   const ownClimbs = (m.climbs ?? []).filter((c) => c.source !== 'creator');
   m.climbs = [...ownClimbs, ...g.climbs.slice(0, Math.max(0, MAX_CLIMBS - ownClimbs.length)).map((c) => ({ ...c, id: newTokenId(), source: 'creator' }))];
+  const ownRaised = (m.raised ?? []).filter((r) => r.source !== 'creator');
+  m.raised = [...ownRaised, ...g.raised.slice(0, Math.max(0, MAX_RAISED - ownRaised.length)).map((r) => ({ ...r, id: newTokenId(), source: 'creator' }))];
   m.grid = g.grid;
   m.scale = g.scale;
   m.design = design;

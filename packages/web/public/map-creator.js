@@ -16,7 +16,7 @@
  */
 import {
   ASSETS, DESIGN_MAX, DESIGN_MIN, EMPTY, FLOORS, PATH_KINDS, addCircle, addRoom, addWall, assetAt, brushCells, clearArea, copyArea,
-  cutWallAt, emptyDesign, fillFloor, labelAt, labelWidth, layerOf, newDesignId, normalizeDesign, paintFloor, pasteClip, pathAt, rectCells,
+  cutWallAt, emptyDesign, fillFloor, fillHeight, heightAreas, labelAt, labelWidth, layerOf, newDesignId, normalizeDesign, paintFloor, paintHeight, pasteClip, pathAt, rectCells,
   resizeDesign, scatterAssets, smoothPoints, transformClip, wallAt, wallPoints,
 } from './shared/map-design.js';
 import { drawAsset, drawDesign, drawFloor, drawPaths } from './shared/map-art.js';
@@ -55,6 +55,7 @@ export async function openCreator(map = null) {
     wallStyle: 'stone',
     door: 'door', // the door tool: 'door' | 'secret' | 'window' | 'arch'
     circleFloor: true,
+    height: 10, // the height tool: feet above the ground (negative: lower)
     roomWalls: true, // the room tool: walled all round, or only its floor
     pathKind: 'road',
     pathWidth: PATH_KINDS.road.w,
@@ -538,6 +539,7 @@ function drawNow() {
   if (c.showGrid) drawGrid(ctx, px, canvas.width, canvas.height);
   drawOpenings(ctx, px);
   drawLinks(ctx, px);
+  if (c.tool === 'height') drawHeights(ctx, px);
   drawPicked(ctx, px);
   drawWorking(ctx, px);
 }
@@ -602,6 +604,31 @@ function drawOpenings(ctx, px) {
 }
 
 /** Things that lead to another map (stairs, a trapdoor) get a small badge. */
+/** The squares given a height (the height tool shows them): blue up, brown down, each area with its height. */
+function drawHeights(ctx, px) {
+  ctx.save();
+  for (const r of heightAreas(c.design)) {
+    const [x, y, w, hgt] = [r.x1 * px, r.y1 * px, (r.x2 - r.x1) * px, (r.y2 - r.y1) * px];
+    ctx.fillStyle = r.height > 0 ? 'rgba(70, 130, 200, 0.3)' : 'rgba(120, 80, 40, 0.35)';
+    ctx.fillRect(x, y, w, hgt);
+    ctx.strokeStyle = r.height > 0 ? '#4a90d9' : '#a0703a';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 1, y + 1, w - 2, hgt - 2);
+    if (w >= px * 0.9 && hgt >= px * 0.5) {
+      ctx.font = `bold ${Math.round(Math.max(10, px * 0.38))}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillStyle = '#ffffff';
+      const text = `${r.height > 0 ? '↑' : '↓'}${Math.abs(r.height)} ft`;
+      ctx.strokeText(text, x + w / 2, y + hgt / 2);
+      ctx.fillText(text, x + w / 2, y + hgt / 2);
+    }
+  }
+  ctx.restore();
+}
+
 function drawLinks(ctx, px) {
   ctx.save();
   for (const a of c.design.assets) {
@@ -786,9 +813,9 @@ function down(e) {
     }
     c.drag = { kind: 'box', a: p, b: p, add: e.shiftKey };
     if (!e.shiftKey) select([]);
-  } else if (t === 'room' || t === 'scatter' || t === 'area' || (t === 'floor' && c.floorShape === 'rect')) {
+  } else if (t === 'room' || t === 'scatter' || t === 'area' || t === 'height' || (t === 'floor' && c.floorShape === 'rect')) {
     const a = t === 'scatter' ? { x: Math.round(p.x * 2) / 2, y: Math.round(p.y * 2) / 2 } : snapCorner(p, false);
-    c.drag = { kind: 'rect', a, b: a };
+    c.drag = { kind: 'rect', a, b: a, click: p };
     if (t === 'area') c.area = null;
   } else if (t === 'wall' || t === 'door') {
     const a = snapCorner(p, e.shiftKey);
@@ -893,7 +920,13 @@ function up(e) {
     change(addWall(c.design, { x1: d.a.x, y1: d.a.y, x2: b.x, y2: b.y, type: c.tool === 'door' ? c.door : c.wallType, style: c.wallStyle }));
   } else if (d.kind === 'rect') {
     const r = rectOf(d.a, d.kind === 'rect' && c.tool === 'scatter' ? { x: Math.round(p.x * 2) / 2, y: Math.round(p.y * 2) / 2 } : snapCorner(p, false));
+    // The height tool: a click raises the whole room (or floor) under it, up to its walls; a drag, the squares in the rectangle.
+    if (c.tool === 'height' && Math.hypot(p.x - d.click.x, p.y - d.click.y) < 0.3) {
+      const [col, row] = square(d.click);
+      return change(fillHeight(c.design, col, row, c.height));
+    }
     if (r.x2 - r.x1 < 0.5 || r.y2 - r.y1 < 0.5) return redraw();
+    if (c.tool === 'height') return change(paintHeight(c.design, rectCells(c.design, r), c.height));
     if (c.tool === 'room') change(c.roomWalls ? addRoom(c.design, r, c.floor, c.wallStyle) : paintFloor(c.design, rectCells(c.design, r), c.floor));
     else if (c.tool === 'floor') change(paintFloor(c.design, rectCells(c.design, r), c.floor));
     else if (c.tool === 'area') {
