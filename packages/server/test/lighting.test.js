@@ -13,7 +13,7 @@ test('darkness: players see lit places and what their darkvision reaches; lights
   const t = await setup({ llm: createFakeLLM({ structured: async () => readOut }) });
   try {
     const png = await terrain(700, 490, { size: 35 });
-    const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'crypt.png', data: png.toString('base64') } })).json().id;
+    const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'crypt.png', data: png.toString('base64') } })).json().id;
     while (t.maps.get(t.campaign.id, id).reading.status === 'pending') await new Promise((r) => setTimeout(r, 10));
     const base = `/campaigns/${t.campaign.id}/maps/${id}`;
     await t.request('PATCH', base, { body: { shown: true, grid: { size: 35, x: 0, y: 0 }, scale: { distance: 5, unit: 'ft', per: 'square' } } });

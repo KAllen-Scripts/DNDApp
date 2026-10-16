@@ -78,7 +78,7 @@ test('the DM makes a map in the creator: drawn by the server, with a grid, walls
     assert.equal((await t.request('POST', `/campaigns/${t.campaign.id}/maps/design`, { as: t.sam.token, body: { name: 'x', design: sampleDesign() } })).statusCode, 403);
 
     // An imported map has no design.
-    const imported = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'm.png', data: (await terrain(200, 140)).toString('base64') } });
+    const imported = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'm.png', data: (await terrain(200, 140)).toString('base64') } });
     assert.equal(imported.json().designed, false);
     assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/maps/${imported.json().id}/design`)).statusCode, 404);
   } finally {
@@ -124,7 +124,7 @@ test('a made map saved again: a new picture, its walls replaced, the DM\'s own w
     assert.equal(third.json().image.file, 'image-r3.webp');
 
     // Only a made map can be saved this way.
-    const imported = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'm.png', data: (await terrain(200, 140)).toString('base64') } });
+    const imported = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'm.png', data: (await terrain(200, 140)).toString('base64') } });
     assert.equal((await t.request('PUT', `/campaigns/${t.campaign.id}/maps/${imported.json().id}/design`, { body: { design } })).statusCode, 400);
   } finally {
     await t.cleanup();

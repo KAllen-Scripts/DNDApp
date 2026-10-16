@@ -64,7 +64,7 @@ export const mapReading = (over = {}) => ({
  */
 export async function importMap(t, { patch = null, filename = 'forest_clearing.png' } = {}) {
   const png = await terrain(700, 490, { size: 35 });
-  const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename, data: png.toString('base64') } });
+  const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename, data: png.toString('base64') } });
   if (res.statusCode !== 201) throw new Error(`import failed: ${res.body}`);
   const id = res.json().id;
   for (let i = 0; t.maps.get(t.campaign.id, id).reading.status === 'pending'; i++) {

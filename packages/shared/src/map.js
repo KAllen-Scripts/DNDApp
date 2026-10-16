@@ -318,7 +318,7 @@ export function normalizeMap(input = {}) {
     grid: normalizeGrid(m.grid, image),
     scale: normalizeScale(m.scale),
     reading: {
-      status: pick(m.reading?.status, ['pending', 'done', 'failed'], 'done'),
+      status: pick(m.reading?.status, ['none', 'pending', 'done', 'failed'], 'done'),
       error: str(m.reading?.error, 500),
       notes: longStr(m.reading?.notes, 2000),
     },

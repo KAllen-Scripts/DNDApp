@@ -13,7 +13,7 @@ const readOut = { readable: true, kind: 'battle', name: 'Keep', description: '',
 
 async function importMap(t, filename, patch = {}) {
   const png = await terrain(700, 490, { size: 35 });
-  const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename, data: png.toString('base64') } })).json().id;
+  const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename, data: png.toString('base64') } })).json().id;
   while (t.maps.get(t.campaign.id, id).reading.status === 'pending') await new Promise((r) => setTimeout(r, 10));
   await t.request('PATCH', `/campaigns/${t.campaign.id}/maps/${id}`, { body: { name: filename.split('.')[0], grid: { size: 35, x: 0, y: 0 }, scale: { distance: 5, unit: 'ft', per: 'square' }, ...patch } });
   return id;

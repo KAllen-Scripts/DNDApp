@@ -164,7 +164,7 @@ test('token pictures: the DM gives NPCs and enemies pictures (all the goblins at
   const t = await setup({ llm: createFakeLLM({ structured: () => ({ readable: true, kind: 'battle', name: 'Cave', description: '', grid: { visible: false, columns: null, rows: null }, scale: { distance: null, unit: null, per: null }, notes: '' }) }) });
   try {
     const base = `/campaigns/${t.campaign.id}/maps`;
-    const map = (await t.request('POST', base, { body: { filename: 'cave.png', data: (await terrain(300, 300)).toString('base64') } })).json();
+    const map = (await t.request('POST', base, { body: { read: true, filename: 'cave.png', data: (await terrain(300, 300)).toString('base64') } })).json();
     for (let i = 0; t.maps.get(t.campaign.id, map.id).reading.status === 'pending' && i < 200; i++) await new Promise((r) => setTimeout(r, 20));
     await t.request('PATCH', `${base}/${map.id}`, { body: { shown: true } });
     const add = async (body) => (await t.request('POST', `${base}/${map.id}/tokens`, { body })).json().token;

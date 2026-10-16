@@ -174,7 +174,7 @@ export function render() {
     $('#map-signals').replaceChildren();
     empty.hidden = false;
     empty.textContent = state.canEdit
-      ? 'No maps yet. Import one (a battle map, a town, a region, anything: the AI reads its grid and scale), or make one from scratch with Make a map. Then add tokens.'
+      ? 'No maps yet. Import one (a battle map, a town, a region, anything; Map settings has the AI read its grid and scale), or make one from scratch with Make a map. Then add tokens.'
       : 'No maps to see yet. Your DM shares them here.';
     status('');
     return;

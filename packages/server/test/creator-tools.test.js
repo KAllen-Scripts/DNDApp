@@ -143,7 +143,7 @@ test('floors of a building: added above or below a made map, and stairs between 
     assert.equal((await t.request('POST', levels, { body: { n: 1 } })).statusCode, 400);
     assert.equal((await t.request('POST', levels, { body: { n: 0 } })).statusCode, 400);
     assert.equal((await t.request('POST', levels, { body: { n: 2 }, as: t.sam.token })).statusCode, 403);
-    const imported = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'm.png', data: (await terrain(200, 140)).toString('base64') } });
+    const imported = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'm.png', data: (await terrain(200, 140)).toString('base64') } });
     assert.equal((await t.request('POST', `/campaigns/${t.campaign.id}/maps/${imported.json().id}/levels`, { body: { n: 1 } })).statusCode, 400);
 
     // Stairs up in the room, a trapdoor down; on the first floor two ways back down.
@@ -428,7 +428,7 @@ test('a map taken out as a Universal VTT file and back in keeps its heights, sta
     assert.equal(doc.lights[0].range, 8);
     assert.deepEqual(doc.dndapp.obstacles, [[{ x: 1, y: 7 }, { x: 4, y: 7 }]]);
 
-    const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'watchpost.dd2vtt', data: Buffer.from(JSON.stringify(doc)).toString('base64') } });
+    const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'watchpost.dd2vtt', data: Buffer.from(JSON.stringify(doc)).toString('base64') } });
     assert.equal(res.statusCode, 201, res.body);
     const id = res.json().id;
     for (let i = 0; i < 100 && t.maps.get(t.campaign.id, id).reading.status === 'pending'; i++) await new Promise((r) => setTimeout(r, 20));
@@ -484,7 +484,7 @@ test('a map taken to another VTT: a Universal VTT file with its picture, grid, w
     assert.deepEqual(back.grid, { size: 70, x: 0, y: 0 });
 
     // A map with no grid can't be; players can't.
-    const imported = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'm.png', data: (await terrain(200, 140)).toString('base64') } });
+    const imported = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'm.png', data: (await terrain(200, 140)).toString('base64') } });
     await t.request('PATCH', `/campaigns/${t.campaign.id}/maps/${imported.json().id}`, { body: { grid: null } });
     assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/maps/${imported.json().id}/export.dd2vtt`)).statusCode, 400);
     await t.request('PATCH', `/campaigns/${t.campaign.id}/maps/${view.id}`, { body: { shown: true } });

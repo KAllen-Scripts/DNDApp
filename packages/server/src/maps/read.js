@@ -200,8 +200,10 @@ export function createMapReader({ llm }) {
      * grid corner or line are put on it.
      *
      * `onProgress` hears how far it has got, so the DM can see it working:
-     * { step: 'tracing' }, then { step: 'checking', parts, parts_done } as
-     * each part's check comes back, then { step: 'tidying' }.
+     * { step: 'tracing' }, then { step: 'checking', parts, parts_done, preview }
+     * as each part's check comes back, then { step: 'tidying' }. `preview` is
+     * the tracing so far (the first draft, with the checked parts swapped in),
+     * in the same shape as the answer, so it can be drawn on the map live.
      */
     async walls({ buf, width, height, grid = null, campaignId, userId, onProgress = () => {} }) {
       const progress = (p) => {
@@ -244,10 +246,20 @@ export function createMapReader({ llm }) {
       const many = tiles.length > 1;
       let failed = 0;
       let partsDone = 0;
-      progress({ step: 'checking', parts: tiles.length, parts_done: 0 });
-      const checked = await Promise.all(tiles.map(async ({ core, view }) => {
+      // The DM sees the draft on the map straight away, and each part's check as it comes back (owner, 2026-10-16).
+      const sofar = tiles.map(({ core }) => ({ core, out: draft }));
+      const preview = () => {
+        try {
+          return assemble(sofar);
+        } catch {
+          return null;
+        }
+      };
+      progress({ step: 'checking', parts: tiles.length, parts_done: 0, preview: preview() });
+      const checked = await Promise.all(tiles.map(async ({ core, view }, i) => {
         const out = await checkPart({ core, view });
-        progress({ step: 'checking', parts: tiles.length, parts_done: ++partsDone });
+        sofar[i] = out;
+        progress({ step: 'checking', parts: tiles.length, parts_done: ++partsDone, preview: partsDone < tiles.length ? preview() : null });
         return out;
       }));
       async function checkPart({ core, view }) {
@@ -269,67 +281,71 @@ export function createMapReader({ llm }) {
         failed++;
         return { core, out: draft };
       }
+      /** The map's walls, lights, terrain, raised areas and climbs from each part's tracing. */
+      function assemble(parts) {
+        // Each part keeps what lies in it (by its middle), so overlaps don't double up.
+        const keep = (core) => (p) => p.x >= core.x0 && (p.x < core.x1 || core.x1 === 1000) && p.y >= core.y0 && (p.y < core.y1 || core.y1 === 1000);
+        const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+        const px = (p) => ({ x: (Math.min(1000, Math.max(0, p.x)) / 1000) * width, y: (Math.min(1000, Math.max(0, p.y)) / 1000) * height });
+        const lines = [];
+        const lights = [];
+        const climbs = [];
+        let group = 0;
+        const curve = (pts, kind) => {
+          group++;
+          for (let i = 1; i < pts.length; i++) lines.push({ a: { ...pts[i - 1] }, b: { ...pts[i] }, door: false, kind: kind === 'obstacle' ? 'low' : 'wall', curve: true, group: `c${group}` });
+        };
+        for (const { core, out } of parts) {
+          const here = keep(core);
+          for (const [list, kind] of [[out.walls, 'wall'], [out.obstacles, 'low']]) {
+            for (const wall of list) {
+              for (let i = 1; i < wall.points.length; i++) {
+                if (here(mid(wall.points[i - 1], wall.points[i]))) lines.push({ a: px(wall.points[i - 1]), b: px(wall.points[i]), door: false, kind });
+              }
+            }
+          }
+          for (const d of out.doors) if (here(mid(d.from, d.to))) lines.push({ a: px(d.from), b: px(d.to), door: true });
+          for (const cv of out.curves) if (here(cv.through[1])) curve(arcThrough(...cv.through.map(px)), cv.kind);
+          for (const ci of out.circles) {
+            if (!here(ci.center)) continue;
+            const c = px(ci.center);
+            const e = px(ci.edge);
+            curve(circlePoints(c, Math.hypot(e.x - c.x, e.y - c.y)), ci.kind);
+          }
+          for (const l of out.lights) if (here(l)) lights.push(l);
+          for (const c of out.climbs) if (here(mid(c.from, c.to))) climbs.push({ kind: c.kind, a: px(c.from), b: px(c.to) });
+        }
+        tidyWalls(lines, { width, height, grid });
+        const walls = lines
+          .filter((l) => Math.hypot(l.b.x - l.a.x, l.b.y - l.a.y) >= 1)
+          .slice(0, MAX_WALLS)
+          .map((l) => ({ x1: l.a.x, y1: l.a.y, x2: l.b.x, y2: l.b.y, door: l.door, kind: l.kind ?? 'wall', ...(l.group ? { group: l.group } : {}) }));
+        // Light sources on the picture, as the 5e light they give (in feet).
+        const lit = lights.slice(0, MAX_LIGHTS).map((l) => ({ ...px(l), ...LIGHT_OF[l.kind] ?? LIGHT_OF.torch }));
+        // Difficult terrain, as areas (areas cross close-ups, so from the whole map's tracing).
+        const areas = many ? draft.difficult : parts[0].out.difficult;
+        const terrain = areas.filter((a) => a.points.length >= 3).map((a) => ({ points: a.points.map((p) => px(p)).map(({ x, y }) => [x, y]) }));
+        // Raised areas, as areas too, with the AI's guess at their height (round ones as 32 sides).
+        const tops = many ? draft.raised : parts[0].out.raised;
+        const raised = tops.map((r) => {
+          let pts = r.points?.length >= 3 ? r.points.map(px) : null;
+          if (!pts && r.center && r.edge) {
+            const c = px(r.center);
+            const e = px(r.edge);
+            const rad = Math.hypot(e.x - c.x, e.y - c.y);
+            if (rad >= 1) pts = Array.from({ length: 32 }, (_, i) => ({ x: c.x + rad * Math.cos((i * Math.PI) / 16), y: c.y + rad * Math.sin((i * Math.PI) / 16) }));
+          }
+          const height = Math.round(Math.max(-MAX_HEIGHT_FT, Math.min(MAX_HEIGHT_FT, r.height)));
+          return pts && height ? { points: pts.map(({ x, y }) => [x, y]), height } : null;
+        }).filter(Boolean).slice(0, MAX_RAISED);
+        const steps = climbs.slice(0, MAX_CLIMBS).map((c) => ({ kind: c.kind, x1: c.a.x, y1: c.a.y, x2: c.b.x, y2: c.b.y }));
+        return { walls, lights: lit, terrain, raised, climbs: steps };
+      }
       if (failed) notes.push(failed === tiles.length ? "The AI's check of its draft failed, so this is its first draft." : `The AI's check failed for ${failed} of ${tiles.length} parts of the map; those parts are its first draft.`);
       if (failed < tiles.length) notes.splice(0, 1, ...checked.filter((x) => x.out !== draft).map((x) => x.out.notes));
 
       progress({ step: 'tidying' });
-      // Each part keeps what lies in it (by its middle), so overlaps don't double up.
-      const keep = (core) => (p) => p.x >= core.x0 && (p.x < core.x1 || core.x1 === 1000) && p.y >= core.y0 && (p.y < core.y1 || core.y1 === 1000);
-      const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
-      const px = (p) => ({ x: (Math.min(1000, Math.max(0, p.x)) / 1000) * width, y: (Math.min(1000, Math.max(0, p.y)) / 1000) * height });
-      const lines = [];
-      const lights = [];
-      const climbs = [];
-      let group = 0;
-      const curve = (pts, kind) => {
-        group++;
-        for (let i = 1; i < pts.length; i++) lines.push({ a: { ...pts[i - 1] }, b: { ...pts[i] }, door: false, kind: kind === 'obstacle' ? 'low' : 'wall', curve: true, group: `c${group}` });
-      };
-      for (const { core, out } of checked) {
-        const here = keep(core);
-        for (const [list, kind] of [[out.walls, 'wall'], [out.obstacles, 'low']]) {
-          for (const wall of list) {
-            for (let i = 1; i < wall.points.length; i++) {
-              if (here(mid(wall.points[i - 1], wall.points[i]))) lines.push({ a: px(wall.points[i - 1]), b: px(wall.points[i]), door: false, kind });
-            }
-          }
-        }
-        for (const d of out.doors) if (here(mid(d.from, d.to))) lines.push({ a: px(d.from), b: px(d.to), door: true });
-        for (const cv of out.curves) if (here(cv.through[1])) curve(arcThrough(...cv.through.map(px)), cv.kind);
-        for (const ci of out.circles) {
-          if (!here(ci.center)) continue;
-          const c = px(ci.center);
-          const e = px(ci.edge);
-          curve(circlePoints(c, Math.hypot(e.x - c.x, e.y - c.y)), ci.kind);
-        }
-        for (const l of out.lights) if (here(l)) lights.push(l);
-        for (const c of out.climbs) if (here(mid(c.from, c.to))) climbs.push({ kind: c.kind, a: px(c.from), b: px(c.to) });
-      }
-      tidyWalls(lines, { width, height, grid });
-      const walls = lines
-        .filter((l) => Math.hypot(l.b.x - l.a.x, l.b.y - l.a.y) >= 1)
-        .slice(0, MAX_WALLS)
-        .map((l) => ({ x1: l.a.x, y1: l.a.y, x2: l.b.x, y2: l.b.y, door: l.door, kind: l.kind ?? 'wall', ...(l.group ? { group: l.group } : {}) }));
-      // Light sources on the picture, as the 5e light they give (in feet).
-      const lit = lights.slice(0, MAX_LIGHTS).map((l) => ({ ...px(l), ...LIGHT_OF[l.kind] ?? LIGHT_OF.torch }));
-      // Difficult terrain, as areas (areas cross close-ups, so from the whole map's tracing).
-      const areas = many ? draft.difficult : checked[0].out.difficult;
-      const terrain = areas.filter((a) => a.points.length >= 3).map((a) => ({ points: a.points.map((p) => px(p)).map(({ x, y }) => [x, y]) }));
-      // Raised areas, as areas too, with the AI's guess at their height (round ones as 32 sides).
-      const tops = many ? draft.raised : checked[0].out.raised;
-      const raised = tops.map((r) => {
-        let pts = r.points?.length >= 3 ? r.points.map(px) : null;
-        if (!pts && r.center && r.edge) {
-          const c = px(r.center);
-          const e = px(r.edge);
-          const rad = Math.hypot(e.x - c.x, e.y - c.y);
-          if (rad >= 1) pts = Array.from({ length: 32 }, (_, i) => ({ x: c.x + rad * Math.cos((i * Math.PI) / 16), y: c.y + rad * Math.sin((i * Math.PI) / 16) }));
-        }
-        const height = Math.round(Math.max(-MAX_HEIGHT_FT, Math.min(MAX_HEIGHT_FT, r.height)));
-        return pts && height ? { points: pts.map(({ x, y }) => [x, y]), height } : null;
-      }).filter(Boolean).slice(0, MAX_RAISED);
-      const steps = climbs.slice(0, MAX_CLIMBS).map((c) => ({ kind: c.kind, x1: c.a.x, y1: c.a.y, x2: c.b.x, y2: c.b.y }));
-      return { walls, lights: lit, terrain, raised, climbs: steps, notes: notes.filter(Boolean).join(' ') };
+      return { ...assemble(checked), notes: notes.filter(Boolean).join(' ') };
     },
   };
 }

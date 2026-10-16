@@ -45,7 +45,7 @@ async function until(check, ms = 5000) {
 }
 
 async function importMap(t, buf, body = {}) {
-  const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'forest_clearing.png', data: buf.toString('base64'), ...body } });
+  const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'forest_clearing.png', data: buf.toString('base64'), ...body } });
   assert.equal(res.statusCode, 201, res.body);
   const map = res.json();
   const read = await until(() => {
@@ -110,6 +110,29 @@ test('the DM imports a map: archived as uploaded, read by the AI, hidden from pl
     // Not an image.
     const bad = await t.request('POST', base, { body: { filename: 'x.txt', data: Buffer.from('hello').toString('base64') } });
     assert.equal(bad.statusCode, 400);
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('regression: importing a map does not start the AI reading it; the DM asks for that', async () => {
+  let calls = 0;
+  const llm = mapLLM(() => { calls++; return readOut(); });
+  const t = await setup({ llm });
+  try {
+    const png = await terrain(700, 490, { size: 70 });
+    const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'forest_clearing.png', data: png.toString('base64') } });
+    assert.equal(res.statusCode, 201, res.body);
+    const map = res.json();
+    assert.equal(map.reading.status, 'none');
+    await new Promise((r) => setTimeout(r, 100));
+    assert.equal(calls, 0);
+    assert.equal(t.maps.get(t.campaign.id, map.id).name, 'forest clearing');
+    // Read with the AI (Map settings) still works.
+    assert.equal((await t.request('POST', `/campaigns/${t.campaign.id}/maps/${map.id}/read`)).statusCode < 300, true);
+    const read = await until(() => { const m = t.maps.get(t.campaign.id, map.id); return m.reading.status === 'done' && m; });
+    assert.equal(read.name, 'Forest clearing');
+    assert.equal(calls, 1);
   } finally {
     await t.cleanup();
   }
@@ -669,7 +692,12 @@ test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and
     assert.equal((await t.request('POST', `${base}/walls/draft`, { as: t.sam.token })).statusCode, 403);
     // The DM sees how far it has got, live.
     const steps = [];
-    const listen = (m) => m.id === map.id && m.wall_draft.status === 'pending' && steps.push(`${m.wall_draft.step} ${m.wall_draft.parts_done}/${m.wall_draft.parts}`);
+    const drawn = [];
+    const listen = (m) => {
+      if (m.id !== map.id || m.wall_draft.status !== 'pending') return;
+      steps.push(`${m.wall_draft.step} ${m.wall_draft.parts_done}/${m.wall_draft.parts}`);
+      drawn.push(m.walls.filter((w) => w.source === 'ai').length);
+    };
     t.maps.events.on('update', listen);
     const started = (await t.request('POST', `${base}/walls/draft`)).json();
     assert.equal(started.wall_draft.status, 'pending');
@@ -680,6 +708,8 @@ test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and
     });
     t.maps.events.off('update', listen);
     assert.deepEqual([...new Set(steps)], ['tracing 0/0', 'checking 0/1', 'checking 1/1', 'tidying 0/0']);
+    // The first draft is on the map while the AI checks it, so the DM watches it draw (the check then adds the tower).
+    assert.equal(drawn[steps.indexOf('checking 0/1')], 4);
     assert.equal(done.wall_draft.notes, 'The tower walls are a guess.');
     // What it found, for the DM's "done" message: the 36 pieces of the round tower count as walls.
     assert.deepEqual(done.wall_draft.found, { walls: 38, obstacles: 1, doors: 1, lights: 1, terrain: 1, climbs: 1, raised: 2 });

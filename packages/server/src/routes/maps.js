@@ -99,6 +99,26 @@ export function registerMaps(app, r) {
     return c.notes;
   }
 
+  /** Put the AI's tracing on the map in place of its earlier one; the DM's own walls, lights, terrain, climbs and accepted heights stay. */
+  function applyWallDraft(m, r) {
+    const own = m.walls.filter((w) => w.source !== 'ai');
+    const groups = new Map();
+    const group = (g) => g && (groups.get(g) ?? groups.set(g, newTokenId()).get(g));
+    m.walls = [...own, ...r.walls.slice(0, MAX_WALLS - own.length).map((w) => ({ ...w, id: newTokenId(), open: false, source: 'ai', group: group(w.group) }))];
+    // Lights the AI saw on the picture (torches, braziers, fires) replace its earlier ones too.
+    const ownLights = m.lights.filter((l) => l.source !== 'ai');
+    m.lights = [...ownLights, ...(r.lights ?? []).slice(0, MAX_LIGHTS - ownLights.length).map((l) => ({ ...l, id: newTokenId(), source: 'ai' }))];
+    // And difficult terrain (water, rubble, undergrowth).
+    const ownTerrain = m.terrain.filter((t) => t.source !== 'ai');
+    m.terrain = [...ownTerrain, ...(r.terrain ?? []).slice(0, MAX_TERRAIN - ownTerrain.length).map((t) => ({ ...t, id: newTokenId(), source: 'ai' }))];
+    // And stairs and ladders.
+    const ownClimbs = m.climbs.filter((c) => c.source !== 'ai');
+    m.climbs = [...ownClimbs, ...(r.climbs ?? []).slice(0, MAX_CLIMBS - ownClimbs.length).map((c) => ({ ...c, id: newTokenId(), source: 'ai' }))];
+    // And raised areas with its guess at their heights, for the DM to accept or correct; ones they accepted stay.
+    const ownRaised = m.raised.filter((x) => x.source !== 'ai');
+    m.raised = [...ownRaised, ...(r.raised ?? []).slice(0, MAX_RAISED - ownRaised.length).map((x) => ({ ...x, id: newTokenId(), source: 'ai' }))];
+  }
+
   /** Draft walls with the AI in the background. The new draft replaces the AI's old one; the DM's own walls stay. */
   function draftWallsInBackground(cid, map, userId) {
     const started_at = new Date().toISOString();
@@ -106,10 +126,13 @@ export function registerMaps(app, r) {
       m.wall_draft = { status: 'pending', error: '', notes: '', step: 'tracing', parts: 0, parts_done: 0, started_at, finished_at: '', found: null };
     }, { by: userId, reason: 'drafting walls' });
     // How far it has got, live to the DM, so they can see it working.
-    const onProgress = ({ step, parts = 0, parts_done = 0 }) => {
+    // The tracing so far goes on the map too, so the DM watches it draw (owner, 2026-10-16: "not hanging").
+    const onProgress = ({ step, parts = 0, parts_done = 0, preview = null }) => {
       try {
         maps.change(cid, map.id, (m) => {
-          if (m.wall_draft.status === 'pending') Object.assign(m.wall_draft, { step, parts, parts_done });
+          if (m.wall_draft.status !== 'pending') return;
+          Object.assign(m.wall_draft, { step, parts, parts_done });
+          if (preview) applyWallDraft(m, preview);
         }, { reason: 'drafting walls' });
       } catch {
         // removed meanwhile
@@ -120,22 +143,7 @@ export function registerMaps(app, r) {
       .walls({ buf, width: map.image.width, height: map.image.height, grid: map.grid, campaignId: cid, userId, onProgress })
       .then((r) =>
         maps.change(cid, map.id, (m) => {
-          const own = m.walls.filter((w) => w.source !== 'ai');
-          const groups = new Map();
-          const group = (g) => g && (groups.get(g) ?? groups.set(g, newTokenId()).get(g));
-          m.walls = [...own, ...r.walls.slice(0, MAX_WALLS - own.length).map((w) => ({ ...w, id: newTokenId(), open: false, source: 'ai', group: group(w.group) }))];
-          // Lights the AI saw on the picture (torches, braziers, fires) replace its earlier ones too.
-          const ownLights = m.lights.filter((l) => l.source !== 'ai');
-          m.lights = [...ownLights, ...(r.lights ?? []).slice(0, MAX_LIGHTS - ownLights.length).map((l) => ({ ...l, id: newTokenId(), source: 'ai' }))];
-          // And difficult terrain (water, rubble, undergrowth).
-          const ownTerrain = m.terrain.filter((t) => t.source !== 'ai');
-          m.terrain = [...ownTerrain, ...(r.terrain ?? []).slice(0, MAX_TERRAIN - ownTerrain.length).map((t) => ({ ...t, id: newTokenId(), source: 'ai' }))];
-          // And stairs and ladders.
-          const ownClimbs = m.climbs.filter((c) => c.source !== 'ai');
-          m.climbs = [...ownClimbs, ...(r.climbs ?? []).slice(0, MAX_CLIMBS - ownClimbs.length).map((c) => ({ ...c, id: newTokenId(), source: 'ai' }))];
-          // And raised areas with its guess at their heights, for the DM to accept or correct; ones they accepted stay.
-          const ownRaised = m.raised.filter((x) => x.source !== 'ai');
-          m.raised = [...ownRaised, ...(r.raised ?? []).slice(0, MAX_RAISED - ownRaised.length).map((x) => ({ ...x, id: newTokenId(), source: 'ai' }))];
+          applyWallDraft(m, r);
           // What it found (what was kept), for the DM's "done" message.
           const ai = m.walls.filter((w) => w.source === 'ai');
           const found = {
@@ -169,14 +177,14 @@ export function registerMaps(app, r) {
   });
 
   /**
-   * Import a map (DM): { filename, data (base64), name? }. The image is
-   * archived as uploaded and the AI reads it in the background; the map
-   * starts hidden from players.
+   * Import a map (DM): { filename, data (base64), name?, page?, read? }. The
+   * image is archived as uploaded; with `read` the AI reads it in the
+   * background (otherwise not until the DM asks). The map starts hidden from players.
    */
   app.post('/campaigns/:cid/maps', upload, async (request, reply) => {
     const a = access(request, { dm: true });
-    const { filename, data, name, page } = z
-      .object({ filename: z.string().max(200).default('map'), data: z.string().min(1), name: z.string().trim().max(100).optional(), page: z.number().int().positive().optional() })
+    const { filename, data, name, page, read } = z
+      .object({ filename: z.string().max(200).default('map'), data: z.string().min(1), name: z.string().trim().max(100).optional(), page: z.number().int().positive().optional(), read: z.boolean().default(false) })
       .parse(request.body);
     let buf = Buffer.from(data, 'base64');
     if (!buf.length) throw new BadRequestError('The file is empty.');
@@ -197,12 +205,14 @@ export function registerMaps(app, r) {
       buf = rendered.png;
     }
     const image = await inspectMapImage(buf);
-    mapAiAllowed(request.user.id);
+    if (read) mapAiAllowed(request.user.id);
     let fromFile = filename.replace(/\.[^.]*$/, '').replace(/[_-]+/g, ' ').trim();
     if (pdf && pages > 1) fromFile = `${fromFile || 'Map'}, page ${pdf.page}`;
     let map = maps.create(a.cid, { name: name || fromFile || 'Map', named: !!name, buf, ...image, pdf, by: request.user.id });
     if (uvtt) map = maps.change(a.cid, map.id, (m) => applyUvtt(m, uvtt, { grid: true }), { by: request.user.id, reason: 'walls from the file' });
-    readMapInBackground(a.cid, map, request.user.id, { keepGrid: !!uvtt });
+    // The AI reads it (name, grid, scale) only when asked (owner, 2026-10-16: "That shouldn't be automatic"); Map settings has Read with the AI.
+    if (read) readMapInBackground(a.cid, map, request.user.id, { keepGrid: !!uvtt });
+    else map = maps.change(a.cid, map.id, (m) => { m.reading = { status: 'none', error: '', notes: '' }; }, { by: request.user.id, reason: 'not read' });
     reply.status(201);
     return maps.view(maps.get(a.cid, map.id), a);
   });
