@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   ASSETS, ASSET_GROUPS, DESIGN_MAX, EMPTY, FLOORS, LABEL_FONTS, LOOK, MAX_DESIGN_LABELS, PATH_KINDS, WALL_STYLES,
   addCircle, addRoom, addWall, assetAt, hullShape, assetOutline, brushCells, clearArea, copyArea, cutWallAt, designToMap, difficultAreas,
-  drawOrder, emptyDesign, eraseWallAt, fillFloor, fillHeight, heightAreas, paintHeight, labelAt, normalizeClip, normalizeDesign, paintFloor, pasteClip, pathAt,
+  drawOrder, emptyDesign, eraseWallAt, fillFloor, fillHeight, heightAreas, paintHeightRect, labelAt, normalizeClip, normalizeDesign, paintFloor, pasteClip, pathAt,
   pathOutline, rectCells, resizeDesign, scatterAssets, seeded, shiftDesign, transformClip, uploadedRefs, wallAt, wallEdges, wallPoints,
 } from '../src/map-design.js';
 import { normalizeMap } from '../src/map.js';
@@ -408,29 +408,41 @@ test('designToMap: stairs and a ladder become climbs, a line up each from the bo
   assert.equal(m.climbs[0].x1, m.climbs[0].x2);
 });
 
-test('heights: painted and filled up to the walls, kept through copy, turn, paste, resize and shift, and given to the map as raised areas', () => {
+test('heights: on half squares, filled up to the walls, round inside a round tower, kept through copy, turn, paste, resize and shift, and given to the map', () => {
   let d = addRoom(emptyDesign(8, 6, 'g'), { x1: 1, y1: 1, x2: 4, y2: 4 }, 's');
-  assert.deepEqual(d.heights[0], [0, 0, 0, 0, 0, 0, 0, 0], 'a new design is all ground');
-  assert.deepEqual(normalizeDesign({ cols: 4, rows: 4, heights: [[5, 'x', 2000]] }).heights[0], [5, 0, 1000, 0], 'heights cleaned up');
-  // The bucket: the room's squares, up to its walls.
-  d = fillHeight(d, 2, 2, 20);
-  assert.deepEqual(d.heights[2], [0, 20, 20, 20, 0, 0, 0, 0]);
-  assert.equal(d.heights[1][1], 20);
-  assert.equal(d.heights[1][4], 0);
-  d = paintHeight(d, [[6, 4], [7, 4]], -5);
-  assert.deepEqual(heightAreas(d), [{ x1: 1, y1: 1, x2: 4, y2: 4, height: 20 }, { x1: 6, y1: 4, x2: 8, y2: 5, height: -5 }]);
-  const m = designToMap(d, 10);
-  assert.deepEqual(m.raised, [
+  assert.equal(d.heights.length, 12, 'two rows of half squares per row');
+  assert.deepEqual(d.heights[0], Array(16).fill(0), 'a new design is all ground');
+  assert.deepEqual(normalizeDesign({ cols: 4, rows: 4, heights: Array.from({ length: 8 }, () => [5, 'x', 2000]) }).heights[0], [5, 0, 1000, 0, 0, 0, 0, 0], 'cleaned up');
+  // One saved a number per square reads as halves.
+  assert.deepEqual(normalizeDesign({ cols: 4, rows: 4, heights: [[5, 0, 0, 7], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]] }).heights.slice(0, 2), [[5, 5, 0, 0, 0, 0, 7, 7], [5, 5, 0, 0, 0, 0, 7, 7]]);
+  // The bucket: the room, up to its walls.
+  d = fillHeight(d, 2.2, 2.7, 20);
+  assert.deepEqual(d.heights[4], [0, 0, 20, 20, 20, 20, 20, 20, 0, 0, 0, 0, 0, 0, 0, 0]);
+  // A wall-walk half a square wide between two walls.
+  let walk = addWall(addWall(emptyDesign(6, 4, 'g'), { x1: 0, y1: 1, x2: 6, y2: 1 }), { x1: 0, y1: 1.5, x2: 6, y2: 1.5 });
+  walk = fillHeight(walk, 3, 1.25, 25);
+  assert.deepEqual(walk.heights.map((r) => r[6]), [0, 0, 25, 0, 0, 0, 0, 0]);
+  assert.deepEqual(heightAreas(walk), [{ points: [[0, 1], [6, 1], [6, 1.5], [0, 1.5]], height: 25 }]);
+  // A rectangle on half squares; then areas and the map.
+  d = paintHeightRect(d, { x1: 6, y1: 4, x2: 7.5, y2: 4.5 }, -5);
+  assert.deepEqual(heightAreas(d), [{ points: [[1, 1], [4, 1], [4, 4], [1, 4]], height: 20 }, { points: [[6, 4], [7.5, 4], [7.5, 4.5], [6, 4.5]], height: -5 }]);
+  assert.deepEqual(designToMap(d, 10).raised, [
     { points: [[10, 10], [40, 10], [40, 40], [10, 40]], height: 20 },
-    { points: [[60, 40], [80, 40], [80, 50], [60, 50]], height: -5 },
+    { points: [[60, 40], [75, 40], [75, 45], [60, 45]], height: -5 },
   ]);
+  // A round tower raised with a click: a circle on the map, not steps.
+  const tower = fillHeight(addCircle(emptyDesign(8, 8, 'g'), { cx: 4, cy: 4, r: 2 }), 4, 4, 30);
+  const [round] = heightAreas(tower);
+  assert.equal(round.height, 30);
+  assert.equal(round.points.length, 32);
+  for (const [x, y] of round.points) assert.ok(Math.abs(Math.hypot(x - 4, y - 4) - 2) < 0.01);
   // Copied, turned a quarter and put down elsewhere: the heights go with the floor.
   const clip = transformClip(copyArea(d, { x1: 1, y1: 1, x2: 4, y2: 3 }), { rot: 90 });
-  assert.deepEqual(clip.heights, [[20, 20], [20, 20], [20, 20]]);
+  assert.deepEqual(clip.heights, Array(6).fill([20, 20, 20, 20]));
   const pasted = pasteClip(emptyDesign(8, 6, 'g'), clip, { x: 5, y: 0 });
-  assert.deepEqual(pasted.heights[2].slice(4, 8), [0, 20, 20, 0]);
-  assert.equal(clearArea(d, { x1: 0, y1: 0, x2: 8, y2: 6 }).heights[2][2], 0);
-  assert.equal(resizeDesign(d, 3, 3).heights[2][2], 20);
-  assert.equal(shiftDesign(d, 1, 0).heights[2][3], 20);
-  assert.equal(shiftDesign(d, 1, 0).heights[2][1], 0);
+  assert.deepEqual(pasted.heights[4].slice(8, 16), [0, 0, 20, 20, 20, 20, 0, 0]);
+  assert.equal(clearArea(d, { x1: 0, y1: 0, x2: 8, y2: 6 }).heights[4][4], 0);
+  assert.equal(resizeDesign(d, 3, 3).heights[4][4], 20);
+  assert.equal(shiftDesign(d, 1, 0).heights[4][6], 20);
+  assert.equal(shiftDesign(d, 1, 0).heights[4][2], 0);
 });

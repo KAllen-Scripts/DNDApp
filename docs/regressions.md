@@ -15,6 +15,7 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-16 | Saving a map again in the creator put its scale back to 5 ft a square, losing the scale the DM had set on the map. | `server/test/creator-tools.test.js`: saving a map again in the creator keeps the scale the DM set on it |
 | 2026-10-14 | On a phone, the "Searching the web for …" message floated over the Items page forever: status messages had no ✕ and never went away. | `web/test/app.test.js`: a status message can be dismissed and goes by itself |
 | 2026-10-14 | Add a token asked who the token is three times over ("From your creatures", "From the campaign's records", Kind, and Player for a player character); the owner found it untidy. | `web/test/map.test.js`: Add a token asks who it is once (players, your creatures and the records in one list, not three overlapping fields) |
 | 2026-10-14 | On the map, the finger that stayed still in a two-finger pinch counted as a tap when it lifted (in Pin or Ping mode it dropped a pin or pinged). | `web/test/map.test.js`: the finger that stays still in a pinch is not a tap when it lifts (it dropped a pin in Pin mode) |

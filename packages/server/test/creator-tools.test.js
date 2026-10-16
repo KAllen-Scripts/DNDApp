@@ -444,3 +444,34 @@ test('a map taken to another VTT: a Universal VTT file with its picture, grid, w
     await t.cleanup();
   }
 });
+
+test('regression: saving a map again in the creator keeps the scale the DM set on it', async () => {
+  const t = await setup({ llm: createFakeLLM() });
+  try {
+    const view = await create(t);
+    const base = `/campaigns/${t.campaign.id}/maps/${view.id}`;
+    assert.deepEqual(t.maps.get(t.campaign.id, view.id).scale, { distance: 5, unit: 'ft', per: 'square' }, 'a new one: 5 ft squares');
+    await t.request('PATCH', base, { body: { scale: { distance: 2.5, unit: 'ft', per: 'square' } } });
+    const design = (await t.request('GET', `${base}/design`)).json().design;
+    await t.request('PUT', `${base}/design`, { body: { design } });
+    assert.deepEqual(t.maps.get(t.campaign.id, view.id).scale, { distance: 2.5, unit: 'ft', per: 'square' });
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('heights from the creator: a raised room and a round tower become raised areas, the tower round', async () => {
+  const t = await setup({ llm: createFakeLLM() });
+  try {
+    const { addCircle, fillHeight } = await import('@dndapp/shared/map-design.js');
+    let d = fillHeight(roomDesign(), 3, 3, 10);
+    d = fillHeight(addCircle(d, { cx: 9, cy: 5, r: 2 }), 9, 5, 30);
+    const view = await create(t, d);
+    const raised = t.maps.get(t.campaign.id, view.id).raised;
+    assert.deepEqual(raised.map((r) => [r.height, r.points.length, r.source]), [[30, 32, 'creator'], [10, 4, 'creator']]);
+    assert.deepEqual(raised[1].points, [[70, 70], [420, 70], [420, 350], [70, 350]]);
+    assert.deepEqual(raised[0].points[0], [770, 350], 'on the circle: 2 squares right of its middle');
+  } finally {
+    await t.cleanup();
+  }
+});
