@@ -841,6 +841,14 @@ test('curved and round walls, hiding the walls, and walls from a map maker\'s fi
       { x1: 35, y1: 35, x2: 175, y2: 35, door: false },
       { x1: 175, y1: 35, x2: 175, y2: 175, door: false },
     ]);
+
+    // And out again from the same panel, as a Universal VTT file (the map has a grid).
+    assert.ok(!page.$('#map-walls-export').disabled);
+    page.click('#map-walls-export');
+    await page.waitFor(() => page.downloads.length, { what: 'the download' });
+    const out = JSON.parse(await page.downloads[0].text);
+    assert.equal(out.portals.length, (await map()).walls.filter((w) => w.door).length);
+    assert.ok(out.dndapp, 'with our own block for heights and stairs');
   });
 });
 

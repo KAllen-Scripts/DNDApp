@@ -10,7 +10,7 @@
  */
 import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from './api.js';
 import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, distanceToWall, inTemplate, snapTemplatePoint, groundAt, tokenTall } from './shared/map.js';
-import { EDITING_KEY, PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, base, report, state, status } from './map-state.js';
+import { EDITING_KEY, PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, base, downloadUvtt, report, state, status } from './map-state.js';
 import { canChangeTemplate, placeTemplate, renderTemplates, selectTemplate, templateControls, templateDialog, templateMove, templateUp } from './map-templates.js';
 import { openShop } from './merchants.js';
 import { openCreator } from './map-creator.js';
@@ -372,6 +372,9 @@ function renderFogTools() {
   acceptAll.hidden = !guesses;
   acceptAll.textContent = `Accept AI heights (${guesses})`;
   const drafting = map.wall_draft.status === 'pending';
+  const exportButton = $('#map-walls-export');
+  exportButton.disabled = !map.grid;
+  exportButton.title = map.grid ? exportButton.title.replace(/ Set the grid first\.$/, '') : `${exportButton.title.replace(/ Set the grid first\.$/, '')} Set the grid first.`;
   const draftButton = $('#map-walls-draft');
   draftButton.disabled = drafting;
   draftButton.classList.toggle('busy', drafting);
@@ -1797,6 +1800,7 @@ export function initMapActions() {
     }
   });
   $('#map-walls-file').addEventListener('click', () => $('#map-walls-file-input').click());
+  $('#map-walls-export').addEventListener('click', () => downloadUvtt(state.current).catch(report));
   $('#map-walls-file-input').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     e.target.value = '';
@@ -1809,7 +1813,12 @@ export function initMapActions() {
       if (!saved) return;
       onMap(saved);
       const n = saved.walls.filter((w) => w.source === 'file');
-      status(`From the file: ${n.filter((w) => !w.door).length} walls, ${n.filter((w) => w.door).length} doors, ${saved.lights.filter((l) => l.source === 'file').length} lights. ${saved.file_notes ?? ''}`.trim());
+      const extra = [['raised areas', saved.raised], ['stairs and ladders', saved.climbs], ['areas of difficult terrain', saved.terrain]]
+        .map(([what, list]) => [what, (list ?? []).filter((x) => x.source === 'file').length])
+        .filter(([, k]) => k)
+        .map(([what, k]) => `, ${k} ${what}`)
+        .join('');
+      status(`From the file: ${n.filter((w) => !w.door).length} walls, ${n.filter((w) => w.door).length} doors, ${saved.lights.filter((l) => l.source === 'file').length} lights${extra}. ${saved.file_notes ?? ''}`.trim());
     } catch (err) {
       report(err);
     }

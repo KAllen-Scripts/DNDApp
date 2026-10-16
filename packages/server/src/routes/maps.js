@@ -87,6 +87,11 @@ export function registerMaps(app, r) {
     m.walls = [...own, ...c.walls.slice(0, MAX_WALLS - own.length).map((w) => ({ ...w, id: newTokenId(), source: 'file' }))];
     const ownLights = m.lights.filter((l) => l.source !== 'file');
     m.lights = [...ownLights, ...c.lights.slice(0, MAX_LIGHTS - ownLights.length).map((l) => ({ ...l, id: newTokenId(), source: 'file' }))];
+    // Heights, stairs and ladders, and difficult terrain come only in our own files; a file without them leaves the map's be.
+    const fromFile = (list, mine, max) => [...mine, ...list.slice(0, max - mine.length).map((x) => ({ ...x, id: newTokenId(), source: 'file' }))];
+    if (c.raised.length) m.raised = fromFile(c.raised, m.raised.filter((x) => x.source !== 'file'), MAX_RAISED);
+    if (c.climbs.length) m.climbs = fromFile(c.climbs, m.climbs.filter((x) => x.source !== 'file'), MAX_CLIMBS);
+    if (c.terrain.length) m.terrain = fromFile(c.terrain, m.terrain.filter((x) => x.source !== 'file'), MAX_TERRAIN);
     if (grid) {
       m.grid = c.grid;
       m.scale = { distance: 5, unit: 'ft', per: 'square' };
