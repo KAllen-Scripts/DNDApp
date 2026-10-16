@@ -297,6 +297,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | PATCH | `/campaigns/:cid/maps/:mid/lights` | Light sources (DM) `{add?: {x, y, bright, dim}, move?: {id, x, y}, remove?: id, clear?: ai \| all}` (radii in the map's unit; players get where they are, for their page's fog) |
 | PATCH | `/campaigns/:cid/maps/:mid/terrain` | Difficult terrain (DM) `{add?: {points: [[x, y], ...]}, remove?: id, clear?: ai \| all}` |
 | PATCH | `/campaigns/:cid/maps/:mid/raised` | Raised areas (DM): roofs, wall-walks, cliffs, flat-topped, in feet `{add?: {points: [[x, y], ...], height}, set?: {id, height}, remove?: id, clear?: all}` (SPEC §6.6 "Height") |
+| PATCH | `/campaigns/:cid/maps/:mid/climbs` | Stairs and ladders (DM): a line up each, bottom to top `{add?: {kind: stairs\|ladder, x1, y1, x2, y2}, remove?: id, clear?: ai\|all}`; climbing a ladder costs a foot per foot (SPEC §6.6 "Stairs and ladders") |
 | POST / DELETE | `/campaigns/:cid/maps/:mid/variants[/:vid]` | Add another picture of the map (DM) `{filename, data (base64), name?}`, stretched to the map's size, the upload archived as it came → `{map, variant}` / remove one (kept in the archive) |
 | PATCH | `/campaigns/:cid/maps/:mid/links` | Links to other maps (DM) `{add?: {x, y, to, label?}, move?: {id, x, y}, remove?: id}` |
 | POST | `/campaigns/:cid/maps/:mid/links/:lid/use` | Take a token through a link `{token}` → `{map (the other one), token (its id there)}`. A player: their own character, within a square and a half, to a shown map. The DM: any token |

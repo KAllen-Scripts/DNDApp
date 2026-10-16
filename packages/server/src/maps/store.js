@@ -13,7 +13,7 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, blockingWalls, canSee, canSeeToken, doorKnown, parseHeight, healthOf, ownToken, speedFromText } from '@dndapp/shared/map.js';
+import { MAX_CLIMBS, MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, blockingWalls, canSee, canSeeToken, doorKnown, parseHeight, healthOf, ownToken, speedFromText, hasClimbSpeed } from '@dndapp/shared/map.js';
 import { designToMap } from '@dndapp/shared/map-design.js';
 import { computeSheet } from '@dndapp/shared/sheet.js';
 import { activeForm, formHasHp, setFormHp } from '@dndapp/shared/wild-shape.js';
@@ -51,8 +51,8 @@ function doorSeen(map, polygons, w) {
 /**
  * What a map made in the creator gets from its design, merged into the map
  * document `m`: the grid and 5 ft squares, and its walls, doors, secret
- * doors, obstacles, lights, difficult terrain and ways to other maps
- * (`source: 'creator'`), replacing those from the design saved before. What
+ * doors, obstacles, lights, difficult terrain, stairs and ladders, and ways
+ * to other maps (`source: 'creator'`), replacing those from the design saved before. What
  * the DM drew on the map, or the AI or a file added, stays. A creator wall
  * that's the same as before keeps its id, and a door keeps whether it's open
  * or locked (a secret door, whether it's been found); a way to another map
@@ -79,6 +79,8 @@ export function applyDesign(m, design) {
   m.lights = [...ownLights, ...g.lights.slice(0, Math.max(0, MAX_LIGHTS - ownLights.length)).map((l) => ({ ...l, id: newTokenId(), source: 'creator' }))];
   const ownTerrain = (m.terrain ?? []).filter((t) => t.source !== 'creator');
   m.terrain = [...ownTerrain, ...g.terrain.slice(0, Math.max(0, MAX_TERRAIN - ownTerrain.length)).map((t) => ({ ...t, id: newTokenId(), source: 'creator' }))];
+  const ownClimbs = (m.climbs ?? []).filter((c) => c.source !== 'creator');
+  m.climbs = [...ownClimbs, ...g.climbs.slice(0, Math.max(0, MAX_CLIMBS - ownClimbs.length)).map((c) => ({ ...c, id: newTokenId(), source: 'creator' }))];
   m.grid = g.grid;
   m.scale = g.scale;
   m.design = design;
@@ -279,6 +281,14 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         }
         return speedFromText(t.stats?.speed) ?? null;
       };
+      // Climbs at no extra cost: a climbing speed in its stat block, or its player's Wild Shape form's.
+      const climberOf = (t) => {
+        if (t.kind === 'pc' && t.user_id != null) {
+          const form = linked(t) && activeForm(linked(t).sheet);
+          return !!form?.speed.climb;
+        }
+        return hasClimbSpeed(t.stats?.speed);
+      };
       // How tall a player character is from its sheet's Height (null: the token's own height or its size's; see tokenTall).
       const tallOf = (t) => (t.height == null && t.kind === 'pc' && linked(t) ? parseHeight(linked(t).sheet.height) : null);
       // A player character with a saved sheet has the sheet's hit points (current and maximum), or
@@ -303,7 +313,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
       const out = {
         ...map,
         // The picture's file name stays on the server; `picture` is its key.
-        tokens: map.tokens.map(({ art: _art, ...t }) => ({ ...t, ...hpOf(t), picture: picture({ ...t, art: _art }), move_speed: moveSpeed(t), tall: tallOf(t) })),
+        tokens: map.tokens.map(({ art: _art, ...t }) => ({ ...t, ...hpOf(t), picture: picture({ ...t, art: _art }), move_speed: moveSpeed(t), tall: tallOf(t), climber: climberOf(t) })),
         links: links.map(({ target: m, ...l }) => ({ ...l, to_name: m?.name ?? null })),
       };
       delete out.campaign_id;
@@ -331,6 +341,8 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         ],
         // Raised areas (roofs, wall-walks, cliffs), so their page works out where it can't see over them.
         raised: map.raised.map(({ points, height }) => ({ points, height })),
+        // Stairs and ladders, so their page can say what a move costs while it's dragged.
+        climbs: map.climbs.map(({ kind, x1, y1, x2, y2 }) => ({ kind, x1, y1, x2, y2 })),
         // Difficult terrain where they can see any of it.
         terrain: map.terrain.filter((a) => a.points.some(([x, y]) => canSee(map, seen.polygons, x, y))),
         // A secret door looks like wall until it's found.

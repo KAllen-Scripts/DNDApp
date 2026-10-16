@@ -9,7 +9,7 @@
  * the server decides where a token really ends up.
  */
 import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from './api.js';
-import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, inTemplate, snapTemplatePoint, groundAt, tokenTall } from './shared/map.js';
+import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, distanceToWall, inTemplate, snapTemplatePoint, groundAt, tokenTall } from './shared/map.js';
 import { EDITING_KEY, PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, base, report, state, status } from './map-state.js';
 import { canChangeTemplate, placeTemplate, renderTemplates, selectTemplate, templateControls, templateDialog, templateMove, templateUp } from './map-templates.js';
 import { openShop } from './merchants.js';
@@ -405,7 +405,7 @@ export function sinceText(from, to = Date.now()) {
 export function foundText(f) {
   if (!f) return '';
   const count = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-  const parts = [count(f.walls, 'wall'), count(f.doors, 'door'), count(f.obstacles, 'obstacle'), count(f.lights, 'light'), count(f.terrain, 'area') + (f.terrain ? ' of difficult terrain' : '')]
+  const parts = [count(f.walls, 'wall'), count(f.doors, 'door'), count(f.obstacles, 'obstacle'), count(f.lights, 'light'), count(f.terrain, 'area') + (f.terrain ? ' of difficult terrain' : ''), f.climbs ? `${f.climbs} stairs or ladder${f.climbs === 1 ? '' : 's'}` : '0 ']
     .filter((x, i) => i < 2 || !x.startsWith('0 '));
   return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0];
 }
@@ -487,7 +487,7 @@ function renderWalls() {
   // Doors on top, drawn as doors so nobody mistakes them for walls.
   for (const w of doors) svg.append(doorShape(map, w, cls(w)));
   const d = state.wallDraw;
-  const draft = state.wallMode === 'door' || state.wallMode === 'low' ? ` ${state.wallMode}` : '';
+  const draft = ['door', 'low', 'stairs', 'ladder'].includes(state.wallMode) ? ` ${state.wallMode}` : '';
   const path = (pts) => svgEl('polyline', { points: pts.map((p) => `${p.x},${p.y}`).join(' '), class: `wall-draft${draft}` });
   if (d && state.wallMode === 'circle') svg.append(path(circlePoints(d.a, Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y))));
   else if (d) svg.append(line({ x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y }, `wall-draft${draft}`));
@@ -565,6 +565,11 @@ function renderTerrain() {
       label.textContent = `${a.height > 0 ? '↑' : a.height < 0 ? '↓' : ''}${Math.abs(a.height)} ft`;
       svg.append(label);
     }
+    // Stairs and ladders: a line up each, with a dot at the top.
+    for (const c of map.climbs ?? []) {
+      const cls = `climb ${c.kind}${c.source === 'ai' ? ' ai' : ''}`;
+      svg.append(svgEl('line', { x1: c.x1, y1: c.y1, x2: c.x2, y2: c.y2, class: cls }), svgEl('circle', { cx: c.x2, cy: c.y2, r: Math.max(3, squarePx(map) / 8), class: `${cls} top` }));
+    }
   }
   if (state.terrainDraw) {
     const r = fogRect(map, state.terrainDraw.a, state.terrainDraw.b);
@@ -586,6 +591,18 @@ async function raised(body) {
     report(err);
   }
 }
+
+async function climbs(body) {
+  try {
+    const saved = await state.guarded(() => api('PATCH', `${base()}/${state.current.id}/climbs`, body));
+    if (saved) onMap(saved);
+  } catch (err) {
+    report(err);
+  }
+}
+
+/** The stairs or ladder within reach of a point on the map, if any. */
+const climbAt = (map, at, reach) => (map.climbs ?? []).findLast((c) => distanceToWall(at, c) <= reach);
 
 async function terrain(body) {
   try {
@@ -1205,6 +1222,8 @@ function wallUp(e) {
     }
     const light = state.wallMode === 'erase' && (map.lights ?? []).find((l) => Math.hypot(l.x - at.x, l.y - at.y) <= SNAP_PX / state.view.k);
     if (light) return lights({ remove: light.id });
+    const climb = state.wallMode === 'erase' && climbAt(map, at, SNAP_PX / state.view.k);
+    if (climb) return climbs({ remove: climb.id });
     const near = nearestWall(map, at, SNAP_PX / state.view.k);
     const door = doorAt(e.clientX, e.clientY);
     if (state.wallMode === 'erase' && near) walls({ remove: near.id });
@@ -1220,6 +1239,7 @@ function wallUp(e) {
   }
   if (state.wallMode === 'erase' || state.wallMode === 'lock' || state.wallMode === 'light' || state.wallMode === 'link') return;
   if (Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y) < 1) return;
+  if (state.wallMode === 'stairs' || state.wallMode === 'ladder') return climbs({ add: { kind: state.wallMode, x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y } });
   walls({ add: { x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y, door: state.wallMode === 'door', kind: state.wallMode === 'low' ? 'low' : 'wall' } });
 }
 
@@ -1467,9 +1487,11 @@ function tokenMove(e) {
   el.classList.add('dragging');
   // How far it's going, along its waypoints to where it would land (difficult terrain costs double).
   const end = snapToken(map, token, drag.x, drag.y);
-  const cost = pathCost(map, [drag.start, ...drag.waypoints, end]);
+  const cost = pathCost(map, [drag.start, ...drag.waypoints, end], token);
   let distance = formatDistance(cost);
   if (cost?.difficult) distance += ' · difficult';
+  // Climbing (a ladder, or up or down a height with no stairs): 1 extra foot per foot, unless it climbs or flies.
+  if (cost?.climb) distance += token.climber || token.elevation > 0 ? ` · climbs ${cost.climb} ft (free)` : ` · climbs ${cost.climb} ft${cost.wall ? ', no ladder or stairs' : ''}`;
   // In a fight: how much of its speed it has used this turn.
   const entry = map.combat?.entries.find((x) => x.id === token.id);
   const over = !!(entry && token.move_speed && entry.moved + cost.value > token.move_speed);
@@ -1783,8 +1805,8 @@ export function initMapActions() {
   for (const b of document.querySelectorAll('[data-wall-action]')) {
     b.addEventListener('click', () => {
       if (b.dataset.wallAction === 'clear-ai') {
-        if (confirm("Remove everything the AI drafted (walls, lights, difficult terrain)? What you drew stays.")) {
-          walls({ clear: 'ai' }).then(() => lights({ clear: 'ai' })).then(() => terrain({ clear: 'ai' }));
+        if (confirm("Remove everything the AI drafted (walls, lights, difficult terrain, stairs and ladders)? What you drew stays.")) {
+          walls({ clear: 'ai' }).then(() => lights({ clear: 'ai' })).then(() => terrain({ clear: 'ai' })).then(() => climbs({ clear: 'ai' }));
         }
       } else if (confirm('Make players forget the places they saw before?')) {
         fog({ forget: true });

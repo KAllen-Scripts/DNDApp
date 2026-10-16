@@ -3,7 +3,7 @@
  * edits and what can be in it (floors, walls, assets, paths, labels and the
  * look), the changes the creator's tools make to it, and what it gives the
  * map (walls, doors, secret doors, windows, obstacles, lights, difficult
- * terrain and ways to other maps). How a design is drawn is in map-art.js.
+ * terrain, stairs and ladders, and ways to other maps). How a design is drawn is in map-art.js.
  *
  * Plain JS with no imports: the server and the page's creator use the same
  * code. Every built-in floor and asset is drawn in code (original, so no
@@ -127,6 +127,7 @@ export const ASSET_GROUPS = ['Nature', 'Rocks', 'Water', 'Ships', 'Camp', 'Town'
  * (tree tops, roofs); blocks: what they block when placed (the DM can change
  * it); light: what they light, in feet; glow: the colour of that light in the
  * picture ('tint': the asset's colour); tint: the colour the DM can change;
+ * climb: 'stairs' or 'ladder' (a way up and down on the map, unless it leads to another map);
  * difficult: the ground under them is difficult terrain; tags: more words to
  * find them by.
  */
@@ -409,10 +410,10 @@ export const ASSETS = {
   pillar_square: { name: 'Square pillar', group: 'Dungeon', w: 1, h: 1, shape: 'rect', layer: 1, blocks: 'wall', tags: 'column' },
   pillar_broken: { name: 'Fallen pillar', group: 'Dungeon', w: 2.5, h: 1, shape: 'rect', layer: 1, blocks: 'low', tags: 'column ruin' },
   altar: { name: 'Altar', group: 'Dungeon', w: 2, h: 1, shape: 'rect', layer: 1, blocks: 'low', tags: 'shrine temple' },
-  stairs: { name: 'Stairs up', group: 'Dungeon', w: 2, h: 2, shape: 'rect', layer: 0, blocks: 'none', tags: 'steps' },
-  stairs_down: { name: 'Stairs down', group: 'Dungeon', w: 2, h: 2, shape: 'rect', layer: 0, blocks: 'none', tags: 'steps' },
-  stairs_spiral: { name: 'Spiral stairs', group: 'Dungeon', w: 2, h: 2, shape: 'round', layer: 0, blocks: 'none', tags: 'steps tower' },
-  ladder: { name: 'Ladder', group: 'Dungeon', w: 0.6, h: 1.6, shape: 'rect', layer: 0, blocks: 'none' },
+  stairs: { name: 'Stairs up', group: 'Dungeon', w: 2, h: 2, shape: 'rect', layer: 0, blocks: 'none', climb: 'stairs', tags: 'steps' },
+  stairs_down: { name: 'Stairs down', group: 'Dungeon', w: 2, h: 2, shape: 'rect', layer: 0, blocks: 'none', climb: 'stairs', tags: 'steps' },
+  stairs_spiral: { name: 'Spiral stairs', group: 'Dungeon', w: 2, h: 2, shape: 'round', layer: 0, blocks: 'none', climb: 'stairs', tags: 'steps tower' },
+  ladder: { name: 'Ladder', group: 'Dungeon', w: 0.6, h: 1.6, shape: 'rect', layer: 0, blocks: 'none', climb: 'ladder' },
   trapdoor: { name: 'Trapdoor', group: 'Dungeon', w: 1, h: 1, shape: 'rect', layer: 0, blocks: 'none', tags: 'hatch' },
   pit: { name: 'Pit', group: 'Dungeon', w: 2, h: 2, shape: 'rect', layer: 0, blocks: 'none', tags: 'hole trap' },
   spike_pit: { name: 'Spiked pit', group: 'Dungeon', w: 2, h: 2, shape: 'rect', layer: 0, blocks: 'none', tags: 'trap' },
@@ -1312,7 +1313,7 @@ const groupOf = (id) => `cw${id}`.padEnd(6, '0').slice(0, 16);
  * walls, fences and windows (obstacles: they block movement, not sight),
  * doors and secret doors, outlines of assets that block, the lights of
  * assets that give light, difficult terrain (floors, rivers, assets like
- * rubble) and ways to other maps (assets with `to`).
+ * rubble), stairs and ladders, and ways to other maps (assets with `to`).
  */
 export function designToMap(design, cell = DESIGN_CELL) {
   const px = (v) => round(v * cell, 1);
@@ -1348,6 +1349,14 @@ export function designToMap(design, cell = DESIGN_CELL) {
     ...(design.paths ?? []).filter((p) => PATH_KINDS[p.kind]?.difficult).map((p) => area(pathOutline(p))),
     ...design.assets.filter((a) => a.difficult).map((a) => area(assetOutline(a))),
   ];
+  // Stairs and ladders that don't lead to another map: a line up the middle of each, along its length.
+  const climbs = design.assets.filter((a) => !a.to && ASSETS[a.a]?.climb).map((a) => {
+    const rot = (a.rot * Math.PI) / 180;
+    const half = (a.h / 2) * 0.9;
+    const end = (s) => [a.x - s * half * Math.sin(rot), a.y + s * half * Math.cos(rot)];
+    const [[x1, y1], [x2, y2]] = [end(1), end(-1)];
+    return { kind: ASSETS[a.a].climb, x1: px(x1), y1: px(y1), x2: px(x2), y2: px(y2) };
+  });
   const links = design.assets.filter((a) => a.to).map((a) => ({ x: px(a.x), y: px(a.y), to: a.to, label: a.label || ASSETS[a.a]?.name || '' }));
   return {
     width: design.cols * cell,
@@ -1358,5 +1367,6 @@ export function designToMap(design, cell = DESIGN_CELL) {
     lights,
     terrain,
     links,
+    climbs,
   };
 }

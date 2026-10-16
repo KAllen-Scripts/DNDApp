@@ -9,7 +9,7 @@
  */
 import sharp from 'sharp';
 import { z } from 'zod';
-import { MAP_KINDS, UNITS, MAX_WALLS, MAX_LIGHTS, normalizeGrid, normalizeScale, arcThrough, circlePoints } from '@dndapp/shared/map.js';
+import { MAP_KINDS, UNITS, MAX_CLIMBS, MAX_WALLS, MAX_LIGHTS, normalizeGrid, normalizeScale, arcThrough, circlePoints } from '@dndapp/shared/map.js';
 
 const AI_LONG_SIDE = 2000;
 const DETECT_LONG_SIDE = 3000; // big enough to measure, small enough to take ~1s
@@ -185,7 +185,7 @@ export function createMapReader({ llm }) {
     /**
      * Draft the walls and doors on a map from its picture, for the DM to
      * correct: { walls: [{ x1, y1, x2, y2, door, kind, group? }] in image
-     * pixels, lights, terrain, notes }. kind 'low' is an obstacle: seen over,
+     * pixels, lights, terrain, climbs (stairs and ladders), notes }. kind 'low' is an obstacle: seen over,
      * not crossed. The pieces of one curved wall share a `group` (local to
      * this draft; the caller gives each its own id).
      *
@@ -259,7 +259,7 @@ export function createMapReader({ llm }) {
           const res = WallsOut.safeParse(await ask(
             'map:walls-check',
             `${WALLS_SYSTEM}\n\n${CHECK_SYSTEM}`,
-            `${part} The first draft is drawn over it: walls in red, obstacles in green, curved walls in orange, doors in blue. Here is that draft as data:\n<draft>${JSON.stringify(draft)}</draft>\nCorrect it and give the whole corrected tracing${many ? ' of everything in this part (a wall that runs out of it can stop at its edge or carry on)' : ''}, not just the changes, in the whole map's 0 to 1000 positions.`,
+            `${part} The first draft is drawn over it: walls in red, obstacles in green, curved walls in orange, doors in blue, stairs and ladders in purple. Here is that draft as data:\n<draft>${JSON.stringify(draft)}</draft>\nCorrect it and give the whole corrected tracing${many ? ' of everything in this part (a wall that runs out of it can stop at its edge or carry on)' : ''}, not just the changes, in the whole map's 0 to 1000 positions.`,
             await withDraft(ruled, draft),
           ));
           if (res.success) return { core, out: res.data };
@@ -279,6 +279,7 @@ export function createMapReader({ llm }) {
       const px = (p) => ({ x: (Math.min(1000, Math.max(0, p.x)) / 1000) * width, y: (Math.min(1000, Math.max(0, p.y)) / 1000) * height });
       const lines = [];
       const lights = [];
+      const climbs = [];
       let group = 0;
       const curve = (pts, kind) => {
         group++;
@@ -302,6 +303,7 @@ export function createMapReader({ llm }) {
           curve(circlePoints(c, Math.hypot(e.x - c.x, e.y - c.y)), ci.kind);
         }
         for (const l of out.lights) if (here(l)) lights.push(l);
+        for (const c of out.climbs) if (here(mid(c.from, c.to))) climbs.push({ kind: c.kind, a: px(c.from), b: px(c.to) });
       }
       tidyWalls(lines, { width, height, grid });
       const walls = lines
@@ -313,7 +315,8 @@ export function createMapReader({ llm }) {
       // Difficult terrain, as areas (areas cross close-ups, so from the whole map's tracing).
       const areas = many ? draft.difficult : checked[0].out.difficult;
       const terrain = areas.filter((a) => a.points.length >= 3).map((a) => ({ points: a.points.map((p) => px(p)).map(({ x, y }) => [x, y]) }));
-      return { walls, lights: lit, terrain, notes: notes.filter(Boolean).join(' ') };
+      const steps = climbs.slice(0, MAX_CLIMBS).map((c) => ({ kind: c.kind, x1: c.a.x, y1: c.a.y, x2: c.b.x, y2: c.b.y }));
+      return { walls, lights: lit, terrain, climbs: steps, notes: notes.filter(Boolean).join(' ') };
     },
   };
 }
@@ -374,7 +377,7 @@ ${parts.join('')}</svg>`;
   return { buf: out, w, h, view };
 }
 
-/** A ruled part of the map with a draft drawn over it: walls red, obstacles green, curves orange, doors blue. */
+/** A ruled part of the map with a draft drawn over it: walls red, obstacles green, curves orange, doors blue, stairs and ladders purple. */
 async function withDraft(ruled, out) {
   const B = RULER_BAND;
   const { view } = ruled;
@@ -392,7 +395,7 @@ async function withDraft(ruled, out) {
     return `<circle cx="${c.x}" cy="${c.y}" r="${Math.hypot(e.x - c.x, e.y - c.y)}" fill="none" stroke="#ff8c00" stroke-width="3" />`;
   });
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${ruled.w + 2 * B}" height="${ruled.h + 2 * B}">
-${out.walls.map((wl) => poly(wl.points, '#ff1a1a')).join('')}${out.obstacles.map((o) => poly(o.points, '#16c60c')).join('')}${curves.join('')}${circles.join('')}${out.doors.map((d) => poly([d.from, d.to], '#1a4dff')).join('')}</svg>`;
+${out.walls.map((wl) => poly(wl.points, '#ff1a1a')).join('')}${out.obstacles.map((o) => poly(o.points, '#16c60c')).join('')}${curves.join('')}${circles.join('')}${out.doors.map((d) => poly([d.from, d.to], '#1a4dff')).join('')}${(out.climbs ?? []).map((c) => poly([c.from, c.to], '#c000ff')).join('')}</svg>`;
   return sharp(ruled.buf).composite([{ input: Buffer.from(svg), left: 0, top: 0 }]).jpeg({ quality: 88 }).toBuffer();
 }
 
@@ -475,6 +478,11 @@ const WallsOut = z.object({
     .describe('Light sources drawn on the map: wall torches, braziers, campfires and hearths, lamps, candles, glowing magic'),
   difficult: z.array(z.object({ points: z.array(Point).min(3).describe('The outline, in order round the area') })).default([])
     .describe('Areas that are hard to move through: shallow water, mud, rubble, dense undergrowth, steep scree'),
+  climbs: z.array(z.object({
+    kind: z.enum(['stairs', 'ladder']),
+    from: Point.describe('The bottom of it'),
+    to: Point.describe('The top of it'),
+  })).default([]).describe('Stairs, steps and ramps, and ladders, drawn on the map, each as a line up it from the bottom to the top'),
   notes: z.string().describe("For the DM: anything you couldn't trace or are unsure of. Empty if nothing."),
 });
 
@@ -488,7 +496,8 @@ const WALLS_SYSTEM = `You trace walls on maps a Dungeon Master imports into a D&
 - Straight walls on a battle map usually run along the edges of its grid squares.
 - A map with no walls (open countryside, a region map) gets no walls.
 - Difficult terrain: outline areas that are hard to walk through (shallow water, mud, rubble, dense undergrowth, scree). Not deep water or walls (those block).
-- Lights: every light source drawn on the map (wall torches, braziers, campfires, hearths, lamps, candles, glowing crystals or runes), at its centre. The app lights the area around them when it's dark.`;
+- Lights: every light source drawn on the map (wall torches, braziers, campfires, hearths, lamps, candles, glowing crystals or runes), at its centre. The app lights the area around them when it's dark.
+- Stairs and ladders: every flight of stairs, set of steps, ramp and ladder drawn on the map, as a line up it from the bottom to the top (for a spiral stair, across its middle). They are how people get up onto roofs, wall-walks and balconies, so the app charges climbing for a ladder and nothing extra for stairs. Not walls.`;
 
 /** The light each kind of source gives (5e, in feet). */
 const CHECK_SYSTEM = `Now you are checking a tracing against the map. Look along every wall on the map and compare:
@@ -498,7 +507,7 @@ const CHECK_SYSTEM = `Now you are checking a tracing against the map. Look along
 - A gap between two lines that meet on the map: make them share a point.
 - A line where the map has no wall (a floor pattern, furniture, a shadow): remove it.
 - A doorway: check it has a door (if a door is drawn) or is left open (an archway or gap). Doors that were traced as walls become doors.
-- Lights and difficult terrain: keep the right ones, fix or add the rest.
+- Lights, difficult terrain, stairs and ladders: keep the right ones, fix or add the rest.
 Give the whole corrected tracing.`;
 
 const LIGHT_OF = {

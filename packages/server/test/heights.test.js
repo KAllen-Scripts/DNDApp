@@ -85,3 +85,48 @@ test('a player character is as tall as the Height on its sheet', async () => {
     await t.cleanup();
   }
 });
+
+test('stairs and ladders: the DM draws them; climbing a ladder or a bare wall costs a foot per foot in a fight, stairs nothing', async () => {
+  const t = await setup({ llm: createFakeLLM({ structured: async () => readOut }) });
+  try {
+    const png = await terrain(700, 490, { size: 35 });
+    const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'yard.png', data: png.toString('base64') } })).json().id;
+    while (t.maps.get(t.campaign.id, id).reading.status === 'pending') await new Promise((r) => setTimeout(r, 10));
+    const base = `/campaigns/${t.campaign.id}/maps/${id}`;
+    await t.request('PATCH', base, { body: { shown: true, grid: { size: 35, x: 0, y: 0 }, scale: { distance: 5, unit: 'ft', per: 'square' } } });
+    await t.request('PATCH', `${base}/raised`, { body: { add: { points: [[280, 0], [420, 0], [420, 490], [280, 490]], height: 10 } } });
+    const add = async (body) => (await t.request('POST', `${base}/tokens`, { body })).json().token;
+    const sam = await add({ kind: 'pc', name: 'Sam', user_id: t.sam.id, x: 227.5, y: 227.5 });
+    const spider = await add({ kind: 'enemy', name: 'Spider', x: 227.5, y: 297.5, stats: { text: 'Giant Spider. Speed 30 ft., climb 30 ft.', speed: '30 ft., climb 30 ft.' } });
+
+    const ladder = { kind: 'ladder', x1: 270, y1: 227.5, x2: 290, y2: 227.5 };
+    assert.equal((await t.request('PATCH', `${base}/climbs`, { as: t.sam.token, body: { add: ladder } })).statusCode, 403);
+    const dm = (await t.request('PATCH', `${base}/climbs`, { body: { add: ladder } })).json();
+    assert.deepEqual(dm.climbs.map(({ kind, source }) => ({ kind, source })), [{ kind: 'ladder', source: 'dm' }]);
+    const view = async (as) => (await t.request('GET', base, { as })).json();
+    assert.deepEqual((await view(t.sam.token)).climbs, [{ kind: 'ladder', x1: 270, y1: 227.5, x2: 290, y2: 227.5 }], 'their page needs them for the movement cost');
+    assert.equal((await view()).tokens.find((x) => x.id === spider.id).climber, true);
+    assert.equal((await view(t.sam.token)).tokens.find((x) => x.id === sam.id).climber, false);
+
+    await t.request('POST', `${base}/combat`, { body: { action: 'start' } });
+    await t.request('POST', `${base}/combat`, { body: { action: 'set', id: sam.id, init: 20 } });
+    await t.request('POST', `${base}/combat`, { body: { action: 'set', id: spider.id, init: 10 } });
+    await t.request('POST', `${base}/combat`, { body: { action: 'next' } });
+    const moved = async (tid) => (await view()).combat.entries.find((e) => e.id === tid).moved;
+    // Up the ladder onto the 10 ft roof, 2 squares: 10 ft plus 10 ft climbing.
+    await t.request('PATCH', `${base}/tokens/${sam.id}`, { as: t.sam.token, body: { x: 297.5, y: 227.5 } });
+    assert.equal(await moved(sam.id), 20);
+    // Up the bare wall: the spider climbs at no extra cost.
+    await t.request('PATCH', `${base}/tokens/${spider.id}`, { body: { x: 297.5, y: 297.5 } });
+    assert.equal(await moved(spider.id), 10);
+
+    // Stairs instead: down again costs only the walk.
+    await t.request('PATCH', `${base}/climbs`, { body: { remove: dm.climbs[0].id } });
+    await t.request('PATCH', `${base}/climbs`, { body: { add: { ...ladder, kind: 'stairs' } } });
+    await t.request('PATCH', `${base}/tokens/${sam.id}`, { as: t.sam.token, body: { x: 227.5, y: 227.5 } });
+    assert.equal(await moved(sam.id), 30);
+    assert.deepEqual((await t.request('PATCH', `${base}/climbs`, { body: { clear: 'all' } })).json().climbs, []);
+  } finally {
+    await t.cleanup();
+  }
+});

@@ -4,7 +4,7 @@
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { CONDITIONS, FOG_MAP, FOG_OPS, MAX_COMPANIONS, MAX_FOG_SHAPES, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_RAISED, MAX_TERRAIN, MAX_HEIGHT_FT, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, PLAYER_KINDS, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, ownToken, pathCost, snapToken, stepTurn, tokenPx, wallBetween } from '@dndapp/shared/map.js';
+import { CLIMB_KINDS, CONDITIONS, FOG_MAP, FOG_OPS, MAX_COMPANIONS, MAX_FOG_SHAPES, MAX_CLIMBS, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_RAISED, MAX_TERRAIN, MAX_HEIGHT_FT, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, PLAYER_KINDS, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, ownToken, pathCost, snapToken, stepTurn, tokenPx, wallBetween } from '@dndapp/shared/map.js';
 import sharp from 'sharp';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
@@ -125,6 +125,9 @@ export function registerMaps(app, r) {
           // And difficult terrain (water, rubble, undergrowth).
           const ownTerrain = m.terrain.filter((t) => t.source !== 'ai');
           m.terrain = [...ownTerrain, ...(r.terrain ?? []).slice(0, MAX_TERRAIN - ownTerrain.length).map((t) => ({ ...t, id: newTokenId(), source: 'ai' }))];
+          // And stairs and ladders.
+          const ownClimbs = m.climbs.filter((c) => c.source !== 'ai');
+          m.climbs = [...ownClimbs, ...(r.climbs ?? []).slice(0, MAX_CLIMBS - ownClimbs.length).map((c) => ({ ...c, id: newTokenId(), source: 'ai' }))];
           // What it found (what was kept), for the DM's "done" message.
           const ai = m.walls.filter((w) => w.source === 'ai');
           const found = {
@@ -133,6 +136,7 @@ export function registerMaps(app, r) {
             doors: ai.filter((w) => w.door).length,
             lights: m.lights.filter((l) => l.source === 'ai').length,
             terrain: m.terrain.filter((t) => t.source === 'ai').length,
+            climbs: m.climbs.filter((c) => c.source === 'ai').length,
           };
           m.wall_draft = { ...m.wall_draft, status: 'done', error: '', notes: r.notes, step: '', finished_at: new Date().toISOString(), found };
         }, { reason: 'walls drafted by the AI' }),
@@ -659,6 +663,32 @@ export function registerMaps(app, r) {
     return maps.view(saved, a);
   });
 
+  /**
+   * Stairs and ladders (DM): { add?: {kind, x1, y1, x2, y2}, remove?: id, clear?: ai | all }.
+   * Each is a line up it from the bottom to the top. Going between heights by stairs costs no
+   * extra movement; by a ladder it's climbing (see pathCost).
+   */
+  app.patch('/campaigns/:cid/maps/:mid/climbs', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const body = z
+      .object({
+        add: z.object({ kind: z.enum(CLIMB_KINDS), x1: POINT, y1: POINT, x2: POINT, y2: POINT }).optional(),
+        remove: z.string().max(20).optional(),
+        clear: z.enum(['ai', 'all']).optional(),
+      })
+      .parse(request.body ?? {});
+    if (body.add && map.climbs.length >= MAX_CLIMBS) throw new BadRequestError(`A map can have at most ${MAX_CLIMBS} stairs and ladders.`);
+    if (body.remove && !map.climbs.some((c) => c.id === body.remove)) throw new NotFoundError('No such stairs or ladder');
+    const saved = maps.change(a.cid, map.id, (m) => {
+      if (body.clear === 'all') m.climbs = [];
+      if (body.clear === 'ai') m.climbs = m.climbs.filter((c) => c.source !== 'ai');
+      if (body.remove) m.climbs = m.climbs.filter((c) => c.id !== body.remove);
+      if (body.add) m.climbs.push({ id: newTokenId(), ...body.add, source: 'dm' });
+    }, { by: request.user.id, reason: 'stairs and ladders' });
+    return maps.view(saved, a);
+  });
+
   /** Draft the walls and doors with the AI (DM), in the background. Replaces the AI's earlier draft; walls the DM drew stay. */
   app.post('/campaigns/:cid/maps/:mid/walls/draft', async (request) => {
     const a = access(request, { dm: true });
@@ -867,9 +897,9 @@ export function registerMaps(app, r) {
         Object.assign(t, body);
         if (!PLAYER_KINDS.includes(t.kind)) t.user_id = null;
         Object.assign(t, snapToken(m, t, t.x, t.y));
-        // In a fight, count how far it has moved this turn (difficult terrain costs double).
+        // In a fight, count how far it has moved this turn (difficult terrain costs double, climbing extra).
         const entry = moves && m.combat?.entries.find((e) => e.id === t.id);
-        if (entry) entry.moved = (entry.moved ?? 0) + (pathCost(map, route)?.value ?? 0);
+        if (entry) entry.moved = (entry.moved ?? 0) + (pathCost(map, route, token)?.value ?? 0);
       }, { by: request.user.id, reason: moving ? 'token moved' : 'token changed' })
       : null;
     const out = maps.view(changed ?? maps.get(a.cid, map.id), a);
