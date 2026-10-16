@@ -187,7 +187,7 @@ test('normalizeWalls keeps real lines on the image; only doors can be open', () 
   }).wall_draft;
   assert.deepEqual(drafting, {
     status: 'pending', error: '', notes: '', step: 'checking', parts: 9, parts_done: 4, started_at: '2026-10-10T15:00:00.000Z', finished_at: '',
-    found: { walls: 3, obstacles: 0, doors: 2, lights: 0, terrain: 0, climbs: 0 },
+    found: { walls: 3, obstacles: 0, doors: 2, lights: 0, terrain: 0, climbs: 0, raised: 0 },
   });
   assert.equal(normalizeMap({ image: { width: 10, height: 10 }, wall_draft: { step: 'napping', parts: 50 } }).wall_draft.step, '');
   assert.equal(normalizeMap({ image: { width: 10, height: 10 }, wall_draft: { parts: 50 } }).wall_draft.parts, 9);

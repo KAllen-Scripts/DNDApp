@@ -1350,6 +1350,7 @@ button.busy:disabled { opacity: 1; }
 .map-fog-tools .map-num { width: 4.2rem; padding: 0.2rem 0.3rem; }
 .map-terrain .raised { fill: rgb(70 130 200 / 0.18); stroke: #4a90d9; stroke-width: 2px; vector-effect: non-scaling-stroke; }
 .map-terrain .raised.low { fill: rgb(120 80 40 / 0.2); stroke: #a0703a; }
+.map-terrain .raised.ai { stroke-dasharray: 8 5; stroke: #00c8d7; }
 .map-terrain .raised-label { fill: #fff; stroke: rgb(0 0 0 / 0.7); stroke-width: 3px; paint-order: stroke; font-weight: 700; pointer-events: none; }
 .map-terrain .climb { stroke: #c000ff; stroke-width: 4px; vector-effect: non-scaling-stroke; stroke-linecap: round; fill: none; }
 .map-terrain .climb.ladder { stroke-dasharray: 2 6; stroke-width: 6px; }

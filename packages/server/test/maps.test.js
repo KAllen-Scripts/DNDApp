@@ -653,6 +653,11 @@ test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and
         lights: [{ x: 100, y: 900, kind: 'brazier' }],
         difficult: [{ points: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }] }],
         climbs: [{ kind: 'ladder', from: { x: 300, y: 800 }, to: { x: 300, y: 700 } }],
+        raised: [
+          { points: [{ x: 600, y: 600 }, { x: 800, y: 600 }, { x: 800, y: 800 }, { x: 600, y: 800 }], height: 10.4 },
+          { center: { x: 900, y: 200 }, edge: { x: 950, y: 200 }, height: 40 },
+          { points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], height: 5 },
+        ],
         notes: 'First go.',
       };
   }
@@ -677,7 +682,7 @@ test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and
     assert.deepEqual([...new Set(steps)], ['tracing 0/0', 'checking 0/1', 'checking 1/1', 'tidying 0/0']);
     assert.equal(done.wall_draft.notes, 'The tower walls are a guess.');
     // What it found, for the DM's "done" message: the 36 pieces of the round tower count as walls.
-    assert.deepEqual(done.wall_draft.found, { walls: 38, obstacles: 1, doors: 1, lights: 1, terrain: 1, climbs: 1 });
+    assert.deepEqual(done.wall_draft.found, { walls: 38, obstacles: 1, doors: 1, lights: 1, terrain: 1, climbs: 1, raised: 2 });
     assert.equal(done.wall_draft.step, '');
     assert.ok(Date.parse(done.wall_draft.finished_at) >= Date.parse(done.wall_draft.started_at));
     const ai = done.walls.filter((w) => w.source === 'ai');
@@ -708,6 +713,9 @@ test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and
     // A ladder it saw, as a line up it in pixels; players get where it is, for their movement cost.
     assert.deepEqual(done.climbs.map(({ kind, x1, y1, x2, y2, source }) => ({ kind, x1, y1, x2, y2, source })), [{ kind: 'ladder', x1: 210, y1: 392, x2: 210, y2: 343, source: 'ai' }]);
     assert.deepEqual((await t.request('GET', base, { as: t.sam.token })).json().climbs, [{ kind: 'ladder', x1: 210, y1: 392, x2: 210, y2: 343 }]);
+    // Raised areas with the AI's guessed heights (a round tower top as 32 sides; one with too few points dropped), for the DM to accept or correct.
+    assert.deepEqual(done.raised.map((r) => [r.height, r.points.length, r.source]), [[10, 4, 'ai'], [40, 32, 'ai']]);
+    assert.deepEqual(done.raised[0].points, [[420, 294], [560, 294], [560, 392], [420, 392]]);
     const call = t.llm.calls.find((c) => c.purpose === 'map:walls');
     assert.equal(call.attachments.length, 1);
     assert.match(call.prompt, /700 × 490/);
@@ -723,6 +731,7 @@ test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and
     assert.equal(again.walls.length, done.walls.length, 'the old draft was replaced, not added to');
     assert.equal(again.lights.length, 1);
     assert.equal(again.climbs.length, 1);
+    assert.equal(again.raised.length, 2, 'its old guesses were replaced');
     await t.request('PATCH', `${base}/walls`, { body: { clear: 'ai' } });
     assert.deepEqual(t.maps.get(t.campaign.id, map.id).walls.map((w) => w.source), ['dm']);
   } finally {
@@ -756,7 +765,7 @@ test("when the AI can't draft walls, the DM is told why and when, and can try ag
       const m = t.maps.get(t.campaign.id, map.id);
       return m.wall_draft.status === 'done' && m;
     });
-    assert.deepEqual(done.wall_draft.found, { walls: 0, obstacles: 0, doors: 0, lights: 0, terrain: 0, climbs: 0 });
+    assert.deepEqual(done.wall_draft.found, { walls: 0, obstacles: 0, doors: 0, lights: 0, terrain: 0, climbs: 0, raised: 0 });
     assert.equal(done.wall_draft.error, '');
   } finally {
     await t.cleanup();

@@ -328,3 +328,38 @@ test('raised areas: the DM drags one at the height in the box, clicks it to chan
     assert.deepEqual((await mapOf(t, map)).raised, []);
   });
 });
+
+test("the AI's guessed heights show with a question mark; a click accepts one (its height into the box), a second click corrects it, and Accept AI heights takes the rest", async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const map = await importMap(t, { patch: SHOWN });
+      t.maps.change(t.campaign.id, map.id, (m) => {
+        m.raised = [
+          { id: 'guess0', points: [[35, 35], [105, 35], [105, 105], [35, 105]], height: 10, source: 'ai' },
+          { id: 'guess1', points: [[210, 210], [280, 210], [280, 280], [210, 280]], height: 30, source: 'ai' },
+        ];
+      });
+      return { map, dana: await addDm(t) };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t, { map }) => {
+    await openMapTab(page);
+    page.click('#map-fog-open');
+    assert.deepEqual(page.$$('#map-terrain .raised-label').map((x) => x.textContent), ['↑10 ft?', '↑30 ft?']);
+    assert.equal(page.text('#map-raised-accept'), 'Accept AI heights (2)');
+    page.click('[data-wall-mode=raised]');
+    click(page, 70, 70);
+    await page.settle();
+    assert.equal(page.$('#map-raised-height').value, '10');
+    assert.deepEqual((await mapOf(t, map)).raised.map((r) => r.source), ['dm', 'ai']);
+    page.type('#map-raised-height', '15');
+    click(page, 70, 70);
+    await page.settle();
+    assert.equal((await mapOf(t, map)).raised[0].height, 15);
+    page.click('#map-raised-accept');
+    await page.settle();
+    assert.deepEqual((await mapOf(t, map)).raised.map((r) => `${r.height} ${r.source}`), ['15 dm', '30 dm']);
+    assert.ok(page.$('#map-raised-accept').hidden);
+  });
+});

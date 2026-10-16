@@ -366,6 +366,11 @@ function renderFogTools() {
   if (others.some((m) => m.id === chosen)) linkTo.value = chosen;
   linkTo.disabled = !others.length;
   walls.querySelector('[data-wall-mode="link"]').disabled = !others.length;
+  // The AI's guesses at heights, to accept or correct.
+  const guesses = (map.raised ?? []).filter((r) => r.source === 'ai').length;
+  const acceptAll = $('#map-raised-accept');
+  acceptAll.hidden = !guesses;
+  acceptAll.textContent = `Accept AI heights (${guesses})`;
   const drafting = map.wall_draft.status === 'pending';
   const draftButton = $('#map-walls-draft');
   draftButton.disabled = drafting;
@@ -405,7 +410,7 @@ export function sinceText(from, to = Date.now()) {
 export function foundText(f) {
   if (!f) return '';
   const count = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-  const parts = [count(f.walls, 'wall'), count(f.doors, 'door'), count(f.obstacles, 'obstacle'), count(f.lights, 'light'), count(f.terrain, 'area') + (f.terrain ? ' of difficult terrain' : ''), f.climbs ? `${f.climbs} stairs or ladder${f.climbs === 1 ? '' : 's'}` : '0 ']
+  const parts = [count(f.walls, 'wall'), count(f.doors, 'door'), count(f.obstacles, 'obstacle'), count(f.lights, 'light'), count(f.terrain, 'area') + (f.terrain ? ' of difficult terrain' : ''), f.climbs ? `${f.climbs} stairs or ladder${f.climbs === 1 ? '' : 's'}` : '0 ', count(f.raised ?? 0, 'raised area') + (f.raised ? ' (heights to check)' : '')]
     .filter((x, i) => i < 2 || !x.startsWith('0 '));
   return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0];
 }
@@ -558,11 +563,13 @@ function renderTerrain() {
   if (state.canEdit && (state.wallMode || !$('#map-wall-tools').hidden)) {
     const font = Math.max(10, squarePx(map) * 0.4);
     for (const a of map.raised ?? []) {
-      svg.append(svgEl('polygon', { points: pts(a.points), class: `raised${a.height < 0 ? ' low' : ''}` }));
+      const guess = a.source === 'ai';
+      svg.append(svgEl('polygon', { points: pts(a.points), class: `raised${a.height < 0 ? ' low' : ''}${guess ? ' ai' : ''}` }));
       const xs = a.points.map((p) => p[0]);
       const ys = a.points.map((p) => p[1]);
       const label = svgEl('text', { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2, class: 'raised-label', 'font-size': font, 'text-anchor': 'middle', 'dominant-baseline': 'middle' });
-      label.textContent = `${a.height > 0 ? '↑' : a.height < 0 ? '↓' : ''}${Math.abs(a.height)} ft`;
+      // The AI's guess shows a question mark until the DM accepts or corrects it.
+      label.textContent = `${a.height > 0 ? '↑' : a.height < 0 ? '↓' : ''}${Math.abs(a.height)} ft${guess ? '?' : ''}`;
       svg.append(label);
     }
     // Stairs and ladders: a line up each, with a dot at the top.
@@ -1425,10 +1432,15 @@ function viewUp(e) {
     const points = [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]];
     if (e.type !== 'pointerup') return;
     if (state.wallMode === 'raised') {
-      // A click on a raised area gives it the height in the box; a drag makes a new one.
+      // A click on one of the AI's guesses accepts it (and puts its height in the box, to correct with a second click);
+      // a click on any other raised area gives it the height in the box; a drag makes a new one.
       const click = Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y) * state.view.k < 4;
       const hit = click && (state.current.raised ?? []).findLast((x) => pointInPolygon(d.a.x, d.a.y, x.points));
-      if (hit) raised({ set: { id: hit.id, height: raisedHeight() } });
+      if (hit?.source === 'ai') {
+        $('#map-raised-height').value = String(hit.height);
+        raised({ accept: hit.id });
+        status(`Accepted ${hit.height} ft. To correct it, change the height and click it again.`);
+      } else if (hit) raised({ set: { id: hit.id, height: raisedHeight() } });
       else if (r.w > 0 && r.h > 0) raised({ add: { points, height: raisedHeight() } });
       return;
     }
@@ -1802,11 +1814,12 @@ export function initMapActions() {
       report(err);
     }
   });
+  $('#map-raised-accept').addEventListener('click', () => raised({ accept: 'all' }));
   for (const b of document.querySelectorAll('[data-wall-action]')) {
     b.addEventListener('click', () => {
       if (b.dataset.wallAction === 'clear-ai') {
-        if (confirm("Remove everything the AI drafted (walls, lights, difficult terrain, stairs and ladders)? What you drew stays.")) {
-          walls({ clear: 'ai' }).then(() => lights({ clear: 'ai' })).then(() => terrain({ clear: 'ai' })).then(() => climbs({ clear: 'ai' }));
+        if (confirm("Remove everything the AI drafted (walls, lights, difficult terrain, stairs and ladders, and heights you haven't accepted)? What you drew stays.")) {
+          walls({ clear: 'ai' }).then(() => lights({ clear: 'ai' })).then(() => terrain({ clear: 'ai' })).then(() => climbs({ clear: 'ai' })).then(() => raised({ clear: 'ai' }));
         }
       } else if (confirm('Make players forget the places they saw before?')) {
         fog({ forget: true });

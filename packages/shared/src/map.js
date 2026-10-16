@@ -293,7 +293,7 @@ const round = (n, places) => Math.round(n * 10 ** places) / 10 ** places;
 function normalizeFound(f) {
   if (!f || typeof f !== 'object') return null;
   const n = (v) => Math.round(num(v, { min: 0, max: 100_000, fallback: 0 }));
-  return { walls: n(f.walls), obstacles: n(f.obstacles), doors: n(f.doors), lights: n(f.lights), terrain: n(f.terrain), climbs: n(f.climbs) };
+  return { walls: n(f.walls), obstacles: n(f.obstacles), doors: n(f.doors), lights: n(f.lights), terrain: n(f.terrain), climbs: n(f.climbs), raised: n(f.raised) };
 }
 
 /** Every map the server saves goes through this: known fields only, types fixed, sizes capped. */
