@@ -130,3 +130,30 @@ test('stairs and ladders: the DM draws them; climbing a ladder or a bare wall co
     await t.cleanup();
   }
 });
+
+test("the AI's guessed heights: the DM accepts one or all, or corrects one; accepted ones stay through Clear AI", async () => {
+  const t = await setup({ llm: createFakeLLM({ structured: async () => readOut }) });
+  try {
+    const png = await terrain(700, 490, { size: 35 });
+    const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'yard.png', data: png.toString('base64') } })).json().id;
+    while (t.maps.get(t.campaign.id, id).reading.status === 'pending') await new Promise((r) => setTimeout(r, 10));
+    const base = `/campaigns/${t.campaign.id}/maps/${id}`;
+    const box = (x) => [[x, 0], [x + 70, 0], [x + 70, 70], [x, 70]];
+    t.maps.change(t.campaign.id, id, (m) => {
+      m.raised = [10, 20, 30].map((h, i) => ({ id: `guess${i}`, points: box(i * 100), height: h, source: 'ai' }));
+    });
+    const sources = () => t.maps.get(t.campaign.id, id).raised.map((r) => `${r.id} ${r.height} ${r.source}`);
+    assert.equal((await t.request('PATCH', `${base}/raised`, { as: t.sam.token, body: { accept: 'all' } })).statusCode, 403);
+    await t.request('PATCH', `${base}/raised`, { body: { accept: 'guess0' } });
+    await t.request('PATCH', `${base}/raised`, { body: { set: { id: 'guess1', height: 25 } } });
+    assert.deepEqual(sources(), ['guess0 10 dm', 'guess1 25 dm', 'guess2 30 ai']);
+    assert.equal((await t.request('PATCH', `${base}/raised`, { body: { accept: 'nope00' } })).statusCode, 404);
+    await t.request('PATCH', `${base}/raised`, { body: { clear: 'ai' } });
+    assert.deepEqual(sources(), ['guess0 10 dm', 'guess1 25 dm']);
+    t.maps.change(t.campaign.id, id, (m) => { m.raised.push({ id: 'guess3', points: box(300), height: 5, source: 'ai' }); });
+    await t.request('PATCH', `${base}/raised`, { body: { accept: 'all' } });
+    assert.deepEqual(sources(), ['guess0 10 dm', 'guess1 25 dm', 'guess3 5 dm']);
+  } finally {
+    await t.cleanup();
+  }
+});

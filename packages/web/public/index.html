@@ -345,6 +345,7 @@
         <button class="ghost" data-wall-mode="difficult" aria-pressed="false" title="Drag over an area that's hard to move through (moving there costs double)">Difficult terrain</button>
         <button class="ghost" data-wall-mode="raised" aria-pressed="false" title="Drag over a roof, a castle's wall-walk, a tower top or a cliff top to give it the height in the box; click one to change its height to that. Players then see onto it but not past it, and from up there over lower things">Raised area</button>
         <label class="map-check small" title="How high a new raised area is, in feet above the ground (negative for a pit or a ditch)"><input type="number" id="map-raised-height" value="15" min="-1000" max="1000" step="1" class="map-num"> ft</label>
+        <button class="ghost" id="map-raised-accept" hidden title="Keep every height the AI guessed as it is (or click one with Raised area to accept just that one, then change the height and click it again to correct it)">Accept AI heights</button>
         <button class="ghost" data-wall-mode="stairs" aria-pressed="false" title="Drag up a flight of stairs, steps or a ramp, from the bottom to the top. Going between heights there costs no extra movement">Stairs</button>
         <button class="ghost" data-wall-mode="ladder" aria-pressed="false" title="Drag up a ladder, from the bottom to the top. Going up or down it is climbing: each foot costs 1 extra foot of movement (free with a climbing speed)">Ladder</button>
         <button class="ghost" data-wall-mode="link" aria-pressed="false" title="Click the map to put stairs or a door to another map there">Link</button>
@@ -353,7 +354,7 @@
         <button class="ghost" id="map-walls-draft" title="Let the AI trace the walls and doors from the picture, for you to correct">AI walls</button>
         <button class="ghost" id="map-walls-file" title="Exact walls, doors and lights from the map maker's Universal VTT file of this map (.dd2vtt or .uvtt, from Dungeondraft, Dungeon Alchemist and many map packs). No AI needed.">Walls from file</button>
         <input id="map-walls-file-input" type="file" accept=".dd2vtt,.uvtt,.df2vtt,.json" hidden>
-        <button class="ghost" data-wall-action="clear-ai" title="Remove the walls, lights and difficult terrain the AI drafted">Clear AI draft</button>
+        <button class="ghost" data-wall-action="clear-ai" title="Remove the walls, lights, difficult terrain, stairs, ladders and unaccepted heights the AI drafted">Clear AI draft</button>
         <button class="ghost" data-wall-action="forget" title="Players lose the dim view of places they saw before">Forget explored</button>
         <span id="map-wall-hint" class="muted small"></span>
       </div>

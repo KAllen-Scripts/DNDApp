@@ -9,7 +9,7 @@
  */
 import sharp from 'sharp';
 import { z } from 'zod';
-import { MAP_KINDS, UNITS, MAX_CLIMBS, MAX_WALLS, MAX_LIGHTS, normalizeGrid, normalizeScale, arcThrough, circlePoints } from '@dndapp/shared/map.js';
+import { MAP_KINDS, UNITS, MAX_CLIMBS, MAX_HEIGHT_FT, MAX_RAISED, MAX_WALLS, MAX_LIGHTS, normalizeGrid, normalizeScale, arcThrough, circlePoints } from '@dndapp/shared/map.js';
 
 const AI_LONG_SIDE = 2000;
 const DETECT_LONG_SIDE = 3000; // big enough to measure, small enough to take ~1s
@@ -185,7 +185,7 @@ export function createMapReader({ llm }) {
     /**
      * Draft the walls and doors on a map from its picture, for the DM to
      * correct: { walls: [{ x1, y1, x2, y2, door, kind, group? }] in image
-     * pixels, lights, terrain, climbs (stairs and ladders), notes }. kind 'low' is an obstacle: seen over,
+     * pixels, lights, terrain, raised (areas with a guessed height), climbs (stairs and ladders), notes }. kind 'low' is an obstacle: seen over,
      * not crossed. The pieces of one curved wall share a `group` (local to
      * this draft; the caller gives each its own id).
      *
@@ -259,7 +259,7 @@ export function createMapReader({ llm }) {
           const res = WallsOut.safeParse(await ask(
             'map:walls-check',
             `${WALLS_SYSTEM}\n\n${CHECK_SYSTEM}`,
-            `${part} The first draft is drawn over it: walls in red, obstacles in green, curved walls in orange, doors in blue, stairs and ladders in purple. Here is that draft as data:\n<draft>${JSON.stringify(draft)}</draft>\nCorrect it and give the whole corrected tracing${many ? ' of everything in this part (a wall that runs out of it can stop at its edge or carry on)' : ''}, not just the changes, in the whole map's 0 to 1000 positions.`,
+            `${part} The first draft is drawn over it: walls in red, obstacles in green, curved walls in orange, doors in blue, stairs and ladders in purple, raised areas in cyan with their heights. Here is that draft as data:\n<draft>${JSON.stringify(draft)}</draft>\nCorrect it and give the whole corrected tracing${many ? ' of everything in this part (a wall that runs out of it can stop at its edge or carry on)' : ''}, not just the changes, in the whole map's 0 to 1000 positions.`,
             await withDraft(ruled, draft),
           ));
           if (res.success) return { core, out: res.data };
@@ -315,8 +315,21 @@ export function createMapReader({ llm }) {
       // Difficult terrain, as areas (areas cross close-ups, so from the whole map's tracing).
       const areas = many ? draft.difficult : checked[0].out.difficult;
       const terrain = areas.filter((a) => a.points.length >= 3).map((a) => ({ points: a.points.map((p) => px(p)).map(({ x, y }) => [x, y]) }));
+      // Raised areas, as areas too, with the AI's guess at their height (round ones as 32 sides).
+      const tops = many ? draft.raised : checked[0].out.raised;
+      const raised = tops.map((r) => {
+        let pts = r.points?.length >= 3 ? r.points.map(px) : null;
+        if (!pts && r.center && r.edge) {
+          const c = px(r.center);
+          const e = px(r.edge);
+          const rad = Math.hypot(e.x - c.x, e.y - c.y);
+          if (rad >= 1) pts = Array.from({ length: 32 }, (_, i) => ({ x: c.x + rad * Math.cos((i * Math.PI) / 16), y: c.y + rad * Math.sin((i * Math.PI) / 16) }));
+        }
+        const height = Math.round(Math.max(-MAX_HEIGHT_FT, Math.min(MAX_HEIGHT_FT, r.height)));
+        return pts && height ? { points: pts.map(({ x, y }) => [x, y]), height } : null;
+      }).filter(Boolean).slice(0, MAX_RAISED);
       const steps = climbs.slice(0, MAX_CLIMBS).map((c) => ({ kind: c.kind, x1: c.a.x, y1: c.a.y, x2: c.b.x, y2: c.b.y }));
-      return { walls, lights: lit, terrain, climbs: steps, notes: notes.filter(Boolean).join(' ') };
+      return { walls, lights: lit, terrain, raised, climbs: steps, notes: notes.filter(Boolean).join(' ') };
     },
   };
 }
@@ -377,7 +390,7 @@ ${parts.join('')}</svg>`;
   return { buf: out, w, h, view };
 }
 
-/** A ruled part of the map with a draft drawn over it: walls red, obstacles green, curves orange, doors blue, stairs and ladders purple. */
+/** A ruled part of the map with a draft drawn over it: walls red, obstacles green, curves orange, doors blue, stairs and ladders purple, raised areas cyan. */
 async function withDraft(ruled, out) {
   const B = RULER_BAND;
   const { view } = ruled;
@@ -394,8 +407,19 @@ async function withDraft(ruled, out) {
     const e = pos(ci.edge);
     return `<circle cx="${c.x}" cy="${c.y}" r="${Math.hypot(e.x - c.x, e.y - c.y)}" fill="none" stroke="#ff8c00" stroke-width="3" />`;
   });
+  // Raised areas in cyan, with their guessed height.
+  const raisedShapes = (out.raised ?? []).map((r) => {
+    if (r.points?.length >= 3) {
+      const q = pos(r.points[0]);
+      return `${poly([...r.points, r.points[0]], '#00c8d7')}<text x="${q.x + 4}" y="${q.y + 16}" fill="#00c8d7" font-size="16" font-family="sans-serif" font-weight="bold">${Math.round(r.height)} ft</text>`;
+    }
+    if (!r.center || !r.edge) return '';
+    const c = pos(r.center);
+    const e = pos(r.edge);
+    return `<circle cx="${c.x}" cy="${c.y}" r="${Math.hypot(e.x - c.x, e.y - c.y)}" fill="none" stroke="#00c8d7" stroke-width="3" /><text x="${c.x}" y="${c.y}" fill="#00c8d7" font-size="16" font-family="sans-serif" font-weight="bold" text-anchor="middle">${Math.round(r.height)} ft</text>`;
+  });
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${ruled.w + 2 * B}" height="${ruled.h + 2 * B}">
-${out.walls.map((wl) => poly(wl.points, '#ff1a1a')).join('')}${out.obstacles.map((o) => poly(o.points, '#16c60c')).join('')}${curves.join('')}${circles.join('')}${out.doors.map((d) => poly([d.from, d.to], '#1a4dff')).join('')}${(out.climbs ?? []).map((c) => poly([c.from, c.to], '#c000ff')).join('')}</svg>`;
+${out.walls.map((wl) => poly(wl.points, '#ff1a1a')).join('')}${out.obstacles.map((o) => poly(o.points, '#16c60c')).join('')}${curves.join('')}${circles.join('')}${out.doors.map((d) => poly([d.from, d.to], '#1a4dff')).join('')}${(out.climbs ?? []).map((c) => poly([c.from, c.to], '#c000ff')).join('')}${raisedShapes.join('')}</svg>`;
   return sharp(ruled.buf).composite([{ input: Buffer.from(svg), left: 0, top: 0 }]).jpeg({ quality: 88 }).toBuffer();
 }
 
@@ -472,7 +496,13 @@ const WallsOut = z.object({
   circles: z.array(z.object({ center: Point, edge: Point.describe('Any point on the circle'), kind: z.enum(['wall', 'obstacle']) })).default([])
     .describe('Whole round walls or obstacles: a round tower or room, a well, a round pillar big enough to hide behind'),
   obstacles: z.array(z.object({ points: z.array(Point).min(2) })).default([])
-    .describe('Outlines of things you can see over but not walk through: buildings seen from above (their roofs), cliff edges, fences, deep water edges'),
+    .describe('Outlines of things you can see over but not walk through: fences, hedges, low walls, deep water edges'),
+  raised: z.array(z.object({
+    points: z.array(Point).optional().describe('The outline, in order round it (or give center and edge for a round one)'),
+    center: Point.optional().describe('The middle of a round one (a round tower top)'),
+    edge: Point.optional().describe('Any point on the edge of a round one'),
+    height: z.number().describe('Your guess at how high its top is above the ground round it, in feet (negative for a pit)'),
+  })).default([]).describe('Ground higher or lower than the rest, seen from above: roofs of buildings drawn as roofs, flat tower tops, castle wall-walks, cliff tops, platforms, balconies, pits'),
   doors: z.array(z.object({ from: Point, to: Point })).describe('Each door or gate, from one side of the doorway to the other'),
   lights: z.array(z.object({ x: z.number(), y: z.number(), kind: z.enum(['candle', 'torch', 'lamp', 'brazier', 'fire', 'magic']) })).default([])
     .describe('Light sources drawn on the map: wall torches, braziers, campfires and hearths, lamps, candles, glowing magic'),
@@ -488,7 +518,8 @@ const WallsOut = z.object({
 
 const WALLS_SYSTEM = `You trace walls on maps a Dungeon Master imports into a D&D table app. The app uses them for line of sight: players only see what their token has a clear line to, so a wall you trace hides what is behind it, and a gap lets sight through.
 - Walls: solid things a person can't see through: walls of rooms and towers you can see inside, castle and city walls, cave walls. Not floors, furniture, tables, rubble, trees or bushes.
-- Obstacles: things you can see over but can't walk through: a building drawn as its roof (outline the roof all the way round), a cliff edge you look down from, a fence, the edge of deep water. They block movement, not sight.
+- Obstacles: things you can see over but can't walk through: a fence, a hedge, a low wall, the edge of deep water. They block movement, not sight.
+- Raised areas: ground that is higher (or lower) than the rest, seen from above: a building drawn as its roof (outline the roof all the way round; not as walls or an obstacle), a flat tower top (round ones as a circle), the walk along the top of a castle or city wall, a cliff top, a platform or balcony, a pit (negative). Guess each one's height in feet above the ground round it: a one-storey house about 10, two storeys about 20, a castle wall about 25, a tower about 40, a balcony about 10, from what's drawn and the grid. The app lets players see onto them but not past them, and climbing onto them costs movement. A building drawn as a floor plan (its rooms and walls shown) gets walls, not a raised area.
 - Follow each wall along its middle as a line through points. Make walls that meet share the same point, and close rooms all the way round except at doors and open doorways.
 - Round and curved walls: never as a jagged or straight line. A whole round room or tower is a circle; part of one, a bend or a curved cave wall is an arc (curves) through its start, a point halfway along it and its end. Follow a long or wavy curve with several arcs end to end, each no more than a quarter turn. A doorway in a round wall: arcs up to each side of it, and a door across it.
 - Doors and gates go in doors, across the doorway. Leave open archways and gaps open.
@@ -507,7 +538,7 @@ const CHECK_SYSTEM = `Now you are checking a tracing against the map. Look along
 - A gap between two lines that meet on the map: make them share a point.
 - A line where the map has no wall (a floor pattern, furniture, a shadow): remove it.
 - A doorway: check it has a door (if a door is drawn) or is left open (an archway or gap). Doors that were traced as walls become doors.
-- Lights, difficult terrain, stairs and ladders: keep the right ones, fix or add the rest.
+- Lights, difficult terrain, raised areas (and their heights), stairs and ladders: keep the right ones, fix or add the rest.
 Give the whole corrected tracing.`;
 
 const LIGHT_OF = {

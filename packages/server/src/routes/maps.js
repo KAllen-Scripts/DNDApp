@@ -128,6 +128,9 @@ export function registerMaps(app, r) {
           // And stairs and ladders.
           const ownClimbs = m.climbs.filter((c) => c.source !== 'ai');
           m.climbs = [...ownClimbs, ...(r.climbs ?? []).slice(0, MAX_CLIMBS - ownClimbs.length).map((c) => ({ ...c, id: newTokenId(), source: 'ai' }))];
+          // And raised areas with its guess at their heights, for the DM to accept or correct; ones they accepted stay.
+          const ownRaised = m.raised.filter((x) => x.source !== 'ai');
+          m.raised = [...ownRaised, ...(r.raised ?? []).slice(0, MAX_RAISED - ownRaised.length).map((x) => ({ ...x, id: newTokenId(), source: 'ai' }))];
           // What it found (what was kept), for the DM's "done" message.
           const ai = m.walls.filter((w) => w.source === 'ai');
           const found = {
@@ -137,6 +140,7 @@ export function registerMaps(app, r) {
             lights: m.lights.filter((l) => l.source === 'ai').length,
             terrain: m.terrain.filter((t) => t.source === 'ai').length,
             climbs: m.climbs.filter((c) => c.source === 'ai').length,
+            raised: m.raised.filter((x) => x.source === 'ai').length,
           };
           m.wall_draft = { ...m.wall_draft, status: 'done', error: '', notes: r.notes, step: '', finished_at: new Date().toISOString(), found };
         }, { reason: 'walls drafted by the AI' }),
@@ -636,7 +640,7 @@ export function registerMaps(app, r) {
   });
 
   /**
-   * Raised areas (DM): { add?: {points: [[x, y], ...], height}, set?: {id, height}, remove?: id, clear?: all }.
+   * Raised areas (DM): { add?: {points: [[x, y], ...], height}, set?: {id, height}, accept?: id | all, remove?: id, clear?: ai | all }. The AI's guesses (source ai) become the DM's when accepted or corrected.
    * Roofs, wall-walks, cliffs: flat-topped parts of the map higher (or lower) than the ground, in feet.
    * Tokens standing in one are that high; players' sight goes over them only if the line clears their edges.
    */
@@ -648,16 +652,25 @@ export function registerMaps(app, r) {
       .object({
         add: z.object({ points: z.array(z.tuple([POINT, POINT])).min(3).max(200), height: HEIGHT }).optional(),
         set: z.object({ id: z.string().max(20), height: HEIGHT }).optional(),
+        accept: z.string().max(20).optional(),
         remove: z.string().max(20).optional(),
-        clear: z.literal('all').optional(),
+        clear: z.enum(['ai', 'all']).optional(),
       })
       .parse(request.body ?? {});
     if (body.add && map.raised.length >= MAX_RAISED) throw new BadRequestError(`A map can have at most ${MAX_RAISED} raised areas.`);
-    for (const id of [body.remove, body.set?.id]) if (id && !map.raised.some((r) => r.id === id)) throw new NotFoundError('No such area');
+    for (const id of [body.remove, body.set?.id, body.accept === 'all' ? null : body.accept]) if (id && !map.raised.some((r) => r.id === id)) throw new NotFoundError('No such area');
     const saved = maps.change(a.cid, map.id, (m) => {
       if (body.clear === 'all') m.raised = [];
+      if (body.clear === 'ai') m.raised = m.raised.filter((r) => r.source !== 'ai');
       if (body.remove) m.raised = m.raised.filter((r) => r.id !== body.remove);
-      if (body.set) m.raised.find((r) => r.id === body.set.id).height = body.set.height;
+      // The AI's guesses: accepted as they are (one, or 'all'), or corrected (a height set), they become the DM's and stay through the next AI draft.
+      const own = (r) => { if (r.source === 'ai') r.source = 'dm'; };
+      if (body.accept) for (const r of m.raised) if (body.accept === 'all' || r.id === body.accept) own(r);
+      if (body.set) {
+        const r = m.raised.find((x) => x.id === body.set.id);
+        r.height = body.set.height;
+        own(r);
+      }
       if (body.add) m.raised.push({ id: newTokenId(), points: body.add.points, height: body.add.height, source: 'dm' });
     }, { by: request.user.id, reason: 'raised areas' });
     return maps.view(saved, a);
