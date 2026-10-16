@@ -21,6 +21,8 @@ export function registerItems(app, r) {
     weight: z.number().min(0).max(100_000).nullable(),
     text: z.string().max(MAX_ITEM_TEXT),
     notes: z.string().max(MAX_ITEM_NOTES),
+    // The numbers for its kind (cleaned by normalizeItemStats); null to read them from the description.
+    stats: z.object({}).passthrough().nullable(),
   });
   const PICTURE_UPLOAD = z.object({ filename: z.string().max(200).default(''), data: z.string().min(1) });
   const pictureBody = { bodyLimit: Math.ceil(MAX_PICTURE_BYTES * 1.4) + 64 * 1024 };
@@ -37,7 +39,7 @@ export function registerItems(app, r) {
 
   /**
    * Save an item (DM): { name, kind?, rarity?, attunement?, price? (copper),
-   * weight?, text?, notes?, picture?: { filename, data (base64) } }.
+   * weight?, text?, notes?, stats?, picture?: { filename, data (base64) } }.
    */
   app.post('/campaigns/:cid/items', pictureBody, async (request, reply) => {
     const a = access(request, { dm: true });
@@ -106,8 +108,9 @@ export function registerItems(app, r) {
 
   /**
    * Fill in an item that's already saved (DM): { name? } (default: its name).
-   * Replaces its description, kind, rarity and weight, and its price unless
-   * the DM set one. 404 if no one knows it.
+   * Replaces its description, kind, rarity and weight (and the numbers for
+   * its kind are read from the new description), and its price unless the
+   * DM set one. 404 if no one knows it.
    */
   app.post('/campaigns/:cid/items/:iid/fill', async (request) => {
     const a = access(request, { dm: true });
@@ -118,6 +121,8 @@ export function registerItems(app, r) {
     if (!found) throw new NotFoundError(`Neither the books nor the AI know an item called "${name ?? x.name}". Try its proper name, or use Find online.`);
     const { name: _n, price, ...fields } = found.fields;
     if (x.price == null) fields.price = price;
+    // A new description: its numbers are read from it again.
+    fields.stats = null;
     return { item: items.view(items.update(a.cid, x.id, fields)), from: found.from };
   });
 

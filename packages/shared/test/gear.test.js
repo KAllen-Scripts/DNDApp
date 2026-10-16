@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addToInventory, armorClass, attackWeapon, attunementLimit, carriedWeight, classProficient, encumbrance, inventoryGroups, itemCharges, itemEffects, itemStats, magicName, newUnownedWeaponAttacks, normalizeGear, normalizeInventory, ownsWeapon, unownedWeaponAttacks } from '../src/gear.js';
+import { addToInventory, armorClass, drinkPotion, itemHeal, normalizeItemStats, attackWeapon, attunementLimit, carriedWeight, classProficient, encumbrance, inventoryGroups, itemCharges, itemEffects, itemStats, magicName, newUnownedWeaponAttacks, normalizeGear, normalizeInventory, ownsWeapon, unownedWeaponAttacks } from '../src/gear.js';
 import { computeSheet, emptySheet, normalizeSheet, rollDisadvantage } from '../src/sheet.js';
 import { normalizeSettings } from '../src/settings.js';
 import { gearRolls } from '../src/rolls.js';
@@ -34,7 +34,7 @@ test('gear: magic names and what an item does, from the tables or its descriptio
   const blade = itemStats({ name: 'Sun Blade', kind: 'weapon', text: 'Martial melee weapon (finesse, versatile). 2d6 radiant damage.' });
   assert.deepEqual(blade.weapon, { damage: '2d6 radiant', ability: 'finesse', category: 'martial', properties: ['finesse', 'versatile'] });
   assert.equal(itemStats({ name: 'Elven Mail', kind: 'armor', text: 'Medium armour. AC 14 + Dex modifier (max 2).' }).armor.type, 'medium');
-  assert.deepEqual(itemStats({ name: 'Bag of Holding', kind: 'magic', text: 'A bag.' }), { kind: 'magic', weapon: null, armor: null, magic: 0, weight: null, charges: null, effects: [] });
+  assert.deepEqual(itemStats({ name: 'Bag of Holding', kind: 'magic', text: 'A bag.' }), { kind: 'magic', weapon: null, armor: null, magic: 0, weight: null, charges: null, effects: [], heal: '' });
 });
 
 test('gear: class proficiency from the PHB, unknown classes left to the player', () => {
@@ -260,4 +260,40 @@ test('inventory: grouped by kind in a fixed order, by name within each (ignoring
 test('spells: a custom spell keeps its source', () => {
   assert.equal(normalizeSheet({ spells: [{ name: 'Kenny\'s Kettle', source: 'custom' }] }).spells[0].source, 'custom');
   assert.equal(normalizeSheet({ spells: [{ name: 'X', source: 'nonsense' }] }).spells[0].source, 'manual');
+});
+
+test('gear: potions heal (the PHB table by name, else read from the description); the DM\'s own numbers win', () => {
+  assert.equal(itemHeal('Potion of Greater Healing'), '4d4+4');
+  assert.equal(itemHeal('Elixir of Mending', 'You regain 3d6 + 1 hit points when you drink it.'), '3d6+1');
+  assert.equal(itemHeal('Potion of Climbing', 'You gain a climbing speed.'), '');
+  assert.equal(itemStats({ name: 'Potion of Healing', kind: 'potion' }).heal, '2d4+2');
+  assert.equal(itemStats({ name: 'Rope', kind: 'gear', text: 'You regain 2 hit points' }).heal, '', 'only potions heal by drinking');
+
+  // Armour the DM set by hand: a Dragon Scale Mail (AC 14 medium, +1) with nothing in its description to read.
+  const stats = normalizeItemStats({ armor: { base: 14, type: 'medium', stealth: false }, magic: 1, weapon: { damage: 'nope' }, heal: 'lots', effects: [{ target: 'saves', value: 1 }, { target: 'flying', value: 3 }] }, 'armor');
+  assert.equal(stats.weapon, null, 'armour has no damage');
+  assert.equal(normalizeItemStats({ heal: 'lots' }).heal, '', 'not dice: dropped');
+  assert.deepEqual(stats.effects, [{ target: 'saves', value: 1 }]);
+  const read = itemStats({ name: 'Dragon Scale Mail', kind: 'armor', text: 'Scales of a dragon.', stats });
+  assert.deepEqual([read.kind, read.armor.base, read.armor.type, read.magic], ['armor', 14, 'medium', 1]);
+  assert.equal(normalizeItemStats(null), null);
+
+  // Bought and equipped, it sets the AC by itself (Dex 14: +2, medium caps at 2): 14 + 2 + 1.
+  const inventory = addToInventory([], { id: 'dsm', name: 'Dragon Scale Mail', kind: 'armor', text: '', stats }, 1, { classKey: 'fighter' });
+  inventory[0].equipped = 1;
+  const { calc } = sheetWith(inventory);
+  assert.equal(calc.values.ac, 17);
+  assert.equal(inventory[0].proficient, true);
+  // A typed-over AC still wins (the DM can overrule the rules).
+  assert.equal(sheetWith(inventory, { overrides: { ac: 12 } }).calc.values.ac, 12);
+});
+
+test('gear: drinking a potion heals up to the maximum and uses one up', () => {
+  const sheet = normalizeSheet({ ...emptySheet(), hp: { current: 5, temp: null }, inventory: [{ id: 'p', name: 'Potion of Healing', kind: 'potion', qty: 2, heal: '2d4+2' }, { id: 'r', name: 'Rope' }] });
+  const once = drinkPotion(sheet, 'p', 7, 10);
+  assert.deepEqual([once.healed, once.sheet.hp.current, once.sheet.inventory.map((g) => [g.name, g.qty])], [5, 10, [['Potion of Healing', 1], ['Rope', 1]]]);
+  const twice = drinkPotion(once.sheet, 'p', 3, null);
+  assert.deepEqual([twice.sheet.hp.current, twice.sheet.inventory.map((g) => g.name)], [13, ['Rope']], 'the last one goes');
+  assert.throws(() => drinkPotion(sheet, 'r', 3, 10), /doesn't heal/);
+  assert.throws(() => drinkPotion(sheet, 'zzz', 3, 10), /isn't in your inventory/);
 });

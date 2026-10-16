@@ -46,6 +46,17 @@ export function registerRests(app, r) {
     return rests.useFeature(cid, request.user.id, id, { visibility, slot });
   });
 
+  /**
+   * Drink a potion that heals from your inventory: { id (the inventory line),
+   * visibility? }. The server rolls what it heals (shared like any roll), adds
+   * the hit points and takes one away. Returns what the hit dice route returns.
+   */
+  app.post('/campaigns/:cid/sheet/gear/drink', async (request) => {
+    const { cid } = player(request);
+    const { id, visibility } = z.object({ id: z.string().min(1).max(64), visibility: z.enum(ROLL_VISIBILITY).default('party') }).parse(request.body);
+    return rests.drink(cid, request.user.id, id, { visibility });
+  });
+
   /** Take a short rest on your own sheet (Pact Magic slots come back). Returns { sheet, version, updated_at }. */
   app.post('/campaigns/:cid/sheet/short-rest', async (request) => {
     const { cid } = player(request);

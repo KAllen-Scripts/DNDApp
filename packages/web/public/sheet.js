@@ -1096,24 +1096,21 @@ function gearRow(g) {
     const select = (label, value, options, set) => {
       const el = h('select', { 'aria-label': `${label}: ${g.name}` }, Object.entries(options).map(([v, n]) => new Option(n, v)));
       el.value = value;
-      el.addEventListener('change', () => { set(el.value); gearChanged(); });
+      // Saving redraws the list: keep these details open.
+      el.addEventListener('change', () => { set(el.value); gearChanged(); reopen(g); });
       return el;
     };
     details.append(h('div', { class: 'spell-fields' },
       labelled('Name', field(`${p()}.name`, { label: 'Item name', onChange: () => (row.querySelector('.gear-title').textContent = g.name) })),
       labelled('Kind', select('Kind', g.kind, GEAR_KINDS, (v) => {
-        g.kind = v;
-        if (v === 'weapon' && !g.weapon) g.weapon = { damage: '', ability: 'str', category: 'simple', properties: [] };
-        if (v === 'armor' && !g.armor) g.armor = { base: 11, type: 'light' };
-        if (v !== 'weapon') g.weapon = null;
-        if (v !== 'armor') g.armor = null;
-        for (const d of state.gearDraws) d();
+        Object.assign(g, kindFields(v, g));
       })),
       g.weapon ? labelled('Damage', field(`${p()}.weapon.damage`, { label: 'Weapon damage', placeholder: 'e.g. 1d8 slashing', onChange: () => { sum.__paint(); for (const d of state.attackDraws) d(); } })) : null,
       g.weapon ? labelled('Uses', select('Ability', g.weapon.ability, { str: 'Strength', dex: 'Dexterity', finesse: 'Finesse (Str or Dex)' }, (v) => (g.weapon.ability = v))) : null,
       g.armor ? labelled('Type', select('Armour type', g.armor.type, { light: 'Light (+ Dex)', medium: 'Medium (+ Dex, max 2)', heavy: 'Heavy', shield: 'Shield' }, (v) => (g.armor.type = v))) : null,
       g.armor ? labelled(g.armor.type === 'shield' ? 'AC bonus' : 'Base AC', field(`${p()}.armor.base`, { label: 'Armour class', kind: 'int', onChange: () => sum.__paint() })) : null,
-      labelled('Magic bonus', field(`${p()}.magic`, { label: 'Magic bonus', kind: 'int', onChange: () => { sum.__paint(); for (const d of state.attackDraws) d(); } })),
+      g.kind === 'potion' || g.heal ? labelled('Heals', field(`${p()}.heal`, { label: 'What it heals', placeholder: 'e.g. 2d4+2', onChange: () => gearChanged() })) : null,
+      g.weapon || g.armor ? labelled('Magic bonus', field(`${p()}.magic`, { label: 'Magic bonus', kind: 'int', onChange: () => { sum.__paint(); for (const d of state.attackDraws) d(); } })) : null,
       labelled('Weight (lb, each)', field(`${p()}.weight`, { label: 'Weight in pounds', kind: 'number', nullable: true, onChange: () => { sum.__paint(); refresh(); } })),
       labelled('Charges', (() => {
         const el = h('input', { type: 'number', min: '0', max: '999', class: 'num', value: g.charges ? String(g.charges.max) : '', 'aria-label': `Charges: ${g.name}`, placeholder: 'none' });
@@ -1133,7 +1130,7 @@ function gearRow(g) {
   });
   const qty = field(`${p()}.qty`, { label: `How many: ${g.name}`, kind: 'int', cls: 'num' });
   qty.addEventListener('change', () => gearChanged()); // more than one weapon: choose how many are equipped
-  const row = h('div', { class: `gear-row${g.equipped ? ' equipped' : ''}` },
+  const row = h('div', { class: `gear-row${g.equipped ? ' equipped' : ''}`, 'data-id': g.id },
     h('div', { class: 'gear-head' },
       gearPicture(g),
       h('strong', { class: 'gear-title' }, g.name),
@@ -1150,6 +1147,7 @@ function gearRow(g) {
         gearChanged(g.id);
       }, 'Needs attunement: its magic only works while you are attuned (at most three items, more for an artificer).') : null,
       g.charges ? chargesControl(g) : null,
+      g.heal ? h('button', { type: 'button', class: 'ghost small', 'aria-label': `Drink ${g.name}`, title: `Heals ${g.heal}: the server rolls it and adds the hit points; one ${g.name} is used up`, onclick: () => drink(g) }, 'Drink') : null,
       sum,
       removeButton(`Remove ${g.name}`, () => {
         if (!confirm(`Remove ${g.name} from your inventory?`)) return;
@@ -1160,6 +1158,38 @@ function gearRow(g) {
     details,
   );
   return row;
+}
+
+/** What a line needs when it becomes a kind: a weapon's numbers, armour's, a potion's healing (the rest go). */
+function kindFields(kind, g = {}) {
+  return {
+    kind,
+    weapon: kind === 'weapon' ? g.weapon ?? { damage: '', ability: 'str', category: 'simple', properties: [] } : null,
+    armor: kind === 'armor' ? g.armor ?? { base: 11, type: 'light', strength: 0, stealth: false } : null,
+    magic: kind === 'weapon' || kind === 'armor' ? g.magic ?? 0 : 0,
+    heal: kind === 'potion' ? g.heal ?? '' : '',
+  };
+}
+
+/** Open a line's details (after it's redrawn), so the fields for its kind are there to fill in. */
+function reopen(g) {
+  const details = $(`#inventory .gear-row[data-id="${String(g.id).replace(/["\\]/g, '\\$&')}"] details`);
+  if (details) details.open = true;
+}
+
+/** Drink a potion: the server rolls what it heals (the dice show it), adds the hit points and takes one away. */
+async function drink(g) {
+  await flush();
+  await roll('', {
+    label: `${g.name}: healing`,
+    path: `${base()}/sheet/gear/drink`,
+    body: { id: g.id },
+    onServer: (res) => {
+      useSheet(res.sheet, res.version);
+      announce();
+      gearStatus(`Drank ${g.name}: ${res.healed ? `regained ${res.healed} hit point${res.healed === 1 ? '' : 's'}` : 'no hit points regained'}.`);
+    },
+  });
 }
 
 /** "+1 AC", "Strength becomes 19". */
@@ -1966,13 +1996,18 @@ export function initSheetActions() {
       gearStatus(err.status === 404 ? `${err.message}` : `Couldn't look up ${name}: ${err.message}`, true);
     }
   });
+  // By hand: the kind chosen first, so the details open with the fields for it (a weapon's damage, armour's AC, what a potion heals).
+  $('#gear-kind').replaceChildren(...Object.entries(GEAR_KINDS).map(([k, n]) => new Option(n, k)));
+  $('#gear-kind').value = 'other';
   $('#gear-own').addEventListener('click', () => {
     if (!state.sheet) return;
     const name = $('#gear-name').value.trim() || prompt('What is it called?')?.trim();
     if (!name) return;
-    const g = addGear({ name, kind: 'other' });
+    const kind = $('#gear-kind').value;
+    const g = addGear({ name, ...kindFields(kind) });
     $('#gear-name').value = '';
-    gearStatus(`Added ${g.name}. Open its details to fill it in.`);
+    reopen(g);
+    gearStatus(`Added ${g.name}. Fill in its details${kind === 'armor' ? ': equip it to set your AC' : kind === 'weapon' ? ': equip it to attack with it' : ''}.`);
   });
   // Advantage and disadvantage without Shift or Alt (phones).
   $('#sheet-status').after(h('div', { class: 'sheet-modes' }, h('span', { class: 'muted small' }, 'Next d20:'), modeButtons({ normal: 'Normal', advantage: 'Adv.', disadvantage: 'Disadv.' })));

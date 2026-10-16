@@ -145,7 +145,7 @@ test('items and merchants: the DM makes a new item by hand right from the mercha
     page.$('#merchant-dialog [name=kind]').value = 'magic';
     page.type(form.querySelector('[name=text]'), 'Warm to the touch.');
     page.type(form.querySelector('[aria-label=Price]'), '25');
-    page.type(form.querySelectorAll('input[type=number]')[2], '4');
+    page.type([...form.querySelectorAll('label.map-field')].find((l) => l.textContent.startsWith('In stock')).querySelector('input'), '4');
     page.setFiles('#merchant-dialog input[type=file]', [{ name: 'charm.png', type: 'image/png', content: await terrain(40, 40) }]);
     page.submit(form);
     await page.waitFor(() => page.text('#merchants .stock').includes('Ember Charm'), { what: 'the new item on sale' });
@@ -177,5 +177,39 @@ test('items and merchants: the DM makes a new item by hand right from the mercha
     page.click('[data-tab=inventory]');
     await page.waitFor(() => /^blob:/.test(page.$('#inventory img.gear-picture')?.src ?? ''), { what: 'the picture in the inventory' });
     assert.equal(page.$$('#inventory img.gear-picture').length, 1, 'only the bought item has one');
+  });
+});
+
+test("items: the item form's fields follow its kind; numbers the DM changes are saved as theirs", async () => {
+  await withPage({
+    before: async (t) => ({ dana: await addDm(t) }),
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t) => {
+    page.click('[data-tab=items]');
+    page.click('#item-new');
+    const form = page.$('#item-dialog form');
+    const stats = () => form.querySelector('.item-stats');
+    assert.ok(stats().hidden, 'adventuring gear has none');
+    page.type(form.querySelector('[name=name]'), 'Plate armor');
+    page.type(form.querySelector('[name=kind]'), 'armor');
+    assert.ok(!stats().hidden);
+    // Read from the tables at first: plate is heavy, AC 18, Strength 15.
+    assert.equal(form.querySelector('[aria-label="Armour type"]').value, 'heavy');
+    assert.equal(form.querySelector('[aria-label="Base AC"]').value, '18');
+    assert.equal(form.querySelector('[aria-label="Strength needed"]').value, '15');
+    page.type(form.querySelector('[name=kind]'), 'potion');
+    assert.ok(form.querySelector('[aria-label=Heals]'));
+    assert.ok(!form.querySelector('[aria-label="Base AC"]'));
+    page.type(form.querySelector('[name=kind]'), 'weapon');
+    page.type(form.querySelector('[name=name]'), 'Sunblade');
+    page.type(form.querySelector('[aria-label=Damage]'), '1d8 radiant');
+    page.type(form.querySelector('[aria-label=Uses]'), 'finesse');
+    page.type(form.querySelector('[aria-label="Magic bonus"]'), '2');
+    page.click(form.querySelector('[aria-label=Finesse]'));
+    page.submit(form);
+    await page.waitFor(() => page.text('#items').includes('Sunblade'), { what: 'the item saved' });
+    const [x] = (await t.request('GET', `/campaigns/${t.campaign.id}/items`)).json().items;
+    assert.deepEqual([x.stats.weapon.damage, x.stats.weapon.ability, x.stats.weapon.properties, x.stats.magic, x.stats.armor], ['1d8 radiant', 'finesse', ['finesse'], 2, null]);
+    assert.match(page.text('#items .item'), /1d8 radiant · simple · finesse · \+2 ?\(set by you\)/);
   });
 });
