@@ -418,3 +418,35 @@ test('regression: creator: the Room tool can lay its floor without walls', async
     assert.equal(d.walls.filter((w) => w.type === 'wall').length, 4);
   });
 });
+
+test('creator tools: the height tool raises a walled room with a click and a rectangle with a drag; the map gets them as raised areas', async () => {
+  await withPage(dm(), async (page, t) => {
+    const design = await startBlank(page);
+    tool(page, 'room');
+    drag(page, [2, 2], [8, 6]);
+    tool(page, 'height');
+    assert.ok(pressed(page, '[data-creator-tool="height"]'));
+    page.type('#creator-height', '15');
+    // A click inside the room: all of it, up to its walls.
+    click(page, [4.5, 4.5]);
+    const d = design();
+    assert.deepEqual(d.heights[3].slice(1, 9), [0, 15, 15, 15, 15, 15, 15, 0]);
+    assert.equal(d.heights[1][4], 0);
+    assert.equal(d.heights[5][7], 15);
+    // A drag: a pit.
+    page.type('#creator-height', '-10');
+    drag(page, [20, 10], [23, 12]);
+    assert.deepEqual(design().heights[11].slice(19, 24), [0, -10, -10, -10, 0]);
+    // 0 puts squares back on the ground.
+    page.type('#creator-height', '0');
+    drag(page, [22, 10], [23, 12]);
+    assert.deepEqual(design().heights[11].slice(19, 24), [0, -10, -10, 0, 0]);
+
+    await saveAndClose(page, 'Keep');
+    const map = t.maps.list(t.campaign.id)[0];
+    assert.deepEqual(map.raised.map(({ points, height, source }) => ({ points, height, source })), [
+      { points: [[140, 140], [560, 140], [560, 420], [140, 420]], height: 15, source: 'creator' },
+      { points: [[1400, 700], [1540, 700], [1540, 840], [1400, 840]], height: -10, source: 'creator' },
+    ]);
+  });
+});

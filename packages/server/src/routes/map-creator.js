@@ -27,6 +27,7 @@ export function registerMapCreator(app, r) {
   const designBody = { bodyLimit: 2 * 1024 * 1024 };
   const PIECES = {
     floor: z.array(z.string().max(200)).max(200),
+    heights: z.array(z.array(z.number()).max(200)).max(200).default([]),
     walls: z.array(z.object({}).passthrough()).max(MAX_DESIGN_WALLS * 2),
     assets: z.array(z.object({}).passthrough()).max(MAX_DESIGN_ASSETS * 2),
     paths: z.array(z.object({}).passthrough()).max(MAX_DESIGN_PATHS * 2).default([]),

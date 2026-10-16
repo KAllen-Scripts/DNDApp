@@ -31,6 +31,7 @@ export const TOOLS = [
   ['label', 'Label', 'T', 'Click to put the words from the panel on the map.'],
   ['place', 'Place', 'A', 'Click to put down the thing picked in Things (Shift: off the grid; R turns it first).'],
   ['scatter', 'Scatter', 'K', 'Drag a rectangle to scatter the picked thing over it: a wood, a field of stones.'],
+  ['height', 'Height', 'H', 'Click inside a building, tower or wall-walk to raise all of it to the height in the panel, up to its walls, or drag a rectangle. On the map, players see onto it but not past it.'],
   ['area', 'Area', 'S', 'Drag a rectangle to copy, cut or clear a piece of the map, or keep it as a stamp.'],
 ];
 
@@ -192,6 +193,16 @@ function options(c, act) {
       h('div', { class: 'creator-row' }, choice('Brush', 'brush', c.floorShape, (v) => { c.floorShape = v; act.panel(); }, { 'data-floor-shape': 'brush' }), choice('Rectangle', 'rect', c.floorShape, (v) => { c.floorShape = v; act.panel(); }, { 'data-floor-shape': 'rect' })),
       c.floorShape === 'brush' ? h('div', { class: 'creator-row' }, sizes, check('Round', c.round, (v) => { c.round = v; })) : null,
       fillAll,
+    ];
+  }
+  if (t === 'height') {
+    return [
+      heading('Height'),
+      field('Feet above the ground', h('input', {
+        type: 'number', id: 'creator-height', class: 'map-num', min: -1000, max: 1000, step: 5, value: c.height,
+        onchange: (e) => { const n = Math.round(Number(e.target.value)); c.height = Number.isFinite(n) ? Math.max(-1000, Math.min(1000, n)) : 0; },
+      })),
+      h('p', { class: 'muted small' }, 'Roofs, wall-walks, tower tops and cliffs. Click inside one to raise it all (up to its walls), or drag a rectangle. 0 puts squares back on the ground; negative for a pit. Shown only while this tool is picked. Add Stairs or a Ladder (in Things) to get up there.'),
     ];
   }
   if (t === 'fill') return [heading('Fill with'), ...floorPalette(c, act, { tool: 'fill' }), fillAll];
