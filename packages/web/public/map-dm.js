@@ -158,7 +158,7 @@ export function settingsDialog() {
       variants,
       field('Add a picture', addVariant),
       h('h3', {}, 'Other VTTs'),
-      h('p', { class: 'muted small' }, 'Download the map as a Universal VTT file (.dd2vtt): its picture, grid, walls, doors and lights, for Foundry, Dungeondraft and others.'),
+      h('p', { class: 'muted small' }, 'Download the map as a Universal VTT file (.dd2vtt): its picture, grid, walls, doors and lights, for Foundry, Dungeondraft and others. Brought back here, it also keeps its heights, stairs, ladders, obstacles and secret doors. (Also in Fog & walls.)'),
       h('button', { type: 'button', class: 'ghost', id: 'map-export', disabled: !map.grid, title: map.grid ? '' : 'Set the grid first', onclick: () => downloadUvtt(map).catch(report) }, 'Download .dd2vtt'),
       h('h3', {}, 'What the AI saw'),
       h('p', { class: 'muted small map-ai' }, reading.status === 'pending' ? 'Reading…' : reading.status === 'failed' ? reading.error : aiText || 'Nothing to add.'),

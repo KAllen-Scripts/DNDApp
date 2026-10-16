@@ -353,8 +353,9 @@
         <select id="map-link-to" aria-label="Leads to"></select>
         <button class="ghost" data-wall-mode="erase" aria-pressed="false" title="Click a wall, door, light, difficult terrain, raised area, stairs, ladder or link to remove it">Erase</button>
         <button class="ghost" id="map-walls-draft" title="Let the AI trace the walls and doors from the picture, for you to correct">AI walls</button>
-        <button class="ghost" id="map-walls-file" title="Exact walls, doors and lights from the map maker's Universal VTT file of this map (.dd2vtt or .uvtt, from Dungeondraft, Dungeon Alchemist and many map packs). No AI needed.">Walls from file</button>
+        <button class="ghost" id="map-walls-file" title="Exact walls, doors and lights from a Universal VTT file of this map (.dd2vtt or .uvtt, from Dungeondraft, Dungeon Alchemist and many map packs). No AI needed.">Walls from file</button>
         <input id="map-walls-file-input" type="file" accept=".dd2vtt,.uvtt,.df2vtt,.json" hidden>
+        <button class="ghost" id="map-walls-export" title="Download this map as a Universal VTT file (.dd2vtt): the picture, grid, walls, doors and lights for Foundry, Dungeondraft and others, plus heights, stairs, ladders and obstacles when it comes back here. The map needs a grid.">Download .dd2vtt</button>
         <button class="ghost" data-wall-action="clear-ai" title="Remove the walls, lights, difficult terrain, stairs, ladders and unaccepted heights the AI drafted">Clear AI draft</button>
         <button class="ghost" data-wall-action="forget" title="Players lose the dim view of places they saw before">Forget explored</button>
         <span id="map-wall-hint" class="muted small"></span>

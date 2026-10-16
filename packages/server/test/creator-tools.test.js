@@ -406,6 +406,55 @@ test("stamps: the built-in ones, the DM's own kept, renamed and taken off the li
   }
 });
 
+test('a map taken out as a Universal VTT file and back in keeps its heights, stairs, ladders, obstacles, terrain, secret and locked doors and exact lights', async () => {
+  const reading = { readable: true, kind: 'dungeon', name: 'Watchpost', description: 'A watchpost.', grid: { visible: false, columns: null, rows: null }, scale: { distance: null, unit: null, per: null }, notes: '' };
+  const t = await setup({ llm: createFakeLLM({ structured: () => reading }) });
+  try {
+    const view = await create(t);
+    t.maps.change(t.campaign.id, view.id, (m) => {
+      const doors = m.walls.filter((w) => w.door);
+      Object.assign(doors[0], { secret: true, revealed: false });
+      Object.assign(doors[1], { locked: true });
+      m.walls.push({ id: 'fence01', x1: 70, y1: 490, x2: 280, y2: 490, kind: 'low', door: false, open: false, locked: false, source: 'dm' });
+      m.raised = [{ id: 'roof01', points: [[70, 70], [210, 70], [210, 210], [70, 210]], height: 15, source: 'dm' }, { id: 'pit001', points: [[560, 350], [630, 350], [630, 420]], height: -10, source: 'ai' }];
+      m.climbs = [{ id: 'ladr01', kind: 'ladder', x1: 140, y1: 245, x2: 140, y2: 210, source: 'dm' }, { id: 'stai01', kind: 'stairs', x1: 245, y1: 140, x2: 210, y2: 140, source: 'creator' }];
+      m.terrain = [{ id: 'mud001', points: [[350, 350], [490, 350], [490, 490], [350, 490]], source: 'dm' }];
+      m.lights[0].bright = 10;
+      m.lights[0].dim = 30;
+    });
+    const doc = (await t.request('GET', `/campaigns/${t.campaign.id}/maps/${view.id}/export.dd2vtt`)).json();
+    // Other VTTs see a plain door, a light of 8 squares and only walls that block sight.
+    assert.ok(doc.line_of_sight.every((l) => !(l[0].y === 7 && l[1].y === 7)), 'the fence is not a sight wall');
+    assert.equal(doc.lights[0].range, 8);
+    assert.deepEqual(doc.dndapp.obstacles, [[{ x: 1, y: 7 }, { x: 4, y: 7 }]]);
+
+    const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'watchpost.dd2vtt', data: Buffer.from(JSON.stringify(doc)).toString('base64') } });
+    assert.equal(res.statusCode, 201, res.body);
+    const id = res.json().id;
+    for (let i = 0; i < 100 && t.maps.get(t.campaign.id, id).reading.status === 'pending'; i++) await new Promise((r) => setTimeout(r, 20));
+    const before = t.maps.get(t.campaign.id, view.id);
+    const after = t.maps.get(t.campaign.id, id);
+    const wall = (w) => [w.x1, w.y1, w.x2, w.y2, w.kind, w.door, w.locked, !!w.secret].join();
+    assert.deepEqual(after.walls.map(wall).sort(), before.walls.map(wall).sort());
+    assert.deepEqual(after.raised.map(({ points, height, source }) => ({ points, height, source })), [
+      { points: [[70, 70], [210, 70], [210, 210], [70, 210]], height: 15, source: 'file' },
+      { points: [[560, 350], [630, 350], [630, 420]], height: -10, source: 'file' },
+    ]);
+    assert.deepEqual(after.climbs.map(({ kind, x1, y1, x2, y2 }) => [kind, x1, y1, x2, y2]), [['ladder', 140, 245, 140, 210], ['stairs', 245, 140, 210, 140]]);
+    assert.deepEqual(after.terrain.map((a) => a.points), [[[350, 350], [490, 350], [490, 490], [350, 490]]]);
+    assert.deepEqual(after.lights.map(({ x, y, bright, dim }) => ({ x, y, bright, dim })), [{ x: 665, y: 175, bright: 10, dim: 30 }]);
+
+    // Added again to the same map, the file's heights replace the last file's; the DM's own stay.
+    const base = `/campaigns/${t.campaign.id}/maps/${id}`;
+    await t.request('PATCH', `${base}/raised`, { body: { add: { points: [[700, 70], [770, 70], [770, 140]], height: 5 } } });
+    const again = (await t.request('POST', `${base}/walls/file`, { body: { data: Buffer.from(JSON.stringify(doc)).toString('base64') } })).json();
+    assert.deepEqual(again.raised.map((a) => a.source).sort(), ['dm', 'file', 'file']);
+    assert.equal(again.climbs.length, 2);
+  } finally {
+    await t.cleanup();
+  }
+});
+
 test('a map taken to another VTT: a Universal VTT file with its picture, grid, walls, doors and lights, that reads back the same', async () => {
   const t = await setup({ llm: createFakeLLM() });
   try {
