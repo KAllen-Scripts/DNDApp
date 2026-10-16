@@ -23,7 +23,7 @@ async function until(check, ms = 5000) {
 
 /** A shown 700 x 490 map with 35 px squares, and Sam's character Thorin at (52.5, 52.5). */
 async function cave(t) {
-  const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'cave.png', data: (await terrain(700, 490, { size: 35 })).toString('base64') } });
+  const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'cave.png', data: (await terrain(700, 490, { size: 35 })).toString('base64') } });
   const map = res.json();
   await until(() => t.maps.get(t.campaign.id, map.id).reading.status !== 'pending');
   const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;

@@ -68,7 +68,7 @@ test('the archivist gets the map events of the session\'s day with the transcrip
   const t = await setup({ llm });
   try {
     const png = await terrain(700, 490, { size: 35 });
-    const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'crypt.png', data: png.toString('base64') } })).json().id;
+    const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'crypt.png', data: png.toString('base64') } })).json().id;
     while (t.maps.get(t.campaign.id, id).reading.status === 'pending') await new Promise((r) => setTimeout(r, 10));
     const base = `/campaigns/${t.campaign.id}/maps/${id}`;
     await t.request('PATCH', base, { body: { name: 'Crypt', shown: true } });

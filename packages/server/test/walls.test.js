@@ -45,7 +45,13 @@ test('a big map is checked in close-ups: each part keeps what lies in it, and a 
   const reader = createMapReader({ llm });
   const buf = await terrain(4000, 1000);
   const heard = [];
-  const r = await reader.walls({ buf, width: 4000, height: 1000, onProgress: (p) => heard.push(p) });
+  const previews = [];
+  const r = await reader.walls({ buf, width: 4000, height: 1000, onProgress: ({ preview, ...p }) => { heard.push(p); previews.push(preview); } });
+  // The tracing so far comes with it, to draw live: the first draft, then each checked part swapped in (none with the last, the answer follows).
+  assert.equal(previews[1].walls.length > 0, true);
+  assert.equal(previews[1].walls.filter((w) => w.door).length, 1);
+  assert.ok(previews[2] && previews[3]);
+  assert.equal(previews[4], null);
   // It says how far it has got: tracing, each close-up's check as it comes back (the failed one too), tidying.
   assert.deepEqual(heard, [
     { step: 'tracing' },
@@ -116,7 +122,7 @@ test('the DM imports a .dd2vtt as a map (picture, exact grid, walls, doors, ligh
   try {
     const doc = await uvttFile();
     const data = Buffer.from(JSON.stringify(doc)).toString('base64');
-    const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'crypt.dd2vtt', data } });
+    const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'crypt.dd2vtt', data } });
     assert.equal(res.statusCode, 201, res.body);
     const id = res.json().id;
     await t.jobs?.idle?.();
@@ -140,7 +146,7 @@ test('the DM imports a .dd2vtt as a map (picture, exact grid, walls, doors, ligh
     const bad = await t.request('POST', `${base}/walls/file`, { body: { data: (await terrain(20, 20)).toString('base64') } });
     assert.equal(bad.statusCode, 400);
     // A file with no picture can't be imported as a map.
-    const bare = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'x.dd2vtt', data: Buffer.from(JSON.stringify(await uvttFile({ image: false }))).toString('base64') } });
+    const bare = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'x.dd2vtt', data: Buffer.from(JSON.stringify(await uvttFile({ image: false }))).toString('base64') } });
     assert.equal(bare.statusCode, 400);
     assert.match(bare.json().error, /no picture/);
   } finally {
@@ -151,7 +157,7 @@ test('the DM imports a .dd2vtt as a map (picture, exact grid, walls, doors, ligh
 test('the DM draws curved and round walls; erasing one piece erases the whole curve', async () => {
   const t = await setup({ llm: createFakeLLM({ structured: () => ({ readable: true, kind: 'battle', name: 'X', description: '', grid: { visible: false, columns: null, rows: null }, scale: { distance: null, unit: null, per: null }, notes: '' }) }) });
   try {
-    const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'x.png', data: (await terrain(400, 300)).toString('base64') } });
+    const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'x.png', data: (await terrain(400, 300)).toString('base64') } });
     const base = `/campaigns/${t.campaign.id}/maps/${res.json().id}`;
     const walls = (body) => t.request('PATCH', `${base}/walls`, { body });
     let map = (await walls({ curve: { x1: 100, y1: 100, mx: 150, my: 150, x2: 200, y2: 100 } })).json();

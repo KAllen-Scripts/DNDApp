@@ -12,7 +12,7 @@ test('raised areas: players see onto a roof but not past it; tall creatures over
   const t = await setup({ llm: createFakeLLM({ structured: async () => readOut }) });
   try {
     const png = await terrain(700, 490, { size: 35 });
-    const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'yard.png', data: png.toString('base64') } })).json().id;
+    const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'yard.png', data: png.toString('base64') } })).json().id;
     while (t.maps.get(t.campaign.id, id).reading.status === 'pending') await new Promise((r) => setTimeout(r, 10));
     const base = `/campaigns/${t.campaign.id}/maps/${id}`;
     // 35 px squares of 5 ft: 7 px a foot.
@@ -71,7 +71,7 @@ test('a player character is as tall as the Height on its sheet', async () => {
   const t = await setup({ llm: createFakeLLM({ structured: async () => readOut }) });
   try {
     const png = await terrain(700, 490, { size: 35 });
-    const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'yard.png', data: png.toString('base64') } })).json().id;
+    const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'yard.png', data: png.toString('base64') } })).json().id;
     while (t.maps.get(t.campaign.id, id).reading.status === 'pending') await new Promise((r) => setTimeout(r, 10));
     const base = `/campaigns/${t.campaign.id}/maps/${id}`;
     await t.request('PATCH', base, { body: { shown: true } });
@@ -90,7 +90,7 @@ test('stairs and ladders: the DM draws them; climbing a ladder or a bare wall co
   const t = await setup({ llm: createFakeLLM({ structured: async () => readOut }) });
   try {
     const png = await terrain(700, 490, { size: 35 });
-    const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'yard.png', data: png.toString('base64') } })).json().id;
+    const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'yard.png', data: png.toString('base64') } })).json().id;
     while (t.maps.get(t.campaign.id, id).reading.status === 'pending') await new Promise((r) => setTimeout(r, 10));
     const base = `/campaigns/${t.campaign.id}/maps/${id}`;
     await t.request('PATCH', base, { body: { shown: true, grid: { size: 35, x: 0, y: 0 }, scale: { distance: 5, unit: 'ft', per: 'square' } } });
@@ -135,7 +135,7 @@ test("the AI's guessed heights: the DM accepts one or all, or corrects one; acce
   const t = await setup({ llm: createFakeLLM({ structured: async () => readOut }) });
   try {
     const png = await terrain(700, 490, { size: 35 });
-    const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'yard.png', data: png.toString('base64') } })).json().id;
+    const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'yard.png', data: png.toString('base64') } })).json().id;
     while (t.maps.get(t.campaign.id, id).reading.status === 'pending') await new Promise((r) => setTimeout(r, 10));
     const base = `/campaigns/${t.campaign.id}/maps/${id}`;
     const box = (x) => [[x, 0], [x + 70, 0], [x + 70, 70], [x, 70]];

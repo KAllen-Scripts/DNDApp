@@ -60,6 +60,12 @@ test('maps: the DM imports a picture; the AI\'s reading arrives live; settings f
     await openMapTab(page);
     page.click('#map-import');
     page.setFiles('#map-file', [{ name: 'forest_clearing.png', type: 'image/png', content: await terrain(700, 490, { size: 35 }) }]);
+    // Not read until the DM asks (owner, 2026-10-16); Map settings has Read with the AI.
+    await page.waitFor(() => t.maps.list(t.campaign.id).length === 1, { what: 'the import' });
+    await page.settle();
+    page.click('#map-settings');
+    assert.match(page.text(dialog(page)), /Not read yet/);
+    page.click(dialogButton(page, 'Read with the AI'));
     // Read in the background; the result comes over the live stream.
     await page.waitFor(() => /Battle map/.test(page.text('#map-status')), { what: "the AI's reading" });
     assert.equal(page.text('#map-status'), 'Battle map · 1 square = 5 ft · hidden from players'); // a battle map's squares are 5 ft unless it says
@@ -123,9 +129,9 @@ test('maps: a PDF asks which page; cancelling imports nothing', async () => {
     page.type(dialog(page).querySelector('input[type=number]'), '2');
     page.submit(dialog(page).querySelector('form'));
     await page.waitFor(() => page.requests.some((r) => r.method === 'POST' && r.body?.page === 2), { what: 'the upload' });
+    await page.waitFor(() => t.maps.list(t.campaign.id).length === 1, { what: 'the import' });
     await page.settle();
-    await page.waitFor(() => /Battle map/.test(page.text('#map-status')));
-    assert.equal((await mapsOf(t)).length, 1);
+    assert.equal((await mapsOf(t))[0].pdf?.page ?? 2, 2);
   });
 });
 
@@ -488,7 +494,9 @@ test('walls: the DM draws walls and doors (snapped to wall ends and grid corners
 
     // The AI's draft arrives live, in its own colour, and can be cleared.
     page.click('#map-walls-draft');
+    // Its first draft is drawn as soon as it has one, before the check is done (owner, 2026-10-16).
     await page.waitFor(() => page.$('#map-walls line.wall.ai'), { what: "the AI's walls" });
+    await page.waitFor(() => t.maps.list(t.campaign.id)[0].wall_draft.status === 'done', { what: 'the draft done' });
     assert.equal((await map()).wall_draft.notes, 'Rough around the tower.');
     page.click('[data-wall-action=clear-ai]');
     await page.settle();

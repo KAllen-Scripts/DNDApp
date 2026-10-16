@@ -26,7 +26,7 @@ const mapLLM = () =>
 /** A shown map, plus a live stream of its updates for `token`. */
 async function liveMap(t, token) {
   const base = `/campaigns/${t.campaign.id}/maps`;
-  const created = await t.request('POST', base, { body: { filename: 'clearing.png', data: (await terrain(200, 200)).toString('base64') } });
+  const created = await t.request('POST', base, { body: { read: true, filename: 'clearing.png', data: (await terrain(200, 200)).toString('base64') } });
   assert.equal(created.statusCode, 201, created.body);
   const map = created.json();
   for (let i = 0; t.maps.get(t.campaign.id, map.id).reading.status === 'pending' && i < 200; i++) await new Promise((r) => setTimeout(r, 20));
@@ -109,7 +109,7 @@ test('errors: unexpected server errors say nothing about the host machine; AI er
     }),
   });
   try {
-    const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'x.png', data: (await terrain(100, 100)).toString('base64') } });
+    const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'x.png', data: (await terrain(100, 100)).toString('base64') } });
     assert.equal(res.statusCode, 201);
     // The map couldn't be read; the DM is told so without the details.
     let reading;

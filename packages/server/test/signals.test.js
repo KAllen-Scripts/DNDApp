@@ -9,7 +9,7 @@ test('pings and drawings: anyone who can see the map; checked; not too many', as
   const t = await setup({ llm: createFakeLLM({ structured: async () => readOut }) });
   try {
     const png = await terrain(700, 490);
-    const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'field.png', data: png.toString('base64') } })).json().id;
+    const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'field.png', data: png.toString('base64') } })).json().id;
     while (t.maps.get(t.campaign.id, id).reading.status === 'pending') await new Promise((r) => setTimeout(r, 10));
     const base = `/campaigns/${t.campaign.id}/maps/${id}`;
     const sent = [];

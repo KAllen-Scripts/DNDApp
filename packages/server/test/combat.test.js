@@ -13,7 +13,7 @@ const readOut = { readable: true, kind: 'battle', name: 'Cave', description: '',
 /** A shown 700 x 490 map with a 35 px grid, 5 ft squares. */
 async function shownMap(t) {
   const png = await terrain(700, 490, { size: 35 });
-  const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'cave.png', data: png.toString('base64') } });
+  const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'cave.png', data: png.toString('base64') } });
   const id = res.json().id;
   for (let i = 0; t.maps.get(t.campaign.id, id).reading.status === 'pending'; i++) await new Promise((r) => setTimeout(r, 10));
   const base = `/campaigns/${t.campaign.id}/maps/${id}`;

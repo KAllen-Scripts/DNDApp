@@ -20,7 +20,7 @@ const llm = () => createFakeLLM({ structured: (opts) => (opts.purpose === 'map:s
 
 async function importMap(t, { grid = 35 } = {}) {
   const base = `/campaigns/${t.campaign.id}/maps`;
-  const map = (await t.request('POST', base, { body: { filename: 'cave.png', data: (await terrain(700, 490)).toString('base64') } })).json();
+  const map = (await t.request('POST', base, { body: { read: true, filename: 'cave.png', data: (await terrain(700, 490)).toString('base64') } })).json();
   for (let i = 0; t.maps.get(t.campaign.id, map.id).reading.status === 'pending' && i < 200; i++) await new Promise((r) => setTimeout(r, 20));
   await t.request('PATCH', `${base}/${map.id}`, { body: { shown: true, grid: grid ? { size: grid, x: 0, y: 0 } : null } });
   return { ...map, base: `${base}/${map.id}` };
