@@ -8,8 +8,16 @@
  *     line_of_sight: [[{x, y}, ...], ...], objects_line_of_sight?: [[...]],
  *     portals: [{ position, bounds: [{x, y}, {x, y}], rotation, closed, freestanding }],
  *     lights: [{ position: {x, y}, range, intensity, color, shadows }], image: base64 }
+ *
+ * Our own files add a `dndapp` block that other VTTs ignore, so taking a map
+ * out and back in keeps what the format has no place for (positions in
+ * squares, like the rest; heights in feet):
+ *   dndapp: { version: 1, obstacles: [[{x, y}, {x, y}], ...],
+ *     raised: [{ points: [{x, y}, ...], height }], climbs: [{ kind, from: {x, y}, to: {x, y} }],
+ *     terrain: [[{x, y}, ...], ...] }
+ * and its portals carry `secret` and `locked`, its lights `bright` and `dim` (in squares).
  */
-import { MAX_WALLS, MAX_LIGHTS } from '@dndapp/shared/map.js';
+import { MAX_WALLS, MAX_LIGHTS, MAX_RAISED, MAX_CLIMBS, MAX_TERRAIN, CLIMB_KINDS } from '@dndapp/shared/map.js';
 import { BadRequestError } from '../store.js';
 
 /** Whether this upload looks like a Universal VTT file (JSON with a resolution and walls or a picture). */
@@ -63,7 +71,9 @@ function straightRuns(points) {
  * map picture of `width` × `height` (the file's picture, or the DM's own of
  * the same map at any size: the file is stretched to fit it).
  * `feetPerSquare` turns light ranges (in squares) into the map's unit.
- * Returns { walls: [{ x1, y1, x2, y2, door, open, kind }], lights: [{ x, y, bright, dim }], grid, notes }.
+ * Returns { walls: [{ x1, y1, x2, y2, door, open, kind, locked?, secret? }], lights: [{ x, y, bright, dim }],
+ * raised: [{ points, height }], climbs: [{ kind, x1, y1, x2, y2 }], terrain: [{ points }], grid, notes }
+ * (raised, climbs and terrain only from our own files).
  */
 export function uvttContents(doc, { width, height, feetPerSquare = 5 }) {
   const r = doc.resolution;
@@ -85,30 +95,53 @@ export function uvttContents(doc, { width, height, feetPerSquare = 5 }) {
   for (const p of Array.isArray(doc.portals) ? doc.portals : []) {
     const [a, b] = (Array.isArray(p?.bounds) ? p.bounds : []).map(px);
     if (!a || !b || !ok(a) || !ok(b)) continue;
-    doors.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, door: true, open: p.closed === false, kind: 'wall' });
+    const open = p.closed === false;
+    doors.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, door: true, open, kind: 'wall', ...(p.locked === true && !open ? { locked: true } : {}), ...(p.secret === true ? { secret: true } : {}) });
   }
+  const own = doc.dndapp && typeof doc.dndapp === 'object' ? doc.dndapp : {};
+  const arr = (v) => (Array.isArray(v) ? v : []);
+  for (const o of arr(own.obstacles)) {
+    const pts = arr(o).map(px).filter(ok);
+    for (let i = 1; i < pts.length; i++) walls.push({ x1: pts[i - 1].x, y1: pts[i - 1].y, x2: pts[i].x, y2: pts[i].y, door: false, open: false, kind: 'low' });
+  }
+  const shape = (list) => arr(list).map(px).filter(ok).map((p) => [p.x, p.y]);
+  const raised = arr(own.raised)
+    .map((a) => ({ points: shape(a?.points), height: Number(a?.height) }))
+    .filter((a) => a.points.length >= 3 && Number.isFinite(a.height))
+    .slice(0, MAX_RAISED);
+  const climbs = arr(own.climbs)
+    .map((c) => ({ kind: CLIMB_KINDS.includes(c?.kind) ? c.kind : 'stairs', a: px(c?.from), b: px(c?.to) }))
+    .filter((c) => ok(c.a) && ok(c.b))
+    .slice(0, MAX_CLIMBS)
+    .map((c) => ({ kind: c.kind, x1: c.a.x, y1: c.a.y, x2: c.b.x, y2: c.b.y }));
+  const terrain = arr(own.terrain).map((t) => ({ points: shape(t) })).filter((t) => t.points.length >= 3).slice(0, MAX_TERRAIN);
   // Doors first, so a very big file keeps them all.
   const all = [...doors, ...walls].filter((w) => Math.hypot(w.x2 - w.x1, w.y2 - w.y1) >= 1);
   if (all.length > MAX_WALLS) dropped = all.length - MAX_WALLS;
   const lights = (Array.isArray(doc.lights) ? doc.lights : [])
-    .map((l) => ({ ...px(l?.position), range: Number(l?.range) }))
+    .map((l) => ({ ...px(l?.position), range: Number(l?.range), bright: Number(l?.bright), dim: Number(l?.dim) }))
     .filter((l) => ok(l) && l.range > 0)
     .slice(0, MAX_LIGHTS)
-    // The file gives how far the light reaches, in squares: half of it bright, the rest dim.
-    .map((l) => ({ x: l.x, y: l.y, bright: (l.range * feetPerSquare) / 2, dim: (l.range * feetPerSquare) / 2 }));
+    // The file gives how far the light reaches, in squares: half of it bright, the rest dim
+    // (our own files say how much of each).
+    .map((l) => (l.bright >= 0 && l.dim >= 0
+      ? { x: l.x, y: l.y, bright: l.bright * feetPerSquare, dim: l.dim * feetPerSquare }
+      : { x: l.x, y: l.y, bright: (l.range * feetPerSquare) / 2, dim: (l.range * feetPerSquare) / 2 }));
   const notes = dropped ? `The file has more walls than a map can hold (${MAX_WALLS}); ${dropped} were left out.` : '';
-  return { walls: all.slice(0, MAX_WALLS), lights, grid: { size: ppg * sx, x: -origin.x * ppg * sx || 0, y: -origin.y * ppg * sy || 0 }, notes };
+  return { walls: all.slice(0, MAX_WALLS), lights, raised, climbs, terrain, grid: { size: ppg * sx, x: -origin.x * ppg * sx || 0, y: -origin.y * ppg * sy || 0 }, notes };
 }
 
 const r4 = (v) => Math.round(v * 10_000) / 10_000;
 
 /**
  * A map as a Universal VTT file (format 0.3), to take it to another VTT or
- * map maker: its picture (`png`, a PNG buffer), grid, walls (line_of_sight;
- * low walls and windows, which don't block sight, are left out), doors
- * (portals; secret doors as plain doors) and lights. Positions are in squares
- * from the grid's corner; `map_origin` is where the picture's corner falls.
- * The map needs a grid. Reading the file back (uvttContents) gives the same walls.
+ * map maker: its picture (`png`, a PNG buffer), grid, walls (line_of_sight),
+ * doors (portals; to other VTTs secret doors are plain doors) and lights.
+ * Obstacles (low walls, windows: they don't block sight), raised areas,
+ * stairs and ladders and difficult terrain have no place in the format, so
+ * they go in the `dndapp` block, which other VTTs ignore. Positions are in
+ * squares from the grid's corner; `map_origin` is where the picture's corner
+ * falls. The map needs a grid. Reading the file back (uvttContents) gives the same map.
  */
 export function toUvtt(map, png) {
   const g = map.grid;
@@ -120,11 +153,15 @@ export function toUvtt(map, png) {
   const portals = map.walls.filter((w) => w.door).map((w) => {
     const a = pt(w.x1, w.y1);
     const b = pt(w.x2, w.y2);
-    return { position: { x: r4((a.x + b.x) / 2), y: r4((a.y + b.y) / 2) }, bounds: [a, b], rotation: r4(Math.atan2(b.y - a.y, b.x - a.x)), closed: !w.open, freestanding: false };
+    return {
+      position: { x: r4((a.x + b.x) / 2), y: r4((a.y + b.y) / 2) }, bounds: [a, b], rotation: r4(Math.atan2(b.y - a.y, b.x - a.x)), closed: !w.open, freestanding: false,
+      ...(w.locked ? { locked: true } : {}), ...(w.secret ? { secret: true } : {}),
+    };
   });
+  const shape = (points) => points.map(([x, y]) => pt(x, y));
   // Light ranges go in squares (the map's lights are in its own unit).
   const per = map.scale?.per === 'square' && map.scale.distance > 0 ? map.scale.distance : 5;
-  const lights = map.lights.map((l) => ({ position: pt(l.x, l.y), range: r4((l.bright + l.dim) / per), intensity: 1, color: 'ffffd9a0', shadows: true }));
+  const lights = map.lights.map((l) => ({ position: pt(l.x, l.y), range: r4((l.bright + l.dim) / per), intensity: 1, color: 'ffffd9a0', shadows: true, bright: r4(l.bright / per), dim: r4(l.dim / per) }));
   return {
     format: 0.3,
     resolution: { map_origin: origin, map_size: { x: r4(map.image.width / ppg), y: r4(map.image.height / ppg) }, pixels_per_grid: r4(ppg) },
@@ -133,6 +170,13 @@ export function toUvtt(map, png) {
     portals,
     environment: { baked_lighting: false, ambient_light: 'ffffffff' },
     lights,
+    dndapp: {
+      version: 1,
+      obstacles: map.walls.filter((w) => !w.door && w.kind === 'low').map((w) => [pt(w.x1, w.y1), pt(w.x2, w.y2)]),
+      raised: (map.raised ?? []).map((a) => ({ points: shape(a.points), height: a.height })),
+      climbs: (map.climbs ?? []).map((c) => ({ kind: c.kind, from: pt(c.x1, c.y1), to: pt(c.x2, c.y2) })),
+      terrain: (map.terrain ?? []).map((t) => shape(t.points)),
+    },
     image: png.toString('base64'),
   };
 }
