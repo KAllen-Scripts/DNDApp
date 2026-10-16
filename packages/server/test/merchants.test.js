@@ -354,3 +354,30 @@ test('items and merchants: back from the archive after losing the database', asy
     await t.cleanup();
   }
 });
+
+test("items: the numbers the DM sets for an item's kind go into a buyer's inventory as they are, and its AC follows", async () => {
+  const t = await setup({ llm: llm() });
+  try {
+    const items = `/campaigns/${t.campaign.id}/items`;
+    const stats = { armor: { base: 15, type: 'heavy', strength: 13, stealth: true }, magic: 1 };
+    const res = await t.request('POST', items, { body: { name: 'Dwarven Bulwark', kind: 'armor', price: 100, text: 'Old dwarven plate.', stats } });
+    assert.equal(res.statusCode, 201, res.body);
+    const x = res.json();
+    assert.deepEqual([x.stats.armor.base, x.stats.armor.type, x.stats.magic], [15, 'heavy', 1]);
+    assert.equal((await t.request('PATCH', `${items}/${x.id}`, { body: { stats: 'nope' } })).statusCode, 400);
+
+    const { base } = await shop(t);
+    const m = (await t.request('POST', `${base}/stock`, { body: { item: x.id, qty: 1 } })).json();
+    giveCoins(t, t.sam, { gp: 5 });
+    const bought = await t.request('POST', `${base}/buy`, { as: t.sam.token, body: { line: m.stock.at(-1).id } });
+    assert.equal(bought.statusCode, 200, bought.body);
+    const [line] = t.sheets.get(t.campaign.id, t.sam.id).sheet.inventory;
+    assert.deepEqual([line.kind, line.armor.base, line.armor.type, line.armor.strength, line.armor.stealth, line.magic], ['armor', 15, 'heavy', 13, true, 1]);
+
+    // Taking the numbers away (null) goes back to reading the description.
+    const cleared = (await t.request('PATCH', `${items}/${x.id}`, { body: { stats: null } })).json();
+    assert.equal(cleared.stats, null);
+  } finally {
+    await t.cleanup();
+  }
+});

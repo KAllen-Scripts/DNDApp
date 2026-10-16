@@ -1036,3 +1036,41 @@ test('sheet: Review sheet shows the rules checks and the AI\'s findings above th
     assert.ok(box.hidden);
   });
 });
+
+test('inventory: Add by hand asks the kind first and opens the fields for it; armour made by hand sets the AC, a potion is drunk', async () => {
+  await withPage(sheetPage({
+    before: async (t) => {
+      t.sheets.save(t.campaign.id, t.sam.id, {
+        ...emptySheet({ name: 'Thorin' }), race: 'Human', classes: [{ name: 'Fighter', level: 1 }],
+        abilities: { str: 10, dex: 14, con: 10, int: 10, wis: 10, cha: 10 }, hp: { current: 3, temp: null },
+        inventory: [{ name: 'Potion of Healing', kind: 'potion', qty: 2, heal: '2d4+2' }],
+      });
+    },
+  }), async (page, t) => {
+    page.click('[data-tab=inventory]');
+    const inv = (label) => page.el(`#inventory [aria-label="${label}"]`);
+    page.type('#gear-name', 'Mithral coat');
+    page.type('#gear-kind', 'armor');
+    page.click('#gear-own');
+    await page.waitFor(() => page.$('#inventory [aria-label="Armour type: Mithral coat"]'), { what: 'the armour fields' });
+    assert.ok(!page.$('#inventory [aria-label="Weapon damage"]'), 'no weapon fields on armour');
+    page.type(inv('Armour type: Mithral coat'), 'medium');
+    await page.waitFor(() => page.$('#inventory [aria-label="Armour class"]'), { what: 'the details to stay open' });
+    page.type(inv('Armour class'), '14');
+    page.click(inv('Equipped: Mithral coat'));
+    page.click('[data-tab=sheet]');
+    assert.equal(byLabel(page, 'Armour class').value, '16', '14 + Dex (max 2)');
+
+    // The potion: Drink rolls 2d4+2 on the server and one is used up.
+    page.click('[data-tab=inventory]');
+    page.click(inv('Drink Potion of Healing'));
+    await page.waitFor(() => /Drank Potion of Healing: regained \d+ hit points/.test(page.text('#gear-status')), { what: 'the potion drunk' });
+    const healed = Number(/regained (\d+)/.exec(page.text('#gear-status'))[1]);
+    assert.ok(healed >= 4 && healed <= 10);
+    assert.equal(page.requests.find((r) => r.path.endsWith('/sheet/gear/drink')).body.visibility, 'party');
+    const { sheet } = t.sheets.get(t.campaign.id, t.sam.id);
+    assert.equal(sheet.hp.current, 3 + healed);
+    assert.equal(sheet.inventory.find((g) => g.name === 'Potion of Healing').qty, 1);
+    assert.equal(sheet.inventory.find((g) => g.name === 'Mithral coat').armor.base, 14);
+  });
+});

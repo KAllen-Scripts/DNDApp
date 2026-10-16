@@ -1,7 +1,7 @@
 /**
  * The DM's items: weapons, armour, potions, gear and magic items, kept once
- * (name, kind, rarity, a usual price, weight, a description, a picture and
- * the DM's own notes) and stocked by merchants (merchants.js). Made by hand,
+ * (name, kind, rarity, a usual price, weight, a description, the numbers
+ * for its kind, a picture and the DM's own notes) and stocked by merchants (merchants.js). Made by hand,
  * looked up (the DM's own items first, then the group's books, then the
  * AI's knowledge: items-find.js), or found online by the AI.
  *
@@ -9,6 +9,7 @@
  * DM's notes. Archived like creatures (library.js).
  */
 import { createLibrary, normalizeArt } from './library.js';
+import { normalizeItemStats } from '@dndapp/shared/gear.js';
 
 export const ITEM_KINDS = ['weapon', 'armor', 'gear', 'tool', 'potion', 'scroll', 'magic', 'other'];
 export const ITEM_KIND_NAMES = { weapon: 'Weapon', armor: 'Armour', gear: 'Adventuring gear', tool: 'Tool', potion: 'Potion', scroll: 'Scroll', magic: 'Magic item', other: 'Other' };
@@ -36,6 +37,9 @@ export function normalizeItem(x = {}) {
     weight: num(x.weight, { max: 100_000 }),
     // What it is and does, in Markdown (damage, properties, effects): players see this.
     text: str(x.text, MAX_ITEM_TEXT),
+    // The numbers the DM set for its kind (a weapon's damage, armour's AC, what a potion heals…): they go
+    // into a buyer's inventory as they are. null: read from the tables and the description instead.
+    stats: normalizeItemStats(x.stats, ITEM_KINDS.includes(x.kind) ? x.kind : 'other'),
     // Only the DM sees these.
     notes: str(x.notes, MAX_ITEM_NOTES),
     art: normalizeArt(x.art),

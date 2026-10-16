@@ -94,6 +94,25 @@ export const MAX_EFFECTS = 8;
 /** How many magic items one character can be attuned to (PHB; artificers more from 10th level). */
 export const attunementLimit = (artificerLevel = 0) => (artificerLevel >= 18 ? 6 : artificerLevel >= 14 ? 5 : artificerLevel >= 10 ? 4 : 3);
 
+/** Healing potions (PHB): what each heals. Others are read from their description ("You regain 2d4 + 2 hit points"). */
+export const POTION_HEALING = {
+  'potion of healing': '2d4+2', 'potion of greater healing': '4d4+4', 'potion of superior healing': '8d4+8', 'potion of supreme healing': '10d4+20',
+};
+/** Dice or a number a potion heals ("2d4+2", "10"); anything else is dropped. */
+const HEAL_RE = /^(\d{1,2}d\d{1,3}([+-]\d{1,3})?|\d{1,3})$/;
+export const cleanHeal = (v) => {
+  const t = String(v ?? '').replace(/\s+/g, '').toLowerCase();
+  return HEAL_RE.test(t) ? t : '';
+};
+
+/** What a potion heals, from the PHB's table by name or read from its description; '' if it doesn't. */
+export function itemHeal(name = '', text = '') {
+  const known = POTION_HEALING[String(name).trim().toLowerCase()];
+  if (known) return known;
+  const m = /\bregains?\s+(\d+d\d+(?:\s*[+-]\s*\d+)?|\d+)\s+hit points/i.exec(String(text));
+  return m ? cleanHeal(m[1]) : '';
+}
+
 /** Every name the tables know (for suggestions). */
 export const GEAR_NAMES = [...WEAPON_ROWS.map((w) => w[0]), ...ARMOR_ROWS.map((a) => a[0])];
 
@@ -139,7 +158,15 @@ const DAMAGE_TYPES = 'acid|bludgeoning|cold|fire|force|lightning|necrotic|pierci
  * its description: { kind, weapon: { damage, ability, category, properties }
  * | null, armor: { base, type } | null, magic }.
  */
-export function itemStats({ name = '', kind = '', text = '' } = {}) {
+export function itemStats({ name = '', kind = '', text = '', stats = null } = {}) {
+  // What the DM set on one of their items wins over what the tables and the description say.
+  if (stats) return { kind: stats.weapon ? 'weapon' : stats.armor ? 'armor' : kind || 'other', weapon: stats.weapon, armor: stats.armor, magic: stats.magic, weight: readStats({ name }).weight ?? null, charges: stats.charges, effects: stats.effects, heal: stats.heal };
+  const read = readStats({ name, kind, text });
+  const potion = read.kind === 'potion' || /\bpotion\b/i.test(name);
+  return { ...read, heal: potion ? itemHeal(name, text) : '' };
+}
+
+function readStats({ name = '', kind = '', text = '' } = {}) {
   const { base, magic } = magicName(name);
   const weapon = WEAPONS[base];
   const extra = { charges: itemCharges(text), effects: itemEffects(text) };
@@ -266,10 +293,28 @@ export function normalizeGear(g = {}) {
       .map((e) => ({ target: e.target, value: int(e.value, { min: -30, max: 30, fallback: 0 }) }))
       .filter((e) => e.value)
       .slice(0, MAX_EFFECTS),
+    // What drinking it heals (a potion): dice or a number; '' if nothing.
+    heal: cleanHeal(g.heal),
     weight: g.weight == null || g.weight === '' || !Number.isFinite(Number(g.weight)) ? null : Math.max(0, Number(g.weight)),
     text: str(g.text, 8000),
     source: str(g.source, 200),
   };
+}
+
+/**
+ * The numbers the DM set on one of their items, by its kind (the Items
+ * tab's form): a weapon's damage, ability, simple or martial and properties;
+ * armour's type, AC, Strength and Stealth; a magic bonus; what a potion
+ * heals; a magic item's charges and effects. Only those of `kind` are kept
+ * (all of them without one). null when there are none, so the tables and
+ * the description are read instead.
+ */
+export function normalizeItemStats(s, kind = null) {
+  if (!s || typeof s !== 'object') return null;
+  const g = normalizeGear({ ...s, name: 'x' });
+  // Only what the item's kind has (a weapon has no AC).
+  const has = (k) => !kind || kind === k;
+  return { weapon: has('weapon') ? g.weapon : null, armor: has('armor') ? g.armor : null, magic: has('weapon') || has('armor') ? g.magic : 0, heal: has('potion') ? g.heal : '', charges: g.charges, effects: g.effects };
 }
 
 /**
@@ -347,18 +392,34 @@ export function armorClass(inventory, dexMod) {
  * with what the item does when equipped (itemStats), Proficient ticked if
  * the character's class (`classKey`, e.g. "fighter") is.
  */
-export function addToInventory(inventory, { id = null, name, kind = 'other', text = '', weight = null, attunement = false }, qty = 1, { classKey = null, attuneMax = 3 } = {}) {
+export function addToInventory(inventory, { id = null, name, kind = 'other', text = '', weight = null, attunement = false, stats = null }, qty = 1, { classKey = null, attuneMax = 3 } = {}) {
   const list = (inventory ?? []).map((g) => ({ ...g }));
   const same = list.find((g) => (id != null && g.item_id === id) || g.name.toLowerCase() === String(name).toLowerCase());
   if (same) {
     same.qty += qty;
     return normalizeInventory(list, { attuneMax });
   }
-  const stats = itemStats({ name, kind, text });
-  const line = { item_id: id, name, kind: stats.kind === 'other' ? kind : stats.kind, qty, text, weight: weight ?? stats.weight, attunement, weapon: stats.weapon, armor: stats.armor, magic: stats.magic, charges: stats.charges, effects: stats.effects };
+  const st = itemStats({ name, kind, text, stats });
+  const line = { item_id: id, name, kind: st.kind === 'other' ? kind : st.kind, qty, text, weight: weight ?? st.weight, attunement, weapon: st.weapon, armor: st.armor, magic: st.magic, charges: st.charges, effects: st.effects, heal: st.heal };
   line.proficient = classProficient(classKey, line) ?? true;
   list.push(line);
   return normalizeInventory(list, { attuneMax });
+}
+
+/**
+ * Drink a potion from the inventory: `total` hit points back (what the
+ * server rolled for its heal), up to `hpMax` (no limit when null), and one
+ * fewer of it (the line goes at none). Throws when the line isn't there or
+ * doesn't heal. @returns {{ sheet, healed, name }}
+ */
+export function drinkPotion(sheet, lineId, total, hpMax = null) {
+  const line = (sheet.inventory ?? []).find((g) => g.id === lineId);
+  if (!line) throw new Error("That item isn't in your inventory.");
+  if (!line.heal) throw new Error(`${line.name} doesn't heal. Set what it heals in its details.`);
+  const inventory = sheet.inventory.flatMap((g) => (g !== line ? [g] : g.qty > 1 ? [{ ...g, qty: g.qty - 1, equipped: Math.min(g.equipped, g.qty - 1) }] : []));
+  const now = sheet.hp?.current ?? hpMax ?? 0;
+  const after = hpMax == null ? now + Math.max(0, total) : Math.max(now, Math.min(hpMax, now + Math.max(0, total)));
+  return { sheet: { ...sheet, inventory, hp: { ...sheet.hp, current: after } }, healed: after - now, name: line.name };
 }
 
 // ---------- attacks come from weapons the character has ----------

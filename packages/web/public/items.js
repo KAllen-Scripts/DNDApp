@@ -10,7 +10,7 @@
 import { api, fileUrl, h, readBase64, LoggedOut, note } from './api.js';
 import { markdownBox } from './markdown.js';
 import { formatPrice, splitPrice, COIN_VALUES } from './shared/coins.js';
-import { EFFECT_TARGETS } from './shared/gear.js';
+import { EFFECT_TARGETS, MAX_EFFECTS, itemStats } from './shared/gear.js';
 
 const $ = (sel) => document.querySelector(sel);
 export const ITEM_KIND_NAMES = { weapon: 'Weapon', armor: 'Armour', gear: 'Adventuring gear', tool: 'Tool', potion: 'Potion', scroll: 'Scroll', magic: 'Magic item', other: 'Other' };
@@ -163,6 +163,24 @@ export function itemSummary(x, price = x.price) {
   ].filter(Boolean).join(' · ');
 }
 
+/** What it does in a buyer's inventory: "1d8 slashing · martial", "AC 16 · heavy", "Heals 2d4+2"; marked when the DM set it. */
+export function statsText(x) {
+  const st = itemStats(x);
+  const bonus = st.magic ? ` · +${st.magic}` : '';
+  const parts = [];
+  if (st.weapon) parts.push(`${st.weapon.damage || 'no damage set'} · ${st.weapon.category}${st.weapon.properties.length ? ` · ${st.weapon.properties.join(', ')}` : ''}${bonus}`);
+  if (st.armor) parts.push(`${st.armor.type === 'shield' ? `+${st.armor.base} AC` : `AC ${st.armor.base}${st.armor.type === 'light' ? ' + Dex' : st.armor.type === 'medium' ? ' + Dex (max 2)' : ''}`} · ${st.armor.type}${bonus}`);
+  if (st.heal) parts.push(`Heals ${st.heal}`);
+  if (st.charges) parts.push(`${st.charges.max} charges`);
+  for (const e of st.effects ?? []) parts.push(`${EFFECT_TARGETS[e.target]} ${e.value > 0 && !e.target.startsWith('score.') ? '+' : ''}${e.value}`);
+  return parts.join(' · ');
+}
+
+function statsLine(x) {
+  const t = statsText(x);
+  return t ? h('p', { class: 'small item-stats-line' }, t, x.stats ? h('span', { class: 'muted' }, ' (set by you)') : null) : null;
+}
+
 function draw() {
   watchSearches();
   const box = $('#items');
@@ -177,6 +195,7 @@ function draw() {
     h('div', { class: 'creature-body' },
       h('div', { class: 'creature-head' }, h('h3', {}, x.name)),
       h('p', { class: 'muted small' }, itemSummary(x)),
+      statsLine(x),
       sourceLine(x),
       x.notes ? h('p', { class: 'creature-notes small' }, x.notes) : null,
       h('div', { class: 'creature-actions' },
@@ -325,6 +344,124 @@ export function priceInputs(cp, { placeholder = 'unknown' } = {}) {
   };
 }
 
+const PROPERTIES = ['finesse', 'light', 'thrown', 'heavy', 'reach', 'two-handed', 'versatile', 'ammunition', 'loading'];
+/** The kinds whose numbers change a sheet (and have their own fields). */
+export const STAT_KINDS = ['weapon', 'armor', 'potion', 'magic'];
+
+/**
+ * The form's fields that depend on the kind: a weapon's damage, ability,
+ * simple or martial, properties and magic bonus; armour's type, AC, Strength,
+ * Stealth and magic bonus; what a potion heals; a magic item's charges and
+ * what it does to a sheet. They start from what the DM set, else what the
+ * app reads from the name and description; they're only saved once the DM
+ * changes one (so an untouched item keeps being read from its description).
+ */
+function statsSection(x, { kind, name, text }) {
+  const box = h('fieldset', { class: 'item-stats' });
+  let dirty = false;
+  const read = () => structuredClone(itemStats({ name: name.value, kind: kind.value, text: text.value, stats: x?.stats ?? null }));
+  let s = read();
+  const touch = () => (dirty = true);
+  const input = (label, value, set, attrs = {}) => {
+    const el = h('input', { value: value ?? '', 'aria-label': label, ...attrs });
+    el.addEventListener('input', () => { set(el.value); touch(); });
+    return field(label, el);
+  };
+  const select = (label, value, options, set) => {
+    const el = h('select', { 'aria-label': label }, ...Object.entries(options).map(([v, n]) => new Option(n, v)));
+    el.value = value;
+    el.addEventListener('change', () => { set(el.value); touch(); draw(); });
+    return field(label, el);
+  };
+  const check = (label, on, set) => h('label', { class: 'map-check' }, h('input', { type: 'checkbox', checked: !!on, 'aria-label': label, onchange: (e) => { set(e.target.checked); touch(); } }), ` ${label}`);
+  const int = (v) => parseInt(v, 10) || 0;
+  const magic = () => input('Magic bonus', String(s.magic || ''), (v) => (s.magic = int(v)), { type: 'number', min: '-5', max: '5', placeholder: '0' });
+
+  const effects = () => h('div', { class: 'effects' },
+    h('span', { class: 'lbl' }, 'What it does to a sheet (while equipped, and attuned if it needs it)'),
+    ...(s.effects ?? []).map((e, i) => {
+      const target = h('select', { 'aria-label': `Effect ${i + 1}` }, ...Object.entries(EFFECT_TARGETS).map(([v, n]) => new Option(n, v)));
+      target.value = e.target;
+      target.addEventListener('change', () => { e.target = target.value; touch(); });
+      const value = h('input', { type: 'number', class: 'num', value: String(e.value), 'aria-label': `Effect ${i + 1} amount` });
+      value.addEventListener('input', () => { e.value = int(value.value); touch(); });
+      return h('div', { class: 'effect' }, target, value, h('button', { type: 'button', class: 'ghost small', 'aria-label': `Remove effect ${i + 1}`, onclick: () => { s.effects.splice(i, 1); touch(); draw(); } }, '✕'));
+    }),
+    (s.effects ?? []).length < MAX_EFFECTS ? h('button', { type: 'button', class: 'ghost small', onclick: () => { (s.effects ??= []).push({ target: 'ac', value: 1 }); touch(); draw(); } }, 'Add an effect') : null);
+
+  function draw() {
+    const k = kind.value;
+    box.hidden = !STAT_KINDS.includes(k);
+    const parts = [];
+    if (k === 'weapon') {
+      s.weapon ??= { damage: '', ability: 'str', category: 'simple', properties: [] };
+      const w = s.weapon;
+      parts.push(
+        h('div', { class: 'map-row' },
+          input('Damage', w.damage, (v) => (w.damage = v), { placeholder: '1d8 slashing' }),
+          select('Uses', w.ability, { str: 'Strength', dex: 'Dexterity', finesse: 'Finesse (Str or Dex)' }, (v) => (w.ability = v))),
+        h('div', { class: 'map-row' },
+          select('Weapon type', w.category, { simple: 'Simple', martial: 'Martial' }, (v) => (w.category = v)),
+          magic()),
+        h('div', { class: 'item-props' }, ...PROPERTIES.map((p) => check(p[0].toUpperCase() + p.slice(1), w.properties.includes(p), (on) => {
+          w.properties = on ? [...new Set([...w.properties, p])] : w.properties.filter((q) => q !== p);
+        }))));
+    }
+    if (k === 'armor') {
+      s.armor ??= { base: 11, type: 'light', strength: 0, stealth: false };
+      const a = s.armor;
+      parts.push(
+        h('div', { class: 'map-row' },
+          select('Armour type', a.type, { light: 'Light (+ Dex)', medium: 'Medium (+ Dex, max 2)', heavy: 'Heavy', shield: 'Shield' }, (v) => (a.type = v)),
+          input(a.type === 'shield' ? 'AC bonus' : 'Base AC', String(a.base), (v) => (a.base = int(v)), { type: 'number', min: '0', max: '30' })),
+        a.type === 'shield' ? null : h('div', { class: 'map-row' },
+          input('Strength needed', a.strength ? String(a.strength) : '', (v) => (a.strength = int(v)), { type: 'number', min: '0', max: '30', placeholder: 'none' }),
+          magic()),
+        a.type === 'shield' ? magic() : null,
+        a.type === 'shield' ? null : check('Disadvantage on Stealth', a.stealth, (on) => (a.stealth = on)));
+    }
+    if (k === 'potion') parts.push(input('Heals', s.heal, (v) => (s.heal = v.replace(/\s+/g, '')), { placeholder: '2d4+2 (empty if it doesn\'t heal)' }));
+    if (k === 'magic') {
+      parts.push(h('div', { class: 'map-row' },
+        input('Charges', s.charges ? String(s.charges.max) : '', (v) => {
+          const max = int(v);
+          s.charges = max > 0 ? { max, used: 0, recharge: s.charges?.recharge ?? '', when: s.charges?.when ?? 'dawn' } : null;
+        }, { type: 'number', min: '0', max: '999', placeholder: 'none' }),
+        input('Charges back', s.charges?.recharge ?? '', (v) => { if (s.charges) s.charges.recharge = v.replace(/\s+/g, ''); }, { placeholder: '1d6+1, 3 or all' })),
+      effects());
+    }
+    box.replaceChildren(
+      h('legend', {}, `${ITEM_KIND_NAMES[k]}: what it does on a sheet`),
+      h('p', { class: 'muted small' }, dirty || x?.stats ? 'Set by you: these go into a buyer\'s inventory as they are.' : 'Read from the name and description. Change any of them to set them yourself.'),
+      ...parts);
+  }
+  // Until the DM sets them, they follow what's typed in the name and description.
+  const reread = () => {
+    if (dirty || x?.stats) return;
+    s = read();
+    draw();
+  };
+  name.addEventListener('change', reread);
+  text.addEventListener('change', reread);
+  kind.addEventListener('change', () => {
+    // Another kind: start again from what the app reads for it.
+    s = structuredClone(itemStats({ name: name.value, kind: kind.value, text: text.value }));
+    if (x?.stats) dirty = true;
+    draw();
+  });
+  draw();
+  return {
+    el: box,
+    /** What to send: the numbers when the DM set them, null for a kind without any, undefined to leave them. */
+    value() {
+      if (!STAT_KINDS.includes(kind.value)) return x?.stats ? null : undefined;
+      if (!dirty) return undefined;
+      const k = kind.value;
+      return { weapon: k === 'weapon' ? s.weapon : null, armor: k === 'armor' ? s.armor : null, magic: ['weapon', 'armor'].includes(k) ? s.magic || 0 : 0, heal: k === 'potion' ? s.heal || '' : '', charges: k === 'magic' ? s.charges : null, effects: k === 'magic' ? (s.effects ?? []).filter((e) => e.value) : [] };
+    },
+  };
+}
+
 /**
  * The fields of an item's form (also the Merchants tab's "Make a new item"): `fields` to show,
  * `body()` what to send (with the picture, base64, for a new one; throws if it's too big).
@@ -341,6 +478,7 @@ export function itemForm(x = null) {
   const text = h('textarea', { name: 'text', rows: 6, maxLength: 8000, placeholder: 'What it is and does: damage and properties, AC, effects. Players see this at a merchant. Markdown is fine.' }, x?.text ?? '');
   const notes = h('textarea', { name: 'notes', rows: 2, maxLength: 4000, placeholder: 'Only you see these.' }, x?.notes ?? '');
   const file = h('input', { type: 'file', name: 'picture', accept: 'image/png,image/jpeg,image/webp,image/gif', 'aria-label': 'Picture' });
+  const stats = statsSection(x, { kind, name, text });
   return {
     name,
     price,
@@ -349,6 +487,7 @@ export function itemForm(x = null) {
       h('div', { class: 'map-row' }, field('Kind', kind), field('Rarity', rarity)),
       h('div', { class: 'map-row' }, field('Usual price', price.el), field('Weight (lb)', weight)),
       h('label', { class: 'map-check' }, attunement, ' Needs attunement'),
+      stats.el,
       field('Description', text),
       field('Notes', notes),
       x ? null : field('Picture (optional)', file),
@@ -363,6 +502,8 @@ export function itemForm(x = null) {
         weight: weight.value === '' ? null : Math.max(0, Number(weight.value) || 0),
         notes: notes.value,
       };
+      const st = stats.value();
+      if (st !== undefined) body.stats = st;
       // Only send the description when it changed (one from a book or the web keeps where it came from).
       if (text.value.trim() !== (x?.text ?? '').trim()) body.text = text.value;
       const f = file.files[0];

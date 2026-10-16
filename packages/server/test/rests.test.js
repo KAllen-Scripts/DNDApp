@@ -289,3 +289,25 @@ test('subclass features: Combat Wild Shape heals the form with a spell slot, Por
     await t.cleanup();
   }
 });
+
+test('potions: drinking one is rolled by the server, heals and uses it up; one that doesn\'t heal is refused', async () => {
+  const t = await setup();
+  try {
+    await saveSheet(t, t.sam, { ...THORIN, inventory: [{ id: 'p1', name: 'Potion of Healing', kind: 'potion', qty: 2, heal: '2d4+2' }, { id: 'r1', name: 'Rope', kind: 'gear' }] });
+    const drink = (id, as = t.sam) => t.request('POST', `/campaigns/${t.campaign.id}/sheet/gear/drink`, { as: as.token, body: { id } });
+    const res = await drink('p1');
+    assert.equal(res.statusCode, 200, res.body);
+    const r = res.json();
+    assert.equal(r.notation, '2d4+2');
+    assert.equal(r.roll.label, 'Potion of Healing: healing');
+    assert.ok(r.healed >= 4 && r.healed <= 10);
+    assert.equal(r.sheet.hp.current, 10 + r.healed);
+    assert.deepEqual(r.sheet.inventory.map((g) => [g.name, g.qty]), [['Potion of Healing', 1], ['Rope', 1]]);
+    assert.equal((await drink('p1')).statusCode, 200);
+    assert.match((await drink('p1')).json().error, /isn't in your inventory/);
+    assert.match((await drink('r1')).json().error, /doesn't heal/);
+    assert.equal((await drink('p1', t)).statusCode, 403, 'the DM has no sheet');
+  } finally {
+    await t.cleanup();
+  }
+});

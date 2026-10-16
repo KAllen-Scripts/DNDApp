@@ -6,6 +6,8 @@
  *     the roll log, so it's shared like any roll) and adds the hit points.
  *   - A player uses a class feature that heals (Second Wind): the server rolls
  *     it the same way and adds the hit points.
+ *   - A player drinks a healing potion from their inventory: the server rolls
+ *     what it heals the same way, adds the hit points and takes one away.
  *   - A player takes a short rest on their own sheet (Pact Magic slots back).
  *   - The DM calls a short or long rest for the party (everyone, or chosen
  *     players). Each sheet is changed and saved with the reason, and the rest
@@ -20,6 +22,7 @@ import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { computeSheet, hitDice, longRest, shortRest, spendHitDie, formatBonus } from '@dndapp/shared/sheet.js';
 import { featureRow, healFeature, healWithSlot, restText, setRolled } from '@dndapp/shared/class-features.js';
+import { drinkPotion } from '@dndapp/shared/gear.js';
 import { BadRequestError } from './store.js';
 import { createEditions } from './editions.js';
 
@@ -126,6 +129,23 @@ export function createRests({ db, archive, store, sheets, rolls, books = null, c
       const rolled = /d/i.test(row.heal) ? rolls.roll(cid, userId, { notation: row.heal, label: row.name, visibility }) : { total: Number(row.heal) || 0 };
       const { sheet, healed } = healFeature(current.sheet, id, rolled.total, { edition: ed, values });
       const saved = sheets.save(cid, userId, sheet, { reason: `used ${row.name} (${rolled.roll ? `rolled ${rolled.total}, ` : ''}regained ${healed} hit points)` });
+      return { ...rolled, healed, ...saved };
+    },
+
+    /**
+     * Drink a potion from the inventory (line id `id`): roll what it heals
+     * (shared like any roll), add the hit points and take one away.
+     * @returns what spendHitDie returns
+     */
+    drink(cid, userId, id, { visibility = 'party' } = {}) {
+      const current = sheets.get(cid, userId);
+      const line = current.sheet.inventory.find((g) => g.id === id);
+      if (!line) throw new BadRequestError("That item isn't in your inventory any more.");
+      if (!line.heal) throw new BadRequestError(`${line.name} doesn't heal. Set what it heals in its details.`);
+      const { values } = computeSheet(current.sheet);
+      const rolled = /d/i.test(line.heal) ? rolls.roll(cid, userId, { notation: line.heal, label: `${line.name}: healing`, visibility }) : { total: Number(line.heal) || 0 };
+      const { sheet, healed } = drinkPotion(current.sheet, id, rolled.total, values.hp_max ?? null);
+      const saved = sheets.save(cid, userId, sheet, { reason: `drank ${line.name} (${rolled.roll ? `rolled ${rolled.total}, ` : ''}regained ${healed} hit points)` });
       return { ...rolled, healed, ...saved };
     },
 
