@@ -202,7 +202,7 @@ function options(c, act) {
         type: 'number', id: 'creator-height', class: 'map-num', min: -1000, max: 1000, step: 5, value: c.height,
         onchange: (e) => { const n = Math.round(Number(e.target.value)); c.height = Number.isFinite(n) ? Math.max(-1000, Math.min(1000, n)) : 0; },
       })),
-      h('p', { class: 'muted small' }, 'Roofs, wall-walks, tower tops and cliffs. Click inside one to raise it all (up to its walls), or drag a rectangle. 0 puts squares back on the ground; negative for a pit. Shown only while this tool is picked. Add Stairs or a Ladder (in Things) to get up there.'),
+      h('p', { class: 'muted small' }, 'Roofs, wall-walks, tower tops and cliffs. Click inside one to raise it all (up to its walls; a round tower stays round), or drag a rectangle (on half squares). 0 puts squares back on the ground; negative for a pit. Shown only while this tool is picked. Add Stairs or a Ladder (in Things) to get up there.'),
     ];
   }
   if (t === 'fill') return [heading('Fill with'), ...floorPalette(c, act, { tool: 'fill' }), fillAll];

@@ -84,7 +84,8 @@ export function applyDesign(m, design) {
   const ownRaised = (m.raised ?? []).filter((r) => r.source !== 'creator');
   m.raised = [...ownRaised, ...g.raised.slice(0, Math.max(0, MAX_RAISED - ownRaised.length)).map((r) => ({ ...r, id: newTokenId(), source: 'creator' }))];
   m.grid = g.grid;
-  m.scale = g.scale;
+  // A scale the DM set on the map stays (owner, 2026-10-16); a new map gets 5 ft squares.
+  if (!m.scale?.distance) m.scale = g.scale;
   m.design = design;
   return m;
 }

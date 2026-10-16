@@ -430,23 +430,23 @@ test('creator tools: the height tool raises a walled room with a click and a rec
     // A click inside the room: all of it, up to its walls.
     click(page, [4.5, 4.5]);
     const d = design();
-    assert.deepEqual(d.heights[3].slice(1, 9), [0, 15, 15, 15, 15, 15, 15, 0]);
-    assert.equal(d.heights[1][4], 0);
-    assert.equal(d.heights[5][7], 15);
+    assert.deepEqual(d.heights[6].slice(2, 18), [0, 0, ...Array(12).fill(15), 0, 0]);
+    assert.equal(d.heights[2][8], 0);
+    assert.equal(d.heights[11][15], 15);
     // A drag: a pit.
     page.type('#creator-height', '-10');
     drag(page, [20, 10], [23, 12]);
-    assert.deepEqual(design().heights[11].slice(19, 24), [0, -10, -10, -10, 0]);
-    // 0 puts squares back on the ground.
+    assert.deepEqual(design().heights[22].slice(39, 47), [0, -10, -10, -10, -10, -10, -10, 0]);
+    // 0 puts squares back on the ground; a drag goes by half squares.
     page.type('#creator-height', '0');
-    drag(page, [22, 10], [23, 12]);
-    assert.deepEqual(design().heights[11].slice(19, 24), [0, -10, -10, 0, 0]);
+    drag(page, [22.5, 10], [23, 12]);
+    assert.deepEqual(design().heights[22].slice(39, 47), [0, -10, -10, -10, -10, -10, 0, 0]);
 
     await saveAndClose(page, 'Keep');
     const map = t.maps.list(t.campaign.id)[0];
     assert.deepEqual(map.raised.map(({ points, height, source }) => ({ points, height, source })), [
       { points: [[140, 140], [560, 140], [560, 420], [140, 420]], height: 15, source: 'creator' },
-      { points: [[1400, 700], [1540, 700], [1540, 840], [1400, 840]], height: -10, source: 'creator' },
+      { points: [[1400, 700], [1575, 700], [1575, 840], [1400, 840]], height: -10, source: 'creator' },
     ]);
   });
 });

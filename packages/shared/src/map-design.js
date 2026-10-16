@@ -13,7 +13,8 @@
  * A design, in squares (one square = 5 ft):
  *   { v: 2, cols, rows,
  *     floor: [string per row, one character per square: a FLOORS key, or '.' for nothing],
- *     heights: [array per row, a number per square: how high its ground is, in feet (0: the map's ground)],
+ *     heights: [array per half-square row, a number per half square: how high its ground is, in feet (0: the map's ground)],
+ *       two rows of halves per row of squares, two halves per square, so wall-walks between walls half a square apart work,
  *     walls: [{ id, x1, y1, x2, y2, type (WALL_TYPES), style (WALL_STYLES), arc?: { x, y } }]
  *       ends on half squares; `arc` is a point a curved wall passes through between its ends,
  *     assets: [{ id, a (an ASSETS key or 'u:<id>'), x, y (its middle), w, h (squares), rot (degrees),
@@ -556,13 +557,22 @@ export function normalizeLook(l) {
 /** A height in feet, whole, within the limits (anything else: 0). */
 const feet = (v) => Math.round(num(v, -MAX_DESIGN_HEIGHT, MAX_DESIGN_HEIGHT, 0));
 
-/** A grid of heights `rows` by `cols` (feet, whole), from whatever was saved (nothing: all 0). */
+/**
+ * The heights of a design `cols` by `rows` squares: a grid of half squares
+ * (2 rows by 2 cols), in whole feet, from whatever was saved (nothing: all 0).
+ * One saved a number per square (briefly, on 2026-10-16) is read as halves.
+ */
 function normalizeHeights(src, cols, rows) {
-  return Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => feet(Array.isArray(src?.[r]) ? src[r][c] : 0)));
+  const perSquare = Array.isArray(src) && src.length === rows && rows > 0 && (src[0]?.length ?? 0) <= cols;
+  const at = (r, c) => {
+    const row = perSquare ? src[r >> 1] : src?.[r];
+    return feet(Array.isArray(row) ? row[perSquare ? c >> 1 : c] : 0);
+  };
+  return Array.from({ length: rows * 2 }, (_, r) => Array.from({ length: cols * 2 }, (_, c) => at(r, c)));
 }
 
-/** A grid of heights for `rows` rows of `cols`, all at the ground. */
-const flatHeights = (cols, rows) => Array.from({ length: rows }, () => Array(cols).fill(0));
+/** The heights of a design `cols` by `rows` squares, all at the ground. */
+const flatHeights = (cols, rows) => Array.from({ length: rows * 2 }, () => Array(cols * 2).fill(0));
 
 /** Are three points (nearly) in a line? */
 const inLine = (a, m, b) => Math.abs((m.x - a.x) * (b.y - a.y) - (m.y - a.y) * (b.x - a.x)) < 1e-3;
@@ -821,41 +831,86 @@ export function fillFloor(design, col, row, ch) {
   return paintFloor(design, cells, ch);
 }
 
-/** Give squares a height in feet (0: back to the ground): cells [[col, row], ...]. */
-export function paintHeight(design, cells, height) {
+/** Give half squares a height in feet (0: back to the ground): halves [[col, row], ...], in half squares. */
+export function paintHalves(design, halves, height) {
   const heights = (design.heights ?? flatHeights(design.cols, design.rows)).map((row) => row.slice());
-  for (const [c, r] of cells) if (heights[r] && c >= 0 && c < design.cols) heights[r][c] = feet(height);
+  for (const [c, r] of halves) if (heights[r] && c >= 0 && c < design.cols * 2) heights[r][c] = feet(height);
   return { ...design, heights };
 }
 
+/** Give squares a height in feet (0: back to the ground): cells [[col, row], ...], in squares. */
+export const paintHeight = (design, cells, height) => paintHalves(design, cells.flatMap(([c, r]) => [[2 * c, 2 * r], [2 * c + 1, 2 * r], [2 * c, 2 * r + 1], [2 * c + 1, 2 * r + 1]]), height);
+
+/** Give a rectangle a height (corners in squares, on half squares, either way round). */
+export function paintHeightRect(design, { x1, y1, x2, y2 }, height) {
+  const halves = [];
+  const l = Math.max(0, Math.round(Math.min(x1, x2) * 2));
+  const r = Math.min(design.cols * 2, Math.round(Math.max(x1, x2) * 2));
+  const t = Math.max(0, Math.round(Math.min(y1, y2) * 2));
+  const b = Math.min(design.rows * 2, Math.round(Math.max(y1, y2) * 2));
+  for (let row = t; row < b; row += 1) for (let col = l; col < r; col += 1) halves.push([col, row]);
+  return paintHalves(design, halves, height);
+}
+
+/** Which neighbouring half squares a wall comes between ("a:b", by index in the half-square grid). */
+function halfWallEdges(design) {
+  const out = new Set();
+  const cols = design.cols * 2;
+  const rows = design.rows * 2;
+  for (const w of design.walls) {
+    if (w.type === 'arch') continue;
+    const pts = wallPoints(w);
+    for (let i = 1; i < pts.length; i += 1) {
+      const [p, q] = [pts[i - 1], pts[i]].map(([x, y]) => [x * 2, y * 2]);
+      const c0 = Math.max(0, Math.floor(Math.min(p[0], q[0])) - 1);
+      const c1 = Math.min(cols - 1, Math.ceil(Math.max(p[0], q[0])));
+      const r0 = Math.max(0, Math.floor(Math.min(p[1], q[1])) - 1);
+      const r1 = Math.min(rows - 1, Math.ceil(Math.max(p[1], q[1])));
+      for (let r = r0; r <= r1; r += 1) {
+        for (let c = c0; c <= c1; c += 1) {
+          const from = [c + 0.5, r + 0.5];
+          if (c + 1 < cols && segmentsMeet(from, [c + 1.5, r + 0.5], p, q)) out.add(`${r * cols + c}:${r * cols + c + 1}`);
+          if (r + 1 < rows && segmentsMeet(from, [c + 0.5, r + 1.5], p, q)) out.add(`${r * cols + c}:${(r + 1) * cols + c}`);
+        }
+      }
+    }
+  }
+  return out;
+}
+
 /**
- * Every square joined to (col, row) with the same floor, the same height and
- * no wall between (as the bucket fills), given a height: a click inside a
- * building or tower raises all of it, up to its walls.
+ * Every half square joined to the point (x, y) (in squares) with the same
+ * floor, the same height and no wall between (as the bucket fills), given a
+ * height: a click inside a building, tower or wall-walk raises all of it, up
+ * to its walls.
  */
-export function fillHeight(design, col, row, height) {
+export function fillHeight(design, x, y, height) {
   const hs = design.heights ?? flatHeights(design.cols, design.rows);
-  const floor = design.floor[row]?.[col];
+  const cols = design.cols * 2;
+  const rows = design.rows * 2;
+  const col = Math.floor(x * 2);
+  const row = Math.floor(y * 2);
+  const floorAt = (c, r) => design.floor[r >> 1]?.[c >> 1];
+  const floor = floorAt(col, row);
   const from = hs[row]?.[col];
-  if (floor == null || from === feet(height)) return design;
-  const blocked = design.walls.length ? wallEdges(design) : new Set();
-  const { cols, rows } = design;
-  const cells = [];
+  if (floor == null || from == null || from === feet(height)) return design;
+  const blocked = design.walls.length ? halfWallEdges(design) : new Set();
+  const halves = [];
   const seen = new Set([row * cols + col]);
   const stack = [[col, row]];
   while (stack.length) {
     const [c, r] = stack.pop();
-    cells.push([c, r]);
+    halves.push([c, r]);
     const k = r * cols + c;
     for (const [nc, nr] of [[c + 1, r], [c - 1, r], [c, r + 1], [c, r - 1]]) {
       if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
       const nk = nr * cols + nc;
-      if (seen.has(nk) || design.floor[nr][nc] !== floor || hs[nr][nc] !== from || blocked.has(k < nk ? `${k}:${nk}` : `${nk}:${k}`)) continue;
+      if (seen.has(nk) || floorAt(nc, nr) !== floor || hs[nr][nc] !== from || blocked.has(k < nk ? `${k}:${nk}` : `${nk}:${k}`)) continue;
       seen.add(nk);
       stack.push([nc, nr]);
     }
   }
-  return paintHeight(design, cells, height);
+  return paintHalves(design, halves, height);
 }
 
 const collinear = (a, w) => {
@@ -1091,7 +1146,7 @@ export function resizeDesign(design, cols, rows) {
     cols: c,
     rows: r,
     floor,
-    heights: Array.from({ length: r }, (_, i) => Array.from({ length: c }, (_, j) => design.heights?.[i]?.[j] ?? 0)),
+    heights: Array.from({ length: r * 2 }, (_, i) => Array.from({ length: c * 2 }, (_, j) => design.heights?.[i]?.[j] ?? 0)),
     walls: design.walls.filter((w) => inside(w.x1, w.y1) && inside(w.x2, w.y2) && (!w.arc || inside(w.arc.x, w.arc.y))),
     assets: design.assets.filter((a) => inside(a.x, a.y)),
     paths: (design.paths ?? []).filter((p) => p.pts.every(([x, y]) => inside(x, y))),
@@ -1134,7 +1189,7 @@ export function copyArea(design, rect) {
     cols,
     rows,
     floor: Array.from({ length: rows }, (_, r) => (design.floor[y1 + r] ?? '').slice(x1, x1 + cols).padEnd(cols, EMPTY)),
-    heights: Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => design.heights?.[y1 + r]?.[x1 + c] ?? 0)),
+    heights: Array.from({ length: rows * 2 }, (_, r) => Array.from({ length: cols * 2 }, (_, c) => design.heights?.[2 * y1 + r]?.[2 * x1 + c] ?? 0)),
     walls: design.walls
       .filter((w) => inside(w.x1, w.y1) && inside(w.x2, w.y2))
       .map((w) => ({ ...w, x1: mx(w.x1), y1: my(w.y1), x2: mx(w.x2), y2: my(w.y2), ...(w.arc && { arc: { x: mx(w.arc.x), y: my(w.arc.y) } }) })),
@@ -1181,7 +1236,7 @@ export function transformClip(clip, { rot = 0, flip = false } = {}) {
     const t = (x, y) => [round(rows - y), round(x)];
     const src = out;
     const floor = Array.from({ length: cols }, (_, r) => Array.from({ length: rows }, (_, c) => src.floor[rows - 1 - c]?.[r] ?? EMPTY).join(''));
-    const heights = src.heights && Array.from({ length: cols }, (_, r) => Array.from({ length: rows }, (_, c) => src.heights[rows - 1 - c]?.[r] ?? 0));
+    const heights = src.heights && Array.from({ length: cols * 2 }, (_, r) => Array.from({ length: rows * 2 }, (_, c) => src.heights[rows * 2 - 1 - c]?.[r] ?? 0));
     out = {
       ...out,
       cols: rows,
@@ -1224,19 +1279,19 @@ export function pasteClip(design, clip, { x, y }, { keepIds = false } = {}) {
   }));
   let out = design;
   for (const [ch, at] of cells) out = paintFloor(out, at.filter(([c, r]) => c >= 0 && r >= 0 && c < design.cols && r < design.rows), ch);
-  // Heights come with the floor they're on (and squares raised with no floor).
-  const raised = [];
-  clip.floor.forEach((line, r) => [...line].forEach((ch, c) => {
-    const height = clip.heights?.[r]?.[c] ?? 0;
-    if (ch !== EMPTY || height) raised.push([ox + c, oy + r, height]);
-  }));
+  // Heights come with the floor they're on (and half squares raised with no floor).
   const byHeight = new Map();
-  for (const [c, r, height] of raised) {
-    if (c < 0 || r < 0 || c >= design.cols || r >= design.rows) continue;
-    if (!byHeight.has(height)) byHeight.set(height, []);
-    byHeight.get(height).push([c, r]);
+  for (let r = 0; r < clip.rows * 2; r += 1) {
+    for (let c = 0; c < clip.cols * 2; c += 1) {
+      const height = clip.heights?.[r]?.[c] ?? 0;
+      if (clip.floor[r >> 1]?.[c >> 1] === EMPTY && !height) continue;
+      const [hc, hr] = [2 * ox + c, 2 * oy + r];
+      if (hc < 0 || hr < 0 || hc >= design.cols * 2 || hr >= design.rows * 2) continue;
+      if (!byHeight.has(height)) byHeight.set(height, []);
+      byHeight.get(height).push([hc, hr]);
+    }
   }
-  for (const [height, at] of byHeight) out = paintHeight(out, at, height);
+  for (const [height, at] of byHeight) out = paintHalves(out, at, height);
   const inside = (px, py) => px >= 0 && py >= 0 && px <= design.cols && py <= design.rows;
   for (const w of clip.walls) {
     const moved = { ...w, x1: w.x1 + ox, y1: w.y1 + oy, x2: w.x2 + ox, y2: w.y2 + oy, ...(w.arc && { arc: { x: w.arc.x + ox, y: w.arc.y + oy } }) };
@@ -1262,7 +1317,7 @@ export function normalizeClip(clip) {
     cols,
     rows,
     floor: d.floor.slice(0, rows).map((l) => l.slice(0, cols)),
-    heights: d.heights.slice(0, rows).map((l) => l.slice(0, cols)),
+    heights: d.heights.slice(0, rows * 2).map((l) => l.slice(0, cols * 2)),
     walls: d.walls.filter((w) => inside(w.x1, w.y1) && inside(w.x2, w.y2)),
     assets: d.assets.filter((a) => inside(a.x, a.y)),
     paths: d.paths.filter((p) => p.pts.every(([x, y]) => inside(x, y))),
@@ -1343,24 +1398,61 @@ export function assetOutline(a) {
  * rows below.
  */
 export function difficultAreas(design) {
-  return rectanglesOf(design, (c, r) => (FLOORS[design.floor[r][c]]?.difficult ? 1 : 0)).map(({ x1, y1, x2, y2 }) => ({ x1, y1, x2, y2 }));
+  return rectanglesOf(design.cols, design.rows, (c, r) => (FLOORS[design.floor[r][c]]?.difficult ? 1 : 0)).map(({ x1, y1, x2, y2 }) => ({ x1, y1, x2, y2 }));
 }
 
-/** Rectangles (in squares, with their `height` in feet) covering every raised or sunken square, one height each. */
+/** The round walls in a design (as the Round tool draws them: two half circles with the same ends): { cx, cy, r } in squares. */
+function roundWalls(design) {
+  const arcs = design.walls.filter((w) => w.arc && w.type !== 'arch');
+  const out = [];
+  for (const a of arcs) {
+    const b = arcs.find((x) => x !== a && x.x1 === a.x2 && x.y1 === a.y2 && x.x2 === a.x1 && x.y2 === a.y1);
+    if (!b || out.some((o) => o.pair === b)) continue;
+    const cx = (a.x1 + a.x2) / 2;
+    const cy = (a.y1 + a.y2) / 2;
+    const r = Math.hypot(a.x2 - a.x1, a.y2 - a.y1) / 2;
+    // Both halves bend round the same middle: a circle.
+    if (r > 0 && [a, b].every((w) => Math.abs(Math.hypot(w.arc.x - cx, w.arc.y - cy) - r) < 0.05)) out.push({ cx, cy, r, pair: a });
+  }
+  return out.map(({ cx, cy, r }) => ({ cx, cy, r }));
+}
+
+/**
+ * The shapes of the raised and sunken ground, in squares, each with its
+ * `height` in feet: inside a round wall whose half squares all share one
+ * height, a circle (so round towers are round on the map); everything else,
+ * rectangles of half squares of one height each.
+ */
 export function heightAreas(design) {
-  return rectanglesOf(design, (c, r) => design.heights?.[r]?.[c] ?? 0).map(({ x1, y1, x2, y2, value }) => ({ x1, y1, x2, y2, height: value }));
+  const hs = (design.heights ?? flatHeights(design.cols, design.rows)).map((row) => row.slice());
+  const out = [];
+  for (const { cx, cy, r } of roundWalls(design)) {
+    const inside = [];
+    for (let row = Math.max(0, Math.floor((cy - r) * 2)); row < Math.min(hs.length, Math.ceil((cy + r) * 2)); row += 1) {
+      for (let col = Math.max(0, Math.floor((cx - r) * 2)); col < Math.min(hs[0]?.length ?? 0, Math.ceil((cx + r) * 2)); col += 1) {
+        if (Math.hypot((col + 0.5) / 2 - cx, (row + 0.5) / 2 - cy) < r) inside.push([col, row]);
+      }
+    }
+    const height = inside.length ? hs[inside[0][1]][inside[0][0]] : 0;
+    if (!height || !inside.every(([c, rw]) => hs[rw][c] === height)) continue;
+    for (const [c, rw] of inside) hs[rw][c] = 0;
+    out.push({ points: Array.from({ length: 32 }, (_, i) => [round(cx + r * Math.cos((i * Math.PI) / 16)), round(cy + r * Math.sin((i * Math.PI) / 16))]), height });
+  }
+  const rects = rectanglesOf(design.cols * 2, design.rows * 2, (c, r) => hs[r][c]);
+  for (const { x1, y1, x2, y2, value } of rects) out.push({ points: [[x1 / 2, y1 / 2], [x2 / 2, y1 / 2], [x2 / 2, y2 / 2], [x1 / 2, y2 / 2]], height: value });
+  return out;
 }
 
-/** Rectangles covering the squares where `valueAt(col, row)` isn't 0, each of one value: runs along each row, joined with the same run in the rows below. */
-function rectanglesOf(design, valueAt) {
+/** Rectangles covering the cells of a grid where `valueAt(col, row)` isn't 0, each of one value: runs along each row, joined with the same run in the rows below. */
+function rectanglesOf(cols, rows, valueAt) {
   const open = new Map(); // `${start},${end},${value}` -> rectangle still growing down
   const out = [];
-  for (let r = 0; r < design.rows; r += 1) {
+  for (let r = 0; r < rows; r += 1) {
     const runs = [];
     let start = -1;
     let value = 0;
-    for (let c = 0; c <= design.cols; c += 1) {
-      const v = c < design.cols ? valueAt(c, r) : 0;
+    for (let c = 0; c <= cols; c += 1) {
+      const v = c < cols ? valueAt(c, r) : 0;
       if (start >= 0 && v !== value) {
         runs.push([start, c, value]);
         start = -1;
@@ -1442,8 +1534,8 @@ export function designToMap(design, cell = DESIGN_CELL) {
     const [[x1, y1], [x2, y2]] = [end(1), end(-1)];
     return { kind: ASSETS[a.a].climb, x1: px(x1), y1: px(y1), x2: px(x2), y2: px(y2) };
   });
-  // Raised areas: the squares given a height, as rectangles.
-  const raised = heightAreas(design).map((r) => ({ ...area([[r.x1, r.y1], [r.x2, r.y1], [r.x2, r.y2], [r.x1, r.y2]]), height: r.height }));
+  // Raised areas: the ground given a height (round inside round walls).
+  const raised = heightAreas(design).map((r) => ({ ...area(r.points), height: r.height }));
   const links = design.assets.filter((a) => a.to).map((a) => ({ x: px(a.x), y: px(a.y), to: a.to, label: a.label || ASSETS[a.a]?.name || '' }));
   return {
     width: design.cols * cell,
