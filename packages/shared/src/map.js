@@ -293,7 +293,7 @@ const round = (n, places) => Math.round(n * 10 ** places) / 10 ** places;
 function normalizeFound(f) {
   if (!f || typeof f !== 'object') return null;
   const n = (v) => Math.round(num(v, { min: 0, max: 100_000, fallback: 0 }));
-  return { walls: n(f.walls), obstacles: n(f.obstacles), doors: n(f.doors), lights: n(f.lights), terrain: n(f.terrain) };
+  return { walls: n(f.walls), obstacles: n(f.obstacles), doors: n(f.doors), lights: n(f.lights), terrain: n(f.terrain), climbs: n(f.climbs) };
 }
 
 /** Every map the server saves goes through this: known fields only, types fixed, sizes capped. */
@@ -327,6 +327,7 @@ export function normalizeMap(input = {}) {
     lights: normalizeLights(m.lights, image),
     terrain: normalizeTerrain(m.terrain, image),
     raised: normalizeRaised(m.raised, image),
+    climbs: normalizeClimbs(m.climbs, image),
     // The AI drafting walls from the picture (the DM's; players never get it).
     wall_draft: {
       status: pick(m.wall_draft?.status, ['', 'pending', 'done', 'failed'], ''),
@@ -1240,6 +1241,29 @@ export function normalizeRaised(list, image = {}) {
   return out;
 }
 
+/** Ways up and down between heights on one map: stairs (no extra movement) and ladders (climbing). */
+export const CLIMB_KINDS = ['stairs', 'ladder'];
+export const MAX_CLIMBS = 300;
+
+/**
+ * Stairs and ladders (owner's request, 2026-10-16), each a line drawn up
+ * it from the bottom to the top: [{ id, kind (CLIMB_KINDS), x1, y1, x2, y2, source }].
+ * Moving between heights where one is costs as the 5e rules say (see pathCost).
+ */
+export function normalizeClimbs(list, image = {}) {
+  const { width = 1, height = 1 } = image;
+  const seen = new Set();
+  const out = [];
+  const x = (v) => round(num(v, { min: 0, max: width, fallback: 0 }), 1);
+  const y = (v) => round(num(v, { min: 0, max: height, fallback: 0 }), 1);
+  for (const c of Array.isArray(list) ? list : []) {
+    if (!c || !isTokenId(c.id) || seen.has(c.id) || out.length >= MAX_CLIMBS) continue;
+    seen.add(c.id);
+    out.push({ id: String(c.id), kind: pick(c.kind, CLIMB_KINDS, 'stairs'), x1: x(c.x1), y1: y(c.y1), x2: x(c.x2), y2: y(c.y2), source: pick(c.source, WALL_SOURCES, 'dm') });
+  }
+  return out;
+}
+
 /** How high the ground is at a point (feet): the highest raised area there, else 0. */
 export function groundAt(map, x, y) {
   let best = null;
@@ -1425,18 +1449,66 @@ export function heightShadows(map, userId, polygons, explored = []) {
 /** Is this point in difficult terrain? */
 export const isDifficult = (map, x, y) => (map.terrain ?? []).some((a) => pointInPolygon(x, y, a.points));
 
+/** Feet in one of each unit (a climb is in feet; a move is in the map's unit). */
+const FEET_PER = { ft: 1, m: 3.28084, mi: 5280, km: 3280.84 };
+
+/** A climbing speed in a stat block's speed line ("30 ft., climb 30 ft."). */
+export const hasClimbSpeed = (text) => /\bclimb(?:ing)?\s+\d/i.test(String(text ?? ''));
+
+/** The stairs or ladder nearest (x, y) within `reach` pixels, or null. */
+function climbNear(map, x, y, reach) {
+  let best = null;
+  let bestD = reach;
+  for (const c of map.climbs ?? []) {
+    const d = distanceToSegment(x, y, [c.x1, c.y1, c.x2, c.y2]);
+    if (d <= bestD) [best, bestD] = [c, d];
+  }
+  return best;
+}
+
 /**
- * What a move along a path costs ({ value, unit, squares?, difficult }), or
- * null without a scale. points: where it starts, any waypoints, where it
- * ends. On a grid with a scale per square, each square entered costs one
- * square (diagonals too, the 5e way), two in difficult terrain; otherwise
- * it's the length of the path, doubled where it crosses difficult terrain.
+ * What a move along a path costs ({ value, unit, squares?, difficult, climb,
+ * wall }), or null without a scale. points: where it starts, any waypoints,
+ * where it ends. On a grid with a scale per square, each square entered
+ * costs one square (diagonals too, the 5e way), two in difficult terrain;
+ * otherwise it's the length of the path, doubled where it crosses difficult
+ * terrain.
+ *
+ * Going up or down between raised areas (owner, 2026-10-16): by stairs it
+ * costs nothing more; anywhere else it's climbing, and each foot climbed
+ * costs a foot extra (5e), by a ladder or up a bare wall (`wall`: the DM may
+ * want an Athletics check). `climb` is how many feet it climbs, up and down.
+ * A token (optional) with a climbing speed (`climber`), or flying
+ * (`elevation` above 0), climbs at no extra cost.
  */
-export function pathCost(map, points) {
+export function pathCost(map, points, token = null) {
   const per = unitsPerPx(map);
   if (per == null || points.length < 2) return null;
   const { unit } = map.scale;
   let difficult = false;
+  // Climbing: where the ground under the path changes height, unless by stairs.
+  const heights = (map.raised ?? []).length > 0;
+  const reach = squarePx(map) * 0.75;
+  let ground = heights ? groundAt(map, points[0].x, points[0].y) : 0;
+  let last = points[0];
+  let climb = 0;
+  let wall = false;
+  const step = (x, y) => {
+    if (!heights) return;
+    const g = groundAt(map, x, y);
+    if (g !== ground) {
+      const near = climbNear(map, (last.x + x) / 2, (last.y + y) / 2, reach);
+      if (near?.kind !== 'stairs') {
+        climb += Math.abs(g - ground);
+        wall ||= !near;
+      }
+      ground = g;
+    }
+    last = { x, y };
+  };
+  const free = !!(token && (token.climber || (token.elevation ?? 0) > 0));
+  const extra = () => (free ? 0 : climb / (FEET_PER[unit] ?? 1));
+  const done = (out) => ({ ...out, difficult, climb: round(climb, 1), wall: wall && climb > 0 });
   if (map.grid && map.scale.per === 'square') {
     const g = map.grid.size;
     let squares = 0;
@@ -1445,27 +1517,31 @@ export function pathCost(map, points) {
       const b = points[i];
       const n = Math.max(Math.round(Math.abs(b.x - a.x) / g), Math.round(Math.abs(b.y - a.y) / g));
       for (let k = 1; k <= n; k++) {
-        const hard = isDifficult(map, a.x + ((b.x - a.x) * k) / n, a.y + ((b.y - a.y) * k) / n);
+        const x = a.x + ((b.x - a.x) * k) / n;
+        const y = a.y + ((b.y - a.y) * k) / n;
+        const hard = isDifficult(map, x, y);
         difficult ||= hard;
         squares += hard ? 2 : 1;
+        step(x, y);
       }
     }
-    return { value: squares * map.scale.distance, unit, squares, difficult };
+    return done({ value: round(squares * map.scale.distance + extra(), 2), unit, squares });
   }
   let px = 0;
-  const step = squarePx(map) / 4;
+  const stepPx = squarePx(map) / 4;
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1];
     const b = points[i];
     const len = Math.hypot(b.x - a.x, b.y - a.y);
-    const n = Math.max(1, Math.ceil(len / step));
+    const n = Math.max(1, Math.ceil(len / stepPx));
     for (let k = 0; k < n; k++) {
       const hard = isDifficult(map, a.x + ((b.x - a.x) * (k + 0.5)) / n, a.y + ((b.y - a.y) * (k + 0.5)) / n);
       difficult ||= hard;
       px += (len / n) * (hard ? 2 : 1);
+      step(a.x + ((b.x - a.x) * (k + 1)) / n, a.y + ((b.y - a.y) * (k + 1)) / n);
     }
   }
-  return { value: px * per, unit, difficult };
+  return done({ value: px * per + extra(), unit });
 }
 
 /** A walking speed from a stat block's speed line ("30 ft., fly 60 ft." is 30), or null. */

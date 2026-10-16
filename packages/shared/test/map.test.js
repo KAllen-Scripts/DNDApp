@@ -6,7 +6,7 @@ import {
   PERSON_KIND, MAX_PINS, PIN_COLOR, TOKEN_COLORS,
   normalizeWalls, segmentsCross, wallBetween, sightPolygon, pointInPolygon, sightOf, canSee, fogMask, nearestWall, snapWallPoint,
   distanceToWall, doorReach,
-  pathCost, isDifficult, speedFromText, normalizeTerrain,
+  pathCost, isDifficult, speedFromText, normalizeTerrain, normalizeClimbs, hasClimbSpeed,
   litAreas, inView, normalizeLights, normalizeLightRadii,
   normalizeCombat, stepTurn, dexModifier, abilityModifier, statBlockRolls, ownToken, normalizeTemplates, templateShape, tokensInTemplate, inTemplate, snapTemplatePoint, spellArea,
 } from '../src/map.js';
@@ -187,7 +187,7 @@ test('normalizeWalls keeps real lines on the image; only doors can be open', () 
   }).wall_draft;
   assert.deepEqual(drafting, {
     status: 'pending', error: '', notes: '', step: 'checking', parts: 9, parts_done: 4, started_at: '2026-10-10T15:00:00.000Z', finished_at: '',
-    found: { walls: 3, obstacles: 0, doors: 2, lights: 0, terrain: 0 },
+    found: { walls: 3, obstacles: 0, doors: 2, lights: 0, terrain: 0, climbs: 0 },
   });
   assert.equal(normalizeMap({ image: { width: 10, height: 10 }, wall_draft: { step: 'napping', parts: 50 } }).wall_draft.step, '');
   assert.equal(normalizeMap({ image: { width: 10, height: 10 }, wall_draft: { parts: 50 } }).wall_draft.parts, 9);
@@ -500,15 +500,57 @@ test('pathCost: squares the 5e way along waypoints, double in difficult terrain;
     terrain: [{ id: 'dddddd', points: [[105, 0], [175, 0], [175, 490], [105, 490]] }], // columns 3 and 4
   });
   const p = (x, y) => ({ x: x * 35 + 17.5, y: y * 35 + 17.5 });
-  assert.deepEqual(pathCost(map, [p(0, 0), p(2, 0)]), { value: 10, unit: 'ft', squares: 2, difficult: false });
+  assert.deepEqual(pathCost(map, [p(0, 0), p(2, 0)]), { value: 10, unit: 'ft', squares: 2, difficult: false, climb: 0, wall: false });
   // Across the two difficult columns: 1 + 1 + 2 + 2 + 1.
-  assert.deepEqual(pathCost(map, [p(0, 0), p(5, 0)]), { value: 35, unit: 'ft', squares: 7, difficult: true });
+  assert.deepEqual(pathCost(map, [p(0, 0), p(5, 0)]), { value: 35, unit: 'ft', squares: 7, difficult: true, climb: 0, wall: false });
   // Waypoints: down 2, then across 2 diagonally (each diagonal step one square).
   assert.equal(pathCost(map, [p(0, 0), p(0, 2), p(2, 4)]).squares, 4);
   assert.ok(isDifficult(map, 120, 300));
   const free = normalizeMap({ image: { width: 1000, height: 500 }, scale: { distance: 100, unit: 'ft', per: 'width' } });
-  assert.deepEqual(pathCost(free, [{ x: 0, y: 0 }, { x: 300, y: 400 }]), { value: 50, unit: 'ft', difficult: false });
+  assert.deepEqual(pathCost(free, [{ x: 0, y: 0 }, { x: 300, y: 400 }]), { value: 50, unit: 'ft', difficult: false, climb: 0, wall: false });
   assert.equal(pathCost(normalizeMap({ image: { width: 10, height: 10 } }), [{ x: 0, y: 0 }, { x: 5, y: 5 }]), null);
+});
+
+test('pathCost: climbing a ladder costs a foot per foot, up and down; stairs are free; no ladder flags a wall', () => {
+  const roof = [[175, 0], [350, 0], [350, 490], [175, 490]]; // columns 5 to 9, 10 ft up
+  const map = (climbs) => normalizeMap({
+    image: { width: 700, height: 490 }, grid: { size: 35, x: 0, y: 0 }, scale: { distance: 5, unit: 'ft', per: 'square' },
+    raised: [{ id: 'rrrrrr', points: roof, height: 10 }], climbs,
+  });
+  const p = (x, y) => ({ x: x * 35 + 17.5, y: y * 35 + 17.5 });
+  // Up onto the roof and back down, 6 squares each way.
+  const there = [p(2, 1), p(7, 1)];
+  const back = [p(7, 1), p(2, 1)];
+  const ladder = map([{ id: 'llllll', kind: 'ladder', x1: 170, y1: 30, x2: 180, y2: 30 }]);
+  assert.deepEqual(pathCost(ladder, there), { value: 35, unit: 'ft', squares: 5, difficult: false, climb: 10, wall: false });
+  assert.equal(pathCost(ladder, back).value, 35);
+  const stairs = map([{ id: 'ssssss', kind: 'stairs', x1: 170, y1: 30, x2: 180, y2: 30 }]);
+  assert.deepEqual(pathCost(stairs, there), { value: 25, unit: 'ft', squares: 5, difficult: false, climb: 0, wall: false });
+  // Nothing to climb by: still climbing, flagged so the DM can ask for a check.
+  assert.deepEqual(pathCost(map([]), there), { value: 35, unit: 'ft', squares: 5, difficult: false, climb: 10, wall: true });
+  // A ladder elsewhere on the roof doesn't help.
+  assert.equal(pathCost(map([{ id: 'llllll', kind: 'stairs', x1: 170, y1: 400, x2: 180, y2: 400 }]), there).wall, true);
+  // A climbing speed or flying makes it free.
+  assert.equal(pathCost(ladder, there, { climber: true }).value, 25);
+  assert.equal(pathCost(ladder, there, { elevation: 5 }).value, 25);
+  assert.equal(pathCost(ladder, there, { climber: false, elevation: 0 }).value, 35);
+  // In metres the extra is converted: 10 ft is about 3.05 m.
+  const metres = normalizeMap({ image: { width: 700, height: 490 }, grid: { size: 35, x: 0, y: 0 }, scale: { distance: 1.5, unit: 'm', per: 'square' }, raised: [{ id: 'rrrrrr', points: roof, height: 10 }] });
+  assert.equal(pathCost(metres, there).value, 10.55);
+  assert.ok(hasClimbSpeed('30 ft., climb 30 ft.'));
+  assert.ok(!hasClimbSpeed('30 ft., fly 60 ft.'));
+});
+
+test('normalizeClimbs: kinds, bounds and sources', () => {
+  assert.deepEqual(normalizeClimbs([
+    { id: 'aaaaaa', kind: 'ladder', x1: -5, y1: 10, x2: 900, y2: 20, source: 'ai' },
+    { id: 'bbbbbb', kind: 'rope', x1: 1, y1: 2, x2: 3, y2: 4 },
+    { id: 'aaaaaa', kind: 'stairs' },
+  ], { width: 700, height: 490 }), [
+    { id: 'aaaaaa', kind: 'ladder', x1: 0, y1: 10, x2: 700, y2: 20, source: 'ai' },
+    { id: 'bbbbbb', kind: 'stairs', x1: 1, y1: 2, x2: 3, y2: 4, source: 'dm' },
+  ]);
+  assert.deepEqual(normalizeMap({}).climbs, []);
 });
 
 test('speedFromText and normalizeTerrain', () => {

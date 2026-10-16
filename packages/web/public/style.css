@@ -1325,6 +1325,7 @@ button.busy:disabled { opacity: 1; }
 .map-walls polyline { fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .map-walls .wall-draft.door { stroke: #ffb74d; }
 .map-walls .wall-draft.low { stroke: #81c784; }
+.map-walls .wall-draft.stairs, .map-walls .wall-draft.ladder { stroke: #c000ff; }
 .token.hidden-token { opacity: 0.5; border-style: dashed; }
 .token.down :is(.token-initials, .token-picture) { opacity: 0.45; }
 .token.down.has-picture .token-picture { filter: grayscale(1); }
@@ -1350,6 +1351,10 @@ button.busy:disabled { opacity: 1; }
 .map-terrain .raised { fill: rgb(70 130 200 / 0.18); stroke: #4a90d9; stroke-width: 2px; vector-effect: non-scaling-stroke; }
 .map-terrain .raised.low { fill: rgb(120 80 40 / 0.2); stroke: #a0703a; }
 .map-terrain .raised-label { fill: #fff; stroke: rgb(0 0 0 / 0.7); stroke-width: 3px; paint-order: stroke; font-weight: 700; pointer-events: none; }
+.map-terrain .climb { stroke: #c000ff; stroke-width: 4px; vector-effect: non-scaling-stroke; stroke-linecap: round; fill: none; }
+.map-terrain .climb.ladder { stroke-dasharray: 2 6; stroke-width: 6px; }
+.map-terrain .climb.top { fill: #c000ff; stroke: #fff; stroke-width: 2px; stroke-dasharray: none; }
+.map-terrain .climb.ai:not(.top) { stroke-opacity: 0.7; }
 .map-selection .hp-text { font-weight: 600; font-size: 0.9rem; }
 .map-selection .hp-change { width: 6.5rem; padding: 0.25rem 0.4rem; }
 .map-selection select { width: auto; padding: 0.25rem 0.4rem; font-size: 0.85rem; }

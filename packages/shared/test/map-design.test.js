@@ -393,3 +393,17 @@ test("a ship's hull: a pointed bow at the top, straight sides from the stern, in
   assert.equal(ASSETS.hull.group, 'Ships');
   assert.equal(ASSETS.floor_round.shape, 'round');
 });
+
+test('designToMap: stairs and a ladder become climbs, a line up each from the bottom to the top; stairs to another map don\'t', () => {
+  const d = normalizeDesign({ ...emptyDesign(8, 6, 'g'), assets: [
+    { id: 'ladd01', a: 'ladder', x: 2, y: 3 },
+    { id: 'stai01', a: 'stairs', x: 5, y: 3, rot: 90 },
+    { id: 'stai02', a: 'stairs_down', x: 7, y: 4, to: 'abcdef0123' },
+    { id: 'crat01', a: 'crate', x: 4, y: 4 },
+  ] });
+  const m = designToMap(d, 10);
+  assert.deepEqual(m.climbs.map((c) => c.kind), ['ladder', 'stairs']);
+  for (const c of m.climbs) assert.ok(Math.hypot(c.x2 - c.x1, c.y2 - c.y1) > 5, 'a real line');
+  // The ladder is upright: its line runs down the map.
+  assert.equal(m.climbs[0].x1, m.climbs[0].x2);
+});
