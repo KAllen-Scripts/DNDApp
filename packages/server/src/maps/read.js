@@ -336,7 +336,7 @@ export function createMapReader({ llm }) {
             if (rad >= 1) pts = Array.from({ length: 32 }, (_, i) => ({ x: c.x + rad * Math.cos((i * Math.PI) / 16), y: c.y + rad * Math.sin((i * Math.PI) / 16) }));
           }
           const height = Math.round(Math.max(-MAX_HEIGHT_FT, Math.min(MAX_HEIGHT_FT, r.height)));
-          return pts && height ? { points: pts.map(({ x, y }) => [x, y]), height } : null;
+          return pts && height ? { points: pts.map(({ x, y }) => [x, y]), height, ...(r.bridge && { bridge: true }) } : null;
         }).filter(Boolean).slice(0, MAX_RAISED);
         const steps = climbs.slice(0, MAX_CLIMBS).map((c) => ({ kind: c.kind, x1: c.a.x, y1: c.a.y, x2: c.b.x, y2: c.b.y }));
         return { walls, lights: lit, terrain, raised, climbs: steps };
@@ -518,7 +518,8 @@ const WallsOut = z.object({
     center: Point.optional().describe('The middle of a round one (a round tower top)'),
     edge: Point.optional().describe('Any point on the edge of a round one'),
     height: z.number().describe('Your guess at how high its top is above the ground round it, in feet (negative for a pit)'),
-  })).default([]).describe('Ground higher or lower than the rest, seen from above: roofs of buildings drawn as roofs, flat tower tops, castle wall-walks, cliff tops, platforms, balconies, pits'),
+    bridge: z.boolean().default(false).describe('True for a bridge, walkway or gallery people can walk under (open space below it), false for solid ground, a roof or a wall-walk'),
+  })).default([]).describe('Ground higher or lower than the rest, seen from above: roofs of buildings drawn as roofs, flat tower tops, castle wall-walks, cliff tops, platforms, balconies, bridges, pits'),
   doors: z.array(z.object({ from: Point, to: Point })).describe('Each door or gate, from one side of the doorway to the other'),
   lights: z.array(z.object({ x: z.number(), y: z.number(), kind: z.enum(['candle', 'torch', 'lamp', 'brazier', 'fire', 'magic']) })).default([])
     .describe('Light sources drawn on the map: wall torches, braziers, campfires and hearths, lamps, candles, glowing magic'),
@@ -535,7 +536,7 @@ const WallsOut = z.object({
 const WALLS_SYSTEM = `You trace walls on maps a Dungeon Master imports into a D&D table app. The app uses them for line of sight: players only see what their token has a clear line to, so a wall you trace hides what is behind it, and a gap lets sight through.
 - Walls: solid things a person can't see through: walls of rooms and towers you can see inside, castle and city walls, cave walls. Not floors, furniture, tables, rubble, trees or bushes.
 - Obstacles: things you can see over but can't walk through: a fence, a hedge, a low wall, the edge of deep water. They block movement, not sight.
-- Raised areas: ground that is higher (or lower) than the rest, seen from above: a building drawn as its roof (outline the roof all the way round; not as walls or an obstacle), a flat tower top (round ones as a circle), the walk along the top of a castle or city wall, a cliff top, a platform or balcony, a pit (negative). Guess each one's height in feet above the ground round it: a one-storey house about 10, two storeys about 20, a castle wall about 25, a tower about 40, a balcony about 10, from what's drawn and the grid. The app lets players see onto them but not past them, and climbing onto them costs movement. A building drawn as a floor plan (its rooms and walls shown) gets walls, not a raised area.
+- Raised areas: ground that is higher (or lower) than the rest, seen from above: a building drawn as its roof (outline the roof all the way round; not as walls or an obstacle), a flat tower top (round ones as a circle), the walk along the top of a castle or city wall, a cliff top, a platform or balcony, a pit (negative). A bridge, a raised walkway or a gallery people can walk under is a raised area with bridge true. Guess each one's height in feet above the ground round it: a one-storey house about 10, two storeys about 20, a castle wall about 25, a tower about 40, a balcony about 10, from what's drawn and the grid. The app lets players see onto them but not past them, and climbing onto them costs movement. A building drawn as a floor plan (its rooms and walls shown) gets walls, not a raised area.
 - Follow each wall along its middle as a line through points. Make walls that meet share the same point, and close rooms all the way round except at doors and open doorways.
 - Round and curved walls: never as a jagged or straight line. A whole round room or tower is a circle; part of one, a bend or a curved cave wall is an arc (curves) through its start, a point halfway along it and its end. Follow a long or wavy curve with several arcs end to end, each no more than a quarter turn. A doorway in a round wall: arcs up to each side of it, and a door across it.
 - Doors and gates go in doors, across the doorway. Leave open archways and gaps open.

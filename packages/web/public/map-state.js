@@ -38,6 +38,8 @@ export const state = {
   templateDraft: null, // a template about to be placed: { shape, size, width, label, color }
   templatePlace: null, // the template being placed: { pointer, a, b }
   selectedTemplate: null, // template id
+  selectedRaised: null, // raised area id (the DM's, to check or change its height, shape or bridge)
+  raisedEdit: null, // dragging a raised area's corner, a new corner or the whole area
   selectedDoor: null, // the DM's: a door's id (to open, close, lock or unlock it)
   templateDrag: null, // a template being moved: { id, pointer, grab, x, y, moved, sx, sy }
   caught: new Set(), // tokens inside the selected (or placed) template

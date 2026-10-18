@@ -157,3 +157,45 @@ test("the AI's guessed heights: the DM accepts one or all, or corrects one; acce
     await t.cleanup();
   }
 });
+
+test('bridges: the DM reshapes a raised area or makes it a bridge; tokens walk under it or onto it, and players see under it', async () => {
+  const t = await setup({ llm: createFakeLLM({ structured: async () => readOut }) });
+  try {
+    const png = await terrain(700, 490, { size: 35 });
+    const id = (await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'river.png', data: png.toString('base64') } })).json().id;
+    const base = `/campaigns/${t.campaign.id}/maps/${id}`;
+    await t.request('PATCH', base, { body: { shown: true, grid: { size: 35, x: 0, y: 0 }, scale: { distance: 5, unit: 'ft', per: 'square' } } });
+    await t.request('PATCH', `${base}/fog`, { body: { enabled: true, sight: true } });
+    // The AI's guess: a 15 ft platform across the river, drawn a little short.
+    t.maps.change(t.campaign.id, id, (m) => { m.raised.push({ id: 'guess0', points: [[280, 175], [420, 175], [420, 280], [280, 280]], height: 15, source: 'ai' }); });
+    // The DM fixes its shape and makes it a bridge: that accepts it.
+    const deck = [[245, 175], [455, 175], [455, 280], [245, 280]];
+    assert.equal((await t.request('PATCH', `${base}/raised`, { as: t.sam.token, body: { set: { id: 'guess0', bridge: true } } })).statusCode, 403);
+    let dm = (await t.request('PATCH', `${base}/raised`, { body: { set: { id: 'guess0', points: deck, bridge: true } } })).json();
+    assert.deepEqual(dm.raised.map(({ points, height, bridge, source }) => ({ points, height, bridge, source })), [{ points: deck, height: 15, bridge: true, source: 'dm' }]);
+    // A height alone keeps the shape and the bridge.
+    dm = (await t.request('PATCH', `${base}/raised`, { body: { set: { id: 'guess0', height: 20 } } })).json();
+    assert.deepEqual([dm.raised[0].height, dm.raised[0].bridge, dm.raised[0].points], [20, true, deck]);
+    dm = (await t.request('PATCH', `${base}/raised`, { body: { set: { id: 'guess0', height: 15 } } })).json();
+
+    const add = async (body) => (await t.request('POST', `${base}/tokens`, { body })).json().token;
+    const sam = await add({ kind: 'pc', name: 'Sam', user_id: t.sam.id, x: 52.5, y: 227.5 });
+    const troll = await add({ kind: 'enemy', name: 'Troll', x: 612.5, y: 227.5 });
+    // Players get the bridge for their fog.
+    const player = (await t.request('GET', base, { as: t.sam.token })).json();
+    assert.deepEqual(player.raised, [{ points: deck, height: 15, bridge: true }]);
+    // Sam walks in from the bank: under the bridge, and still sees the troll on the far bank under the deck.
+    const moved = (await t.request('PATCH', `${base}/tokens/${sam.id}`, { as: t.sam.token, body: { x: 332.5, y: 227.5 } })).json();
+    assert.equal(moved.token.under, true);
+    assert.ok(moved.map.tokens.some((x) => x.name === 'Troll'));
+    // The DM puts the troll up on the bridge by hand, right over Sam: the deck is between them.
+    await t.request('PATCH', `${base}/tokens/${troll.id}`, { body: { x: 367.5, y: 227.5, under: false } });
+    assert.equal(t.maps.get(t.campaign.id, id).tokens.find((x) => x.id === troll.id).under, false);
+    assert.deepEqual((await t.request('GET', base, { as: t.sam.token })).json().tokens.map((x) => x.name), ['Sam']);
+    // Sam walks out the far side: no longer under anything.
+    const out = (await t.request('PATCH', `${base}/tokens/${sam.id}`, { as: t.sam.token, body: { x: 507.5, y: 227.5 } })).json();
+    assert.equal(out.token.under, false);
+  } finally {
+    await t.cleanup();
+  }
+});

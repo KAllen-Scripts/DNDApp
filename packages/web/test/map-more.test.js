@@ -311,11 +311,43 @@ test('raised areas: the DM drags one at the height in the box, clicks it to chan
     assert.deepEqual([area.points, area.height], [[[35, 35], [105, 35], [105, 105], [35, 105]], 25]);
     assert.equal(page.text('#map-terrain .raised-label'), '↑25 ft');
     assert.equal(tokenEl(page, 'Thorin').querySelector('.token-up').textContent, '↑25', 'standing on it');
-    // A click on it gives it the height now in the box.
-    page.type('#map-raised-height', '10');
+    // A click on it picks it: the bar under the map changes its height.
     click(page, 70, 70);
     await page.settle();
+    assert.match(page.text('#map-selection'), /Raised area/);
+    page.type('#map-raised-set', '10');
+    await page.settle();
     assert.equal((await mapOf(t, map)).raised[0].height, 10);
+    // Its corners can be dragged (onto half squares): the area it covers changes.
+    assert.equal(page.$$('#map-terrain .raised-handle:not(.add)').length, 4);
+    page.pointer('#map-view', 'pointerdown', { clientX: 105, clientY: 105 });
+    page.pointer('#map-view', 'pointermove', { clientX: 138, clientY: 141 });
+    page.pointer('#map-view', 'pointerup', { clientX: 138, clientY: 141 });
+    await page.settle();
+    assert.deepEqual((await mapOf(t, map)).raised[0].points, [[35, 35], [105, 35], [140, 140], [35, 105]]);
+    // A dot between two corners adds one; the whole area drags from inside it.
+    page.pointer('#map-view', 'pointerdown', { clientX: 70, clientY: 35 });
+    page.pointer('#map-view', 'pointermove', { clientX: 70, clientY: 17 });
+    page.pointer('#map-view', 'pointerup', { clientX: 70, clientY: 17 });
+    await page.settle();
+    assert.deepEqual((await mapOf(t, map)).raised[0].points, [[35, 35], [70, 17.5], [105, 35], [140, 140], [35, 105]]);
+    // Dropping that corner back on its neighbour takes it away again.
+    page.pointer('#map-view', 'pointerdown', { clientX: 70, clientY: 17.5 });
+    page.pointer('#map-view', 'pointermove', { clientX: 37, clientY: 36 });
+    page.pointer('#map-view', 'pointerup', { clientX: 37, clientY: 36 });
+    await page.settle();
+    assert.deepEqual((await mapOf(t, map)).raised[0].points, [[35, 35], [105, 35], [140, 140], [35, 105]]);
+    page.pointer('#map-view', 'pointerdown', { clientX: 60, clientY: 60 });
+    page.pointer('#map-view', 'pointermove', { clientX: 95, clientY: 60 });
+    page.pointer('#map-view', 'pointerup', { clientX: 95, clientY: 60 });
+    await page.settle();
+    assert.deepEqual((await mapOf(t, map)).raised[0].points, [[70, 35], [140, 35], [175, 140], [70, 105]]);
+    page.pointer('#map-view', 'pointerdown', { clientX: 95, clientY: 60 });
+    page.pointer('#map-view', 'pointermove', { clientX: 60, clientY: 60 });
+    page.pointer('#map-view', 'pointerup', { clientX: 60, clientY: 60 });
+    await page.settle();
+    click(page, 400, 400);
+    assert.ok(page.$('#map-selection').hidden, 'a click off it lets it go');
     // Flying 5 ft above it.
     page.key(tokenEl(page, 'Thorin'), 'Enter');
     page.type('#map-selection [aria-label="Feet above the ground"]', '5');
@@ -329,7 +361,7 @@ test('raised areas: the DM drags one at the height in the box, clicks it to chan
   });
 });
 
-test("the AI's guessed heights show with a question mark; a click accepts one (its height into the box), a second click corrects it, and Accept AI heights takes the rest", async () => {
+test("the AI's guessed heights show with a question mark; Check AI heights goes through them to keep, correct or make a bridge; Accept all takes the rest", async () => {
   await withPage({
     setup: { llm: mapLLM() },
     before: async (t) => {
@@ -338,6 +370,7 @@ test("the AI's guessed heights show with a question mark; a click accepts one (i
         m.raised = [
           { id: 'guess0', points: [[35, 35], [105, 35], [105, 105], [35, 105]], height: 10, source: 'ai' },
           { id: 'guess1', points: [[210, 210], [280, 210], [280, 280], [210, 280]], height: 30, source: 'ai' },
+          { id: 'guess2', points: [[420, 210], [490, 210], [490, 280], [420, 280]], height: 20, source: 'ai' },
         ];
       });
       return { map, dana: await addDm(t) };
@@ -346,20 +379,63 @@ test("the AI's guessed heights show with a question mark; a click accepts one (i
   }, async (page, t, { map }) => {
     await openMapTab(page);
     page.click('#map-fog-open');
-    assert.deepEqual(page.$$('#map-terrain .raised-label').map((x) => x.textContent), ['↑10 ft?', '↑30 ft?']);
-    assert.equal(page.text('#map-raised-accept'), 'Accept AI heights (2)');
-    page.click('[data-wall-mode=raised]');
-    click(page, 70, 70);
+    assert.deepEqual(page.$$('#map-terrain .raised-label').map((x) => x.textContent), ['↑10 ft?', '↑30 ft?', '↑20 ft?']);
+    assert.equal(page.text('#map-raised-check'), 'Check AI heights (3)');
+    assert.equal(page.text('#map-raised-accept'), 'Accept all (3)');
+    // With Fog & walls open and no tool on, a click on one picks it.
+    click(page, 450, 250);
+    assert.equal(page.$('#map-raised-set').value, '20');
+    page.click('#map-selection [aria-label="Close"]');
+    assert.ok(page.$('#map-selection').hidden);
+    // Check AI heights picks the first guess (and brings it into view), with its height to keep or change.
+    page.click('#map-raised-check');
+    assert.match(page.text('#map-selection'), /The AI's guess: check it/);
+    assert.equal(page.$('#map-raised-set').value, '10');
+    assert.ok(page.$('#map-terrain polygon.raised.selected'));
+    page.click('#map-raised-ok');
     await page.settle();
-    assert.equal(page.$('#map-raised-height').value, '10');
-    assert.deepEqual((await mapOf(t, map)).raised.map((r) => r.source), ['dm', 'ai']);
-    page.type('#map-raised-height', '15');
-    click(page, 70, 70);
+    assert.deepEqual((await mapOf(t, map)).raised.map((r) => r.source), ['dm', 'ai', 'ai']);
+    // On to the next: 30 ft is wrong, it's a 15 ft bridge.
+    assert.equal(page.$('#map-raised-set').value, '30');
+    page.type('#map-raised-set', '15');
     await page.settle();
-    assert.equal((await mapOf(t, map)).raised[0].height, 15);
+    page.type('#map-raised-bridge', true);
+    await page.settle();
+    assert.deepEqual((await mapOf(t, map)).raised.map((r) => `${r.height} ${r.source}${r.bridge ? ' bridge' : ''}`), ['10 dm', '15 dm bridge', '20 ai']);
+    assert.match(page.text('#map-selection'), /Bridge/);
+    assert.equal(page.$$('#map-terrain .raised-label')[1].textContent, 'bridge ↑15 ft');
     page.click('#map-raised-accept');
     await page.settle();
-    assert.deepEqual((await mapOf(t, map)).raised.map((r) => `${r.height} ${r.source}`), ['15 dm', '30 dm']);
+    assert.deepEqual((await mapOf(t, map)).raised.map((r) => `${r.height} ${r.source}`), ['10 dm', '15 dm', '20 dm']);
     assert.ok(page.$('#map-raised-accept').hidden);
+    assert.ok(page.$('#map-raised-check').hidden);
+  });
+});
+
+test('bridges: a token under one shows it is under, and the DM can put it on top', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const map = await importMap(t, { patch: SHOWN });
+      t.maps.change(t.campaign.id, map.id, (m) => {
+        m.raised = [{ id: 'brdg01', points: [[0, 35], [210, 35], [210, 105], [0, 105]], height: 15, bridge: true, source: 'dm' }];
+      });
+      await addToken(t, map, { kind: 'npc', name: 'Troll', x: 87.5, y: 52.5, under: true });
+      return { map, dana: await addDm(t) };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t, { map }) => {
+    await openMapTab(page);
+    const troll = () => tokenEl(page, 'Troll');
+    assert.ok(troll().classList.contains('under'));
+    assert.equal(troll().querySelector('.token-up').textContent, 'under');
+    page.key(troll(), 'Enter');
+    const box = page.$('#map-selection [data-token-under]');
+    assert.ok(box.checked);
+    page.type(box, false);
+    await page.settle();
+    assert.equal((await mapOf(t, map)).tokens[0].under, false);
+    assert.ok(!troll().classList.contains('under'));
+    assert.equal(troll().querySelector('.token-up').textContent, '↑15', 'on the bridge, 15 ft up');
   });
 });

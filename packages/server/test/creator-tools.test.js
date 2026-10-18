@@ -416,7 +416,7 @@ test('a map taken out as a Universal VTT file and back in keeps its heights, sta
       Object.assign(doors[0], { secret: true, revealed: false });
       Object.assign(doors[1], { locked: true });
       m.walls.push({ id: 'fence01', x1: 70, y1: 490, x2: 280, y2: 490, kind: 'low', door: false, open: false, locked: false, source: 'dm' });
-      m.raised = [{ id: 'roof01', points: [[70, 70], [210, 70], [210, 210], [70, 210]], height: 15, source: 'dm' }, { id: 'pit001', points: [[560, 350], [630, 350], [630, 420]], height: -10, source: 'ai' }];
+      m.raised = [{ id: 'roof01', points: [[70, 70], [210, 70], [210, 210], [70, 210]], height: 15, bridge: true, source: 'dm' }, { id: 'pit001', points: [[560, 350], [630, 350], [630, 420]], height: -10, source: 'ai' }];
       m.climbs = [{ id: 'ladr01', kind: 'ladder', x1: 140, y1: 245, x2: 140, y2: 210, source: 'dm' }, { id: 'stai01', kind: 'stairs', x1: 245, y1: 140, x2: 210, y2: 140, source: 'creator' }];
       m.terrain = [{ id: 'mud001', points: [[350, 350], [490, 350], [490, 490], [350, 490]], source: 'dm' }];
       m.lights[0].bright = 10;
@@ -436,9 +436,9 @@ test('a map taken out as a Universal VTT file and back in keeps its heights, sta
     const after = t.maps.get(t.campaign.id, id);
     const wall = (w) => [w.x1, w.y1, w.x2, w.y2, w.kind, w.door, w.locked, !!w.secret].join();
     assert.deepEqual(after.walls.map(wall).sort(), before.walls.map(wall).sort());
-    assert.deepEqual(after.raised.map(({ points, height, source }) => ({ points, height, source })), [
-      { points: [[70, 70], [210, 70], [210, 210], [70, 210]], height: 15, source: 'file' },
-      { points: [[560, 350], [630, 350], [630, 420]], height: -10, source: 'file' },
+    assert.deepEqual(after.raised.map(({ points, height, bridge, source }) => ({ points, height, bridge, source })), [
+      { points: [[70, 70], [210, 70], [210, 210], [70, 210]], height: 15, bridge: true, source: 'file' },
+      { points: [[560, 350], [630, 350], [630, 420]], height: -10, bridge: undefined, source: 'file' },
     ]);
     assert.deepEqual(after.climbs.map(({ kind, x1, y1, x2, y2 }) => [kind, x1, y1, x2, y2]), [['ladder', 140, 245, 140, 210], ['stairs', 245, 140, 210, 140]]);
     assert.deepEqual(after.terrain.map((a) => a.points), [[[350, 350], [490, 350], [490, 490], [350, 490]]]);

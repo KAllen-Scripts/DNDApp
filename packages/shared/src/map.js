@@ -101,6 +101,8 @@ export function normalizeToken(t = {}, map) {
     height: t.height == null ? null : round(num(t.height, { min: 0.5, max: MAX_HEIGHT_FT, fallback: 6 }), 1),
     // Feet above the ground under it (flying, climbing, levitating); 0 standing on it.
     elevation: round(num(t.elevation, { min: -MAX_HEIGHT_FT, max: MAX_HEIGHT_FT, fallback: 0 }), 1),
+    // Under a bridge rather than on it, where it stands in one (owner, 2026-10-18); set as it moves (see levelWalker).
+    under: t.under === true,
     // A picture the DM gave an NPC, enemy or companion (a player character shows its player's own token picture instead).
     art: kind !== 'pc' ? normalizeTokenArt(t.art) : null,
     // The DM's merchant this token stands for (players open its shop from the token); null for none.
@@ -1225,6 +1227,10 @@ export const SIZE_HEIGHTS = { 0.5: 2, 1: 6, 2: 10, 3: 20, 4: 30 };
  * lower than the ground, each flat on top: a roof, a castle's wall-walk, a
  * tower top, a cliff top, a pit. `height` is in feet above the map's ground
  * (0). Where areas overlap, the highest counts.
+ *
+ * A `bridge` (owner, 2026-10-18: "platforms that you can walk under") is a
+ * deck at that height with open space below it: a token in it is either on
+ * it or under it (the token's `under`), and sight passes under it.
  */
 export function normalizeRaised(list, image = {}) {
   const { width = 1, height = 1 } = image;
@@ -1236,7 +1242,7 @@ export function normalizeRaised(list, image = {}) {
       .map((p) => [round(num(p?.[0], { min: 0, max: width, fallback: 0 }), 1), round(num(p?.[1], { min: 0, max: height, fallback: 0 }), 1)]);
     if (points.length < 3) continue;
     seen.add(a.id);
-    out.push({ id: String(a.id), points, height: round(num(a.height, { min: -MAX_HEIGHT_FT, max: MAX_HEIGHT_FT, fallback: 0 }), 1), source: pick(a.source, WALL_SOURCES, 'dm') });
+    out.push({ id: String(a.id), points, height: round(num(a.height, { min: -MAX_HEIGHT_FT, max: MAX_HEIGHT_FT, fallback: 0 }), 1), ...(a.bridge === true && { bridge: true }), source: pick(a.source, WALL_SOURCES, 'dm') });
   }
   return out;
 }
@@ -1264,12 +1270,33 @@ export function normalizeClimbs(list, image = {}) {
   return out;
 }
 
-/** How high the ground is at a point (feet): the highest raised area there, else 0. */
-export function groundAt(map, x, y) {
+/** How thick a bridge's deck is (feet): sight passes under it, not through it. */
+export const BRIDGE_DECK_FT = 1;
+/** How far down (feet) a token steps onto a bridge from where it stands, rather than walking under it. */
+export const BRIDGE_STEP_FT = 5;
+
+/**
+ * How high the ground is at a point (feet): the highest raised area there,
+ * else 0. `under`: below any bridge there (the ground under it), not on it.
+ */
+export function groundAt(map, x, y, under = false) {
   let best = null;
-  for (const a of map.raised ?? []) if ((best == null || a.height > best) && pointInPolygon(x, y, a.points)) best = a.height;
+  for (const a of map.raised ?? []) if ((!under || !a.bridge) && (best == null || a.height > best) && pointInPolygon(x, y, a.points)) best = a.height;
   return best ?? 0;
 }
+
+/** The highest bridge at a point, or null. */
+export function bridgeAt(map, x, y) {
+  let best = null;
+  for (const a of map.raised ?? []) if (a.bridge && (!best || a.height > best.height) && pointInPolygon(x, y, a.points)) best = a;
+  return best;
+}
+
+/** How high the ground a token stands on is (feet): a bridge's deck, or what's under it if the token is. */
+export const tokenGround = (map, t) => groundAt(map, t.x, t.y, !!t.under);
+
+/** Is this token under a bridge (it says so, and one is where it stands)? */
+export const isUnder = (map, t) => !!t.under && !!bridgeAt(map, t.x, t.y);
 
 /**
  * A height in feet from what a player typed on their sheet ("5'10\"", "5 ft 10 in",
@@ -1296,12 +1323,12 @@ export const tokenTall = (t) => t.height ?? t.tall ?? SIZE_HEIGHTS[t.size] ?? 6;
 /** Where a token's eyes are: { x, y, z } with z in feet (1 ft below the top of its head, but at least half way up). */
 export function eyeOf(map, t) {
   const tall = tokenTall(t);
-  return { x: t.x, y: t.y, z: groundAt(map, t.x, t.y) + (t.elevation ?? 0) + Math.max(tall - 1, tall / 2) };
+  return { x: t.x, y: t.y, z: tokenGround(map, t) + (t.elevation ?? 0) + Math.max(tall - 1, tall / 2) };
 }
 
 /** The top of a token's head: { x, y, z }, z in feet. */
 export function headOf(map, t) {
-  return { x: t.x, y: t.y, z: groundAt(map, t.x, t.y) + (t.elevation ?? 0) + tokenTall(t) };
+  return { x: t.x, y: t.y, z: tokenGround(map, t) + (t.elevation ?? 0) + tokenTall(t) };
 }
 
 // The edges of raised areas, per set of areas: a key -> edges.
@@ -1310,15 +1337,22 @@ const edgeCache = new Map();
 /**
  * Every place the ground changes height, as segments with `top`: the
  * higher of the heights on its two sides (what a line of sight over it
- * must clear).
+ * must clear). Bridges aren't ground (sight passes under them): they come
+ * as `decks` on the list, { points, top, bottom, box }.
  */
 export function heightEdges(map) {
   const raised = map.raised ?? [];
   if (!raised.length) return [];
-  const key = raised.map((a) => `${a.height}:${a.points.join(';')}`).join('|');
+  const key = raised.map((a) => `${a.bridge ? 'b' : ''}${a.height}:${a.points.join(';')}`).join('|');
   if (edgeCache.has(key)) return edgeCache.get(key);
   const out = [];
+  out.decks = raised.filter((a) => a.bridge).map((a) => {
+    const xs = a.points.map((p) => p[0]);
+    const ys = a.points.map((p) => p[1]);
+    return { points: a.points, top: a.height, bottom: a.height - BRIDGE_DECK_FT, box: { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) } };
+  });
   for (const a of raised) {
+    if (a.bridge) continue;
     const n = a.points.length;
     for (let i = 0; i < n; i++) {
       const [x1, y1] = a.points[i];
@@ -1330,7 +1364,7 @@ export function heightEdges(map) {
       const ny = ((x2 - x1) / len) * 0.01;
       const mx = (x1 + x2) / 2;
       const my = (y1 + y2) / 2;
-      const top = Math.max(groundAt(map, mx + nx, my + ny), groundAt(map, mx - nx, my - ny));
+      const top = Math.max(groundAt(map, mx + nx, my + ny, true), groundAt(map, mx - nx, my - ny, true));
       out.push({ x1, y1, x2, y2, top });
     }
   }
@@ -1366,7 +1400,47 @@ export function heightClear(edges, a, b) {
     if (t < 0 || t > 1 || u < 0 || u > 1) continue;
     if (a.z + (b.z - a.z) * t < e.top - 1e-6) return false;
   }
+  for (const d of edges.decks ?? []) {
+    if (d.box.x1 < x0 || d.box.x0 > x1 || d.box.y1 < y0 || d.box.y0 > y1) continue;
+    if (throughDeck(d, a, b)) return false;
+  }
   return true;
+}
+
+/**
+ * Does the line from a to b pass through a bridge's deck? Where it's over
+ * the bridge (between crossings of its outline), its height there runs
+ * straight from one end to the other, so it goes through the deck if that
+ * range meets the deck's (bottom to top). Over it or under it is clear.
+ */
+function throughDeck(d, a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const ts = [0, 1];
+  const n = d.points.length;
+  for (let i = 0; i < n; i++) {
+    const [x1, y1] = d.points[i];
+    const [x2, y2] = d.points[(i + 1) % n];
+    const sx = x2 - x1;
+    const sy = y2 - y1;
+    const denom = cross(dx, dy, sx, sy);
+    if (Math.abs(denom) < 1e-12) continue;
+    const t = cross(x1 - a.x, y1 - a.y, sx, sy) / denom;
+    const u = cross(x1 - a.x, y1 - a.y, dx, dy) / denom;
+    if (t > 0 && t < 1 && u >= 0 && u <= 1) ts.push(t);
+  }
+  ts.sort((p, q) => p - q);
+  for (let i = 1; i < ts.length; i++) {
+    const t0 = ts[i - 1];
+    const t1 = ts[i];
+    if (t1 - t0 < 1e-9) continue;
+    const tm = (t0 + t1) / 2;
+    if (!pointInPolygon(a.x + dx * tm, a.y + dy * tm, d.points)) continue;
+    const z0 = a.z + (b.z - a.z) * t0;
+    const z1 = a.z + (b.z - a.z) * t1;
+    if (Math.max(z0, z1) > d.bottom + 1e-6 && Math.min(z0, z1) < d.top - 1e-6) return true;
+  }
+  return false;
 }
 
 /** Can token a see token b over the raised areas (walls aside)? The same line both ways, so it's mutual. */
@@ -1431,8 +1505,10 @@ export function heightShadows(map, userId, polygons, explored = []) {
       const cy = y + h / 2;
       let hide = false;
       if (polygons.some((v) => inView(cx, cy, v)) && isFogged(map, cx, cy)) {
-        const target = { x: cx, y: cy, z: groundAt(map, cx, cy) + FOG_TARGET_HEIGHT };
-        hide = !eyes.some((eye) => heightClear(edges, eye, target));
+        // Someone standing there (on a bridge or under it: either can be seen).
+        const deck = bridgeAt(map, cx, cy);
+        const targets = [{ x: cx, y: cy, z: groundAt(map, cx, cy, true) + FOG_TARGET_HEIGHT }, ...(deck ? [{ x: cx, y: cy, z: Math.max(deck.height, groundAt(map, cx, cy, true)) + FOG_TARGET_HEIGHT }] : [])];
+        hide = !eyes.some((eye) => targets.some((target) => heightClear(edges, eye, target)));
       }
       const f = hide ? (explored.some((e) => cx >= e.x && cx <= e.x + e.w && cy >= e.y && cy <= e.y + e.h) ? 'dim' : fill) : null;
       if (f && run && run.fill === f && Math.abs(run.x + run.w - x) < 1e-6) run.w = x + w - run.x;
@@ -1467,8 +1543,62 @@ function climbNear(map, x, y, reach) {
 }
 
 /**
+ * Follows a token's feet along a move, step by step: how high the ground
+ * under it is, whether it's on a bridge or under one (owner, 2026-10-18),
+ * and how far it climbs. It walks onto a bridge where it comes to it from
+ * no more than BRIDGE_STEP_FT below the deck, or by stairs or a ladder;
+ * otherwise it walks under it, and stays under (or on) until it leaves it.
+ * Climbing as in pathCost: any change of height, except by stairs.
+ * `step(x, y)` each point along the way; then `under`, `ground`, `climb`, `wall`.
+ */
+export function levelWalker(map, start, under = false) {
+  const heights = (map.raised ?? []).length > 0;
+  const reach = squarePx(map) * 0.75;
+  let deck = heights ? bridgeAt(map, start.x, start.y) : null;
+  let on = !!deck && !under;
+  const w = { ground: heights ? groundAt(map, start.x, start.y, !on) : 0, climb: 0, wall: false, under: !!deck && !on };
+  let last = start;
+  w.step = (x, y) => {
+    if (!heights) return;
+    const d = bridgeAt(map, x, y);
+    const near = climbNear(map, (last.x + x) / 2, (last.y + y) / 2, reach);
+    const base = groundAt(map, x, y, true);
+    const nextOn = !!d && (on || w.ground >= d.height - BRIDGE_STEP_FT || !!near);
+    const g = nextOn ? Math.max(base, d.height) : base;
+    if (g !== w.ground) {
+      if (near?.kind !== 'stairs') {
+        w.climb += Math.abs(g - w.ground);
+        w.wall ||= !near;
+      }
+      w.ground = g;
+    }
+    deck = d;
+    on = nextOn;
+    w.under = !!d && !on;
+    last = { x, y };
+  };
+  return w;
+}
+
+/**
+ * Whether a token ends a move (points: where it starts, any waypoints, where
+ * it ends) under a bridge: { under, climb }. Walked in quarter squares.
+ */
+export function walkLevels(map, points, token = {}) {
+  const w = levelWalker(map, points[0], !!token.under);
+  const stepPx = squarePx(map) / 4;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / stepPx));
+    for (let k = 1; k <= n; k++) w.step(a.x + ((b.x - a.x) * k) / n, a.y + ((b.y - a.y) * k) / n);
+  }
+  return { under: w.under, climb: w.climb };
+}
+
+/**
  * What a move along a path costs ({ value, unit, squares?, difficult, climb,
- * wall }), or null without a scale. points: where it starts, any waypoints,
+ * wall, under }), or null without a scale. points: where it starts, any waypoints,
  * where it ends. On a grid with a scale per square, each square entered
  * costs one square (diagonals too, the 5e way), two in difficult terrain;
  * otherwise it's the length of the path, doubled where it crosses difficult
@@ -1479,7 +1609,8 @@ function climbNear(map, x, y, reach) {
  * costs a foot extra (5e), by a ladder or up a bare wall (`wall`: the DM may
  * want an Athletics check). `climb` is how many feet it climbs, up and down.
  * A token (optional) with a climbing speed (`climber`), or flying
- * (`elevation` above 0), climbs at no extra cost.
+ * (`elevation` above 0), climbs at no extra cost. Bridges as levelWalker
+ * says; `under`: whether it ends under one.
  */
 export function pathCost(map, points, token = null) {
   const per = unitsPerPx(map);
@@ -1487,28 +1618,11 @@ export function pathCost(map, points, token = null) {
   const { unit } = map.scale;
   let difficult = false;
   // Climbing: where the ground under the path changes height, unless by stairs.
-  const heights = (map.raised ?? []).length > 0;
-  const reach = squarePx(map) * 0.75;
-  let ground = heights ? groundAt(map, points[0].x, points[0].y) : 0;
-  let last = points[0];
-  let climb = 0;
-  let wall = false;
-  const step = (x, y) => {
-    if (!heights) return;
-    const g = groundAt(map, x, y);
-    if (g !== ground) {
-      const near = climbNear(map, (last.x + x) / 2, (last.y + y) / 2, reach);
-      if (near?.kind !== 'stairs') {
-        climb += Math.abs(g - ground);
-        wall ||= !near;
-      }
-      ground = g;
-    }
-    last = { x, y };
-  };
+  const walker = levelWalker(map, points[0], !!token?.under);
+  const step = walker.step;
   const free = !!(token && (token.climber || (token.elevation ?? 0) > 0));
-  const extra = () => (free ? 0 : climb / (FEET_PER[unit] ?? 1));
-  const done = (out) => ({ ...out, difficult, climb: round(climb, 1), wall: wall && climb > 0 });
+  const extra = () => (free ? 0 : walker.climb / (FEET_PER[unit] ?? 1));
+  const done = (out) => ({ ...out, difficult, climb: round(walker.climb, 1), wall: walker.wall && walker.climb > 0, under: walker.under });
   if (map.grid && map.scale.per === 'square') {
     const g = map.grid.size;
     let squares = 0;

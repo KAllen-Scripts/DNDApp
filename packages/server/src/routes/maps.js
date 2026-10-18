@@ -4,7 +4,7 @@
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { CLIMB_KINDS, CONDITIONS, FOG_MAP, FOG_OPS, MAX_COMPANIONS, MAX_FOG_SHAPES, MAX_CLIMBS, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_RAISED, MAX_TERRAIN, MAX_HEIGHT_FT, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, PLAYER_KINDS, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, ownToken, pathCost, snapToken, stepTurn, tokenPx, wallBetween } from '@dndapp/shared/map.js';
+import { CLIMB_KINDS, CONDITIONS, FOG_MAP, FOG_OPS, MAX_COMPANIONS, MAX_FOG_SHAPES, MAX_CLIMBS, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_RAISED, MAX_TERRAIN, MAX_HEIGHT_FT, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, PLAYER_KINDS, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, ownToken, pathCost, snapToken, stepTurn, tokenPx, walkLevels, wallBetween } from '@dndapp/shared/map.js';
 import sharp from 'sharp';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
@@ -655,7 +655,8 @@ export function registerMaps(app, r) {
   });
 
   /**
-   * Raised areas (DM): { add?: {points: [[x, y], ...], height}, set?: {id, height}, accept?: id | all, remove?: id, clear?: ai | all }. The AI's guesses (source ai) become the DM's when accepted or corrected.
+   * Raised areas (DM): { add?: {points: [[x, y], ...], height, bridge?}, set?: {id, height?, points?, bridge?}, accept?: id | all, remove?: id, clear?: ai | all }.
+   * The AI's guesses (source ai) become the DM's when accepted or corrected (a new height, shape or bridge).
    * Roofs, wall-walks, cliffs: flat-topped parts of the map higher (or lower) than the ground, in feet.
    * Tokens standing in one are that high; players' sight goes over them only if the line clears their edges.
    */
@@ -665,8 +666,8 @@ export function registerMaps(app, r) {
     const HEIGHT = z.number().min(-MAX_HEIGHT_FT).max(MAX_HEIGHT_FT);
     const body = z
       .object({
-        add: z.object({ points: z.array(z.tuple([POINT, POINT])).min(3).max(200), height: HEIGHT }).optional(),
-        set: z.object({ id: z.string().max(20), height: HEIGHT }).optional(),
+        add: z.object({ points: z.array(z.tuple([POINT, POINT])).min(3).max(200), height: HEIGHT, bridge: z.boolean().optional() }).optional(),
+        set: z.object({ id: z.string().max(20), height: HEIGHT.optional(), points: z.array(z.tuple([POINT, POINT])).min(3).max(200).optional(), bridge: z.boolean().optional() }).optional(),
         accept: z.string().max(20).optional(),
         remove: z.string().max(20).optional(),
         clear: z.enum(['ai', 'all']).optional(),
@@ -683,10 +684,12 @@ export function registerMaps(app, r) {
       if (body.accept) for (const r of m.raised) if (body.accept === 'all' || r.id === body.accept) own(r);
       if (body.set) {
         const r = m.raised.find((x) => x.id === body.set.id);
-        r.height = body.set.height;
+        if (body.set.height !== undefined) r.height = body.set.height;
+        if (body.set.points) r.points = body.set.points;
+        if (body.set.bridge !== undefined) r.bridge = body.set.bridge;
         own(r);
       }
-      if (body.add) m.raised.push({ id: newTokenId(), points: body.add.points, height: body.add.height, source: 'dm' });
+      if (body.add) m.raised.push({ id: newTokenId(), points: body.add.points, height: body.add.height, bridge: !!body.add.bridge, source: 'dm' });
     }, { by: request.user.id, reason: 'raised areas' });
     return maps.view(saved, a);
   });
@@ -803,10 +806,12 @@ export function registerMaps(app, r) {
     // How tall it is (feet; null: its sheet's or its size's), and how far above the ground it is (flying, climbing).
     height: z.number().min(0.5).max(MAX_HEIGHT_FT).nullable(),
     elevation: z.number().min(-MAX_HEIGHT_FT).max(MAX_HEIGHT_FT),
+    // Under a bridge rather than on it (it changes by itself as the token moves; this sets it by hand).
+    under: z.boolean(),
     merchant: z.string().regex(/^[a-f0-9]{10}$/).nullable(),
   });
   // What a player may change on their own token; everything else is the DM's.
-  const OWNER_FIELDS = new Set(['x', 'y', 'hp', 'conditions', 'light', 'darkvision', 'height', 'elevation']);
+  const OWNER_FIELDS = new Set(['x', 'y', 'hp', 'conditions', 'light', 'darkvision', 'height', 'elevation', 'under']);
   // On their companions and summons, a player may also rename it, resize it, recolour it and write its stat block.
   const COMPANION_FIELDS = new Set([...OWNER_FIELDS, 'name', 'size', 'color', 'stats', 'speed']);
   // What a player sends to add a companion or summon of their own.
@@ -898,7 +903,7 @@ export function registerMaps(app, r) {
     // A move can go by waypoints: path is where it turns on the way.
     const { path = [], ...rest } = z.object({ path: z.array(z.tuple([z.number(), z.number()])).max(50).optional() }).passthrough().parse(request.body ?? {});
     const body = TOKEN.partial().parse(rest);
-    const moving = Object.keys(body).every((k) => k === 'x' || k === 'y');
+    const moving = Object.keys(body).every((k) => k === 'x' || k === 'y' || k === 'under');
     if (a.role !== 'dm') {
       if (!ownToken(token, request.user.id)) throw new AuthError('You can only change your own token', 403);
       const allowed = token.kind === 'companion' ? COMPANION_FIELDS : OWNER_FIELDS;
@@ -925,6 +930,8 @@ export function registerMaps(app, r) {
         Object.assign(t, body);
         if (!PLAYER_KINDS.includes(t.kind)) t.user_id = null;
         Object.assign(t, snapToken(m, t, t.x, t.y));
+        // Walking in under a bridge or up onto it (owner, 2026-10-18), unless it's set by hand.
+        if (moves && body.under === undefined) t.under = walkLevels(map, [...route.slice(0, -1), { x: t.x, y: t.y }], token).under;
         // In a fight, count how far it has moved this turn (difficult terrain costs double, climbing extra).
         const entry = moves && m.combat?.entries.find((e) => e.id === t.id);
         if (entry) entry.moved = (entry.moved ?? 0) + (pathCost(map, route, token)?.value ?? 0);
