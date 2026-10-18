@@ -344,9 +344,11 @@
         <button class="ghost" data-wall-mode="light" aria-pressed="false" title="Click the map to put a light there (a torch, a brazier, a campfire)">Light</button>
         <select id="map-light-kind" aria-label="Which light"></select>
         <button class="ghost" data-wall-mode="difficult" aria-pressed="false" title="Drag over an area that's hard to move through (moving there costs double)">Difficult terrain</button>
-        <button class="ghost" data-wall-mode="raised" aria-pressed="false" title="Drag over a roof, a castle's wall-walk, a tower top or a cliff top to give it the height in the box; click one to change its height to that. Players then see onto it but not past it, and from up there over lower things">Raised area</button>
+        <button class="ghost" data-wall-mode="raised" aria-pressed="false" title="Drag over a roof, a castle's wall-walk, a tower top, a cliff top or a bridge to make a raised area the height in the box. Click one to check or change its height, its shape or whether it's a bridge. Players then see onto it but not past it, and from up there over lower things">Raised area</button>
         <label class="map-check small" title="How high a new raised area is, in feet above the ground (negative for a pit or a ditch)"><input type="number" id="map-raised-height" value="15" min="-1000" max="1000" step="1" class="map-num"> ft</label>
-        <button class="ghost" id="map-raised-accept" hidden title="Keep every height the AI guessed as it is (or click one with Raised area to accept just that one, then change the height and click it again to correct it)">Accept AI heights</button>
+        <label class="map-check small" title="A new raised area is a bridge: tokens can walk under it"><input type="checkbox" id="map-raised-new-bridge"> Bridge</label>
+        <button class="primary" id="map-raised-check" hidden title="Go through the heights the AI guessed one at a time: each is picked on the map to keep, change or reshape">Check AI heights</button>
+        <button class="ghost" id="map-raised-accept" hidden title="Keep every height the AI guessed as it is">Accept all</button>
         <button class="ghost" data-wall-mode="stairs" aria-pressed="false" title="Drag up a flight of stairs, steps or a ramp, from the bottom to the top. Going between heights there costs no extra movement">Stairs</button>
         <button class="ghost" data-wall-mode="ladder" aria-pressed="false" title="Drag up a ladder, from the bottom to the top. Going up or down it is climbing: each foot costs 1 extra foot of movement (free with a climbing speed)">Ladder</button>
         <button class="ghost" data-wall-mode="link" aria-pressed="false" title="Click the map to put stairs or a door to another map there">Link</button>

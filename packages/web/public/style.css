@@ -1351,6 +1351,11 @@ button.busy:disabled { opacity: 1; }
 .map-terrain .raised { fill: rgb(70 130 200 / 0.18); stroke: #4a90d9; stroke-width: 2px; vector-effect: non-scaling-stroke; }
 .map-terrain .raised.low { fill: rgb(120 80 40 / 0.2); stroke: #a0703a; }
 .map-terrain .raised.ai { stroke-dasharray: 8 5; stroke: #00c8d7; }
+.token.under { opacity: 0.6; outline: 2px dashed #c08a3e; outline-offset: 2px; }
+.map-terrain .raised.bridge { fill: rgb(150 110 60 / 0.22); stroke: #c08a3e; }
+.map-terrain .raised.selected { fill: rgb(255 215 0 / 0.22); stroke: #ffd400; stroke-width: 3px; }
+.map-terrain .raised-handle { fill: #ffd400; stroke: #000; stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+.map-terrain .raised-handle.add { fill: #fff; opacity: 0.85; }
 .map-terrain .raised-label { fill: #fff; stroke: rgb(0 0 0 / 0.7); stroke-width: 3px; paint-order: stroke; font-weight: 700; pointer-events: none; }
 .map-terrain .climb { stroke: #c000ff; stroke-width: 4px; vector-effect: non-scaling-stroke; stroke-linecap: round; fill: none; }
 .map-terrain .climb.ladder { stroke-dasharray: 2 6; stroke-width: 6px; }

@@ -106,7 +106,7 @@ export function uvttContents(doc, { width, height, feetPerSquare = 5 }) {
   }
   const shape = (list) => arr(list).map(px).filter(ok).map((p) => [p.x, p.y]);
   const raised = arr(own.raised)
-    .map((a) => ({ points: shape(a?.points), height: Number(a?.height) }))
+    .map((a) => ({ points: shape(a?.points), height: Number(a?.height), ...(a?.bridge === true && { bridge: true }) }))
     .filter((a) => a.points.length >= 3 && Number.isFinite(a.height))
     .slice(0, MAX_RAISED);
   const climbs = arr(own.climbs)
@@ -173,7 +173,7 @@ export function toUvtt(map, png) {
     dndapp: {
       version: 1,
       obstacles: map.walls.filter((w) => !w.door && w.kind === 'low').map((w) => [pt(w.x1, w.y1), pt(w.x2, w.y2)]),
-      raised: (map.raised ?? []).map((a) => ({ points: shape(a.points), height: a.height })),
+      raised: (map.raised ?? []).map((a) => ({ points: shape(a.points), height: a.height, ...(a.bridge && { bridge: true }) })),
       climbs: (map.climbs ?? []).map((c) => ({ kind: c.kind, from: pt(c.x1, c.y1), to: pt(c.x2, c.y2) })),
       terrain: (map.terrain ?? []).map((t) => shape(t.points)),
     },

@@ -9,7 +9,7 @@
  * the server decides where a token really ends up.
  */
 import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from './api.js';
-import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, distanceToWall, inTemplate, snapTemplatePoint, groundAt, tokenTall } from './shared/map.js';
+import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, distanceToWall, inTemplate, snapTemplatePoint, groundAt, tokenTall, bridgeAt, isUnder } from './shared/map.js';
 import { EDITING_KEY, PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, base, downloadUvtt, report, state, status } from './map-state.js';
 import { canChangeTemplate, placeTemplate, renderTemplates, selectTemplate, templateControls, templateDialog, templateMove, templateUp } from './map-templates.js';
 import { openShop } from './merchants.js';
@@ -105,6 +105,8 @@ export async function show(map) {
   state.selectedPin = null;
   state.selectedTemplate = null;
   state.selectedDoor = null;
+  state.selectedRaised = null;
+  state.raisedEdit = null;
   state.ruler = null;
   state.fitted = false;
   if (map) storage.set(PICK_KEY(), map.id);
@@ -370,7 +372,10 @@ function renderFogTools() {
   const guesses = (map.raised ?? []).filter((r) => r.source === 'ai').length;
   const acceptAll = $('#map-raised-accept');
   acceptAll.hidden = !guesses;
-  acceptAll.textContent = `Accept AI heights (${guesses})`;
+  acceptAll.textContent = `Accept all (${guesses})`;
+  const check = $('#map-raised-check');
+  check.hidden = !guesses;
+  check.textContent = `Check AI heights (${guesses})`;
   const drafting = map.wall_draft.status === 'pending';
   const exportButton = $('#map-walls-export');
   exportButton.disabled = !map.grid;
@@ -565,15 +570,23 @@ function renderTerrain() {
   // Raised areas: the DM sees their outlines and heights while working on the walls (players only feel them in the fog).
   if (state.canEdit && (state.wallMode || !$('#map-wall-tools').hidden)) {
     const font = Math.max(10, squarePx(map) * 0.4);
-    for (const a of map.raised ?? []) {
+    const picked = state.selectedRaised;
+    for (const area of map.raised ?? []) {
+      // The one being reshaped shows where it's going.
+      const a = state.raisedEdit?.id === area.id && state.raisedEdit.next ? { ...area, points: state.raisedEdit.next } : area;
       const guess = a.source === 'ai';
-      svg.append(svgEl('polygon', { points: pts(a.points), class: `raised${a.height < 0 ? ' low' : ''}${guess ? ' ai' : ''}` }));
+      svg.append(svgEl('polygon', { points: pts(a.points), 'data-raised': a.id, class: `raised${a.height < 0 ? ' low' : ''}${guess ? ' ai' : ''}${a.bridge ? ' bridge' : ''}${a.id === picked ? ' selected' : ''}` }));
       const xs = a.points.map((p) => p[0]);
       const ys = a.points.map((p) => p[1]);
       const label = svgEl('text', { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2, class: 'raised-label', 'font-size': font, 'text-anchor': 'middle', 'dominant-baseline': 'middle' });
       // The AI's guess shows a question mark until the DM accepts or corrects it.
-      label.textContent = `${a.height > 0 ? '↑' : a.height < 0 ? '↓' : ''}${Math.abs(a.height)} ft${guess ? '?' : ''}`;
+      label.textContent = `${a.bridge ? 'bridge ' : ''}${a.height > 0 ? '↑' : a.height < 0 ? '↓' : ''}${Math.abs(a.height)} ft${guess ? '?' : ''}`;
       svg.append(label);
+      // The picked one's corners to drag, and a dot halfway along each side to add a corner there.
+      if (a.id === picked) {
+        const r = HANDLE_PX / 2 / state.view.k;
+        for (const p of raisedHandles(a)) svg.append(svgEl('circle', { cx: p.x, cy: p.y, r: p.insert ? r * 0.6 : r, class: `raised-handle${p.insert ? ' add' : ''}` }));
+      }
     }
     // Stairs and ladders: a line up each, with a dot at the top.
     for (const c of map.climbs ?? []) {
@@ -709,11 +722,13 @@ function tokenPicture(t) {
 }
 
 /** How high a token stands (the raised area under it plus flying or climbing), in feet. */
-const tokenElevation = (map, t, x = t.x, y = t.y) => groundAt(map, x, y) + (t.elevation ?? 0);
+const tokenElevation = (map, t, x = t.x, y = t.y) => groundAt(map, x, y, !!t.under) + (t.elevation ?? 0);
 
 /** A badge on a token that isn't on the ground: ↑25 on a wall-walk, ↓10 in a pit. */
 function heightBadge(map, t, x, y) {
   const up = Math.round(tokenElevation(map, t, x, y) * 10) / 10;
+  const deck = t.under && bridgeAt(map, x ?? t.x, y ?? t.y);
+  if (deck) return h('span', { class: 'token-up under', title: `Under the bridge (${deck.height} ft up)` }, up ? `under ${up > 0 ? '↑' : '↓'}${Math.abs(up)}` : 'under');
   if (!up) return null;
   return h('span', { class: 'token-up', title: `${Math.abs(up)} ft ${up > 0 ? 'up' : 'down'}` }, `${up > 0 ? '↑' : '↓'}${Math.abs(up)}`);
 }
@@ -732,7 +747,7 @@ export function renderTokens() {
       const health = t.hp ? healthOf(t.hp) : t.health;
       const picture = tokenPicture(t);
       const el = h('div', {
-        class: `token token-${t.kind}${picture ? ' has-picture' : ''}${canMove(t) ? ' movable' : ''}${t.user_id === state.userId ? ' mine' : ''}${state.selected === t.id ? ' selected' : ''}${dragging ? ' dragging' : ''}${t.hidden ? ' hidden-token' : ''}${health === 'down' ? ' down' : ''}${state.caught.has(t.id) ? ' caught' : ''}${map.combat?.turn === t.id ? ' turn' : ''}`,
+        class: `token token-${t.kind}${picture ? ' has-picture' : ''}${canMove(t) ? ' movable' : ''}${t.user_id === state.userId ? ' mine' : ''}${state.selected === t.id ? ' selected' : ''}${dragging ? ' dragging' : ''}${t.hidden ? ' hidden-token' : ''}${health === 'down' ? ' down' : ''}${state.caught.has(t.id) ? ' caught' : ''}${map.combat?.turn === t.id ? ' turn' : ''}${isUnder(map, t) ? ' under' : ''}`,
         title: [t.name, t.merchant ? 'Merchant: pick to shop' : TOKEN_KIND_NAMES[t.kind], hpText(t), ...t.conditions].filter(Boolean).join(' · '),
         role: 'button',
         tabindex: '0',
@@ -848,7 +863,7 @@ export function renderPins() {
 
 function selectPin(id) {
   state.selectedPin = id;
-  if (id) Object.assign(state, { selected: null, selectedTemplate: null, selectedDoor: null });
+  if (id) Object.assign(state, { selected: null, selectedTemplate: null, selectedDoor: null, selectedRaised: null });
   renderTemplates();
   renderTokens();
   renderPins();
@@ -1002,10 +1017,15 @@ function heightInputs(token) {
     const n = Number(up.value || 0);
     if (Number.isFinite(n)) patchToken(token, { elevation: Math.max(-1000, Math.min(1000, n)) });
   });
+  // On a bridge or under it (it changes by itself as the token walks; this is for putting it right).
+  const deck = bridgeAt(state.current, token.x, token.y);
+  const under = deck ? h('input', { type: 'checkbox', 'data-token-under': '', onchange: (e) => patchToken(token, { under: e.target.checked }) }) : null;
+  if (under) under.checked = !!token.under;
   return [
     h('label', { class: 'map-check small' }, 'Tall ', tall, ' ft'),
     h('label', { class: 'map-check small' }, 'Up ', up, ' ft'),
-  ];
+    under ? h('label', { class: 'map-check small', title: `Walking under the bridge (${deck.height} ft up) rather than on it` }, under, ' Under the bridge') : null,
+  ].filter(Boolean);
 }
 
 /** Hit points and conditions: the DM for any token, a player for their own. */
@@ -1052,7 +1072,16 @@ export function renderSelection() {
   const pin = !token && myPins().find((p) => p.id === state.selectedPin);
   const tpl = !token && !pin && state.current?.templates?.find((t) => t.id === state.selectedTemplate);
   const door = !token && !pin && !tpl && state.canEdit && state.current?.walls.find((w) => w.door && w.id === state.selectedDoor);
-  bar.hidden = !token && !pin && !tpl && !door;
+  const area = !token && !pin && !tpl && !door && selectedArea();
+  bar.hidden = !token && !pin && !tpl && !door && !area;
+  if (area) {
+    // Don't rebuild the height box while the DM is typing in it.
+    if (bar.dataset.raised === `${area.id}:${area.source}:${!!area.bridge}` && bar.contains(document.activeElement)) return;
+    bar.dataset.pin = '';
+    bar.dataset.raised = `${area.id}:${area.source}:${!!area.bridge}`;
+    return bar.replaceChildren(...raisedControls(area));
+  }
+  bar.dataset.raised = '';
   if (door) {
     bar.dataset.pin = '';
     return bar.replaceChildren(...doorControls(door));
@@ -1093,7 +1122,7 @@ export function renderSelection() {
 
 /** The DM picks a door (a click on it) to open, close, lock or unlock it. */
 function selectDoor(id) {
-  Object.assign(state, { selectedDoor: id, selected: null, selectedPin: null, selectedTemplate: null });
+  Object.assign(state, { selectedDoor: id, selected: null, selectedPin: null, selectedTemplate: null, selectedRaised: null });
   renderWalls();
   renderTemplates();
   renderTokens();
@@ -1119,12 +1148,165 @@ function doorControls(door) {
   ].filter(Boolean);
 }
 
+/** The raised area the DM picked, while raised areas are on show (Fog & walls open). */
+function selectedArea() {
+  if (!state.canEdit || !state.selectedRaised || !raisedShown()) return null;
+  return (state.current?.raised ?? []).find((a) => a.id === state.selectedRaised) ?? null;
+}
+
+/** Raised areas are drawn (and can be picked) while Fog & walls is open or a wall tool is on. */
+const raisedShown = () => !!state.wallMode || !$('#map-wall-tools').hidden;
+
+/**
+ * The DM picks a raised area (a click on it with Fog & walls open) to check
+ * the AI's guess or change its height, the area it covers or whether it's a
+ * bridge (owner, 2026-10-18: "no obvious way to confirm or change
+ * recommended heights. Neither their elevation level or what area they cover").
+ */
+export function selectRaised(id, { center = false } = {}) {
+  Object.assign(state, { selectedRaised: id, selected: null, selectedPin: null, selectedTemplate: null, selectedDoor: null });
+  const area = selectedArea();
+  if (area && center) centerOn(areaMiddle(area));
+  renderWalls();
+  renderTerrain();
+  renderTokens();
+  renderPins();
+  renderSelection();
+}
+
+const areaMiddle = (a) => {
+  const xs = a.points.map((p) => p[0]);
+  const ys = a.points.map((p) => p[1]);
+  return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
+};
+
+/** Move the view so this point of the map is in the middle of it (same zoom and turn). */
+function centerOn(at) {
+  const box = $('#map-view').getBoundingClientRect();
+  const { k, r = 0 } = state.view;
+  state.view.x = box.width / 2 - k * (at.x * Math.cos(r) - at.y * Math.sin(r));
+  state.view.y = box.height / 2 - k * (at.x * Math.sin(r) + at.y * Math.cos(r));
+  applyView();
+}
+
+/** The AI's guesses still to check, in reading order (top to bottom, then left to right). */
+function aiGuesses(map) {
+  return (map.raised ?? []).filter((a) => a.source === 'ai').map((a) => ({ a, m: areaMiddle(a) })).sort((p, q) => p.m.y - q.m.y || p.m.x - q.m.x).map((x) => x.a);
+}
+
+function raisedControls(area) {
+  const guess = area.source === 'ai';
+  const height = h('input', { type: 'number', min: -1000, max: 1000, step: 1, class: 'map-num', id: 'map-raised-set', value: String(area.height), 'aria-label': 'Height in feet', title: 'How high its top is above the ground round it, in feet (negative for a pit)' });
+  const setHeight = () => {
+    const n = Math.round(Number(height.value));
+    if (Number.isFinite(n) && n !== area.height) raised({ set: { id: area.id, height: Math.max(-1000, Math.min(1000, n)) } });
+  };
+  height.addEventListener('change', setHeight);
+  height.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') setHeight();
+  });
+  const bridge = h('input', { type: 'checkbox', id: 'map-raised-bridge', ...(area.bridge && { checked: '' }), onchange: (e) => raised({ set: { id: area.id, bridge: e.target.checked } }) });
+  bridge.checked = !!area.bridge;
+  const others = aiGuesses(state.current).filter((a) => a.id !== area.id);
+  return [
+    h('strong', {}, area.bridge ? 'Bridge' : area.height < 0 ? 'Sunken area' : 'Raised area'),
+    h('span', { class: 'muted small' }, guess ? "The AI's guess: check it" : 'Drag its corners to change what it covers; drag a dot between two to add a corner'),
+    h('label', { class: 'map-check small' }, height, ' ft'),
+    h('label', { class: 'map-check small', title: 'Open space under it, like a bridge or a walkway: tokens can walk under it, and see under it' }, bridge, ' Bridge'),
+    h('span', { class: 'spacer' }),
+    guess ? h('button', { class: 'primary', id: 'map-raised-ok', title: 'Keep it as it is (it stays through the next AI walls)', onclick: () => raised({ accept: area.id }).then(() => (others.length ? selectRaised(others[0].id, { center: true }) : renderSelection())) }, others.length ? 'Looks right, next' : 'Looks right') : null,
+    others.length ? h('button', { class: 'ghost', id: 'map-raised-next', title: 'Go to the next height the AI guessed', onclick: () => selectRaised(others[0].id, { center: true }) }, `Next guess (${others.length})`) : null,
+    h('button', { class: 'ghost danger', onclick: () => raised({ remove: area.id }).then(() => selectRaised(null)) }, 'Remove'),
+    h('button', { class: 'ghost icon-btn', 'aria-label': 'Close', onclick: () => selectRaised(null) }, '✕'),
+  ].filter(Boolean);
+}
+
+/** Where the DM can grab the picked area: its corners, and the middle of each side (to add a corner there). */
+function raisedHandles(area) {
+  const n = area.points.length;
+  const out = area.points.map(([x, y], i) => ({ x, y, index: i, insert: false }));
+  for (let i = 0; i < n; i++) {
+    const [x1, y1] = area.points[i];
+    const [x2, y2] = area.points[(i + 1) % n];
+    out.push({ x: (x1 + x2) / 2, y: (y1 + y2) / 2, index: i, insert: true });
+  }
+  return out;
+}
+
+/** A point on the map as an area's corner: on the half squares with a grid (a 2.5 ft step for 5 ft squares). */
+function raisedPoint(map, at) {
+  const x = Math.max(0, Math.min(map.image.width, at.x));
+  const y = Math.max(0, Math.min(map.image.height, at.y));
+  if (!map.grid) return [Math.round(x * 10) / 10, Math.round(y * 10) / 10];
+  const half = map.grid.size / 2;
+  const snap = (v, o) => Math.round((Math.round((v - o) / half) * half + o) * 10) / 10;
+  return [Math.max(0, Math.min(map.image.width, snap(x, map.grid.x))), Math.max(0, Math.min(map.image.height, snap(y, map.grid.y)))];
+}
+
+/** Start dragging the picked area's corner, a new corner, or (from inside it) the whole area. */
+function raisedDown(e) {
+  const area = selectedArea();
+  if (!area || state.pointers.size || (state.wallMode && state.wallMode !== 'raised')) return false;
+  const at = toImage(e.clientX, e.clientY);
+  const reach = HANDLE_PX / state.view.k;
+  const handle = raisedHandles(area).filter((p) => Math.hypot(p.x - at.x, p.y - at.y) <= reach).sort((p, q) => Number(p.insert) - Number(q.insert))[0];
+  if (!handle && !pointInPolygon(at.x, at.y, area.points)) return false;
+  state.raisedEdit = { id: area.id, pointer: e.pointerId, handle, from: at, points: area.points.map((p) => [...p]), moved: false, sx: e.clientX, sy: e.clientY };
+  return true;
+}
+
+function raisedMove(e) {
+  const d = state.raisedEdit;
+  const area = selectedArea();
+  if (!area) return;
+  if (!d.moved && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 4) return;
+  d.moved = true;
+  const map = state.current;
+  const at = toImage(e.clientX, e.clientY);
+  if (!d.handle) {
+    // The whole area: moved by whole half squares (or freely without a grid).
+    const [ox, oy] = raisedPoint(map, d.from);
+    const [nx, ny] = raisedPoint(map, at);
+    d.next = d.points.map(([x, y]) => [x + nx - ox, y + ny - oy]);
+  } else {
+    const next = d.points.map((p) => [...p]);
+    if (d.handle.insert) next.splice(d.handle.index + 1, 0, raisedPoint(map, at));
+    else next[d.handle.index] = raisedPoint(map, at);
+    d.next = next;
+  }
+  renderTerrain();
+}
+
+function raisedUp(e) {
+  const d = state.raisedEdit;
+  state.raisedEdit = null;
+  if (!d.moved || e.type !== 'pointerup' || !d.next) {
+    renderTerrain();
+    return false;
+  }
+  let points = d.next;
+  // A corner dropped on the one beside it goes (an area keeps at least three).
+  if (d.handle && !d.handle.insert && points.length > 3) {
+    const i = d.handle.index;
+    const n = points.length;
+    const [x, y] = points[i];
+    const near = [points[(i + n - 1) % n], points[(i + 1) % n]].some(([px, py]) => Math.hypot(px - x, py - y) * state.view.k < HANDLE_PX);
+    if (near) points = points.filter((_, k) => k !== i);
+  }
+  raised({ set: { id: d.id, points } });
+  return true;
+}
+
 export function select(id) {
   state.selected = id;
   state.selectedPin = null;
   state.selectedTemplate = null;
   state.selectedDoor = null;
-  if (state.current) renderWalls();
+  state.selectedRaised = null;
+  if (state.current) {
+    renderWalls();
+    renderTerrain();
+  }
   renderTemplates();
   renderPins();
   renderTokens();
@@ -1202,6 +1384,8 @@ const NORTH_SNAP = (8 * Math.PI) / 180;
 
 /** How close (screen pixels) a wall end snaps to another wall's end or a grid corner, and how close a click picks a wall. */
 const SNAP_PX = 12;
+/** How close (screen pixels) a press must be to a raised area's corner handle to grab it. */
+const HANDLE_PX = 14;
 
 /** Finish drawing a wall or door, or (a click, not a drag) erase a wall or open/close a door. */
 function wallUp(e) {
@@ -1311,6 +1495,8 @@ function viewDown(e) {
     state.fogDraw = { pointer: e.pointerId, a: at, b: at };
     return;
   }
+  // The picked raised area: its corners and sides to drag, or the whole of it.
+  if (raisedDown(e)) return;
   if ((state.wallMode === 'difficult' || state.wallMode === 'raised') && !state.pointers.size && !state.terrainDraw) {
     const at = toImage(e.clientX, e.clientY);
     state.terrainDraw = { pointer: e.pointerId, a: at, b: at };
@@ -1364,6 +1550,7 @@ function viewMove(e) {
     state.terrainDraw.b = toImage(e.clientX, e.clientY);
     return renderTerrain();
   }
+  if (state.raisedEdit?.pointer === e.pointerId) return raisedMove(e);
   if (state.wallDraw?.pointer === e.pointerId) {
     const at = toImage(e.clientX, e.clientY);
     state.wallDraw.b = state.wallMode === 'circle' ? at : snapWallPoint(state.current, at, SNAP_PX / state.view.k);
@@ -1427,6 +1614,11 @@ function viewUp(e) {
     return;
   }
   if (state.wallDraw?.pointer === e.pointerId) return wallUp(e);
+  if (state.raisedEdit?.pointer === e.pointerId) {
+    // Not dragged: a click on it, as on any other area (below).
+    if (raisedUp(e)) return;
+    if (state.wallMode === 'raised') return;
+  }
   if (state.terrainDraw?.pointer === e.pointerId) {
     const d = state.terrainDraw;
     const r = fogRect(state.current, d.a, d.b);
@@ -1435,16 +1627,12 @@ function viewUp(e) {
     const points = [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]];
     if (e.type !== 'pointerup') return;
     if (state.wallMode === 'raised') {
-      // A click on one of the AI's guesses accepts it (and puts its height in the box, to correct with a second click);
-      // a click on any other raised area gives it the height in the box; a drag makes a new one.
+      // A click on a raised area picks it (to check the AI's guess, or change its height, shape or bridge); a drag makes a new one.
       const click = Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y) * state.view.k < 4;
       const hit = click && (state.current.raised ?? []).findLast((x) => pointInPolygon(d.a.x, d.a.y, x.points));
-      if (hit?.source === 'ai') {
-        $('#map-raised-height').value = String(hit.height);
-        raised({ accept: hit.id });
-        status(`Accepted ${hit.height} ft. To correct it, change the height and click it again.`);
-      } else if (hit) raised({ set: { id: hit.id, height: raisedHeight() } });
-      else if (r.w > 0 && r.h > 0) raised({ add: { points, height: raisedHeight() } });
+      if (hit) return selectRaised(hit.id);
+      if (click) return selectRaised(null);
+      if (r.w > 0 && r.h > 0) raised({ add: { points, height: raisedHeight(), ...($('#map-raised-new-bridge')?.checked && { bridge: true }) } });
       return;
     }
     if (r.w > 0 && r.h > 0) terrain({ add: { points } });
@@ -1468,6 +1656,9 @@ function viewUp(e) {
     const at = toImage(e.clientX, e.clientY);
     const tpl = e.type === 'pointerup' ? (state.current.templates ?? []).findLast((t) => inTemplate(state.current, t, at.x, at.y)) : null;
     if (tpl) return selectTemplate(tpl.id);
+    // With Fog & walls open, a click on a raised area picks it (the DM).
+    const area = e.type === 'pointerup' && state.canEdit && raisedShown() && !state.wallMode && !state.fogMode ? (state.current.raised ?? []).findLast((a) => pointInPolygon(at.x, at.y, a.points)) : null;
+    if (area) return selectRaised(area.id);
     select(null);
   }
 }
@@ -1507,6 +1698,7 @@ function tokenMove(e) {
   if (cost?.difficult) distance += ' · difficult';
   // Climbing (a ladder, or up or down a height with no stairs): 1 extra foot per foot, unless it climbs or flies.
   if (cost?.climb) distance += token.climber || token.elevation > 0 ? ` · climbs ${cost.climb} ft (free)` : ` · climbs ${cost.climb} ft${cost.wall ? ', no ladder or stairs' : ''}`;
+  if (cost?.under) distance += ' · under the bridge';
   // In a fight: how much of its speed it has used this turn.
   const entry = map.combat?.entries.find((x) => x.id === token.id);
   const over = !!(entry && token.move_speed && entry.moved + cost.value > token.move_speed);
@@ -1824,6 +2016,11 @@ export function initMapActions() {
     }
   });
   $('#map-raised-accept').addEventListener('click', () => raised({ accept: 'all' }));
+  // One at a time: go to each guess, see it on the map, then keep it or change it.
+  $('#map-raised-check').addEventListener('click', () => {
+    const [first] = aiGuesses(state.current);
+    if (first) selectRaised(first.id, { center: true });
+  });
   for (const b of document.querySelectorAll('[data-wall-action]')) {
     b.addEventListener('click', () => {
       if (b.dataset.wallAction === 'clear-ai') {

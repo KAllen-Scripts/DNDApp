@@ -678,7 +678,7 @@ test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and
         climbs: [{ kind: 'ladder', from: { x: 300, y: 800 }, to: { x: 300, y: 700 } }],
         raised: [
           { points: [{ x: 600, y: 600 }, { x: 800, y: 600 }, { x: 800, y: 800 }, { x: 600, y: 800 }], height: 10.4 },
-          { center: { x: 900, y: 200 }, edge: { x: 950, y: 200 }, height: 40 },
+          { center: { x: 900, y: 200 }, edge: { x: 950, y: 200 }, height: 40, bridge: true },
           { points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], height: 5 },
         ],
         notes: 'First go.',
@@ -744,7 +744,7 @@ test('walls drafted by the AI replace its earlier draft, keep the DM\'s own, and
     assert.deepEqual(done.climbs.map(({ kind, x1, y1, x2, y2, source }) => ({ kind, x1, y1, x2, y2, source })), [{ kind: 'ladder', x1: 210, y1: 392, x2: 210, y2: 343, source: 'ai' }]);
     assert.deepEqual((await t.request('GET', base, { as: t.sam.token })).json().climbs, [{ kind: 'ladder', x1: 210, y1: 392, x2: 210, y2: 343 }]);
     // Raised areas with the AI's guessed heights (a round tower top as 32 sides; one with too few points dropped), for the DM to accept or correct.
-    assert.deepEqual(done.raised.map((r) => [r.height, r.points.length, r.source]), [[10, 4, 'ai'], [40, 32, 'ai']]);
+    assert.deepEqual(done.raised.map((r) => [r.height, r.points.length, r.source, !!r.bridge]), [[10, 4, 'ai', false], [40, 32, 'ai', true]]);
     assert.deepEqual(done.raised[0].points, [[420, 294], [560, 294], [560, 392], [420, 392]]);
     const call = t.llm.calls.find((c) => c.purpose === 'map:walls');
     assert.equal(call.attachments.length, 1);

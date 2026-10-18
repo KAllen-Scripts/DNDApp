@@ -343,7 +343,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
           ...map.tokens.filter((t) => t.light && !visible.has(t.id)).map((t) => ({ x: t.x, y: t.y, ...t.light })),
         ],
         // Raised areas (roofs, wall-walks, cliffs), so their page works out where it can't see over them.
-        raised: map.raised.map(({ points, height }) => ({ points, height })),
+        raised: map.raised.map(({ points, height, bridge }) => ({ points, height, ...(bridge && { bridge }) })),
         // Stairs and ladders, so their page can say what a move costs while it's dragged.
         climbs: map.climbs.map(({ kind, x1, y1, x2, y2 }) => ({ kind, x1, y1, x2, y2 })),
         // Difficult terrain where they can see any of it.

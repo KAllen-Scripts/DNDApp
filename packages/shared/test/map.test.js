@@ -22,7 +22,7 @@ test('normalizeMap keeps known fields only and drops a per-square scale without 
   assert.equal(m.evil, undefined);
   assert.equal(m.scale, null);
   assert.equal(m.shown, false);
-  assert.deepEqual(m.tokens, [{ id: 'abc123', kind: 'pc', name: 'Player character', user_id: 4, color: '#2f6fb3', size: 1, x: 100, y: 0, hp: null, conditions: [], hidden: false, stats: null, record: null, light: null, darkvision: 0, speed: null, height: null, elevation: 0, art: null, merchant: null }]);
+  assert.deepEqual(m.tokens, [{ id: 'abc123', kind: 'pc', name: 'Player character', user_id: 4, color: '#2f6fb3', size: 1, x: 100, y: 0, hp: null, conditions: [], hidden: false, stats: null, record: null, light: null, darkvision: 0, speed: null, height: null, elevation: 0, under: false, art: null, merchant: null }]);
 });
 
 test('snapToken: Medium in the middle of a square, Large on a corner, always on the map', () => {
@@ -500,14 +500,14 @@ test('pathCost: squares the 5e way along waypoints, double in difficult terrain;
     terrain: [{ id: 'dddddd', points: [[105, 0], [175, 0], [175, 490], [105, 490]] }], // columns 3 and 4
   });
   const p = (x, y) => ({ x: x * 35 + 17.5, y: y * 35 + 17.5 });
-  assert.deepEqual(pathCost(map, [p(0, 0), p(2, 0)]), { value: 10, unit: 'ft', squares: 2, difficult: false, climb: 0, wall: false });
+  assert.deepEqual(pathCost(map, [p(0, 0), p(2, 0)]), { value: 10, unit: 'ft', squares: 2, difficult: false, climb: 0, wall: false, under: false });
   // Across the two difficult columns: 1 + 1 + 2 + 2 + 1.
-  assert.deepEqual(pathCost(map, [p(0, 0), p(5, 0)]), { value: 35, unit: 'ft', squares: 7, difficult: true, climb: 0, wall: false });
+  assert.deepEqual(pathCost(map, [p(0, 0), p(5, 0)]), { value: 35, unit: 'ft', squares: 7, difficult: true, climb: 0, wall: false, under: false });
   // Waypoints: down 2, then across 2 diagonally (each diagonal step one square).
   assert.equal(pathCost(map, [p(0, 0), p(0, 2), p(2, 4)]).squares, 4);
   assert.ok(isDifficult(map, 120, 300));
   const free = normalizeMap({ image: { width: 1000, height: 500 }, scale: { distance: 100, unit: 'ft', per: 'width' } });
-  assert.deepEqual(pathCost(free, [{ x: 0, y: 0 }, { x: 300, y: 400 }]), { value: 50, unit: 'ft', difficult: false, climb: 0, wall: false });
+  assert.deepEqual(pathCost(free, [{ x: 0, y: 0 }, { x: 300, y: 400 }]), { value: 50, unit: 'ft', difficult: false, climb: 0, wall: false, under: false });
   assert.equal(pathCost(normalizeMap({ image: { width: 10, height: 10 } }), [{ x: 0, y: 0 }, { x: 5, y: 5 }]), null);
 });
 
@@ -522,12 +522,12 @@ test('pathCost: climbing a ladder costs a foot per foot, up and down; stairs are
   const there = [p(2, 1), p(7, 1)];
   const back = [p(7, 1), p(2, 1)];
   const ladder = map([{ id: 'llllll', kind: 'ladder', x1: 170, y1: 30, x2: 180, y2: 30 }]);
-  assert.deepEqual(pathCost(ladder, there), { value: 35, unit: 'ft', squares: 5, difficult: false, climb: 10, wall: false });
+  assert.deepEqual(pathCost(ladder, there), { value: 35, unit: 'ft', squares: 5, difficult: false, climb: 10, wall: false, under: false });
   assert.equal(pathCost(ladder, back).value, 35);
   const stairs = map([{ id: 'ssssss', kind: 'stairs', x1: 170, y1: 30, x2: 180, y2: 30 }]);
-  assert.deepEqual(pathCost(stairs, there), { value: 25, unit: 'ft', squares: 5, difficult: false, climb: 0, wall: false });
+  assert.deepEqual(pathCost(stairs, there), { value: 25, unit: 'ft', squares: 5, difficult: false, climb: 0, wall: false, under: false });
   // Nothing to climb by: still climbing, flagged so the DM can ask for a check.
-  assert.deepEqual(pathCost(map([]), there), { value: 35, unit: 'ft', squares: 5, difficult: false, climb: 10, wall: true });
+  assert.deepEqual(pathCost(map([]), there), { value: 35, unit: 'ft', squares: 5, difficult: false, climb: 10, wall: true, under: false });
   // A ladder elsewhere on the roof doesn't help.
   assert.equal(pathCost(map([{ id: 'llllll', kind: 'stairs', x1: 170, y1: 400, x2: 180, y2: 400 }]), there).wall, true);
   // A climbing speed or flying makes it free.
