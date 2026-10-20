@@ -328,8 +328,8 @@ function renderFog() {
 
 const FOG_COLOUR = [20, 17, 13];
 const DM_FOG_ALPHA = 0.55; // the DM sees the fog as a shade
-// How dark each kind of shape leaves the fog: covered, seen before (dim), clear.
-const FOG_ALPHA = { cover: 1, dim: 0.6, clear: 0 };
+// How dark each kind of shape leaves the fog: covered, seen before (dim), only glimpsed over heights, clear.
+const FOG_ALPHA = { cover: 1, dim: 0.6, glimpse: 0.3, clear: 0 };
 // The fog's canvas is at most this many pixels along its long side (phones refuse much bigger canvases).
 const FOG_MAX_PX = 2048;
 

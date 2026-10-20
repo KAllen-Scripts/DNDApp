@@ -75,7 +75,7 @@ test('the fog covers what a player can\'t see over the raised areas, not the DM\
   });
   const at = maskFillAt;
   const shadows = heightShadows(view, 7, sightOf(view, 7));
-  assert.equal(at(shadows, 102.5, 52.5), 'clear', 'the near edge of the roof');
+  assert.equal(at(shadows, 102.5, 52.5), 'glimpse', 'the near edge of the roof: someone standing there is seen, the roof itself isn\'t');
   assert.equal(at(shadows, 137.5, 52.5), 'cover', 'the far side of the roof, out of sight from below');
   assert.equal(at(shadows, 152.5, 52.5), 'cover', 'behind the building');
   assert.equal(at(shadows, 50, 52.5), 'clear', 'open ground');
@@ -88,8 +88,12 @@ test('the fog covers what a player can\'t see over the raised areas, not the DM\
   const fromUp = heightShadows(up, 7, sightOf(up, 7));
   assert.equal(at(fromUp, 102.5, 52.5), 'clear');
   assert.equal(at(fromUp, 137.5, 52.5), 'clear');
-  assert.equal(at(fromUp, 50, 52.5), 'clear', 'far off');
+  assert.equal(at(fromUp, 10, 52.5), 'clear', 'far off');
+  assert.equal(at(fromUp, 50, 52.5), 'glimpse', 'nearer, the ground is behind the roof\'s edge but someone standing is seen');
   assert.equal(at(fromUp, 97.5, 52.5), 'cover', 'dead ground under the edge');
+  // Two shades (owner, 2026-10-20): a tall creature is seen before a short one, so the fog is lighter where only someone standing would be.
+  assert.equal(at(shadows, 60, 52.5), 'clear', 'the floor is seen');
+  assert.deepEqual(shadows.map((s) => s.fill), ['cover', 'glimpse']);
   // No raised areas: nothing added.
   assert.deepEqual(heightShadows({ ...view, raised: [] }, 7, sightOf(view, 7)), []);
 });
