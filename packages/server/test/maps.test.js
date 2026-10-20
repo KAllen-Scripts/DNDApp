@@ -851,7 +851,14 @@ test("when the AI can't draft walls, the DM is told why and when, and can try ag
   try {
     const map = await importMap(t, await terrain(700, 490));
     const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
-    await t.request('POST', `${base}/walls/draft`);
+    // The DM sees the effort used when they don't pick one; players don't.
+    assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/maps`)).json().walls_effort, t.config.llm.tasks.walls.effort);
+    assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/maps`, { as: t.sam.token })).json().walls_effort, undefined);
+    const bad = await t.request('POST', `${base}/walls/draft`, { body: { effort: 'ludicrous' } });
+    assert.equal(bad.statusCode, 400);
+    assert.match(bad.json().error, /low, medium, high, xhigh, max/);
+    // None picked: the task's effort (EFFORT_WALLS), recorded on the draft.
+    assert.equal((await t.request('POST', `${base}/walls/draft`)).json().wall_draft.effort, t.config.llm.tasks.walls.effort);
     const failed = await until(() => {
       const m = t.maps.get(t.campaign.id, map.id);
       return m.wall_draft.status === 'failed' && m;
@@ -860,13 +867,20 @@ test("when the AI can't draft walls, the DM is told why and when, and can try ag
     assert.ok(failed.wall_draft.finished_at);
     assert.equal(failed.wall_draft.found, null);
     fail = false;
-    assert.equal((await t.request('POST', `${base}/walls/draft`)).json().wall_draft.finished_at, '', 'a new go starts afresh');
+    assert.ok(t.llm.calls.filter((c) => c.purpose === 'map:walls').every((c) => c.effort === undefined), "no effort given: the provider uses the task's");
+    // The DM picks one: every call of the draft runs at it.
+    const picked = (await t.request('POST', `${base}/walls/draft`, { body: { effort: 'high' } })).json();
+    assert.equal(picked.wall_draft.finished_at, '', 'a new go starts afresh');
+    assert.equal(picked.wall_draft.effort, 'high');
     const done = await until(() => {
       const m = t.maps.get(t.campaign.id, map.id);
       return m.wall_draft.status === 'done' && m;
     });
     assert.deepEqual(done.wall_draft.found, { walls: 0, obstacles: 0, doors: 0, lights: 0, terrain: 0, climbs: 0, raised: 0 });
     assert.equal(done.wall_draft.error, '');
+    assert.equal(done.wall_draft.effort, 'high');
+    const last = t.llm.calls.filter((c) => c.purpose.startsWith('map:walls')).slice(-2);
+    assert.deepEqual(last.map((c) => [c.purpose, c.effort]), [['map:walls', 'high'], ['map:walls-check', 'high']]);
   } finally {
     await t.cleanup();
   }

@@ -206,7 +206,7 @@
 :root[data-phone] .map-fog-tools > .muted { display: none; }
 
 /* What sits over the map keeps clear of ☰ and the tools. */
-:root[data-phone] .map-selection { bottom: calc(var(--phone-bars-h, 3rem) + 0.8rem + env(safe-area-inset-bottom)); left: 0.4rem; right: 0.4rem; }
+:root[data-phone] .map-selection { bottom: calc(var(--phone-bars-h, 3rem) + 0.8rem + env(safe-area-inset-bottom)); left: 0.4rem; right: 0.4rem; max-width: none; }
 :root[data-phone] .map-combat { top: calc(3.1rem + env(safe-area-inset-top)); right: 0.4rem; max-height: calc(100% - 7.5rem); }
 :root[data-phone] .map-ai-note { top: calc(0.45rem + env(safe-area-inset-top)); max-width: calc(100% - 3.6rem); left: 0.4rem; transform: none; }
 

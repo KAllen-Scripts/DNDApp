@@ -55,8 +55,9 @@ export function createClaudeCodeProvider({ config, usage, queryFn = query }) {
   const { tasks } = config.llm;
 
   /** Run one query to completion. Returns the result message. */
-  async function run({ task, purpose, system, prompt, campaignId, userId, options = {}, onMessage }) {
-    const { model, effort } = tasks[task];
+  async function run({ task, purpose, system, prompt, campaignId, userId, options = {}, onMessage, effort: chosen }) {
+    const { model } = tasks[task];
+    const effort = chosen || tasks[task].effort;
     let result;
     const startedAt = Date.now();
     for await (const msg of queryFn({
@@ -109,9 +110,10 @@ export function createClaudeCodeProvider({ config, usage, queryFn = query }) {
   return {
     name: 'claude-code',
 
-    async structured({ task, purpose, system, prompt, schema, attachments = [], campaignId, userId }) {
+    async structured({ task, purpose, system, prompt, schema, attachments = [], campaignId, userId, effort }) {
       const result = await run({
         task,
+        effort,
         purpose,
         system,
         // Images and PDFs go in as a streamed user message; plain prompts as text.

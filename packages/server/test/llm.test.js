@@ -205,3 +205,16 @@ test("the map creator's AI draft has its own task: the maps model unless set, hi
   assert.equal(config.llm.tasks.design.effort, 'high');
   assert.equal(config.llm.tasks.design.model, config.llm.tasks.maps.model);
 });
+
+test('a structured call can run at another effort than its task (the DM\'s pick for AI walls)', async () => {
+  const { usage } = usageFor();
+  const client = createFakeAnthropic([fakeMessage([{ type: 'text', text: '{"title":"Hi"}' }])]);
+  await createApiProvider({ config, usage, client }).structured({ task: 'walls', purpose: 'map:walls', system: 's', prompt: 'p', schema: Schema, effort: 'low' });
+  assert.equal(client.requests[0].output_config.effort, 'low');
+  const queryFn = fakeQuery([result({ structured_output: { title: 'Hi' } }), result({ structured_output: { title: 'Hi' } })]);
+  const cc = createClaudeCodeProvider({ config, usage, queryFn });
+  await cc.structured({ task: 'walls', purpose: 'map:walls', system: 's', prompt: 'p', schema: Schema, effort: 'max' });
+  assert.equal(queryFn.calls[0].options.effort, 'max');
+  await cc.structured({ task: 'walls', purpose: 'map:walls', system: 's', prompt: 'p', schema: Schema });
+  assert.equal(queryFn.calls[1].options.effort, config.llm.tasks.walls.effort, 'none picked: the task\'s');
+});

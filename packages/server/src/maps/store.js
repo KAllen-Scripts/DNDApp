@@ -352,7 +352,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         doors: map.walls
           .filter((w) => doorKnown(w) && doorSeen(map, seen.polygons, w))
           .map(({ id, x1, y1, x2, y2, open, locked }) => ({ id, x1, y1, x2, y2, open, locked })),
-        wall_draft: { status: '', error: '', notes: '', step: '', parts: 0, parts_done: 0, started_at: '', finished_at: '', found: null },
+        wall_draft: { status: '', error: '', notes: '', step: '', parts: 0, parts_done: 0, started_at: '', effort: '', finished_at: '', found: null },
         fog: { ...map.fog, explored: seen.explored },
         // Areas of effect: their own, and ones whose point of origin they can see.
         templates: map.templates.filter((t) => t.user_id === userId || canSee(map, seen.polygons, t.x, t.y)),

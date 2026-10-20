@@ -199,13 +199,15 @@ export function createMapReader({ llm }) {
      * that nearly meet are joined, and on a map with a grid, ends close to a
      * grid corner or line are put on it.
      *
+     * `effort` is the DM's pick (null: the `walls` task's, EFFORT_WALLS).
+     *
      * `onProgress` hears how far it has got, so the DM can see it working:
      * { step: 'tracing' }, then { step: 'checking', parts, parts_done, preview }
      * as each part's check comes back, then { step: 'tidying' }. `preview` is
      * the tracing so far (the first draft, with the checked parts swapped in),
      * in the same shape as the answer, so it can be drawn on the map live.
      */
-    async walls({ buf, width, height, grid = null, campaignId, userId, onProgress = () => {} }) {
+    async walls({ buf, width, height, grid = null, campaignId, userId, effort = null, onProgress = () => {} }) {
       const progress = (p) => {
         try {
           onProgress(p);
@@ -218,6 +220,8 @@ export function createMapReader({ llm }) {
       const overview = await withRuler(full, WHOLE, { width, height });
       const ask = (purpose, system, prompt, image) => llm.structured({
         task: 'walls',
+        // The DM's pick, else the task's (EFFORT_WALLS).
+        ...(effort && { effort }),
         purpose,
         campaignId,
         userId,
