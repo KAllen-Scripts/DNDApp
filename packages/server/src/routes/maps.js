@@ -360,6 +360,20 @@ export function registerMaps(app, r) {
   });
 
   /**
+   * Bring the players here (DM): shows the map if it was hidden and makes it the players' map
+   * (playersMap), so every player's page switches to it live and opens on it.
+   */
+  app.post('/campaigns/:cid/maps/:mid/bring', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const saved = maps.change(a.cid, map.id, (m) => {
+      m.shown = true;
+      m.brought_at = new Date().toISOString();
+    }, { by: request.user.id, reason: 'players brought here' });
+    return maps.view(saved, a);
+  });
+
+  /**
    * Another picture of the same map (DM): { filename, data (base64), name? }, e.g. the same room at night.
    * It's stretched to the map's size so everything on the map stays in place; the upload is archived as it came.
    */

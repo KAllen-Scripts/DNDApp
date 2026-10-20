@@ -1,13 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import { setup, createFakeLLM, fakeEmbedder, terrain } from './helpers.js';
 import { createContext } from '../src/context.js';
 import { detectGrid } from '../src/maps/read.js';
 import { emptySheet } from '@dndapp/shared/sheet.js';
-import { playerFogMask, inView } from '@dndapp/shared/map.js';
+import { playerFogMask, inView, playersMap } from '@dndapp/shared/map.js';
 
 /** What a player's page draws at a point of the map: 'cover', 'dim' or 'clear'. */
 function fogAt(view, userId, x, y) {
@@ -138,6 +139,19 @@ test('regression: importing a map does not start the AI reading it; the DM asks 
   }
 });
 
+// sharp kept up to 20 pictures it read by path open (the .dd2vtt export, the creator's assets), so on Windows
+// they couldn't be deleted: tests' cleanup failed with EPERM, and the server held archive pictures open.
+test('regression: sharp keeps no picture it read open, so map pictures can be deleted (Windows refused to)', async () => {
+  await import('../src/images.js'); // the server's picture rules; loading them sets this for the whole process
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dndapp-test-'));
+  const file = path.join(dir, 'map.webp'); // sharp reads PNG and JPEG whole and closes them; WebP (and GIF) stay open
+  fs.writeFileSync(file, await sharp(await terrain(140, 140, { size: 70 })).webp().toBuffer());
+  await sharp(file).png().toBuffer();
+  fs.rmSync(dir, { recursive: true, force: true });
+  assert.equal(fs.existsSync(dir), false);
+  assert.equal(sharp.cache().files.max, 0); // Linux deletes open files anyway, so check sharp's setting too
+});
+
 test('tokens: the DM places them; players move only their own, snapped to the grid', async () => {
   const t = await setup({ llm: mapLLM() });
   try {
@@ -206,6 +220,62 @@ test('maps: moves reach everyone live; a map being hidden is "gone" for players'
     assert.equal(update.description, ''); // filtered for the player
     await t.request('PATCH', `${base}/${map.id}`, { body: { shown: false } });
     assert.deepEqual(await next('gone'), { id: map.id });
+    controller.abort();
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test("maps: the DM brings the players to a map: it's shown, becomes the players' map and they hear it live; only the DM can", async () => {
+  const t = await setup({ llm: mapLLM() });
+  try {
+    const png = await terrain(700, 490, { size: 35 });
+    const base = `/campaigns/${t.campaign.id}/maps`;
+    const road = await importMap(t, png);
+    const keep = await importMap(t, png);
+    await t.request('PATCH', `${base}/${road.id}`, { body: { shown: true } });
+    const playerMaps = async () => (await t.request('GET', base, { as: t.sam.token })).json().maps;
+    assert.equal(playersMap(await playerMaps()), null, 'no players\' map until the DM brings them somewhere');
+
+    await t.app.listen({ port: 0, host: '127.0.0.1' });
+    const { port } = t.app.server.address();
+    const controller = new AbortController();
+    const res = await fetch(`http://127.0.0.1:${port}${base}/events`, { headers: { authorization: `Bearer ${t.sam.token}` }, signal: controller.signal });
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let text = '';
+    const next = async (event) => {
+      for (;;) {
+        const m = new RegExp(`event: ${event}\\ndata: (.*)\\n\\n`).exec(text);
+        if (m) {
+          text = text.slice(m.index + m[0].length);
+          return JSON.parse(m[1]);
+        }
+        const { value } = await reader.read();
+        text += value;
+      }
+    };
+
+    // The keep was hidden: bringing them shows it too.
+    const brought = await t.request('POST', `${base}/${keep.id}/bring`);
+    assert.equal(brought.statusCode, 200, brought.body);
+    assert.equal(brought.json().shown, true);
+    assert.ok(brought.json().brought_at);
+    const update = await next('map');
+    assert.equal(update.id, keep.id);
+    assert.equal(update.brought_at, brought.json().brought_at);
+    assert.equal(playersMap(await playerMaps()).id, keep.id);
+
+    // Back to the road later: it's the players' map now.
+    await new Promise((r) => setTimeout(r, 5));
+    await t.request('POST', `${base}/${road.id}/bring`);
+    assert.equal(playersMap(await playerMaps()).id, road.id);
+    // Hidden, it isn't theirs any more: the last shown one they were brought to is.
+    await t.request('PATCH', `${base}/${road.id}`, { body: { shown: false } });
+    assert.equal(playersMap(await playerMaps()).id, keep.id);
+
+    const denied = await t.request('POST', `${base}/${road.id}/bring`, { as: t.sam.token });
+    assert.equal(denied.statusCode, 403);
+    assert.equal(t.maps.get(t.campaign.id, road.id).shown, false);
     controller.abort();
   } finally {
     await t.cleanup();
