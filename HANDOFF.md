@@ -72,7 +72,8 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 
 ## Next steps
 
-0. **Show players this map (2026-10-20; the owner asked): built.** The owner tries it (VS Code list). He also saw a red console error that evening that couldn't be reproduced here (two headless Chrome runs on a copy of the data found none): ask him for the text if it comes back.
+0. **Real-browser checks:** `scripts/browser.js` (Playwright, the installed Chrome, a copy of the data, fake AI); see AGENTS.md. Use it instead of asking the owner for checks that only need a desktop browser.
+0. **Show players this map (2026-10-20; the owner asked): built and merged.** The owner tries it (VS Code list). He also saw a red console error that evening that couldn't be reproduced here (two headless Chrome runs on a copy of the data found none): ask him for the text if it comes back.
 0. **Checking heights and bridges (2026-10-18; the owner asked): built.** The owner tries it (VS Code list). Next if wanted: bridges in the map creator, too-tall creatures not fitting under a bridge.
 0. **Maps not read on import; AI walls draws live (2026-10-16; the owner asked): built.** The owner tries it (VS Code list).
 0. **Map export (2026-10-16; the owner asked): built.** The .dd2vtt download is in Fog & walls too and keeps heights, stairs, ladders, obstacles and secret doors for a round trip. The owner opens one in Foundry or Dungeondraft (VS Code list).
@@ -1324,6 +1325,10 @@ The owner, testing with a DM window and a player window: first "the player canno
 - **Console error:** the owner saw a red error in the browser console that evening but didn't paste it. Two headless Chrome runs (DM and player, on a copy of the data, through the steps he took: Check AI heights, switching maps, hiding and showing, line of sight, moving tokens) logged none. Still unknown.
 - **`npm test` on Windows** (found while checking this): 6 server and web tests failed with EPERM deleting their temp folders, on `main` too. sharp keeps up to 20 pictures it read by path open (WebP and GIF; PNG and JPEG it closes), and Windows can't delete an open file; the live server held archive pictures open the same way. `images.js` now sets `sharp.cache({ files: 0 })` for the whole process. Regression test: `regression: sharp keeps no picture it read open, so map pictures can be deleted (Windows refused to)` (server `maps.test.js`, in docs/regressions.md). Earlier "all suites pass" runs were likely on Linux, which deletes open files.
 - Tests: server `maps.test.js` (bring: shown, live, players' map, hidden falls back, players refused), `mapevents.test.js`; web `map.test.js` (the DM's button and its warning; a player's page following, looking elsewhere, a hidden map coming back). Not a regression test: nothing that worked before broke.
+
+### 2026-10-20: Playwright for real-browser checks
+
+The owner: "can you set playwright up? Would this help with your testing?" Yes: the session before drove Chrome by hand over the DevTools protocol. `playwright-core` (dev dependency, no browser download: it uses the installed Chrome) and `scripts/browser.js`: `openTable({ accounts })` copies `data/` (SQLite backup, archive copied), starts the server on the copy with the fake AI and no job runner on port 4401, sets the named accounts' passwords on the copy, and opens one logged-in page per account, collecting console errors, uncaught exceptions and failed requests. Tried on the Show players this map flow (DM and player, no errors). Not part of `npm test`; AGENTS.md says when to use it.
 
 ## Gotchas and lessons
 

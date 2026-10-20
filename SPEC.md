@@ -207,6 +207,7 @@ DNDApp/
                   style.css, themes.css, mobile.css (the phone layout), icon.svg
       test/       page tests in jsdom against a real test server (page.js), fakes for the dice libraries
   docs/notes/     design notes, research and checklists from the first Claude project (README.md lists them)
+  scripts/        restart-server.js (npm run restart); browser.js (real-browser checks: Playwright with the installed Chrome on a throwaway copy of data/, fake AI)
   docs/regressions.md  every bug found and fixed, and the `regression: …` test that keeps it fixed
   .claude/        Claude Code set-up: agents/regression-keeper.md (the worker that writes and checks regression tests),
                   settings.json + hooks/regressions.mjs (regression tests run before every commit touching packages/)
