@@ -7,7 +7,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeMap, tokenSeesOver, groundAt, bridgeAt, tokenGround, isUnder, walkLevels, pathCost, heightShadows, sightOf } from '../src/map.js';
+import { normalizeMap, tokenSeesOver, groundAt, bridgeAt, tokenGround, isUnder, walkLevels, pathCost, heightShadows, sightOf, maskFillAt } from '../src/map.js';
 
 // 1 px = 1 ft. A river runs down the middle; a bridge 15 ft up crosses it at x 80..120.
 const BRIDGE = { id: 'brdg01', points: [[80, 40], [120, 40], [120, 60], [80, 60]], height: 15, bridge: true };
@@ -70,9 +70,9 @@ test('bridges: walking in from the ground goes under; by stairs or from the same
 
 test('bridges: the fog lets players see under a bridge from the bank', () => {
   const view = normalizeMap({ image: { width: 200, height: 100 }, fog: { enabled: true, sight: true }, raised: [BRIDGE], tokens: [{ ...tok('aaaaaa', 160), kind: 'pc', user_id: 7 }] });
-  const hidden = (x, y) => heightShadows(view, 7, sightOf(view, 7)).some((s) => x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h);
+  const hidden = (x, y) => maskFillAt(heightShadows(view, 7, sightOf(view, 7)), x, y) !== 'clear';
   assert.equal(hidden(100, 50), false, 'under the bridge, seen from the bank');
   // As a plain raised area, the far side of it is out of sight.
   const solid = { ...view, raised: [{ ...BRIDGE, bridge: false, points: [[80, 0], [120, 0], [120, 100], [80, 100]] }] };
-  assert.equal(heightShadows(solid, 7, sightOf(solid, 7)).some((s) => 50 >= s.x && 50 <= s.x + s.w), true);
+  assert.equal(maskFillAt(heightShadows(solid, 7, sightOf(solid, 7)), 50, 50), 'cover');
 });
