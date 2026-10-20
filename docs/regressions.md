@@ -15,6 +15,7 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-20 | The fog behind a raised area came in whole squares, a stepped edge beside the smooth shadows of walls. | `shared/test/map-height.test.js`: regression: a raised area's shadow is smooth, not whole squares (owner, 2026-10-20) |
 | 2026-10-20 | On Windows, `npm test` failed with EPERM when tests deleted their temp folders: sharp kept up to 20 pictures it had read by path open (WebP and GIF; PNG and JPEG are closed), and an open file can't be deleted there. The server held archive pictures open the same way. | `server/test/maps.test.js`: sharp keeps no picture it read open, so map pictures can be deleted (Windows refused to) |
 | 2026-10-16 | Saving a map again in the creator put its scale back to 5 ft a square, losing the scale the DM had set on the map. | `server/test/creator-tools.test.js`: saving a map again in the creator keeps the scale the DM set on it |
 | 2026-10-14 | On a phone, the "Searching the web for …" message floated over the Items page forever: status messages had no ✕ and never went away. | `web/test/app.test.js`: a status message can be dismissed and goes by itself |

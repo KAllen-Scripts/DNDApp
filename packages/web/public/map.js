@@ -335,7 +335,8 @@ const FOG_MAX_PX = 2048;
 
 /**
  * Draw the fog on a canvas the size of the map: each shape in order replaces
- * the fog under it (a shape with a clip only inside the clip). A canvas, not
+ * the fog under it (a shape with a clip only inside the clip; one with
+ * rings filled even-odd). A canvas, not
  * an SVG mask: phones failed to draw a mask this size, so players saw no fog
  * at all once the server stopped blacking out their picture.
  */
@@ -352,7 +353,12 @@ function drawFog(canvas, image, shapes, alpha) {
   g.setTransform(k, 0, 0, k, 0, 0);
   const path = (s) => {
     const p = new Path2D();
-    if (s.points) {
+    if (s.rings) {
+      for (const ring of s.rings) {
+        ring.forEach(([x, y], i) => (i ? p.lineTo(x, y) : p.moveTo(x, y)));
+        p.closePath();
+      }
+    } else if (s.points) {
       s.points.forEach(([x, y], i) => (i ? p.lineTo(x, y) : p.moveTo(x, y)));
       p.closePath();
     } else p.rect(s.x, s.y, s.w, s.h);
@@ -362,13 +368,15 @@ function drawFog(canvas, image, shapes, alpha) {
     g.save();
     if (s.clip) g.clip(path({ points: s.clip }));
     const p = path(s);
+    // Rings (the shadows of raised areas) are filled even-odd: a ring inside another is a hole.
+    const rule = s.rings ? 'evenodd' : 'nonzero';
     g.globalCompositeOperation = 'destination-out';
-    g.fill(p);
+    g.fill(p, rule);
     g.globalCompositeOperation = 'source-over';
     const a = FOG_ALPHA[s.fill] * alpha;
     if (a > 0) {
       g.fillStyle = `rgba(${FOG_COLOUR.join(',')},${a})`;
-      g.fill(p);
+      g.fill(p, rule);
     }
     g.restore();
   }

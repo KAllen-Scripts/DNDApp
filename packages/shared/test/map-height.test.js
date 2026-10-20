@@ -7,7 +7,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeMap, tokenSeesOver, parseHeight, groundAt, tokenTall, heightShadows, playerFogMask, eyeOf, headOf, sightOf } from '../src/map.js';
+import { normalizeMap, tokenSeesOver, parseHeight, groundAt, tokenTall, heightShadows, playerFogMask, eyeOf, headOf, sightOf, maskFillAt } from '../src/map.js';
 
 // 1 px = 1 ft. A 15 ft roof covers x 0..40; open ground to its right.
 const ROOF = [{ id: 'roof01', points: [[0, 0], [40, 0], [40, 100], [0, 100]], height: 15 }];
@@ -73,7 +73,7 @@ test('the fog covers what a player can\'t see over the raised areas, not the DM\
     raised: [{ id: 'roof01', points: [[100, 0], [140, 0], [140, 100], [100, 100]], height: 15 }],
     tokens: [{ id: 'sam001', kind: 'pc', user_id: 7, x: 92.5, y: 52.5 }],
   });
-  const at = (shapes, x, y) => shapes.reduce((fill, s) => (s.points ? fill : x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h ? s.fill : fill), 'clear');
+  const at = maskFillAt;
   const shadows = heightShadows(view, 7, sightOf(view, 7));
   assert.equal(at(shadows, 102.5, 52.5), 'clear', 'the near edge of the roof');
   assert.equal(at(shadows, 137.5, 52.5), 'cover', 'the far side of the roof, out of sight from below');
@@ -92,4 +92,24 @@ test('the fog covers what a player can\'t see over the raised areas, not the DM\
   assert.equal(at(fromUp, 97.5, 52.5), 'cover', 'dead ground under the edge');
   // No raised areas: nothing added.
   assert.deepEqual(heightShadows({ ...view, raised: [] }, 7, sightOf(view, 7)), []);
+});
+
+test('regression: a raised area\'s shadow is smooth, not whole squares (owner, 2026-10-20)', () => {
+  // A 15 ft block on 20 px squares; Sam stands down and to the left of it.
+  const view = normalizeMap({
+    image: { width: 400, height: 300 },
+    grid: { size: 20, x: 0, y: 0 },
+    fog: { enabled: true, sight: true, memory: false, shapes: [] },
+    raised: [{ id: 'block1', points: [[200, 60], [240, 60], [240, 100], [200, 100]], height: 15 }],
+    tokens: [{ id: 'sam001', kind: 'pc', user_id: 7, x: 60, y: 200 }],
+  });
+  const shadows = heightShadows(view, 7, sightOf(view, 7));
+  assert.ok(shadows.length && shadows.every((s) => s.rings), 'drawn as outlines');
+  // The shadow's edge is the line from Sam's eyes past the block's corner (240, 100): at x = 320 it's at y = 55.6,
+  // half way down a square. Either side of it, inside that one square, the fog differs.
+  assert.equal(maskFillAt(shadows, 320, 54), 'cover');
+  assert.equal(maskFillAt(shadows, 320, 57.5), 'clear');
+  // And the other edge, past the corner (200, 60): at y = 20 it's at x = 240.
+  assert.equal(maskFillAt(shadows, 241.5, 20), 'cover');
+  assert.equal(maskFillAt(shadows, 238.5, 20), 'clear');
 });
