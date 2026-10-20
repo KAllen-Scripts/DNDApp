@@ -10,6 +10,7 @@ import { creatureList, creatureSaved } from './creatures.js';
 import { markdownBox } from './markdown.js';
 import { showStatBlock, statsFound } from './stat-block.js';
 import { openCreator } from './map-creator.js';
+import { whoField } from './map-places.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -79,13 +80,13 @@ export function newMapDialog() {
 
 export const field = (label, input) => h('label', { class: 'map-field' }, h('span', {}, label), input);
 
-/** Map settings: name, shown to players, grid (drawn on the map while editing), scale, the AI's reading. */
+/** Map settings: name, who sees it (every player or chosen ones), grid (drawn on the map while editing), scale, the AI's reading. */
 export function settingsDialog() {
   const map = state.current;
   if (!map) return;
   const dialog = $('#map-dialog');
   const name = h('input', { value: map.name, maxLength: 100, required: true });
-  const shown = h('input', { type: 'checkbox', checked: map.shown });
+  const who = whoField({ shown: map.shown, to: map.shown_to ?? null });
   const hasGrid = h('input', { type: 'checkbox', checked: !!map.grid });
   const size = h('input', { type: 'number', min: '4', step: '0.1', value: map.grid?.size ?? Math.round(map.image.width / 20) });
   const gx = h('input', { type: 'number', step: '0.5', value: map.grid?.x ?? 0 });
@@ -153,7 +154,8 @@ export function settingsDialog() {
     const grid = draft();
     const d = Number(distance.value);
     const scale = d > 0 && (per.value === 'width' || grid) ? { distance: d, unit: unit.value, per: per.value } : null;
-    const saved = await api('PATCH', `${base()}/${map.id}`, { name: name.value.trim() || map.name, shown: shown.checked, grid, scale });
+    const seen = who.read();
+    const saved = await api('PATCH', `${base()}/${map.id}`, { name: name.value.trim() || map.name, shown: seen.shown, shown_to: seen.to, grid, scale });
     onMap(saved);
   };
   dialog.replaceChildren(
@@ -163,7 +165,8 @@ export function settingsDialog() {
     } },
       h('h2', {}, 'Map settings'),
       field('Name', name),
-      h('label', { class: 'map-check' }, shown, ' Players can see this map'),
+      h('h3', {}, 'Who can see this map'),
+      who.el,
       h('h3', {}, 'Grid'),
       h('label', { class: 'map-check' }, hasGrid, ' This map has a grid (tokens snap to it)'),
       gridFields,
@@ -221,12 +224,17 @@ async function removeMap(map) {
 let players = null; // the campaign's players, fetched once for the token dialog
 /** Forget them (leaving the campaign). */
 export const forgetPlayers = () => { players = null; };
+/** The campaign's players (fetched once): for tokens, and for who sees a map or a place. */
+export async function campaignPlayers() {
+  players ??= (await state.guarded(() => api('GET', `/campaigns/${state.campaignId}/members`)))?.filter((m) => m.role === 'player' && !m.revoked_at) ?? null;
+  return players;
+}
 
 /** Add a token, or change one (DM). New tokens go in the middle of what's on screen. */
 export async function tokenDialog(token = null) {
   const map = state.current;
   if (!map) return;
-  players ??= (await state.guarded(() => api('GET', `/campaigns/${state.campaignId}/members`))).filter((m) => m.role === 'player' && !m.revoked_at);
+  if (!(await campaignPlayers())) return;
   const dialog = $('#map-dialog');
   // A companion or summon is asked for with its player (below), not as a kind of its own.
   const kind = h('select', {}, ...TOKEN_KINDS.filter((k) => k !== 'companion').map((k) => new Option(TOKEN_KIND_NAMES[k], k)));

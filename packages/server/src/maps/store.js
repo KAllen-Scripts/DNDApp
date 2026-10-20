@@ -8,12 +8,12 @@
  * marks it removed.
  *
  * Who sees what is decided here (`view`), so every read path filters by the
- * viewer: players only see maps the DM has shown, and never the AI's
- * description or reading notes.
+ * viewer: players only see maps the DM has shown them (everyone, or chosen
+ * players), and never the AI's description or reading notes.
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { MAX_CLIMBS, MAX_RAISED, MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, blockingWalls, canSee, canSeeToken, doorKnown, parseHeight, healthOf, ownToken, speedFromText, hasClimbSpeed } from '@dndapp/shared/map.js';
+import { MAX_CLIMBS, MAX_RAISED, MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, blockingWalls, shownTo, placeRevealedTo, canSee, canSeeToken, doorKnown, parseHeight, healthOf, ownToken, speedFromText, hasClimbSpeed } from '@dndapp/shared/map.js';
 import { designToMap } from '@dndapp/shared/map-design.js';
 import { computeSheet } from '@dndapp/shared/sheet.js';
 import { activeForm, formHasHp, setFormHp } from '@dndapp/shared/wild-shape.js';
@@ -311,6 +311,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         return m && !m.removed ? m : null;
       };
       const links = map.links.map((l) => ({ ...l, target: target(l.to) }));
+      const places = map.places.map((p) => ({ ...p, target: p.to ? target(p.to) : null }));
       // A new picture (a map saved again in the creator) changes the key, so browsers fetch it.
       const variantKey = `${map.variant ? `-${map.variant}` : ''}${imageRev(map.image) > 1 ? `-r${imageRev(map.image)}` : ''}`;
       const out = {
@@ -318,12 +319,13 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         // The picture's file name stays on the server; `picture` is its key.
         tokens: map.tokens.map(({ art: _art, ...t }) => ({ ...t, ...hpOf(t), picture: picture({ ...t, art: _art }), move_speed: moveSpeed(t), tall: tallOf(t), climber: climberOf(t) })),
         links: links.map(({ target: m, ...l }) => ({ ...l, to_name: m?.name ?? null })),
+        places: places.map(({ target: m, ...p }) => ({ ...p, to_name: m?.name ?? null })),
       };
       delete out.campaign_id;
       // The design is fetched on its own when the DM opens the creator (GET .../design); players never get it.
       delete out.design;
       if (role === 'dm') return { ...out, designed: !!map.design, image_key: `dm${variantKey}`, can_edit: true };
-      if (!map.shown) return null;
+      if (!shownTo(map, userId)) return null;
       const seen = sight.forPlayer(map, userId);
       // In their tokens' sight, and with raised areas, over them to the top of its head (the tokens carry their heights).
       const withHeights = { ...map, tokens: out.tokens };
@@ -372,8 +374,14 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         }),
         // Links to maps they're shown, where they can see the link; variants by name only.
         links: links
-          .filter((l) => l.target?.shown && canSee(map, seen.polygons, l.x, l.y))
+          .filter((l) => shownTo(l.target, userId) && canSee(map, seen.polygons, l.x, l.y))
           .map(({ target: m, ...l }) => ({ ...l, to_name: m.name })),
+        // Places revealed to them, where they can see where its name goes (or any corner of it); what it opens
+        // only if they're shown that map; never the DM's record or who else it's revealed to.
+        places: places
+          .filter((p) => placeRevealedTo(p, userId) && [[p.x, p.y], ...(p.points ?? [])].some(([x, y]) => canSee(map, seen.polygons, x, y)))
+          .map(({ target: m, record: _r, revealed_to: _t, ...p }) => (shownTo(m, userId) ? { ...p, record: null, revealed_to: null, to_name: m.name } : { ...p, to: null, record: null, revealed_to: null, to_name: null })),
+        shown_to: null,
         variants: map.variants.filter((v) => v.id === map.variant).map(({ id, name }) => ({ id, name })),
         image_key: `p${variantKey}`,
         designed: false,

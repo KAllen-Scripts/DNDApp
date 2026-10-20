@@ -29,6 +29,18 @@ export const MAX_COMPANIONS = 12;
  * and go to it whenever the DM brings them somewhere new.
  */
 export const playersMap = (maps) => maps.reduce((best, m) => (m.shown && m.brought_at && (!best || m.brought_at > best.brought_at) ? m : best), null);
+/**
+ * Who sees what (owner, 2026-10-18: "The DM will choose who to reveal what to"): a map is shown to
+ * every player (`shown`, `shown_to` null) or only to the players listed in `shown_to`; a place on a
+ * map likewise (`revealed`, `revealed_to`). Lists of user ids, null for everyone.
+ */
+export const shownTo = (map, userId) => !!map?.shown && (!map.shown_to || map.shown_to.includes(userId));
+export const placeRevealedTo = (place, userId) => !!place?.revealed && (!place.revealed_to || place.revealed_to.includes(userId));
+/** A list of user ids (who a map or a place is shown to), or null for everyone. */
+export function normalizeUserIds(list) {
+  if (!Array.isArray(list)) return null;
+  return [...new Set(list.map(Number).filter((n) => Number.isInteger(n) && n > 0))].slice(0, 100).sort((a, b) => a - b);
+}
 /** Token sizes in squares, as the 5e size categories. */
 export const TOKEN_SIZES = [0.5, 1, 2, 3, 4];
 export const TOKEN_SIZE_NAMES = { 0.5: 'Tiny', 1: 'Medium', 2: 'Large', 3: 'Huge', 4: 'Gargantuan' };
@@ -208,6 +220,105 @@ export function normalizeLinks(list, image = {}) {
   return out;
 }
 
+// ---------- the world: places on maps, and maps inside maps ----------
+
+export const MAX_PLACES = 200;
+export const MAX_PLACE_POINTS = 40;
+
+/**
+ * Places on a map (the world's atlas, owner 2026-10-18: "We want to be able to make an entire world.
+ * Connected maps, a world map"): [{ id, name, x, y, points?, group, to?, record?, revealed, revealed_to }].
+ * A place is a pin (x, y) or an area (`points`, with x, y where its name goes); `group` sorts places
+ * for showing and hiding together (Cities, Roads); `to` is a smaller map it opens (a town on a region
+ * map, a tavern in a town); `record` the archivist's record about it (the DM's); players get it only
+ * once it's `revealed` (to everyone, or to the players in `revealed_to`).
+ */
+export function normalizePlaces(list, image = {}) {
+  const { width = 1, height = 1 } = image;
+  const seen = new Set();
+  const out = [];
+  for (const p of Array.isArray(list) ? list : []) {
+    if (!p || !isTokenId(p.id) || seen.has(p.id) || out.length >= MAX_PLACES) continue;
+    seen.add(p.id);
+    const points = (Array.isArray(p.points) ? p.points : []).slice(0, MAX_PLACE_POINTS)
+      .map((q) => [round(num(q?.[0], { min: 0, max: width, fallback: 0 }), 1), round(num(q?.[1], { min: 0, max: height, fallback: 0 }), 1)]);
+    out.push({
+      id: String(p.id),
+      name: str(p.name, 80) || 'Place',
+      x: round(num(p.x, { min: 0, max: width, fallback: width / 2 }), 2),
+      y: round(num(p.y, { min: 0, max: height, fallback: height / 2 }), 2),
+      ...(points.length >= 3 ? { points } : {}),
+      group: str(p.group, 40),
+      to: /^[a-f0-9]{10}$/.test(String(p.to)) ? String(p.to) : null,
+      record: normalizeRecordLink(p.record),
+      revealed: p.revealed === true,
+      revealed_to: normalizeUserIds(p.revealed_to),
+    });
+  }
+  return out;
+}
+
+/** The map holding a place that opens map `id`, with that place: { map, place }, or null for a top map. */
+export function parentOf(maps, id) {
+  for (const m of maps) {
+    const place = (m.places ?? []).find((p) => p.to === id);
+    if (place && m.id !== id) return { map: m, place };
+  }
+  return null;
+}
+
+/** The maps from the top of the world down to map `id` (its breadcrumb), ending with it. */
+export function mapTrail(maps, id) {
+  const byId = new Map(maps.map((m) => [m.id, m]));
+  const trail = [];
+  const seen = new Set();
+  for (let m = byId.get(id); m && !seen.has(m.id); m = parentOf(maps, m.id)?.map) {
+    seen.add(m.id);
+    trail.unshift(m);
+  }
+  return trail;
+}
+
+/**
+ * Why a place on map `on` can't open map `to`, or '' if it can: each map sits in one place only, and
+ * a map can't be inside itself (a place on the town opening the region the town is in). `except`: the
+ * place being changed.
+ */
+export function placeProblem(maps, on, to, except = null) {
+  if (!to) return '';
+  if (to === on) return 'A place has to open another map.';
+  const holder = maps.find((m) => (m.places ?? []).some((p) => p.to === to && p.id !== except));
+  if (holder) return `That map is already a place on "${holder.name}". Remove it there first.`;
+  if (mapTrail(maps, on).some((m) => m.id === to)) return 'That map is around this one already: a map can’t be inside itself.';
+  return '';
+}
+
+/** The maps in world order: each top map, then the maps inside it, with their depth (for the DM's map list). */
+export function atlasOrder(maps) {
+  const children = new Map();
+  const placed = new Set();
+  for (const m of maps) {
+    for (const p of m.places ?? []) {
+      if (!p.to || p.to === m.id || placed.has(p.to) || !maps.some((x) => x.id === p.to)) continue;
+      placed.add(p.to);
+      children.set(m.id, [...(children.get(m.id) ?? []), p.to]);
+    }
+  }
+  const byId = new Map(maps.map((m) => [m.id, m]));
+  const out = [];
+  const seen = new Set();
+  const walk = (m, depth) => {
+    if (seen.has(m.id)) return;
+    seen.add(m.id);
+    out.push({ map: m, depth });
+    for (const c of children.get(m.id) ?? []) walk(byId.get(c), depth + 1);
+  };
+  for (const m of maps) if (!placed.has(m.id)) walk(m, 0);
+  // Anything left is in a loop (shouldn't happen): list it at the top.
+  for (const m of maps) walk(m, 0);
+  return out;
+}
+
 /** Is a point close enough to a link to use it? Within a square and a half (or 5% of the map's size without a grid). */
 export function nearLink(map, link, x, y) {
   const reach = map.grid ? map.grid.size * 1.5 : Math.max(map.image.width, map.image.height) * 0.05;
@@ -323,6 +434,8 @@ export function normalizeMap(input = {}) {
     named: m.named === true,
     image,
     shown: m.shown === true,
+    // Shown only to these players (user ids); null: every player.
+    shown_to: normalizeUserIds(m.shown_to),
     // When the DM last brought the players here ('' never): the shown map brought to last is the players' map (playersMap).
     brought_at: isoStr(m.brought_at),
     removed: m.removed === true,
@@ -364,6 +477,8 @@ export function normalizeMap(input = {}) {
     variant: null,
     // Stairs and doors to another map.
     links: normalizeLinks(m.links, image),
+    // Places on it (a town on a region map, a tavern in a town), some opening a smaller map (the world's atlas).
+    places: normalizePlaces(m.places, image),
     // A map made in the app's creator: what the DM made it from (the DM's alone; players never get it).
     design: m.design && typeof m.design === 'object' ? normalizeDesign(m.design) : null,
     // One level of a building (maps sharing a group are its floors): n = 0 the ground floor, 1 the floor above, -1 the cellar.
@@ -1475,12 +1590,119 @@ export function canSeeToken(map, userId, polygons, t) {
 /** How tall the creature is that the fog shows for: where a Medium creature standing there would be seen. */
 export const FOG_TARGET_HEIGHT = 6;
 
+/** Is a point inside a fog shape: a rectangle, a polygon (with its clip), or rings filled even-odd? */
+export function inMaskShape(s, x, y) {
+  if (s.rings) return s.rings.reduce((inside, ring) => (pointInPolygon(x, y, ring) ? !inside : inside), false);
+  if (s.points) return inView(x, y, s.clip ? { points: s.points, clip: s.clip } : s.points);
+  return x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h;
+}
+
+/** What a fog mask shows at a point: the fill of the last shape over it, else 'clear'. */
+export const maskFillAt = (shapes, x, y) => shapes.reduce((fill, s) => (inMaskShape(s, x, y) ? s.fill : fill), 'clear');
+
+// Which sides of a square the shadow's outline crosses, for each pattern of
+// its corners in the shadow (top left 8, top right 4, bottom right 2,
+// bottom left 1): pairs of sides (T, R, B, L) joined by a line. The two
+// patterns with opposite corners in (5 and 10) depend on the middle.
+const MARCH = {
+  1: [['L', 'B']], 2: [['B', 'R']], 3: [['L', 'R']], 4: [['T', 'R']], 6: [['T', 'B']], 7: [['L', 'T']],
+  8: [['L', 'T']], 9: [['T', 'B']], 11: [['T', 'R']], 12: [['L', 'R']], 13: [['B', 'R']], 14: [['L', 'B']],
+};
+const SADDLE = {
+  5: { in: [['L', 'T'], ['B', 'R']], out: [['T', 'R'], ['L', 'B']] },
+  10: { in: [['T', 'R'], ['L', 'B']], out: [['L', 'T'], ['B', 'R']] },
+};
+
+/**
+ * The outline of where `inside(x, y)` holds, as rings (filled even-odd),
+ * from a grid of nx × ny points `step` apart from (x0, y0) with `val`
+ * saying which are inside (1); the outermost are outside so every ring
+ * closes. Marching squares: where the outline crosses a side of a square,
+ * the point is found by halving the side until it's within a hundredth of
+ * the step, so straight edges come out straight, whatever angle they run at.
+ */
+function outline(val, inside, x0, y0, step, nx, ny) {
+  const at = (i, j) => [x0 + i * step, y0 + j * step];
+  const inner = (i, j) => i > 0 && j > 0 && i < nx - 1 && j < ny - 1;
+  const crossings = new Map();
+  // Where the outline crosses the side between points (i, j) and (k, l).
+  const crossing = (key, i, j, k, l) => {
+    if (crossings.has(key)) return crossings.get(key);
+    let [ax, ay] = at(i, j);
+    let [bx, by] = at(k, l);
+    let p;
+    if (!inner(i, j) || !inner(k, l)) p = [(ax + bx) / 2, (ay + by) / 2];
+    else {
+      const aIn = val[j * nx + i] === 1;
+      while (Math.abs(bx - ax) + Math.abs(by - ay) > step / 100) {
+        const mx = (ax + bx) / 2;
+        const my = (ay + by) / 2;
+        if (inside(mx, my) === aIn) [ax, ay] = [mx, my];
+        else [bx, by] = [mx, my];
+      }
+      p = [(ax + bx) / 2, (ay + by) / 2];
+    }
+    crossings.set(key, p);
+    return p;
+  };
+  const segments = [];
+  for (let j = 0; j < ny - 1; j++) {
+    for (let i = 0; i < nx - 1; i++) {
+      const tl = val[j * nx + i], tr = val[j * nx + i + 1], br = val[(j + 1) * nx + i + 1], bl = val[(j + 1) * nx + i];
+      const code = tl * 8 + tr * 4 + br * 2 + bl;
+      if (code === 0 || code === 15) continue;
+      const pairs = MARCH[code] ?? (inside(...at(i + 0.5, j + 0.5)) ? SADDLE[code].in : SADDLE[code].out);
+      const side = { T: [`h${i},${j}`, i, j, i + 1, j], B: [`h${i},${j + 1}`, i, j + 1, i + 1, j + 1], L: [`v${i},${j}`, i, j, i, j + 1], R: [`v${i + 1},${j}`, i + 1, j, i + 1, j + 1] };
+      for (const [a, b] of pairs) segments.push([side[a][0], side[b][0], side[a], side[b]]);
+    }
+  }
+  // Join the pieces into rings: each crossing is shared by two of them.
+  const by = new Map();
+  segments.forEach((s, n) => {
+    for (const key of [s[0], s[1]]) by.set(key, [...(by.get(key) ?? []), n]);
+  });
+  const used = new Uint8Array(segments.length);
+  const rings = [];
+  for (let n = 0; n < segments.length; n++) {
+    if (used[n]) continue;
+    const ring = [];
+    let m = n;
+    let from = segments[n][0];
+    while (m != null && !used[m]) {
+      used[m] = 1;
+      const s = segments[m];
+      const [here, to] = s[0] === from ? [s[2], s[1]] : [s[3], s[0]];
+      ring.push(crossing(...here));
+      from = to;
+      m = by.get(to).find((o) => !used[o]);
+    }
+    rings.push(straighten(ring));
+  }
+  return rings.filter((r) => r.length >= 3);
+}
+
+/** A ring without the points that lie on a straight line between their neighbours. */
+function straighten(ring) {
+  const out = [];
+  for (let i = 0; i < ring.length; i++) {
+    const a = out.length ? out[out.length - 1] : ring[(i + ring.length - 1) % ring.length];
+    const b = ring[i];
+    const c = ring[(i + 1) % ring.length];
+    const lenAC = Math.hypot(c[0] - a[0], c[1] - a[1]);
+    if (lenAC > 0 && Math.abs(cross(b[0] - a[0], b[1] - a[1], c[0] - a[0], c[1] - a[1])) / lenAC < 0.05) continue;
+    out.push(b);
+  }
+  return out;
+}
+
 /**
  * Where a player's tokens can't see over the raised areas, as fog shapes
- * on top of their sight: a grid of cells (the map's squares, or 1/64 of
- * its long side), each covered when none of their tokens sees a Medium
- * creature standing there. Cells they explored before stay dim, and the
- * DM's reveals stay clear. Neighbouring cells in a row are joined.
+ * on top of their sight: everywhere none of their tokens sees a Medium
+ * creature standing (heightClear), outlined smoothly like a wall's shadow
+ * (owner, 2026-10-20: the squares looked blocky beside the walls'
+ * shadows). One shape of rings per fill: places they explored before stay
+ * dim, and the DM's reveals stay clear. Outside what they can see the
+ * fog covers it anyway, so only the box around their sight is looked at.
  */
 export function heightShadows(map, userId, polygons, explored = []) {
   if (!map.raised?.length || !polygons.length) return [];
@@ -1490,47 +1712,77 @@ export function heightShadows(map, userId, polygons, explored = []) {
   const eyes = own.map((t) => eyeOf(map, t));
   const { width, height } = map.image;
   const cell = map.grid ? map.grid.size : Math.max(width, height) / 64;
-  const ox = map.grid ? ((map.grid.x % cell) + cell) % cell : 0;
-  const oy = map.grid ? ((map.grid.y % cell) + cell) % cell : 0;
-  // Only where they can see at all.
   let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
   for (const v of polygons) {
     const b = boundsOf(v.points ?? v);
     bx0 = Math.min(bx0, b.x0); by0 = Math.min(by0, b.y0); bx1 = Math.max(bx1, b.x1); by1 = Math.max(by1, b.y1);
   }
+  bx0 = Math.max(0, bx0); by0 = Math.max(0, by0); bx1 = Math.min(width, bx1); by1 = Math.min(height, by1);
+  if (bx1 <= bx0 || by1 <= by0) return [];
+  // Points a quarter square apart (fewer on a huge map), with a row of outside all round.
+  let step = cell / 4;
+  while (((bx1 - bx0) / step + 3) * ((by1 - by0) / step + 3) > 40000) step *= 1.5;
+  // A multiple of 4 squares across (see below), plus the outside rows.
+  const nx = Math.ceil((bx1 - bx0) / step / 4) * 4 + 3;
+  const ny = Math.ceil((by1 - by0) / step / 4) * 4 + 3;
   const fill = map.fog?.map === 'grey' ? 'dim' : 'cover';
-  const out = [];
-  const c0 = Math.max(0, Math.floor((bx0 - ox) / cell)) - (ox > 0 ? 1 : 0);
-  const r0 = Math.max(0, Math.floor((by0 - oy) / cell)) - (oy > 0 ? 1 : 0);
-  for (let r = r0; oy + r * cell < Math.min(by1, height); r++) {
-    let run = null;
-    const flush = () => {
-      if (run) out.push(run);
-      run = null;
-    };
-    for (let c = c0; ox + c * cell < Math.min(bx1, width); c++) {
-      const x = Math.max(0, ox + c * cell);
-      const y = Math.max(0, oy + r * cell);
-      const w = Math.min(width, ox + (c + 1) * cell) - x;
-      const h = Math.min(height, oy + (r + 1) * cell) - y;
-      if (w <= 0 || h <= 0) continue;
-      const cx = x + w / 2;
-      const cy = y + h / 2;
-      let hide = false;
-      if (polygons.some((v) => inView(cx, cy, v)) && isFogged(map, cx, cy)) {
-        // Someone standing there (on a bridge or under it: either can be seen).
-        const deck = bridgeAt(map, cx, cy);
-        const targets = [{ x: cx, y: cy, z: groundAt(map, cx, cy, true) + FOG_TARGET_HEIGHT }, ...(deck ? [{ x: cx, y: cy, z: Math.max(deck.height, groundAt(map, cx, cy, true)) + FOG_TARGET_HEIGHT }] : [])];
-        hide = !eyes.some((eye) => targets.some((target) => heightClear(edges, eye, target)));
-      }
-      const f = hide ? (explored.some((e) => cx >= e.x && cx <= e.x + e.w && cy >= e.y && cy <= e.y + e.h) ? 'dim' : fill) : null;
-      if (f && run && run.fill === f && Math.abs(run.x + run.w - x) < 1e-6) run.w = x + w - run.x;
-      else {
-        flush();
-        if (f) run = { fill: f, x, y, w, h };
-      }
+  // groundAt and bridgeAt, quicker: each area's box first.
+  const areas = map.raised.map((a) => ({ a, box: boundsOf(a.points) }));
+  const hidden = (x, y) => {
+    if (!isFogged(map, x, y)) return null;
+    let ground = null, deck = null;
+    for (const { a, box } of areas) {
+      if (x < box.x0 || x > box.x1 || y < box.y0 || y > box.y1 || !pointInPolygon(x, y, a.points)) continue;
+      if (!a.bridge) ground = Math.max(ground ?? -Infinity, a.height);
+      else if (!deck || a.height > deck.height) deck = a;
     }
-    flush();
+    ground ??= 0;
+    // Someone standing there (on a bridge or under it: either can be seen).
+    const targets = [{ x, y, z: ground + FOG_TARGET_HEIGHT }, ...(deck ? [{ x, y, z: Math.max(deck.height, ground) + FOG_TARGET_HEIGHT }] : [])];
+    if (eyes.some((eye) => targets.some((target) => heightClear(edges, eye, target)))) return null;
+    return explored.some((e) => x >= e.x && x <= e.x + e.w && y >= e.y && y <= e.y + e.h) ? 'dim' : fill;
+  };
+  // Each point looked at once (halving a side looks at new ones).
+  const seen = new Map();
+  const hiddenAt = (x, y) => {
+    const key = `${x},${y}`;
+    if (!seen.has(key)) seen.set(key, hidden(x, y));
+    return seen.get(key);
+  };
+  // Every 4th point first (a square apart); the rest only in squares
+  // whose corners differ (elsewhere they're all the same as the corners).
+  const FILLS = [null, 'cover', 'dim'];
+  const code = (x, y) => FILLS.indexOf(hiddenAt(x, y));
+  const codes = new Uint8Array(nx * ny);
+  const coarse = (i) => (i - 1) % 4 === 0;
+  for (let j = 1; j < ny - 1; j += 4) for (let i = 1; i < nx - 1; i += 4) codes[j * nx + i] = code(bx0 + (i - 1) * step, by0 + (j - 1) * step);
+  const same = (ci, cj) => {
+    const i = 1 + ci * 4, j = 1 + cj * 4;
+    if (ci < 0 || cj < 0 || i + 4 > nx - 2 || j + 4 > ny - 2) return -1;
+    const c = codes[j * nx + i];
+    return codes[j * nx + i + 4] === c && codes[(j + 4) * nx + i] === c && codes[(j + 4) * nx + i + 4] === c ? c : -1;
+  };
+  for (let j = 1; j < ny - 1; j++) {
+    for (let i = 1; i < nx - 1; i++) {
+      if (coarse(i) && coarse(j)) continue;
+      // The squares this point is in (two or four when it's on their sides).
+      const cis = coarse(i) ? [(i - 1) / 4 - 1, (i - 1) / 4] : [Math.floor((i - 1) / 4)];
+      const cjs = coarse(j) ? [(j - 1) / 4 - 1, (j - 1) / 4] : [Math.floor((j - 1) / 4)];
+      let c = null;
+      for (const ci of cis) for (const cj of cjs) {
+        const v = same(ci, cj);
+        if (v < 0 || (c != null && c !== v)) c = -1;
+        else if (c == null) c = v;
+        if (c === -1) break;
+      }
+      codes[j * nx + i] = c != null && c >= 0 ? c : code(bx0 + (i - 1) * step, by0 + (j - 1) * step);
+    }
+  }
+  const out = [];
+  for (const f of fill === 'dim' ? ['dim'] : ['cover', 'dim']) {
+    const want = FILLS.indexOf(f);
+    const rings = outline(codes.map((c) => (c === want ? 1 : 0)), (x, y) => hiddenAt(x, y) === f, bx0 - step, by0 - step, step, nx, ny);
+    if (rings.length) out.push({ fill: f, rings });
   }
   return out;
 }

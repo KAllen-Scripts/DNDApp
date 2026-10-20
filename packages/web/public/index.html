@@ -284,6 +284,7 @@
       <div class="map-bars">
       <div id="map-main-bar" class="map-bar">
         <select id="map-pick" aria-label="Which map" hidden></select>
+        <button id="map-place-groups" class="ghost map-needs-map" title="Which groups of places to show on the map (only on your screen)" hidden>Places</button>
         <button id="map-bring" class="ghost dm-only map-main">Show players this map</button>
         <span id="map-status" class="muted small" role="status"></span>
         <label class="map-check small" data-tool="grid"><input type="checkbox" id="map-show-grid"> Grid</label>
@@ -361,7 +362,8 @@
         <button class="ghost" data-wall-mode="ladder" aria-pressed="false" title="Drag up a ladder, from the bottom to the top. Going up or down it is climbing: each foot costs 1 extra foot of movement (free with a climbing speed)">Ladder</button>
         <button class="ghost" data-wall-mode="link" aria-pressed="false" title="Click the map to put stairs or a door to another map there">Link</button>
         <select id="map-link-to" aria-label="Leads to"></select>
-        <button class="ghost" data-wall-mode="erase" aria-pressed="false" title="Click a wall, door, light, difficult terrain, raised area, stairs, ladder or link to remove it">Erase</button>
+        <button class="ghost" data-wall-mode="place" aria-pressed="false" title="Places for the world: click the map to put a town, a tavern or a cave there, or drag out an area. A place can open a smaller map, and you choose which players see it. With Place on, drag a place to move it or click it to change it">Place</button>
+        <button class="ghost" data-wall-mode="erase" aria-pressed="false" title="Click a wall, door, light, difficult terrain, raised area, stairs, ladder, link or place to remove it">Erase</button>
         <span class="map-sep" aria-hidden="true"></span>
         <button class="ghost" id="map-walls-draft" title="Let the AI trace the walls and doors from the picture, for you to correct. You pick how hard it thinks first.">AI walls…</button>
         <button class="ghost" id="map-walls-file" title="Exact walls, doors and lights from a Universal VTT file of this map (.dd2vtt or .uvtt, from Dungeondraft, Dungeon Alchemist and many map packs). No AI needed.">Walls from file</button>
@@ -385,10 +387,13 @@
           <div id="map-tokens" class="map-tokens"></div>
           <svg id="map-ruler-line" class="map-ruler" preserveAspectRatio="none" aria-hidden="true"></svg>
           <svg id="map-signals" class="map-signals" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <svg id="map-place-areas" class="map-place-areas" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <div id="map-places" class="map-places"></div>
           <div id="map-links" class="map-links"></div>
           <div id="map-pins" class="map-pins"></div>
         </div>
         <p id="map-empty" class="map-empty muted" hidden></p>
+        <nav id="map-trail" class="map-trail" aria-label="Where this map is in the world" hidden></nav>
         <button type="button" id="map-north" class="map-north" title="The map is turned: tap for north up" aria-label="Turn the map north up" hidden><span aria-hidden="true">N</span></button>
         <div id="map-measure" class="map-measure" hidden></div>
         <div id="map-combat" class="map-combat" hidden></div>
