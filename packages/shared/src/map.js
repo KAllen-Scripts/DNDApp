@@ -29,6 +29,18 @@ export const MAX_COMPANIONS = 12;
  * and go to it whenever the DM brings them somewhere new.
  */
 export const playersMap = (maps) => maps.reduce((best, m) => (m.shown && m.brought_at && (!best || m.brought_at > best.brought_at) ? m : best), null);
+/**
+ * Who sees what (owner, 2026-10-18: "The DM will choose who to reveal what to"): a map is shown to
+ * every player (`shown`, `shown_to` null) or only to the players listed in `shown_to`; a place on a
+ * map likewise (`revealed`, `revealed_to`). Lists of user ids, null for everyone.
+ */
+export const shownTo = (map, userId) => !!map?.shown && (!map.shown_to || map.shown_to.includes(userId));
+export const placeRevealedTo = (place, userId) => !!place?.revealed && (!place.revealed_to || place.revealed_to.includes(userId));
+/** A list of user ids (who a map or a place is shown to), or null for everyone. */
+export function normalizeUserIds(list) {
+  if (!Array.isArray(list)) return null;
+  return [...new Set(list.map(Number).filter((n) => Number.isInteger(n) && n > 0))].slice(0, 100).sort((a, b) => a - b);
+}
 /** Token sizes in squares, as the 5e size categories. */
 export const TOKEN_SIZES = [0.5, 1, 2, 3, 4];
 export const TOKEN_SIZE_NAMES = { 0.5: 'Tiny', 1: 'Medium', 2: 'Large', 3: 'Huge', 4: 'Gargantuan' };
@@ -205,6 +217,105 @@ export function normalizeLinks(list, image = {}) {
   return out;
 }
 
+// ---------- the world: places on maps, and maps inside maps ----------
+
+export const MAX_PLACES = 200;
+export const MAX_PLACE_POINTS = 40;
+
+/**
+ * Places on a map (the world's atlas, owner 2026-10-18: "We want to be able to make an entire world.
+ * Connected maps, a world map"): [{ id, name, x, y, points?, group, to?, record?, revealed, revealed_to }].
+ * A place is a pin (x, y) or an area (`points`, with x, y where its name goes); `group` sorts places
+ * for showing and hiding together (Cities, Roads); `to` is a smaller map it opens (a town on a region
+ * map, a tavern in a town); `record` the archivist's record about it (the DM's); players get it only
+ * once it's `revealed` (to everyone, or to the players in `revealed_to`).
+ */
+export function normalizePlaces(list, image = {}) {
+  const { width = 1, height = 1 } = image;
+  const seen = new Set();
+  const out = [];
+  for (const p of Array.isArray(list) ? list : []) {
+    if (!p || !isTokenId(p.id) || seen.has(p.id) || out.length >= MAX_PLACES) continue;
+    seen.add(p.id);
+    const points = (Array.isArray(p.points) ? p.points : []).slice(0, MAX_PLACE_POINTS)
+      .map((q) => [round(num(q?.[0], { min: 0, max: width, fallback: 0 }), 1), round(num(q?.[1], { min: 0, max: height, fallback: 0 }), 1)]);
+    out.push({
+      id: String(p.id),
+      name: str(p.name, 80) || 'Place',
+      x: round(num(p.x, { min: 0, max: width, fallback: width / 2 }), 2),
+      y: round(num(p.y, { min: 0, max: height, fallback: height / 2 }), 2),
+      ...(points.length >= 3 ? { points } : {}),
+      group: str(p.group, 40),
+      to: /^[a-f0-9]{10}$/.test(String(p.to)) ? String(p.to) : null,
+      record: normalizeRecordLink(p.record),
+      revealed: p.revealed === true,
+      revealed_to: normalizeUserIds(p.revealed_to),
+    });
+  }
+  return out;
+}
+
+/** The map holding a place that opens map `id`, with that place: { map, place }, or null for a top map. */
+export function parentOf(maps, id) {
+  for (const m of maps) {
+    const place = (m.places ?? []).find((p) => p.to === id);
+    if (place && m.id !== id) return { map: m, place };
+  }
+  return null;
+}
+
+/** The maps from the top of the world down to map `id` (its breadcrumb), ending with it. */
+export function mapTrail(maps, id) {
+  const byId = new Map(maps.map((m) => [m.id, m]));
+  const trail = [];
+  const seen = new Set();
+  for (let m = byId.get(id); m && !seen.has(m.id); m = parentOf(maps, m.id)?.map) {
+    seen.add(m.id);
+    trail.unshift(m);
+  }
+  return trail;
+}
+
+/**
+ * Why a place on map `on` can't open map `to`, or '' if it can: each map sits in one place only, and
+ * a map can't be inside itself (a place on the town opening the region the town is in). `except`: the
+ * place being changed.
+ */
+export function placeProblem(maps, on, to, except = null) {
+  if (!to) return '';
+  if (to === on) return 'A place has to open another map.';
+  const holder = maps.find((m) => (m.places ?? []).some((p) => p.to === to && p.id !== except));
+  if (holder) return `That map is already a place on "${holder.name}". Remove it there first.`;
+  if (mapTrail(maps, on).some((m) => m.id === to)) return 'That map is around this one already: a map can’t be inside itself.';
+  return '';
+}
+
+/** The maps in world order: each top map, then the maps inside it, with their depth (for the DM's map list). */
+export function atlasOrder(maps) {
+  const children = new Map();
+  const placed = new Set();
+  for (const m of maps) {
+    for (const p of m.places ?? []) {
+      if (!p.to || p.to === m.id || placed.has(p.to) || !maps.some((x) => x.id === p.to)) continue;
+      placed.add(p.to);
+      children.set(m.id, [...(children.get(m.id) ?? []), p.to]);
+    }
+  }
+  const byId = new Map(maps.map((m) => [m.id, m]));
+  const out = [];
+  const seen = new Set();
+  const walk = (m, depth) => {
+    if (seen.has(m.id)) return;
+    seen.add(m.id);
+    out.push({ map: m, depth });
+    for (const c of children.get(m.id) ?? []) walk(byId.get(c), depth + 1);
+  };
+  for (const m of maps) if (!placed.has(m.id)) walk(m, 0);
+  // Anything left is in a loop (shouldn't happen): list it at the top.
+  for (const m of maps) walk(m, 0);
+  return out;
+}
+
 /** Is a point close enough to a link to use it? Within a square and a half (or 5% of the map's size without a grid). */
 export function nearLink(map, link, x, y) {
   const reach = map.grid ? map.grid.size * 1.5 : Math.max(map.image.width, map.image.height) * 0.05;
@@ -320,6 +431,8 @@ export function normalizeMap(input = {}) {
     named: m.named === true,
     image,
     shown: m.shown === true,
+    // Shown only to these players (user ids); null: every player.
+    shown_to: normalizeUserIds(m.shown_to),
     // When the DM last brought the players here ('' never): the shown map brought to last is the players' map (playersMap).
     brought_at: isoStr(m.brought_at),
     removed: m.removed === true,
@@ -359,6 +472,8 @@ export function normalizeMap(input = {}) {
     variant: null,
     // Stairs and doors to another map.
     links: normalizeLinks(m.links, image),
+    // Places on it (a town on a region map, a tavern in a town), some opening a smaller map (the world's atlas).
+    places: normalizePlaces(m.places, image),
     // A map made in the app's creator: what the DM made it from (the DM's alone; players never get it).
     design: m.design && typeof m.design === 'object' ? normalizeDesign(m.design) : null,
     // One level of a building (maps sharing a group are its floors): n = 0 the ground floor, 1 the floor above, -1 the cellar.

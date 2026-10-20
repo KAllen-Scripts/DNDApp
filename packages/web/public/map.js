@@ -18,6 +18,7 @@ import { chooseTokenPicture, fillStats, forgetPlayers, importMap, recordDialog, 
 import { renderCombat } from './map-combat.js';
 import { companionDialog, companionRolls, dismissCompanion, myCompanion } from './map-companions.js';
 import { initMapFull } from './map-full.js';
+import { groupsDialog, mapOptions, placeEnd, placeMove, placeStart, renderPlaces, shownNote } from './map-places.js';
 
 const $ = (sel) => document.querySelector(sel);
 const KIND_LABELS = { battle: 'Battle map', dungeon: 'Dungeon', building: 'Building', town: 'Town', region: 'Region', world: 'World', other: 'Map' };
@@ -174,8 +175,9 @@ async function loadImage(map) {
 function renderPicker() {
   const select = $('#map-pick');
   const party = playersMap(state.maps);
-  const note = (m) => (m.id === party?.id ? (state.canEdit ? ' (players here)' : ' (party here)') : state.canEdit && !m.shown ? ' (hidden)' : '');
-  select.replaceChildren(...state.maps.map((m) => new Option(`${m.name}${note(m)}`, m.id)));
+  const note = (m) => (m.id === party?.id ? (state.canEdit ? ' (players here)' : ' (party here)') : shownNote(m));
+  // In world order: each map under the one it's a place on.
+  select.replaceChildren(...mapOptions(note));
   select.value = state.current?.id ?? '';
   select.hidden = !state.maps.length;
   // The DM's one click to show the map on screen to the players and switch their pages to it.
@@ -185,7 +187,7 @@ function renderPicker() {
   bring.textContent = here ? 'Players are here' : 'Show players this map';
   bring.title = here
     ? "The players' pages show this map. To move them, open another map and press Show players this map."
-    : `Show this map to the players${state.current && !state.current.shown ? ' (it is hidden from them now)' : ''} and switch their pages to it.`;
+    : `Show this map to the players${state.current && !state.current.shown ? ' (it is hidden from them now)' : state.current?.shown_to ? ' (only some players see it now)' : ''} and switch their pages to it.`;
 }
 
 /** Bring the players to the map on screen (DM): their pages switch to it. */
@@ -223,6 +225,7 @@ export function render() {
     $('#map-tokens').replaceChildren();
     $('#map-pins').replaceChildren();
     $('#map-links').replaceChildren();
+    renderPlaces();
     $('#map-templates').replaceChildren();
     $('#map-ruler-line').replaceChildren();
     renderSelection();
@@ -249,6 +252,7 @@ export function render() {
   renderTokens();
   renderRuler();
   renderLinks();
+  renderPlaces();
   renderPins();
   renderSelection();
   renderFogTools();
@@ -266,7 +270,7 @@ function renderStatus() {
   const note = state.note?.id === map.id && Date.now() < state.note.until ? state.note.text : '';
   if (reading === 'pending') status('The AI is reading this map…');
   else if (reading === 'failed' && state.canEdit) status(map.reading.error || "The AI couldn't read this map.", true);
-  else status([note, KIND_LABELS[map.kind], scaleText(map), state.canEdit && !map.shown ? 'hidden from players' : ''].filter(Boolean).join(' · '));
+  else status([note, KIND_LABELS[map.kind], scaleText(map), state.canEdit && !map.shown ? 'hidden from players' : state.canEdit && map.shown_to ? `shown to ${map.shown_to.length} player${map.shown_to.length === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · '));
 }
 
 /** Say something about the map on screen in its status line, kept there for a while as the map changes. */
@@ -1573,6 +1577,8 @@ function viewDown(e) {
   }
   // The picked raised area: its corners and sides to drag, or the whole of it.
   if (raisedDown(e)) return;
+  // Place: a click puts a place there, a drag an area (map-places.js).
+  if (state.wallMode === 'place' && !state.pointers.size && !state.placeDraw) return placeStart(e, toImage(e.clientX, e.clientY));
   if ((state.wallMode === 'difficult' || state.wallMode === 'raised') && !state.pointers.size && !state.terrainDraw) {
     const at = toImage(e.clientX, e.clientY);
     state.terrainDraw = { pointer: e.pointerId, a: at, b: at };
@@ -1626,6 +1632,7 @@ function viewMove(e) {
     state.terrainDraw.b = toImage(e.clientX, e.clientY);
     return renderTerrain();
   }
+  if (state.placeDraw?.pointer === e.pointerId) return placeMove(toImage(e.clientX, e.clientY));
   if (state.raisedEdit?.pointer === e.pointerId) return raisedMove(e);
   if (state.wallDraw?.pointer === e.pointerId) {
     const at = toImage(e.clientX, e.clientY);
@@ -1695,6 +1702,7 @@ function viewUp(e) {
     if (raisedUp(e)) return;
     if (state.wallMode === 'raised') return;
   }
+  if (state.placeDraw?.pointer === e.pointerId) return placeEnd(e);
   if (state.terrainDraw?.pointer === e.pointerId) {
     const d = state.terrainDraw;
     const r = fogRect(state.current, d.a, d.b);
@@ -1986,6 +1994,7 @@ export function initMapActions() {
     }
   });
   $('#map-pick').addEventListener('change', (e) => show(state.maps.find((m) => m.id === e.target.value) ?? null));
+  $('#map-place-groups').addEventListener('click', groupsDialog);
   $('#map-bring').addEventListener('click', bringPlayers);
   $('#map-fit').addEventListener('click', fit);
   $('#map-north').addEventListener('click', northUp);
