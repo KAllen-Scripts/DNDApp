@@ -23,6 +23,12 @@ export const PLAYER_KINDS = ['pc', 'companion'];
 export const ownToken = (t, userId) => userId != null && PLAYER_KINDS.includes(t?.kind) && t.user_id === userId;
 /** How many companions and summons one player may have on a map. */
 export const MAX_COMPANIONS = 12;
+/**
+ * The players' map: the shown map the DM last brought the players to
+ * (Show players this map), or null if they never did. Players' pages open on it
+ * and go to it whenever the DM brings them somewhere new.
+ */
+export const playersMap = (maps) => maps.reduce((best, m) => (m.shown && m.brought_at && (!best || m.brought_at > best.brought_at) ? m : best), null);
 /** Token sizes in squares, as the 5e size categories. */
 export const TOKEN_SIZES = [0.5, 1, 2, 3, 4];
 export const TOKEN_SIZE_NAMES = { 0.5: 'Tiny', 1: 'Medium', 2: 'Large', 3: 'Huge', 4: 'Gargantuan' };
@@ -314,6 +320,8 @@ export function normalizeMap(input = {}) {
     named: m.named === true,
     image,
     shown: m.shown === true,
+    // When the DM last brought the players here ('' never): the shown map brought to last is the players' map (playersMap).
+    brought_at: isoStr(m.brought_at),
     removed: m.removed === true,
     kind: pick(m.kind, MAP_KINDS, 'other'),
     description: longStr(m.description, 2000),

@@ -9,7 +9,7 @@
  * the server decides where a token really ends up.
  */
 import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from './api.js';
-import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, distanceToWall, inTemplate, snapTemplatePoint, groundAt, tokenTall, bridgeAt, isUnder } from './shared/map.js';
+import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, playersMap, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, distanceToWall, inTemplate, snapTemplatePoint, groundAt, tokenTall, bridgeAt, isUnder } from './shared/map.js';
 import { EDITING_KEY, PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, base, downloadUvtt, report, state, status } from './map-state.js';
 import { canChangeTemplate, placeTemplate, renderTemplates, selectTemplate, templateControls, templateDialog, templateMove, templateUp } from './map-templates.js';
 import { openShop } from './merchants.js';
@@ -37,9 +37,25 @@ export async function loadMaps({ campaignId, userId, guarded }) {
   state.canEdit = can_edit;
   state.maps = maps;
   $('#tab-map').classList.toggle('can-edit', can_edit);
+  state.broughtSeen = playersMap(maps)?.brought_at ?? '';
+  state.bouncedFrom = null;
+  // Players open on the map the DM brought them to; the DM on the one they had open.
   const remembered = maps.find((m) => m.id === storage.get(PICK_KEY()));
-  await show(remembered ?? maps.at(-1) ?? null);
+  await show((!can_edit && playersMap(maps)) || remembered || maps.at(-1) || null);
   startLive();
+}
+
+/** Where to go when the map on screen goes away: for players the players' map, else the newest. */
+const fallbackMap = () => (!state.canEdit && playersMap(state.maps)) || state.maps.at(-1) || null;
+
+/** Players: go to the map the DM just brought everyone to (once per bring; they can look elsewhere afterwards). */
+function followPlayersMap() {
+  const party = playersMap(state.maps);
+  if (state.canEdit || !party || party.brought_at <= state.broughtSeen) return;
+  state.broughtSeen = party.brought_at;
+  if (state.current?.id === party.id) return;
+  show(party);
+  noteOnMap('Your DM brought everyone here');
 }
 
 /** Keep listening for changes; reconnect after a dropped connection. */
@@ -70,7 +86,8 @@ function startLive() {
           state.maps = maps;
           const current = maps.find((m) => m.id === state.current?.id) ?? null;
           if (current) onMap(current);
-          else if (state.current) await show(maps.at(-1) ?? null);
+          else if (state.current) await show(fallbackMap());
+          followPlayersMap();
           renderPicker();
         } catch { /* try again on the next round */ }
       }
@@ -87,20 +104,26 @@ export function onMap(map) {
   if (state.current?.id === map.id) {
     state.current = map;
     render();
-  } else if (!state.current) {
+  } else if (!state.current || (i < 0 && map.id === state.bouncedFrom)) {
+    // A new map with nothing on screen, or the one the DM hid for a moment back again.
     show(map);
   }
+  followPlayersMap();
 }
 
 export function onGone(id) {
   state.maps = state.maps.filter((m) => m.id !== id);
   renderPicker();
-  if (state.current?.id === id) show(state.maps.at(-1) ?? null);
+  if (state.current?.id === id) {
+    show(fallbackMap());
+    state.bouncedFrom = id;
+  }
 }
 
 /** Put a map on screen (or the empty message). */
 export async function show(map) {
   state.current = map;
+  state.bouncedFrom = null;
   state.selected = null;
   state.selectedPin = null;
   state.selectedTemplate = null;
@@ -150,11 +173,43 @@ async function loadImage(map) {
 
 function renderPicker() {
   const select = $('#map-pick');
-  select.replaceChildren(
-    ...state.maps.map((m) => new Option(`${m.name}${state.canEdit && !m.shown ? ' (hidden)' : ''}`, m.id)),
-  );
+  const party = playersMap(state.maps);
+  const note = (m) => (m.id === party?.id ? (state.canEdit ? ' (players here)' : ' (party here)') : state.canEdit && !m.shown ? ' (hidden)' : '');
+  select.replaceChildren(...state.maps.map((m) => new Option(`${m.name}${note(m)}`, m.id)));
   select.value = state.current?.id ?? '';
   select.hidden = !state.maps.length;
+  // The DM's one click to show the map on screen to the players and switch their pages to it.
+  const bring = $('#map-bring');
+  const here = !!state.current && state.current.id === party?.id;
+  bring.disabled = !state.current || here;
+  bring.textContent = here ? 'Players are here' : 'Show players this map';
+  bring.title = here
+    ? "The players' pages show this map. To move them, open another map and press Show players this map."
+    : `Show this map to the players${state.current && !state.current.shown ? ' (it is hidden from them now)' : ''} and switch their pages to it.`;
+}
+
+/** Bring the players to the map on screen (DM): their pages switch to it. */
+async function bringPlayers() {
+  const map = state.current;
+  if (!map) return;
+  try {
+    const res = await state.guarded(() => api('POST', `${base()}/${map.id}/bring`));
+    if (!res) return;
+    onMap(res);
+    const fix = howToSeeAnything(res);
+    noteOnMap(fix ? `The players now see this map, but only fog: ${fix}` : 'The players now see this map');
+  } catch (err) {
+    report(err);
+  }
+}
+
+/** When players would see nothing of a map but dark fog (nothing revealed, nothing for them to see from), what to do about it; else ''. */
+function howToSeeAnything(map) {
+  const f = map.fog;
+  if (!f?.enabled || f.map !== 'dark' || f.shapes.some((s) => s.op === 'reveal')) return '';
+  if (!f.sight) return 'reveal parts, or tick Line of sight, in Fog & walls';
+  if (!map.tokens.some((t) => t.kind === 'pc')) return 'reveal parts in Fog & walls, or add their characters (they see from their tokens)';
+  return '';
 }
 
 export function render() {
@@ -201,10 +256,23 @@ export function render() {
   renderCombat();
   renderSignals();
   if (state.images.has(map.id) && state.images.get(map.id).key !== map.image_key) loadImage(map);
+  renderStatus();
+}
+
+function renderStatus() {
+  const map = state.current;
+  if (!map) return;
   const reading = map.reading.status;
+  const note = state.note?.id === map.id && Date.now() < state.note.until ? state.note.text : '';
   if (reading === 'pending') status('The AI is reading this map…');
   else if (reading === 'failed' && state.canEdit) status(map.reading.error || "The AI couldn't read this map.", true);
-  else status([KIND_LABELS[map.kind], scaleText(map), state.canEdit && !map.shown ? 'hidden from players' : ''].filter(Boolean).join(' · '));
+  else status([note, KIND_LABELS[map.kind], scaleText(map), state.canEdit && !map.shown ? 'hidden from players' : ''].filter(Boolean).join(' · '));
+}
+
+/** Say something about the map on screen in its status line, kept there for a while as the map changes. */
+function noteOnMap(text) {
+  state.note = { id: state.current?.id, text, until: Date.now() + 10_000 };
+  renderStatus();
 }
 
 function scaleText(map) {
@@ -1910,6 +1978,7 @@ export function initMapActions() {
     }
   });
   $('#map-pick').addEventListener('change', (e) => show(state.maps.find((m) => m.id === e.target.value) ?? null));
+  $('#map-bring').addEventListener('click', bringPlayers);
   $('#map-fit').addEventListener('click', fit);
   $('#map-north').addEventListener('click', northUp);
   initMapFull();

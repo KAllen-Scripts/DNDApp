@@ -335,6 +335,78 @@ test('maps: the DM picks between maps; the choice is remembered; removing one sh
   });
 });
 
+test("maps: the DM's Show players this map shows a hidden map, moves the players there and then reads Players are here", async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const road = await importMap(t, { patch: { ...SHOWN, name: 'Road' } });
+      const keep = await importMap(t, { patch: { name: 'Keep' } });
+      // Fog on, line of sight off, nothing revealed: the players would see only fog.
+      await t.request('PATCH', `/campaigns/${t.campaign.id}/maps/${keep.id}/fog`, { body: { enabled: true } });
+      return { dana: await addDm(t), road, keep };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t, { road, keep }) => {
+    await openMapTab(page);
+    assert.equal(page.$('#map-pick').value, keep.id);
+    assert.equal(page.text('#map-bring'), 'Show players this map');
+    assert.ok(!page.$('#map-bring').disabled);
+    assert.match(page.$('#map-bring').title, /hidden from them now/);
+
+    page.click('#map-bring');
+    await page.waitFor(() => page.text('#map-bring') === 'Players are here', { what: 'the button to say the players are here' });
+    assert.ok(page.$('#map-bring').disabled);
+    assert.match(page.text('#map-status'), /The players now see this map, but only fog: reveal parts, or tick Line of sight, in Fog & walls/);
+    assert.deepEqual(page.$$('#map-pick option').map((o) => o.textContent), ['Road', 'Keep (players here)']);
+    assert.equal(t.maps.get(t.campaign.id, keep.id).shown, true, 'bringing them shows it');
+
+    page.type('#map-pick', road.id);
+    await page.settle();
+    assert.equal(page.text('#map-bring'), 'Show players this map');
+    assert.ok(!page.$('#map-bring').disabled);
+  });
+});
+
+test("maps: a player's page goes where the DM brings everyone and opens there; they can look elsewhere; a map hidden for a moment comes back", async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const keep = await importMap(t, { patch: { ...SHOWN, name: 'Keep' } });
+      const road = await importMap(t, { patch: { ...SHOWN, name: 'Road' } });
+      const cellar = await importMap(t, { patch: { name: 'Cellar' } });
+      await t.request('POST', `/campaigns/${t.campaign.id}/maps/${keep.id}/bring`);
+      return { keep, road, cellar };
+    },
+    page: (t) => ({ as: t.sam }),
+  }, async (page, t, { keep, road, cellar }) => {
+    const base = `/campaigns/${t.campaign.id}/maps`;
+    await openMapTab(page);
+    assert.equal(page.$('#map-pick').value, keep.id, 'it opens on the players\' map, not the newest');
+    assert.deepEqual(page.$$('#map-pick option').map((o) => o.textContent), ['Keep (party here)', 'Road']);
+    assert.ok(page.$('#map-bring').classList.contains('dm-only') && !page.$('#tab-map').classList.contains('can-edit'), 'only the DM moves everyone');
+
+    // The DM brings everyone down to the cellar (hidden until now): the page follows and says so.
+    await t.request('POST', `${base}/${cellar.id}/bring`);
+    await page.waitFor(() => page.$('#map-pick').value === cellar.id, { what: 'the page to go to the cellar' });
+    assert.match(page.text('#map-status'), /Your DM brought everyone here/);
+
+    // They look at the road themselves; changes on the cellar don't pull them back.
+    page.type('#map-pick', road.id);
+    await page.settle();
+    await t.request('POST', `${base}/${cellar.id}/tokens`, { body: { kind: 'npc', name: 'Rat', x: 10, y: 10 } });
+    const { state } = await page.module('map-state.js');
+    await page.waitFor(() => state.maps.find((m) => m.id === cellar.id).tokens.some((tk) => tk.name === 'Rat'), { what: 'the change on the cellar' });
+    await page.settle();
+    assert.equal(page.$('#map-pick').value, road.id);
+
+    // The DM hides the road for a moment: the page goes to the players' map, and back when it's shown again.
+    await t.request('PATCH', `${base}/${road.id}`, { body: { shown: false } });
+    await page.waitFor(() => page.$('#map-pick').value === cellar.id, { what: 'the page to fall back to the players\' map' });
+    await t.request('PATCH', `${base}/${road.id}`, { body: { shown: true } });
+    await page.waitFor(() => page.$('#map-pick').value === road.id, { what: 'the road to come back' });
+  });
+});
+
 test('maps: read again with the AI (after confirming)', async () => {
   let reads = 0;
   const llm = createFakeLLM({ structured: async () => (++reads === 1 ? mapReading() : mapReading({ name: 'Second look', kind: 'town' })) });

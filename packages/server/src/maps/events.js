@@ -21,9 +21,10 @@ function eventsOf(before, after, reason) {
   const out = [];
   const on = `on "${after.name}"`;
   if (!before.shown) {
-    if (after.shown) out.push(`The DM showed the map "${after.name}"${after.description ? ` (${after.description.split('\n')[0].slice(0, 200)})` : ''}.`);
+    if (after.shown) out.push(`The DM showed the map "${after.name}"${after.description ? ` (${after.description.split('\n')[0].slice(0, 200)})` : ''}${after.brought_at !== before.brought_at ? ' and brought the players there' : ''}.`);
     return out;
   }
+  if (after.brought_at && after.brought_at !== before.brought_at) out.push(`The DM brought the players to the map "${after.name}".`);
   if (after.variant !== before.variant) {
     const v = after.variants.find((x) => x.id === after.variant);
     out.push(v ? `The map "${after.name}" changed to its "${v.name}" picture.` : `The map "${after.name}" went back to its usual picture.`);

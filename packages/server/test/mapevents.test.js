@@ -33,6 +33,8 @@ test('mapEvents: fights, tokens going down and up, doors, travel; never hidden t
         { saved_at: at(19, 42), changes: [{ p: ['walls', 0, 'open'], v: true }] },
         // The spy steps out of hiding.
         { saved_at: at(19, 45), changes: [{ p: ['tokens', 3, 'hidden'], v: false }] },
+        // The DM brings the players back to the keep (Show players this map).
+        { saved_at: at(19, 50), reason: 'players brought here', changes: [{ p: ['brought_at'], v: at(19, 50) }] },
         // Thorin takes the stairs, after midnight (still the same session: before the 6am rollover).
         { saved_at: at(0, 30, 9), reason: `left for ${cellar}`, changes: [{ p: ['tokens', 0], v: tok('rat001', 'Rat', 'enemy') }, { p: ['tokens'], len: 3 }] },
       ],
@@ -43,7 +45,7 @@ test('mapEvents: fights, tokens going down and up, doors, travel; never hidden t
         { saved_at: at(18), changes: [{ p: [], v: { name: 'Cellar', image, shown: false, tokens: [tok('ghoul1', 'Ghoul', 'enemy')] } }] },
         // The DM's own setup on a map players can't see: nothing.
         { saved_at: at(18, 30), changes: [{ p: ['tokens', 1], v: tok('ghoul2', 'Ghoul', 'enemy') }] },
-        { saved_at: at(0, 20, 9), changes: [{ p: ['shown'], v: true }, { p: ['description'], v: 'A damp cellar under the keep.' }] },
+        { saved_at: at(0, 20, 9), reason: 'players brought here', changes: [{ p: ['shown'], v: true }, { p: ['brought_at'], v: at(0, 20, 9) }, { p: ['description'], v: 'A damp cellar under the keep.' }] },
         { saved_at: at(0, 30, 9), reason: `arrived from ${keep}`, changes: [{ p: ['tokens', 2], v: tok('thorin1', 'Thorin', 'pc', { conditions: ['poisoned'] }) }] },
       ],
     },
@@ -56,7 +58,8 @@ test('mapEvents: fights, tokens going down and up, doors, travel; never hidden t
     '[19:31] The fight on "Keep" ended after 3 rounds.',
     '[19:40] A door was opened on "Keep".', // and again at 19:42: the same thing twice in a row is said once
     '[19:45] Spy (NPC) was revealed on "Keep".',
-    '[00:20] The DM showed the map "Cellar" (A damp cellar under the keep.).',
+    '[19:50] The DM brought the players to the map "Keep".',
+    '[00:20] The DM showed the map "Cellar" (A damp cellar under the keep.) and brought the players there.',
     '[00:30] Thorin went from "Keep" to "Cellar".',
   ]);
   assert.deepEqual(mapEvents(histories, { date: '2026-10-01', rolloverHour: 6 }), ['[12:00] The DM showed the map "Keep".', '[20:00] Rat (enemy) appeared on "Keep".']);

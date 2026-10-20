@@ -13,6 +13,9 @@ export const state = {
   canEdit: false,
   maps: [],
   current: null, // the map on screen
+  broughtSeen: '', // players: the latest time the DM brought everyone to a map that this page has gone along with
+  bouncedFrom: null, // the map that was on screen when the DM hid it (it comes back if shown again before another is picked)
+  note: null, // a message about a map kept in its status line for a while: { id, text, until }
   images: new Map(), // map id -> { key, url } of its image (players' changes with the fog)
   view: { x: 0, y: 0, k: 1, r: 0 }, // screen = (image * k turned by r radians clockwise) + (x, y); r is this screen's own turn of the map
   twist: null, // two fingers on the map: how far they've twisted { total, on } (the map turns once they mean it)

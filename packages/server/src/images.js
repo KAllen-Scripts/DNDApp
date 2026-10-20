@@ -5,6 +5,10 @@
 import sharp from 'sharp';
 import { BadRequestError } from './store.js';
 
+// sharp keeps files it read by path open (up to 20) to read them faster next time; on Windows an
+// open file can't be deleted or replaced, so none are kept open (for the whole process).
+sharp.cache({ files: 0 });
+
 const FORMATS = { png: { ext: 'png', type: 'image/png' }, jpeg: { ext: 'jpg', type: 'image/jpeg' }, webp: { ext: 'webp', type: 'image/webp' }, gif: { ext: 'gif', type: 'image/gif' } };
 export const MAX_PICTURE_BYTES = 10 * 1024 * 1024;
 // A small file can claim a huge size and take gigabytes to open; real photos are well under these.
