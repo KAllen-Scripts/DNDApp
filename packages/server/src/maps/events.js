@@ -6,6 +6,8 @@
  * Worked out from the archived change lines (maps/<id>/changes.jsonl), so
  * a rebuild gives the same events. Only maps players could see at the time,
  * and never hidden tokens: the archivist only hears about what the table saw.
+ * A map shown only to some players says so on each line ("[seen only by user 3,
+ * user 5]"), so what happened there is known only to them.
  */
 import { normalizeMap } from '@dndapp/shared/map.js';
 import { sessionDateFor } from '../store.js';
@@ -74,7 +76,11 @@ export function mapEvents(histories, { date, rolloverHour }) {
       raw = applyJson(raw, e.changes);
       if (!today) continue;
       const after = normalizeMap(structuredClone(raw));
-      for (const ev of eventsOf(before, after, e.reason)) found.push({ when, ev });
+      // Shown to nobody in the list: as good as hidden.
+      if (after.shown_to && !after.shown_to.length) continue;
+      if (before.shown_to && !before.shown_to.length) before.shown = false;
+      const only = after.shown_to ? ` [seen only by ${after.shown_to.map((u) => `user ${u}`).join(', ')}]` : '';
+      for (const ev of eventsOf(before, after, e.reason)) found.push({ when, ev: !only ? ev : typeof ev === 'string' ? `${ev}${only}` : { ...ev, text: (from) => `${ev.text(from)}${only}` } });
     }
     names.set(id, normalizeMap(raw).name);
   }

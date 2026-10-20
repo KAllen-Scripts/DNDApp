@@ -26,8 +26,10 @@ export const state = {
   draftGrid: undefined, // grid being edited in the settings dialog (shown live)
   fogMode: null, // DM drawing fog: 'reveal' | 'cover'
   fogDraw: null, // the rectangle being drawn: { pointer, a, b }
-  wallMode: null, // DM working on walls: 'wall' | 'low' | 'door' | 'curve' | 'circle' | 'lock' | 'light' | 'difficult' | 'link' | 'erase'
+  wallMode: null, // DM working on walls: 'wall' | 'low' | 'door' | 'curve' | 'circle' | 'lock' | 'light' | 'difficult' | 'link' | 'place' | 'erase'
   terrainDraw: null, // difficult terrain being drawn: { pointer, a, b }
+  placeDraw: null, // the DM putting a place down: { pointer, a, b, sx, sy } (a click makes a pin, a drag an area)
+  placeDrag: null, // the DM moving a place: { id, pointer, x, y, sx, sy, moved }
   wallDraw: null, // the wall being drawn: { pointer, a, b, sx, sy }
   curveBend: null, // a curved wall waiting to be bent: { a, b, m } (m follows the pointer; a click places it)
   live: null, // AbortController for the live stream

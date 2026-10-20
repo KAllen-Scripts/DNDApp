@@ -4,7 +4,7 @@
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { CLIMB_KINDS, CONDITIONS, FOG_MAP, FOG_OPS, MAX_COMPANIONS, MAX_FOG_SHAPES, MAX_CLIMBS, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_RAISED, MAX_TERRAIN, MAX_HEIGHT_FT, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, PLAYER_KINDS, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, ownToken, pathCost, snapToken, stepTurn, tokenPx, walkLevels, wallBetween } from '@dndapp/shared/map.js';
+import { CLIMB_KINDS, CONDITIONS, FOG_MAP, FOG_OPS, MAX_COMPANIONS, MAX_FOG_SHAPES, MAX_CLIMBS, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_PLACES, MAX_PLACE_POINTS, placeProblem, shownTo, MAX_RAISED, MAX_TERRAIN, MAX_HEIGHT_FT, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, PLAYER_KINDS, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, ownToken, pathCost, snapToken, stepTurn, tokenPx, walkLevels, wallBetween } from '@dndapp/shared/map.js';
 import sharp from 'sharp';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
@@ -338,20 +338,33 @@ export function registerMaps(app, r) {
   const GRID = z.object({ size: z.number().positive(), x: z.number(), y: z.number() }).nullable();
   const SCALE = z.object({ distance: z.number().positive(), unit: z.enum(UNITS), per: z.enum(SCALE_PER) }).nullable();
 
-  /** Change a map (DM): { name?, shown?, grid?, scale?, variant? }. grid/scale null removes them; variant: which picture everyone sees (null: the original). */
+  /** Who a map or a place is shown to: null for every player, or a list of the campaign's players. */
+  const WHO = z.array(z.number().int().positive()).max(100).nullable();
+  const checkPlayers = (cid, ids) => {
+    for (const id of ids ?? []) {
+      if (auth.membership(cid, id)?.role !== 'player') throw new BadRequestError("That player isn't in this campaign.");
+    }
+  };
+
+  /**
+   * Change a map (DM): { name?, shown?, shown_to?, grid?, scale?, variant? }. grid/scale null removes them; variant: which
+   * picture everyone sees (null: the original); shown_to: only these players see it when it's shown (null: every player).
+   */
   app.patch('/campaigns/:cid/maps/:mid', async (request) => {
     const a = access(request, { dm: true });
     const { map } = viewableMap(request);
     const body = z
-      .object({ name: z.string().trim().min(1).max(100).optional(), shown: z.boolean().optional(), grid: GRID.optional(), scale: SCALE.optional(), variant: z.string().nullable().optional() })
+      .object({ name: z.string().trim().min(1).max(100).optional(), shown: z.boolean().optional(), shown_to: WHO.optional(), grid: GRID.optional(), scale: SCALE.optional(), variant: z.string().nullable().optional() })
       .parse(request.body ?? {});
     if (body.variant != null && !map.variants.some((v) => v.id === body.variant)) throw new NotFoundError('No such variant');
+    checkPlayers(a.cid, body.shown_to);
     const saved = maps.change(a.cid, map.id, (m) => {
       if (body.name !== undefined) {
         m.name = body.name;
         m.named = true;
       }
       if (body.shown !== undefined) m.shown = body.shown;
+      if (body.shown_to !== undefined) m.shown_to = body.shown_to;
       if (body.grid !== undefined) m.grid = body.grid;
       if (body.scale !== undefined) m.scale = body.scale;
       if (body.variant !== undefined) m.variant = body.variant;
@@ -435,6 +448,72 @@ export function registerMaps(app, r) {
   });
 
   /**
+   * Places on the map (DM; the world's atlas): { add?: place, set?: { id, ...place }, move?: { id, x, y }, remove?: id }.
+   * A place: { name, x, y, points? (an area), group?, to? (a smaller map it opens, or null), record? ({ id } of the
+   * archivist's), revealed?, revealed_to? (null: every player it's revealed to; else these players) }. Each map is a place
+   * on one map only, and never inside itself.
+   */
+  app.patch('/campaigns/:cid/maps/:mid/places', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const PLACE = z.object({
+      name: z.string().trim().min(1).max(80),
+      x: z.number(),
+      y: z.number(),
+      points: z.array(z.tuple([z.number(), z.number()])).min(3).max(MAX_PLACE_POINTS).nullable(),
+      group: z.string().trim().max(40),
+      to: z.string().nullable(),
+      record: z.object({ id: z.string() }).nullable(),
+      revealed: z.boolean(),
+      revealed_to: WHO,
+    });
+    const body = z
+      .object({
+        add: PLACE.partial().required({ name: true, x: true, y: true }).optional(),
+        set: PLACE.partial().extend({ id: z.string() }).optional(),
+        move: z.object({ id: z.string(), x: z.number(), y: z.number() }).optional(),
+        remove: z.string().optional(),
+      })
+      .parse(request.body ?? {});
+    const known = (id) => {
+      if (!map.places.some((p) => p.id === id)) throw new NotFoundError('No such place');
+    };
+    for (const id of [body.set?.id, body.move?.id, body.remove].filter(Boolean)) known(id);
+    if (body.add && map.places.length >= MAX_PLACES) throw new BadRequestError(`A map can have up to ${MAX_PLACES} places.`);
+    const all = maps.list(a.cid);
+    for (const [place, except] of [[body.add, null], [body.set, body.set?.id]]) {
+      if (!place) continue;
+      if (place.to) {
+        if (!isMapId(place.to)) throw new NotFoundError('No such map');
+        maps.get(a.cid, place.to);
+        const problem = placeProblem(all, map.id, place.to, except);
+        if (problem) throw new BadRequestError(problem);
+      }
+      checkPlayers(a.cid, place.revealed_to);
+      linkRecord(a.cid, place);
+    }
+    const clean = ({ points, ...p }) => ({ ...p, ...(points !== undefined && { points: points ?? undefined }) });
+    const saved = maps.change(a.cid, map.id, (m) => {
+      if (body.add) m.places.push({ group: '', to: null, record: null, revealed: false, revealed_to: null, ...clean(body.add), id: newTokenId() });
+      if (body.set) {
+        const p = m.places.find((x) => x.id === body.set.id);
+        Object.assign(p, clean(body.set));
+        if (p.points === undefined) delete p.points;
+      }
+      if (body.move) {
+        const p = m.places.find((x) => x.id === body.move.id);
+        // An area moves as a whole.
+        const dx = body.move.x - p.x;
+        const dy = body.move.y - p.y;
+        if (p.points) p.points = p.points.map(([x, y]) => [x + dx, y + dy]);
+        Object.assign(p, { x: body.move.x, y: body.move.y });
+      }
+      if (body.remove) m.places = m.places.filter((p) => p.id !== body.remove);
+    }, { by: request.user.id, reason: 'places' });
+    return maps.view(saved, a);
+  });
+
+  /**
    * Take a token through a link to the other map: { token }. Players move their own character, standing
    * next to a link they can see, to a map the DM has shown; the DM can send any token. It arrives at the
    * link on the other map that leads back here, or the middle of that map. Between levels of the same
@@ -453,7 +532,7 @@ export function registerMaps(app, r) {
     if (!dm && !ownToken(token, request.user.id)) throw new AuthError('You can only move your own character and companions.', 403);
     if (!dm && !nearLink(map, link, token.x, token.y)) throw new BadRequestError(`Move ${token.name} next to it first.`);
     const target = maps.get(a.cid, link.to);
-    if (!dm && !target.shown) throw new NotFoundError('No such map');
+    if (!dm && !shownTo(target, a.userId)) throw new NotFoundError('No such map');
     if (target.tokens.length >= MAX_TOKENS) throw new BadRequestError(`${target.name} is full.`);
     const levels = map.level && target.level?.group === map.level.group && target.image.width === map.image.width && target.image.height === map.image.height;
     const backs = target.links.filter((l) => l.to === map.id);

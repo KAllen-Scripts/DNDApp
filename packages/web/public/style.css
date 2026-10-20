@@ -1229,7 +1229,7 @@ details.spell > summary::-webkit-details-marker { display: none; }
 :root[data-token-labels="hover"] .token:not(:hover, :focus-visible, .selected, .dragging) .token-name { display: none; }
 
 /* A map turned (two fingers twisting, on a touch screen) shows N, pointing at north; a tap turns it back. */
-.token, .map-pin, .map-link { rotate: var(--unturn, 0rad); }
+.token, .map-pin, .map-link, .map-place { rotate: var(--unturn, 0rad); }
 .map-north {
   position: absolute; left: 0.5rem; top: 0.5rem; z-index: 3; width: 2.2rem; height: 2.2rem; padding: 0; border-radius: 50%;
   display: grid; place-items: center; background: var(--surface); color: var(--text); border: 1px solid var(--border); box-shadow: var(--shadow);
@@ -1417,6 +1417,42 @@ button.busy:disabled { opacity: 1; }
   position: absolute; left: 50%; top: 28px; transform: translateX(-50%);
   white-space: nowrap; font-size: 12px; padding: 1px 6px; border-radius: 4px; background: rgb(0 0 0 / 0.7); pointer-events: none;
 }
+/* Places on a map and the breadcrumb above it (map-places.js): the world's atlas. */
+.map-place-areas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.map-place-areas .place-area { fill: rgb(242 214 117 / 0.12); stroke: #f2d675; stroke-width: 2px; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; }
+.map-place-areas .place-area.opens { fill: rgb(242 214 117 / 0.2); }
+.map-place-areas .place-area.unrevealed { stroke: #9aa0a6; fill: rgb(154 160 166 / 0.12); }
+.map-place-areas .place-area.drawing { stroke: var(--accent, #4a7bd0); fill: rgb(74 123 208 / 0.15); }
+.map-places { position: absolute; inset: 0; pointer-events: none; }
+.map-place {
+  position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; padding: 0; border: 0; background: none;
+  transform: scale(var(--unzoom, 1)); pointer-events: auto; cursor: pointer; touch-action: none;
+}
+.map-place-dot {
+  position: absolute; inset: 0; display: grid; place-items: center; border-radius: 50%;
+  background: #f2d675; color: #3b2f0c; border: 2px solid #3b2f0c; font-size: 10px; line-height: 1; box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+}
+.map-place.area .map-place-dot { background: transparent; border-color: transparent; box-shadow: none; }
+.map-place.opens .map-place-dot { background: #f2d675; box-shadow: 0 0 0 3px #fff4c2, 0 0 0 5px #3b2f0c, 0 1px 4px 5px rgb(0 0 0 / 0.4); }
+.map-place.unrevealed .map-place-dot { background: #c7cbd0; border-style: dashed; }
+.map-place.dragging { cursor: grabbing; opacity: 0.85; }
+.map-place-label {
+  position: absolute; left: 50%; top: 20px; transform: translateX(-50%); white-space: nowrap;
+  font-size: 13px; font-weight: 600; padding: 1px 7px; border-radius: 4px; color: #fff; background: rgb(0 0 0 / 0.7); pointer-events: none;
+}
+.map-place.area .map-place-label { top: 0; transform: translate(-50%, -25%); }
+.map-place.opens .map-place-label { text-decoration: underline; text-underline-offset: 2px; }
+.map-place.unrevealed .map-place-label { font-style: italic; opacity: 0.8; }
+.map-trail {
+  position: absolute; z-index: 3; top: 0.5rem; left: 50%; transform: translateX(-50%); max-width: calc(100% - 6rem);
+  display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; justify-content: center;
+  padding: 0.2rem 0.7rem; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 0.85rem;
+}
+.map-trail .link { padding: 0; }
+.map-trail-sep { opacity: 0.6; }
+.map-trail-here { font-weight: 700; }
+.map-who { display: grid; gap: 0.4rem; }
+.map-who-list { display: grid; gap: 0.2rem; padding-left: 0.3rem; }
 .map-variants { display: grid; gap: 0.3rem; }
 .map-variants .map-row { align-items: center; }
 
