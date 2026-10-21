@@ -9,6 +9,8 @@ import {
   ASSETS, ASSET_GROUPS, BLOCKS, FLOORS, GRID_LOOKS, LABEL_FONTS, MOODS, PATH_KINDS, WALL_STYLES, WALL_STYLE_NAMES, normalizeDesign, normalizeLook,
 } from './shared/map-design.js';
 import { drawBuiltIn, drawDesign, drawFloorSwatch, drawPathSwatch, drawWallSwatch } from './shared/map-art.js';
+import { MAP_ART, artRef, floorArt, propArt, wallArt } from './shared/map-art-library.js';
+import { artImage, loadArt } from './map-art-loader.js';
 import { levelName } from './shared/map.js';
 import { h } from './api.js';
 import { state } from './map-state.js';
@@ -62,11 +64,46 @@ function thumb(key, w, ht, draw) {
   return cv;
 }
 
-const assetThumb = (key, size = 40) => thumb(`a:${key}:${size}`, size, size, (ctx) => {
+// The map art's small pictures, all on one sheet (MAP_ART.thumbs: { file, size, at: { 'f:<floor>' | 'w:<style>' | 'a:<asset>': [col, row] } }),
+// so the panel needs one download for every floor, wall and thing. Until it's here the panel shows the drawings.
+const sheetReady = () => !!(MAP_ART.thumbs && artImage(MAP_ART.thumbs.file));
+const sheetCells = new Map();
+/** One small picture from the sheet, on a canvas of its own (a texture to fill a sample with), or null. */
+function sheetCell(key) {
+  const t = MAP_ART.thumbs;
+  const at = t?.at?.[key];
+  const img = at && artImage(t.file);
+  if (!img) return null;
+  if (!sheetCells.has(key)) {
+    const cv = h('canvas', { width: t.size, height: t.size });
+    cv.getContext('2d')?.drawImage(img, at[0] * t.size, at[1] * t.size, t.size, t.size, 0, 0, t.size, t.size);
+    sheetCells.set(key, cv);
+  }
+  return sheetCells.get(key);
+}
+/** The textures of a sample, from the sheet: floors and wall styles. */
+function sampleImages(floors, styles = []) {
+  const images = new Map();
+  for (const ch of floors) if (floorArt(ch) && sheetCell(`f:${ch}`)) images.set(artRef(floorArt(ch).file), sheetCell(`f:${ch}`));
+  for (const st of styles) if (wallArt(st) && sheetCell(`w:${st}`)) images.set(artRef(wallArt(st).file), sheetCell(`w:${st}`));
+  return images;
+}
+/** Ask for the sheet once; when it comes, the panel is drawn again with it. */
+function wantSheet(act) {
+  if (!MAP_ART.thumbs || sheetReady()) return;
+  loadArt(MAP_ART.thumbs.file, () => act.panel());
+}
+
+const assetThumb = (key, size = 40) => thumb(`a:${key}:${size}:${sheetReady() && !!propArt(key)}`, size, size, (ctx) => {
   const a = ASSETS[key];
   const k = (size - 4) / Math.max(a.w, a.h);
   ctx.translate(size / 2, size / 2);
-  drawBuiltIn(ctx, key, a.w * k, a.h * k, { shadows: false });
+  const pic = propArt(key) && sheetCell(`a:${key}`);
+  if (pic) {
+    // The sheet's picture is the whole thing fitted in a square; drawn as big as the box allows, keeping its shape.
+    const s = (size - 4) / pic.width;
+    ctx.drawImage(pic, -pic.width * s / 2, -pic.height * s / 2, pic.width * s, pic.height * s);
+  } else drawBuiltIn(ctx, key, a.w * k, a.h * k, { shadows: false });
 });
 
 function pictureThumb(picture, size = 40) {
@@ -97,6 +134,7 @@ const clipThumb = (key, clip, images, ground = '.') => {
 export function renderPanel(c, act) {
   const panel = $('#creator-tools');
   if (!panel) return;
+  wantSheet(act);
   const scroll = panel.querySelector('.creator-tab-body')?.scrollTop ?? 0;
   const tools = TOOLS.map(([key, label, k, title]) => h('button', {
     type: 'button', class: 'ghost', 'data-creator-tool': key, title: `${title} (${k})`, 'aria-pressed': String(c.tool === key),
@@ -139,14 +177,14 @@ function floorPalette(c, act, { tool = null } = {}) {
         if (tool && c.tool !== tool && !['room', 'fill', 'circle', 'floor'].includes(c.tool)) act.setTool(tool);
         else act.panel();
       },
-    }, thumb(`f:${key}`, 28, 28, (ctx) => drawFloorSwatch(ctx, key, 28))))));
+    }, thumb(`f:${key}:${sheetReady()}`, 28, 28, (ctx) => drawFloorSwatch(ctx, key, 28, sampleImages([key])))))));
 }
 
 function wallStyles(c, act, type = 'wall') {
   return h('div', { class: 'creator-styles' }, WALL_STYLES.map((s) => h('button', {
     type: 'button', class: 'ghost creator-style', 'data-wall-style': s, title: WALL_STYLE_NAMES[s], 'aria-pressed': String(c.wallStyle === s),
     onclick: () => { c.wallStyle = s; act.panel(); },
-  }, thumb(`w:${s}:${type}`, 56, 22, (ctx) => drawWallSwatch(ctx, s, type, 56, 22)), h('span', {}, WALL_STYLE_NAMES[s]))));
+  }, thumb(`w:${s}:${type}:${sheetReady()}`, 56, 22, (ctx) => drawWallSwatch(ctx, s, type, 56, 22, sampleImages(['s'], [s]))), h('span', {}, WALL_STYLE_NAMES[s]))));
 }
 
 /** What the current tool uses. */

@@ -285,3 +285,73 @@ test('painting helpers: colours and noise', () => {
     assert.ok(f >= 0 && f <= 1);
   }
 });
+
+test('map art: every art file is there, credited and CC0; every prop with art is a real asset; all of it stays small', async () => {
+  const fs = await import('node:fs');
+
+  const { MAP_ART, allArtFiles, artFiles, propArt } = await import('../src/map-art-library.js');
+  const dir = new URL('../../web/public/art/', import.meta.url);
+  let bytes = 0;
+  for (const file of [...allArtFiles(), MAP_ART.thumbs.file]) {
+    const p = new URL(file, dir);
+    assert.ok(fs.existsSync(p), `${file} is missing`);
+    bytes += fs.statSync(p).size;
+    if (file === MAP_ART.thumbs.file) continue;
+    const c = MAP_ART.credits[file];
+    assert.ok(c?.url && c.source && c.id, `${file} says where it's from`);
+    assert.equal(c.licence, 'CC0', `${file} may be shipped with the app`);
+  }
+  assert.ok(bytes < 3e6, `the art is ${(bytes / 1e6).toFixed(1)} MB; the creator loads what a map uses, but keep it small`);
+  for (const [key, art] of Object.entries(MAP_ART.props)) {
+    assert.ok(ASSETS[key], `${key} is an asset`);
+    assert.ok(!art.fill || (art.fill > 0 && art.fill <= 1), `${key} fills part of its box`);
+    assert.ok(MAP_ART.thumbs.at[`a:${key}`], `${key} has a small picture for the panel`);
+  }
+  for (const ch of Object.keys(MAP_ART.floors)) assert.ok(FLOORS[ch], `${ch} is a floor`);
+  for (const style of Object.keys(MAP_ART.walls)) assert.ok(WALL_STYLES.includes(style), `${style} is a wall style`);
+  // A design asks only for the art it uses.
+  const d = normalizeDesign({ cols: 4, rows: 4, floor: Array(4).fill('wwww'), assets: [{ id: 'a1', a: 'barrel', x: 1, y: 1 }] });
+  const want = artFiles(d);
+  assert.ok(want.includes(MAP_ART.floors.w.file) && want.includes(propArt('barrel').file));
+  assert.equal(want.length, 2);
+});
+
+test('map art: a prop with art draws its picture (a small one doesn\'t fill its box); without it, or recoloured, it draws as before', async () => {
+  const { MAP_ART, artRef, propArt } = await import('../src/map-art-library.js');
+  const key = Object.keys(MAP_ART.props).find((k) => MAP_ART.props[k].fill && !ASSETS[k].tint);
+  const img = { width: 200, height: 100 };
+  const images = new Map([[artRef(propArt(key).file), img]]);
+  const drawn = (a, imgs) => {
+    const { ctx, calls } = recorder();
+    drawAsset(ctx, { id: 'p', x: 2, y: 2, w: 2, h: 2, ...a }, 70, imgs, { shadows: false });
+    return calls;
+  };
+  const pic = drawn({ a: key }, images).filter((c) => c[0] === 'drawImage' && c[1] === img);
+  assert.equal(pic.length, 1);
+  const fill = propArt(key).fill;
+  assert.ok(Math.abs(pic[0][4] - 140 * fill) < 0.01, 'as wide as the box times how much of it the thing fills');
+  assert.ok(!drawn({ a: key }, new Map()).some((c) => c[0] === 'drawImage'), 'not loaded yet: drawn in code');
+  assert.ok(!drawn({ a: key, tint: '#123456' }, images).some((c) => c[0] === 'drawImage'), 'recoloured: drawn in code so the colour shows');
+});
+
+// A tavern took the server 10 s to draw (45 s at 140 px a square) once props had pictures: each picture's shadow was a
+// canvas shadow blurred at full size, a tenth of a second a prop.
+test('regression: a prop picture\'s shadow is made once, small, and reused; the map\'s canvas never blurs a shadow for it', async () => {
+  const { MAP_ART, artRef, propArt } = await import('../src/map-art-library.js');
+  const key = Object.keys(MAP_ART.props)[0];
+  const img = { width: 400, height: 300 };
+  const images = new Map([[artRef(propArt(key).file), img]]);
+  const made = [];
+  const makeCanvas = (w, h) => {
+    const r = recorder();
+    const c = { width: w, height: h, getContext: () => r.ctx };
+    made.push({ c, calls: r.calls });
+    return c;
+  };
+  const { ctx, calls } = recorder();
+  for (let i = 0; i < 5; i += 1) drawAsset(ctx, { id: `p${i}`, a: key, x: 2 + i, y: 2, w: 1, h: 1 }, 140, images, undefined, makeCanvas);
+  assert.equal(made.length, 1, 'one shadow for the picture, however many times it is placed');
+  assert.ok(Math.max(made[0].c.width, made[0].c.height) <= 128, 'blurred small');
+  assert.ok(!calls.some((c) => c[0] === '=shadowBlur' && c[1] > 0), 'nothing blurred on the map itself');
+  assert.equal(calls.filter((c) => c[0] === 'drawImage' && c[1] === made[0].c).length, 5, 'the shadow under each one');
+});

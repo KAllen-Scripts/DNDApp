@@ -9,7 +9,7 @@
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import { BadRequestError, NotFoundError } from '../store.js';
-import { BLOCKS, DESIGN_MAX, DESIGN_MIN, MAX_DESIGN_ASSETS, MAX_DESIGN_LABELS, MAX_DESIGN_PATHS, MAX_DESIGN_WALLS, emptyDesign, isMapRef, normalizeClip, normalizeDesign } from '@dndapp/shared/map-design.js';
+import { BLOCKS, DESIGN_CELL, DESIGN_CELL_MAX, DESIGN_MAX, DESIGN_MIN, MAX_DESIGN_ASSETS, MAX_DESIGN_LABELS, MAX_DESIGN_PATHS, MAX_DESIGN_WALLS, emptyDesign, isMapRef, normalizeClip, normalizeDesign } from '@dndapp/shared/map-design.js';
 import { GENERATORS, generateDesign } from '@dndapp/shared/map-generate.js';
 import { BUILT_IN_STAMPS } from '@dndapp/shared/map-stamps.js';
 import { MAX_LEVEL, levelName } from '@dndapp/shared/map.js';
@@ -63,7 +63,9 @@ export function registerMapCreator(app, r) {
     return design;
   }
 
-  const draw = (cid, design) => renderDesign(design, { assetFile: (id) => mapAssets.file(cid, id) });
+  // A new map's picture gets as many pixels a square as its size allows; a map changed again keeps its own, so tokens,
+  // fog and the DM's walls (all in pixels) stay where they were.
+  const draw = (cid, design, cell = undefined) => renderDesign(design, { assetFile: (id) => mapAssets.file(cid, id), cell });
 
   /** Make a new map (DM): { name, design }. The picture is drawn from the design; the map starts hidden from players. */
   app.post('/campaigns/:cid/maps/design', designBody, async (request, reply) => {
@@ -90,7 +92,7 @@ export function registerMapCreator(app, r) {
     if (!map.design) throw new BadRequestError("This map wasn't made in the map creator.");
     const { design } = z.object({ design: z.unknown() }).parse(request.body ?? {});
     const clean = readDesign(a.cid, design, map.id);
-    return maps.view(maps.redesign(a.cid, map.id, { design: clean, image: await draw(a.cid, clean), by: request.user.id }), a);
+    return maps.view(maps.redesign(a.cid, map.id, { design: clean, image: await draw(a.cid, clean, Math.round(Math.min(DESIGN_CELL_MAX, Math.max(DESIGN_CELL, map.grid?.size || DESIGN_CELL)))), by: request.user.id }), a);
   });
 
   // ---------- starting points ----------

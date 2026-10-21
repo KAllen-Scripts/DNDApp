@@ -106,6 +106,8 @@ const WEB_MODULES = {
   '/shared/map-design.js': '@dndapp/shared/map-design.js',
   '/shared/map-paint.js': '@dndapp/shared/map-paint.js',
   '/shared/map-art.js': '@dndapp/shared/map-art.js',
+  '/shared/map-art-library.js': '@dndapp/shared/map-art-library.js',
+  '/shared/map-art-files.js': '@dndapp/shared/map-art-files.js',
   '/shared/map-art-assets.js': '@dndapp/shared/map-art-assets.js',
   '/shared/map-art-outdoors.js': '@dndapp/shared/map-art-outdoors.js',
   '/shared/map-art-dungeon.js': '@dndapp/shared/map-art-dungeon.js',
@@ -139,6 +141,24 @@ export function pageVersion(dir) {
  * Serve the web page's files (no build step). Each file gets its own public
  * route, so nothing outside the folder can be requested; "/" is index.html.
  */
+/**
+ * The map creator's art (shared/map-art-library.js): big pictures that only
+ * change with an update, so each has an ETag and a browser that has it gets
+ * "304 Not Modified" instead of downloading it again.
+ */
+function sendArt(file, type) {
+  let cached = null;
+  return async (request, reply) => {
+    cached ??= (() => {
+      const body = fs.readFileSync(file);
+      return { body, etag: `"${crypto.createHash('sha1').update(body).digest('base64url')}"` };
+    })();
+    reply.type(type).header('Cache-Control', 'no-cache').header('X-Content-Type-Options', 'nosniff').header('ETag', cached.etag);
+    if (request.headers['if-none-match'] === cached.etag) return reply.code(304).send();
+    return reply.send(cached.body);
+  };
+}
+
 function serveWebPage(app, dir) {
   if (!dir || !fs.existsSync(dir)) return;
   for (const name of fs.readdirSync(dir, { recursive: true })) {
@@ -146,6 +166,10 @@ function serveWebPage(app, dir) {
     const type = CONTENT_TYPES[path.extname(file)];
     if (!type || !fs.statSync(file).isFile()) continue;
     const url = '/' + name.split(path.sep).join('/');
+    if (url.startsWith('/art/')) {
+      app.get(url, { config: { public: true } }, sendArt(file, type));
+      continue;
+    }
     const send = async (request, reply) =>
       reply.type(type).header('Cache-Control', 'no-cache').header('X-Content-Type-Options', 'nosniff').send(fs.readFileSync(file));
     app.get(url, { config: { public: true } }, send);

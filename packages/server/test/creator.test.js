@@ -40,26 +40,26 @@ test('the DM makes a map in the creator: drawn by the server, with a grid, walls
     assert.equal(view.design, undefined, 'the design comes on its own, not with every map update');
     assert.equal(view.shown, false);
     assert.equal(view.reading.status, 'done', 'no AI reading for a made map');
-    assert.deepEqual(view.image, { file: 'image.webp', type: 'image/webp', width: 840, height: 560 });
-    assert.deepEqual(view.grid, { size: 70, x: 0, y: 0 });
+    assert.deepEqual(view.image, { file: 'image.webp', type: 'image/webp', width: 1680, height: 1120 });
+    assert.deepEqual(view.grid, { size: 140, x: 0, y: 0 }, 'a small map gets 140 px a square');
     assert.deepEqual(view.scale, { distance: 5, unit: 'ft', per: 'square' });
 
     // The room's four walls, the south one cut round the door; the pillar's outline blocks sight too.
     const map = t.maps.get(t.campaign.id, view.id);
     assert.ok(map.walls.every((w) => w.source === 'creator'));
     const doors = map.walls.filter((w) => w.door);
-    assert.deepEqual(doors.map(({ x1, y1, x2, y2 }) => [x1, y1, x2, y2]), [[210, 350, 280, 350]]);
-    const south = map.walls.filter((w) => !w.door && w.y1 === 350 && w.y2 === 350);
+    assert.deepEqual(doors.map(({ x1, y1, x2, y2 }) => [x1, y1, x2, y2]), [[420, 700, 560, 700]]);
+    const south = map.walls.filter((w) => !w.door && w.y1 === 700 && w.y2 === 700);
     assert.equal(south.length, 2, 'the wall goes round the doorway');
     assert.equal(map.walls.filter((w) => !w.door && w.kind === 'wall').length, 5 + 8);
-    assert.deepEqual(map.lights.map(({ x, y, bright, dim, source }) => ({ x, y, bright, dim, source })), [{ x: 665, y: 175, bright: 20, dim: 20, source: 'creator' }]);
-    assert.deepEqual(map.terrain.map((a) => a.points), [[[630, 350], [770, 350], [770, 490], [630, 490]]]);
+    assert.deepEqual(map.lights.map(({ x, y, bright, dim, source }) => ({ x, y, bright, dim, source })), [{ x: 1330, y: 350, bright: 20, dim: 20, source: 'creator' }]);
+    assert.deepEqual(map.terrain.map((a) => a.points), [[[1260, 700], [1540, 700], [1540, 980], [1260, 980]]]);
 
     // The picture: archived, the size of the design, and grass-green at a corner.
     const file = path.join(t.paths.archive, t.campaign.slug, 'maps', view.id, 'image.webp');
     const meta = await sharp(file).metadata();
-    assert.deepEqual([meta.format, meta.width, meta.height], ['webp', 840, 560]);
-    const { data } = await sharp(file).extract({ left: 770, top: 0, width: 1, height: 1 }).raw().toBuffer({ resolveWithObject: true });
+    assert.deepEqual([meta.format, meta.width, meta.height], ['webp', 1680, 1120]);
+    const { data } = await sharp(file).extract({ left: 1540, top: 0, width: 1, height: 1 }).raw().toBuffer({ resolveWithObject: true });
     assert.ok(data[1] > data[0] && data[1] > data[2], `green grass, got ${[...data]}`);
     const img = await t.request('GET', `/campaigns/${t.campaign.id}/maps/${view.id}/image`);
     assert.equal(img.statusCode, 200);
@@ -107,7 +107,7 @@ test('a made map saved again: a new picture, its walls replaced, the DM\'s own w
     const res = await t.request('PUT', `${base}/design`, { body: { design } });
     assert.equal(res.statusCode, 200, res.body);
     const after = res.json();
-    assert.deepEqual(after.image, { file: 'image-r2.webp', type: 'image/webp', width: 980, height: 560 });
+    assert.deepEqual(after.image, { file: 'image-r2.webp', type: 'image/webp', width: 1960, height: 1120 });
     assert.notEqual(after.image_key, view.image_key, 'browsers fetch the new picture');
     assert.ok(fs.existsSync(path.join(t.paths.archive, t.campaign.slug, 'maps', view.id, 'image.webp')), 'the old picture stays in the archive');
 
@@ -126,6 +126,26 @@ test('a made map saved again: a new picture, its walls replaced, the DM\'s own w
     // Only a made map can be saved this way.
     const imported = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'm.png', data: (await terrain(200, 140)).toString('base64') } });
     assert.equal((await t.request('PUT', `/campaigns/${t.campaign.id}/maps/${imported.json().id}/design`, { body: { design } })).statusCode, 400);
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('a map made before sharper pictures keeps its 70 px squares when saved again, so its tokens and walls stay put', async () => {
+  const t = await setup({ llm: createFakeLLM() });
+  try {
+    const view = await create(t);
+    // As a map made before 140 px squares was: its grid 70 px a square.
+    t.maps.change(t.campaign.id, view.id, (m) => {
+      m.grid = { size: 70, x: 0, y: 0 };
+    });
+    const base = `/campaigns/${t.campaign.id}/maps/${view.id}`;
+    const design = (await t.request('GET', `${base}/design`)).json().design;
+    const after = (await t.request('PUT', `${base}/design`, { body: { design } })).json();
+    assert.deepEqual([after.image.width, after.image.height], [840, 560]);
+    assert.deepEqual(after.grid, { size: 70, x: 0, y: 0 });
+    const door = t.maps.get(t.campaign.id, view.id).walls.find((w) => w.door);
+    assert.deepEqual([door.x1, door.y1, door.x2, door.y2], [210, 350, 280, 350]);
   } finally {
     await t.cleanup();
   }
@@ -164,7 +184,7 @@ test("the DM's own assets: uploaded, placed on a made map, kept on it after bein
     design.assets = [{ id: 'cart01', a: `u:${cart.id}`, x: 3, y: 2, w: 2, h: 1, blocks: 'low' }];
     const view = await create(t, design, 'Farmyard');
     const file = path.join(t.paths.archive, t.campaign.slug, 'maps', view.id, 'image.webp');
-    const { data } = await sharp(file).extract({ left: 210, top: 140, width: 1, height: 1 }).raw().toBuffer({ resolveWithObject: true });
+    const { data } = await sharp(file).extract({ left: 420, top: 280, width: 1, height: 1 }).raw().toBuffer({ resolveWithObject: true });
     assert.ok(data[0] > 150 && data[1] < 80, `the cart is drawn, got ${[...data]}`);
     assert.equal(t.maps.get(t.campaign.id, view.id).walls.filter((w) => w.kind === 'low').length, 4);
 
@@ -193,4 +213,21 @@ test("the DM's own assets: uploaded, placed on a made map, kept on it after bein
   } finally {
     await t.cleanup();
   }
+});
+
+// Drawing a 140 px a square picture takes the canvas seconds; on the server's own thread that froze everything else
+// (rolls, the map's live updates) until it was done.
+test('regression: drawing a made map\'s picture happens off the server\'s thread, so it keeps answering meanwhile', async () => {
+  const { renderDesign } = await import('../src/maps/design.js');
+  const d = addRoom(emptyDesign(30, 20, 'g'), { x1: 2, y1: 2, x2: 12, y2: 9 }, 'w');
+  let worst = 0;
+  let last = Date.now();
+  const tick = setInterval(() => {
+    worst = Math.max(worst, Date.now() - last);
+    last = Date.now();
+  }, 10);
+  const r = await renderDesign(d, { assetFile: () => null });
+  clearInterval(tick);
+  assert.equal(r.width, 30 * 140);
+  assert.ok(worst < 800, `the server's thread stood still for ${worst} ms`);
 });

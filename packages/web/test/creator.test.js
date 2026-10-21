@@ -46,7 +46,7 @@ async function openNew(page) {
 /** Save and wait for the creator to close. */
 async function saveAndClose(page) {
   page.click('#creator-save');
-  await page.waitFor(() => !page.$('#map-creator').open, { what: 'the creator to close' });
+  await page.waitFor(() => !page.$('#map-creator').open, { timeout: 30000, what: 'the creator to close' });
   await page.settle();
 }
 
@@ -114,7 +114,7 @@ test('creator: the DM starts blank, draws a room with a door, a pond and a campf
 
     const [map] = t.maps.list(t.campaign.id);
     assert.equal(map.name, 'Watchpost');
-    assert.deepEqual(map.image, { file: 'image.webp', type: 'image/webp', width: 2100, height: 1400 });
+    assert.deepEqual(map.image, { file: 'image.webp', type: 'image/webp', width: 4200, height: 2800 });
     const d = map.design;
     assert.equal(d.floor[2].slice(0, 7), 'ggssssg');
     assert.equal(d.floor[10].slice(10, 12), 'WW');
@@ -147,7 +147,7 @@ test('creator: the DM starts blank, draws a room with a door, a pond and a campf
     await saveAndClose(page);
     const after = t.maps.get(t.campaign.id, map.id);
     assert.equal(after.image.file, 'image-r2.webp');
-    assert.equal(after.image.width, 32 * 70);
+    assert.equal(after.image.width, 32 * 140, 'a bigger map keeps its squares, so its tokens stay put');
     assert.deepEqual(after.design.assets.map((a) => [a.a, a.x, a.y]), [['campfire', 8.5, 3.5]], 'the copy went; the first campfire stays');
   });
 });
@@ -398,15 +398,15 @@ test('creator: the floors of a building: a first floor added above (with the wal
 
     // The map as a Universal VTT file.
     page.click('#creator-export');
-    await page.waitFor(() => page.downloads.length, { what: 'the download' });
+    await page.waitFor(() => page.downloads.length, { timeout: 30000, what: 'the download' });
     assert.equal(page.downloads[0].name, 'Keep.dd2vtt');
     const uvtt = JSON.parse(await page.downloads[0].text);
-    assert.equal(uvtt.resolution.pixels_per_grid, 70);
+    assert.equal(uvtt.resolution.pixels_per_grid, 140);
     assert.equal(uvtt.line_of_sight.length, 4, 'the room');
 
     // A first floor above, with this floor's walls: opened in the creator straight away.
     page.click('#creator-add-above');
-    await page.waitFor(() => page.$('#creator-name')?.value === 'Keep (First floor)', { what: 'the first floor in the creator' });
+    await page.waitFor(() => page.$('#creator-name')?.value === 'Keep (First floor)', { timeout: 30000, what: 'the first floor in the creator' });
     await page.settle();
     assert.match(page.dialogs.at(-1).message, /Open "Keep \(First floor\)" in the creator now\?/);
     const first = t.maps.list(t.campaign.id).find((m) => m.id !== keep.id);
@@ -450,7 +450,7 @@ test('map settings: a map with a grid downloads as a Universal VTT file', async 
     page.click('#map-settings');
     assert.ok(!page.$('#map-export').disabled);
     page.click('#map-export');
-    await page.waitFor(() => page.downloads.length, { what: 'the download' });
+    await page.waitFor(() => page.downloads.length, { timeout: 30000, what: 'the download' });
     assert.equal(page.downloads[0].name, 'Hut northsouth.dd2vtt');
     const uvtt = JSON.parse(await page.downloads[0].text);
     assert.equal(uvtt.format, 0.3);

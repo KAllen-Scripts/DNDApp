@@ -19,6 +19,8 @@
     "./map-design.js": "./src/map-design.js",
     "./map-paint.js": "./src/map-paint.js",
     "./map-art.js": "./src/map-art.js",
+    "./map-art-library.js": "./src/map-art-library.js",
+    "./map-art-files.js": "./src/map-art-files.js",
     "./map-art-assets.js": "./src/map-art-assets.js",
     "./map-art-outdoors.js": "./src/map-art-outdoors.js",
     "./map-art-dungeon.js": "./src/map-art-dungeon.js",

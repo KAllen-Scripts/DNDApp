@@ -1,0 +1,43 @@
+<!doctype html><!-- The page render-props.js drives: one Poly Haven model, drawn from straight above, sun from the top left, on a see-through background. --><html><head><script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script></head><body style="margin:0;background:transparent">
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setClearColor(0x000000, 0);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+document.body.appendChild(renderer.domElement);
+const loader = new GLTFLoader();
+// pxPerMetre: how big; returns { png, wM, dM, hM }
+window.renderModel = async (url, { pxPerMetre = 168, ssaa = 2, maxPx = 2048 } = {}) => {
+  const gltf = await loader.loadAsync(url);
+  const scene = new THREE.Scene();
+  const obj = gltf.scene;
+  scene.add(obj);
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = box.getSize(new THREE.Vector3());
+  const c = box.getCenter(new THREE.Vector3());
+  let scale = pxPerMetre;
+  let W = Math.ceil(size.x * scale), H = Math.ceil(size.z * scale);
+  if (Math.max(W, H) > maxPx) { scale *= maxPx / Math.max(W, H); W = Math.ceil(size.x * scale); H = Math.ceil(size.z * scale); }
+  W = Math.max(W, 8); H = Math.max(H, 8);
+  renderer.setPixelRatio(1);
+  renderer.setSize(W * ssaa, H * ssaa, false);
+  const cam = new THREE.OrthographicCamera(-W / scale / 2, W / scale / 2, H / scale / 2, -H / scale / 2, 0.01, size.y + 20);
+  cam.position.set(c.x, box.max.y + 5, c.z);
+  cam.up.set(0, 0, -1);
+  cam.lookAt(c.x, box.min.y - 1, c.z);
+  scene.add(new THREE.HemisphereLight(0xfff8ee, 0x4a4038, 1.6));
+  const sun = new THREE.DirectionalLight(0xfff2dd, 2.6);
+  sun.position.set(c.x - 3, box.max.y + 8, c.z - 3); // from the top left of the picture
+  sun.target.position.copy(c);
+  scene.add(sun, sun.target);
+  renderer.render(scene, cam);
+  const big = renderer.domElement;
+  const out = document.createElement('canvas'); out.width = W; out.height = H;
+  const g = out.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(big, 0, 0, W, H);
+  return { png: out.toDataURL('image/png'), wM: size.x, dM: size.z, hM: size.y };
+};
+window.ready = true;
+</script></body></html>

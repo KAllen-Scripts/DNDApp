@@ -46,12 +46,12 @@ test('secret doors: wall to players until found; the DM reveals or hides one, or
     const map = t.maps.get(t.campaign.id, view.id);
     const secret = map.walls.find((w) => w.secret);
     const door = map.walls.find((w) => w.door && !w.secret);
-    assert.deepEqual([secret.x1, secret.y1, secret.x2, secret.y2, secret.door, secret.revealed], [420, 140, 420, 210, true, false]);
+    assert.deepEqual([secret.x1, secret.y1, secret.x2, secret.y2, secret.door, secret.revealed], [840, 280, 840, 420, true, false]);
 
     // Shown, with Thorin in the room beside both doors.
     await t.request('PATCH', base, { body: { shown: true, fog: undefined } });
     await t.request('PATCH', `${base}/fog`, { body: { enabled: true, sight: true } });
-    await t.request('POST', `${base}/tokens`, { body: { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 385, y: 175 } });
+    await t.request('POST', `${base}/tokens`, { body: { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 770, y: 350 } });
     const player = async () => (await t.request('GET', base, { as: t.sam.token })).json();
     assert.deepEqual((await player()).doors.map((d) => d.id), [door.id], 'the secret door is just wall to them');
     assert.equal((await t.request('POST', `${base}/doors/${secret.id}/toggle`, { as: t.sam.token })).statusCode, 404);
@@ -153,8 +153,8 @@ test('floors of a building: added above or below a made map, and stairs between 
     assert.equal((await t.request('PUT', `/campaigns/${t.campaign.id}/maps/${upper.id}/design`, { body: { design: upperDesign } })).statusCode, 200);
     const links = t.maps.get(t.campaign.id, ground.id).links;
     assert.deepEqual(links.map(({ x, y, to, label, source }) => ({ x, y, to, label, source })), [
-      { x: 175, y: 175, to: upper.id, label: 'Stairs up', source: 'creator' },
-      { x: 315, y: 245, to: cellar.id, label: 'Hatch', source: 'creator' },
+      { x: 350, y: 350, to: upper.id, label: 'Stairs up', source: 'creator' },
+      { x: 630, y: 490, to: cellar.id, label: 'Hatch', source: 'creator' },
     ]);
 
     // Saved again, the links keep their ids.
@@ -162,17 +162,17 @@ test('floors of a building: added above or below a made map, and stairs between 
     assert.deepEqual(t.maps.get(t.campaign.id, ground.id).links.map((l) => l.id), links.map((l) => l.id));
 
     // Up the stairs: to the nearest way back down (not the middle of the map).
-    const tok = (await t.request('POST', `/campaigns/${t.campaign.id}/maps/${ground.id}/tokens`, { body: { kind: 'npc', name: 'Guard', x: 175, y: 175 } })).json().token;
+    const tok = (await t.request('POST', `/campaigns/${t.campaign.id}/maps/${ground.id}/tokens`, { body: { kind: 'npc', name: 'Guard', x: 350, y: 350 } })).json().token;
     res = await t.request('POST', `/campaigns/${t.campaign.id}/maps/${ground.id}/links/${links[0].id}/use`, { body: { token: tok.id } });
     assert.equal(res.statusCode, 200, res.body);
     const there = res.json().map.tokens.find((x) => x.id === res.json().token);
-    assert.deepEqual([there.x, there.y], [245, 175]);
+    assert.deepEqual([there.x, there.y], [490, 350]);
 
     // Down the hatch to the cellar, which has no way back: the same spot.
-    const tok2 = (await t.request('POST', `/campaigns/${t.campaign.id}/maps/${ground.id}/tokens`, { body: { kind: 'npc', name: 'Cook', x: 315, y: 245 } })).json().token;
+    const tok2 = (await t.request('POST', `/campaigns/${t.campaign.id}/maps/${ground.id}/tokens`, { body: { kind: 'npc', name: 'Cook', x: 630, y: 490 } })).json().token;
     res = await t.request('POST', `/campaigns/${t.campaign.id}/maps/${ground.id}/links/${links[1].id}/use`, { body: { token: tok2.id } });
     const below = res.json().map.tokens.find((x) => x.id === res.json().token);
-    assert.deepEqual([below.x, below.y], [315, 245]);
+    assert.deepEqual([below.x, below.y], [630, 490]);
 
     // A thing can't lead to its own map, or to one that isn't there.
     groundDesign.assets.push({ id: 'bad001', a: 'ladder', x: 8, y: 6, to: ground.id });
@@ -294,7 +294,7 @@ test("the AI's draft: a map planned from the DM's description (and sketch), made
 
     // Saved as it came: an ordinary made map.
     const saved = await create(t, d, done.name);
-    assert.equal(saved.image.width, 1400);
+    assert.equal(saved.image.width, 2800);
 
     // The DM's own size wins.
     res = await t.request('POST', url, { body: { prompt: 'The same, but bigger.', cols: 30, rows: 24 } });
@@ -415,10 +415,10 @@ test('a map taken out as a Universal VTT file and back in keeps its heights, sta
       const doors = m.walls.filter((w) => w.door);
       Object.assign(doors[0], { secret: true, revealed: false });
       Object.assign(doors[1], { locked: true });
-      m.walls.push({ id: 'fence01', x1: 70, y1: 490, x2: 280, y2: 490, kind: 'low', door: false, open: false, locked: false, source: 'dm' });
-      m.raised = [{ id: 'roof01', points: [[70, 70], [210, 70], [210, 210], [70, 210]], height: 15, bridge: true, source: 'dm' }, { id: 'pit001', points: [[560, 350], [630, 350], [630, 420]], height: -10, source: 'ai' }];
-      m.climbs = [{ id: 'ladr01', kind: 'ladder', x1: 140, y1: 245, x2: 140, y2: 210, source: 'dm' }, { id: 'stai01', kind: 'stairs', x1: 245, y1: 140, x2: 210, y2: 140, source: 'creator' }];
-      m.terrain = [{ id: 'mud001', points: [[350, 350], [490, 350], [490, 490], [350, 490]], source: 'dm' }];
+      m.walls.push({ id: 'fence01', x1: 140, y1: 980, x2: 560, y2: 980, kind: 'low', door: false, open: false, locked: false, source: 'dm' });
+      m.raised = [{ id: 'roof01', points: [[140, 140], [420, 140], [420, 420], [140, 420]], height: 15, bridge: true, source: 'dm' }, { id: 'pit001', points: [[1120, 700], [1260, 700], [1260, 840]], height: -10, source: 'ai' }];
+      m.climbs = [{ id: 'ladr01', kind: 'ladder', x1: 280, y1: 490, x2: 280, y2: 420, source: 'dm' }, { id: 'stai01', kind: 'stairs', x1: 490, y1: 280, x2: 420, y2: 280, source: 'creator' }];
+      m.terrain = [{ id: 'mud001', points: [[700, 700], [980, 700], [980, 980], [700, 980]], source: 'dm' }];
       m.lights[0].bright = 10;
       m.lights[0].dim = 30;
     });
@@ -437,16 +437,16 @@ test('a map taken out as a Universal VTT file and back in keeps its heights, sta
     const wall = (w) => [w.x1, w.y1, w.x2, w.y2, w.kind, w.door, w.locked, !!w.secret].join();
     assert.deepEqual(after.walls.map(wall).sort(), before.walls.map(wall).sort());
     assert.deepEqual(after.raised.map(({ points, height, bridge, source }) => ({ points, height, bridge, source })), [
-      { points: [[70, 70], [210, 70], [210, 210], [70, 210]], height: 15, bridge: true, source: 'file' },
-      { points: [[560, 350], [630, 350], [630, 420]], height: -10, bridge: undefined, source: 'file' },
+      { points: [[140, 140], [420, 140], [420, 420], [140, 420]], height: 15, bridge: true, source: 'file' },
+      { points: [[1120, 700], [1260, 700], [1260, 840]], height: -10, bridge: undefined, source: 'file' },
     ]);
-    assert.deepEqual(after.climbs.map(({ kind, x1, y1, x2, y2 }) => [kind, x1, y1, x2, y2]), [['ladder', 140, 245, 140, 210], ['stairs', 245, 140, 210, 140]]);
-    assert.deepEqual(after.terrain.map((a) => a.points), [[[350, 350], [490, 350], [490, 490], [350, 490]]]);
-    assert.deepEqual(after.lights.map(({ x, y, bright, dim }) => ({ x, y, bright, dim })), [{ x: 665, y: 175, bright: 10, dim: 30 }]);
+    assert.deepEqual(after.climbs.map(({ kind, x1, y1, x2, y2 }) => [kind, x1, y1, x2, y2]), [['ladder', 280, 490, 280, 420], ['stairs', 490, 280, 420, 280]]);
+    assert.deepEqual(after.terrain.map((a) => a.points), [[[700, 700], [980, 700], [980, 980], [700, 980]]]);
+    assert.deepEqual(after.lights.map(({ x, y, bright, dim }) => ({ x, y, bright, dim })), [{ x: 1330, y: 350, bright: 10, dim: 30 }]);
 
     // Added again to the same map, the file's heights replace the last file's; the DM's own stay.
     const base = `/campaigns/${t.campaign.id}/maps/${id}`;
-    await t.request('PATCH', `${base}/raised`, { body: { add: { points: [[700, 70], [770, 70], [770, 140]], height: 5 } } });
+    await t.request('PATCH', `${base}/raised`, { body: { add: { points: [[1400, 140], [1540, 140], [1540, 280]], height: 5 } } });
     const again = (await t.request('POST', `${base}/walls/file`, { body: { data: Buffer.from(JSON.stringify(doc)).toString('base64') } })).json();
     assert.deepEqual(again.raised.map((a) => a.source).sort(), ['dm', 'file', 'file']);
     assert.equal(again.climbs.length, 2);
@@ -464,7 +464,7 @@ test('a map taken to another VTT: a Universal VTT file with its picture, grid, w
     assert.match(res.headers['content-disposition'], /^attachment; filename="Old watchpost\.dd2vtt"/);
     const doc = res.json();
     assert.equal(doc.format, 0.3);
-    assert.deepEqual(doc.resolution, { map_origin: { x: 0, y: 0 }, map_size: { x: 12, y: 8 }, pixels_per_grid: 70 });
+    assert.deepEqual(doc.resolution, { map_origin: { x: 0, y: 0 }, map_size: { x: 12, y: 8 }, pixels_per_grid: 140 });
     const map = t.maps.get(t.campaign.id, view.id);
     const sight = map.walls.filter((w) => !w.door && w.kind === 'wall');
     assert.equal(doc.line_of_sight.length, sight.length);
@@ -474,14 +474,14 @@ test('a map taken to another VTT: a Universal VTT file with its picture, grid, w
     ]);
     assert.deepEqual(doc.lights.map((l) => [l.position, l.range]), [[{ x: 9.5, y: 2.5 }, 8]]);
     const meta = await sharp(Buffer.from(doc.image, 'base64')).metadata();
-    assert.deepEqual([meta.format, meta.width, meta.height], ['png', 840, 560]);
+    assert.deepEqual([meta.format, meta.width, meta.height], ['png', 1680, 1120]);
 
     // Read back (as an import would), the same walls, doors and light.
-    const back = uvttContents(doc, { width: 840, height: 560 });
+    const back = uvttContents(doc, { width: 1680, height: 1120 });
     const key = (w) => [w.x1, w.y1, w.x2, w.y2, w.door].join();
     assert.deepEqual(back.walls.map(key).sort(), map.walls.filter((w) => w.door || w.kind === 'wall').map(key).sort());
-    assert.deepEqual(back.lights, [{ x: 665, y: 175, bright: 20, dim: 20 }]);
-    assert.deepEqual(back.grid, { size: 70, x: 0, y: 0 });
+    assert.deepEqual(back.lights, [{ x: 1330, y: 350, bright: 20, dim: 20 }]);
+    assert.deepEqual(back.grid, { size: 140, x: 0, y: 0 });
 
     // A map with no grid can't be; players can't.
     const imported = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'm.png', data: (await terrain(200, 140)).toString('base64') } });
@@ -518,8 +518,8 @@ test('heights from the creator: a raised room and a round tower become raised ar
     const view = await create(t, d);
     const raised = t.maps.get(t.campaign.id, view.id).raised;
     assert.deepEqual(raised.map((r) => [r.height, r.points.length, r.source]), [[30, 32, 'creator'], [10, 4, 'creator']]);
-    assert.deepEqual(raised[1].points, [[70, 70], [420, 70], [420, 350], [70, 350]]);
-    assert.deepEqual(raised[0].points[0], [770, 350], 'on the circle: 2 squares right of its middle');
+    assert.deepEqual(raised[1].points, [[140, 140], [840, 140], [840, 700], [140, 700]]);
+    assert.deepEqual(raised[0].points[0], [1540, 700], 'on the circle: 2 squares right of its middle');
   } finally {
     await t.cleanup();
   }

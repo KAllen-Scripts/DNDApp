@@ -14,7 +14,7 @@
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { MAX_CLIMBS, MAX_RAISED, MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, blockingWalls, shownTo, placeRevealedTo, canSee, canSeeToken, doorKnown, parseHeight, healthOf, ownToken, speedFromText, hasClimbSpeed } from '@dndapp/shared/map.js';
-import { designToMap } from '@dndapp/shared/map-design.js';
+import { DESIGN_CELL, designToMap } from '@dndapp/shared/map-design.js';
 import { computeSheet } from '@dndapp/shared/sheet.js';
 import { activeForm, formHasHp, setFormHp } from '@dndapp/shared/wild-shape.js';
 import { createSight } from './sight.js';
@@ -56,10 +56,11 @@ function doorSeen(map, polygons, w) {
  * the DM drew on the map, or the AI or a file added, stays. A creator wall
  * that's the same as before keeps its id, and a door keeps whether it's open
  * or locked (a secret door, whether it's been found); a way to another map
- * from the same place to the same map keeps its id.
+ * from the same place to the same map keeps its id. `cell`: the pixels a
+ * square of the map's picture.
  */
-export function applyDesign(m, design) {
-  const g = designToMap(design);
+export function applyDesign(m, design, cell = DESIGN_CELL) {
+  const g = designToMap(design, cell);
   const key = (w) => [w.x1, w.y1, w.x2, w.y2, w.kind, w.door, !!w.secret].join();
   const before = new Map((m.walls ?? []).filter((w) => w.source === 'creator').map((w) => [key(w), w]));
   const own = (m.walls ?? []).filter((w) => w.source !== 'creator');
@@ -166,7 +167,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
       const file = `image.${image.ext}`;
       archive.saveMapImage(c.slug, id, file, image.buf);
       const doc = { name, named: true, kind: 'battle', image: { file, type: image.type, width: image.width, height: image.height }, shown: false, reading: { status: 'done' }, level };
-      return write(campaignId, id, null, normalizeMap(applyDesign(doc, design)), { by, reason: 'made in the creator', created: true });
+      return write(campaignId, id, null, normalizeMap(applyDesign(doc, design, image.cell)), { by, reason: 'made in the creator', created: true });
     },
 
     /**
@@ -183,7 +184,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
       const resized = map.image.width !== image.width || map.image.height !== image.height;
       const saved = maps.change(campaignId, id, (m) => {
         m.image = { file, type: image.type, width: image.width, height: image.height };
-        applyDesign(m, design);
+        applyDesign(m, design, image.cell);
       }, { by, reason: 'changed in the creator' });
       if (resized) sight.forget(map.id);
       return saved;
