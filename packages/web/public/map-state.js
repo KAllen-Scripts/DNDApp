@@ -17,6 +17,8 @@ export const state = {
   current: null, // the map on screen
   broughtSeen: '', // players: the latest time the DM brought everyone to a map that this page has gone along with
   characterSeen: null, // players: the map their character was last seen on, so the page goes along when they move
+  clock: null, // the campaign's in-game clock (minutes since day 1 began)
+  travelPick: null, // the token waiting for a click on the map for where it travels to
   fanZoom: 0, // the zoom the pins on a world or region map were last fanned out at
   bouncedFrom: null, // the map that was on screen when the DM hid it (it comes back if shown again before another is picked)
   note: null, // a message about a map kept in its status line for a while: { id, text, until }

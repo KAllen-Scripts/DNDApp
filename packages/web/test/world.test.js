@@ -251,3 +251,91 @@ test('world: on a region map tokens are pins of one size that fan out where they
     assert.ok(page.$('#map-tokens .token:not(.token-pin)'), 'on the inn Thorin is an ordinary token');
   });
 });
+
+// ---------- stage three: travel and time ----------
+
+test('world: the DM sends Thorin to Daggerford at a normal pace; the clock brings him there; a player sees the clock move', async () => {
+  const setupRoad = async (t) => {
+    const vale = await importMap(t, { patch: { ...SHOWN, name: 'The Vale' } });
+    const base = `/campaigns/${t.campaign.id}/maps/${vale.id}`;
+    // 700 px across is 175 miles: a quarter of a mile a pixel.
+    await t.request('PATCH', base, { body: { kind: 'region', grid: null, scale: { distance: 175, unit: 'mi', per: 'width' } } });
+    await t.request('PATCH', `${base}/places`, { body: { add: { name: 'Daggerford', x: 340, y: 100, revealed: true } } });
+    const thorin = await addToken(t, vale, { kind: 'pc', user_id: t.sam.id, name: 'Thorin', x: 100, y: 100 });
+    return { vale, thorin };
+  };
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => ({ ...(await setupRoad(t)), dana: await addDm(t) }),
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t, { vale, thorin }) => {
+    await openMapTab(page);
+    page.type('#map-pick', vale.id);
+    await page.settle();
+    assert.equal(page.text('#map-clock'), 'Day 1, 08:00');
+    pick(page, thorin.id, 100, 100);
+    page.click('#map-selection .map-travel');
+    const form = dialog(page).querySelector('form');
+    page.type(fieldIn(form, 'Where to'), t.maps.get(t.campaign.id, vale.id).places[0].id);
+    assert.equal(page.text(form.querySelector('.map-travel-says')), '60 miles: 2 days 4 hours at a normal pace, arriving Day 3, 12:00.');
+    page.submit(form);
+    await page.settle();
+    const j = t.maps.get(t.campaign.id, vale.id).tokens[0].journey;
+    assert.deepEqual([j.to_name, j.leaves, j.arrives], ['Daggerford', 480, 3600]);
+    assert.ok(page.$(`#map-routes line[data-route="${thorin.id}"]`), 'a line to where he is headed');
+    assert.match(page.text('#map-selection'), /On the road to Daggerford, due Day 3, 12:00/);
+
+    // The clock: a day on, then to when he gets there.
+    page.click('#map-clock');
+    const clockForm = dialog(page).querySelector('form');
+    page.click([...clockForm.querySelectorAll('button')].find((b) => b.textContent === '+1 day'));
+    await page.settle();
+    assert.equal(page.text('#map-clock'), 'Day 2, 08:00');
+    assert.ok(t.maps.get(t.campaign.id, vale.id).tokens[0].x > 100);
+    page.click('#map-clock-next');
+    await page.settle();
+    assert.equal(page.text('#map-clock'), 'Day 3, 12:00');
+    const there = t.maps.get(t.campaign.id, vale.id).tokens[0];
+    assert.deepEqual([there.x, there.journey], [340, null]);
+    assert.ok(!page.$('#map-routes line'));
+  });
+
+  await withPage({ setup: { llm: mapLLM() }, before: setupRoad, page: (t) => ({ as: t.sam }) }, async (page, t, { vale, thorin }) => {
+    await openMapTab(page);
+    assert.ok(page.$('#map-clock').disabled, 'players only read the clock');
+    pick(page, thorin.id, 100, 100);
+    page.click('#map-selection .map-travel');
+    const form = dialog(page).querySelector('form');
+    assert.ok(fieldIn(form, 'Days').closest('.map-row').hidden, 'only the DM says how long');
+    page.type(fieldIn(form, 'Pace'), 'fast');
+    page.submit(form);
+    await page.settle();
+    assert.equal(t.maps.get(t.campaign.id, vale.id).tokens[0].journey.pace, 'fast');
+    await t.request('POST', `/campaigns/${t.campaign.id}/clock`, { body: { add: 60 } });
+    await page.waitFor(() => page.text('#map-clock') === 'Day 1, 09:00', { what: 'the clock to move' });
+  });
+});
+
+test("regression: the DM's travel dialog can be sent when the trip's hours aren't whole (the Hours box refused 4.9)", async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const vale = await importMap(t, { patch: { ...SHOWN, name: 'The Vale' } });
+      const base = `/campaigns/${t.campaign.id}/maps/${vale.id}`;
+      await t.request('PATCH', base, { body: { kind: 'region', grid: null, scale: { distance: 400, unit: 'mi', per: 'width' } } });
+      const thorin = await addToken(t, vale, { kind: 'pc', user_id: t.sam.id, name: 'Thorin', x: 100, y: 100 });
+      await t.request('PATCH', `${base}/places`, { body: { add: { name: 'Millbrook', x: 330, y: 190, revealed: true } } });
+      return { vale, thorin, dana: await addDm(t) };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t, { vale, thorin }) => {
+    await openMapTab(page);
+    page.type('#map-pick', vale.id);
+    await page.settle();
+    pick(page, thorin.id, 100, 100);
+    page.click('#map-selection .map-travel');
+    const form = dialog(page).querySelector('form');
+    page.type(fieldIn(form, 'Where to'), t.maps.get(t.campaign.id, vale.id).places[0].id);
+    assert.ok(form.checkValidity(), `the form can be sent (hours: ${fieldIn(form, 'Hours').value})`);
+  });
+});

@@ -15,6 +15,7 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-21 | The DM's travel dialog filled in a journey's hours as 4.9, which the Hours box (whole numbers only) refused, so Set off did nothing (found in a real browser before merging). | `web/test/world.test.js`: the DM's travel dialog can be sent when the trip's hours aren't whole (the Hours box refused 4.9) |
 | 2026-10-21 | After the Map page overhaul moved the walls into Edit map, importing a .dd2vtt with no picture still told the DM to add its walls in Fog & walls, a panel that no longer exists. | `server/test/walls.test.js`: regression: importing a .dd2vtt with no picture points the DM to Edit map, not the old Fog & walls panel |
 | 2026-10-21 | The DM's map page mixed setting a map up (walls, heights, lights, settings) with playing on it; the owner found it messy. | `web/test/map-full.test.js`: edit mode: Edit map swaps the play tools for the walls, heights and settings; Done goes back; players never see it |
 | 2026-10-21 | The picked token's bar sat over the bottom of the map and hid it. | `web/test/map.test.js`: what is picked on the map shows below the map, not over it (except full screen and phones) |

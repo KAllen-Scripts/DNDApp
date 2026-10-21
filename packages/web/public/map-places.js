@@ -12,6 +12,7 @@ import { atlasOrder, mapTrail } from './shared/map.js';
 import { base, report, state, status } from './map-state.js';
 import { campaignPlayers, field, recordDialog } from './map-dm.js';
 import { onMap, show, svgEl } from './map.js';
+import { travelPicked } from './map-travel.js';
 
 const $ = (sel) => document.querySelector(sel);
 const HIDDEN_GROUPS_KEY = () => `dndapp.map.hiddenGroups.${state.campaignId}`;
@@ -193,6 +194,8 @@ function placeDown(e, place) {
 
 /** Open what a place leads to (or, for the DM, its settings when it leads nowhere). */
 function openPlace(place) {
+  // Picking where a token travels to: the place.
+  if (state.travelPick) return travelPicked(place, place);
   if (state.canEdit && state.wallMode === 'erase') return places({ remove: place.id });
   const target = place.to && state.maps.find((m) => m.id === place.to);
   if (target) return show(target);

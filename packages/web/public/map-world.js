@@ -11,6 +11,7 @@ import { api, h } from './api.js';
 import { characterMap, isPinMap, nearLink, nearPlace, parentOf } from './shared/map.js';
 import { base, report, state, status } from './map-state.js';
 import { campaignPlayers } from './map-dm.js';
+import { journeyText } from './map-travel.js';
 import { noteOnMap, onMap, patchToken, select, show, toImage } from './map.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -142,7 +143,7 @@ export async function partyDialog() {
     rows.replaceChildren(...(list.length ? list.map(({ player, map, token, also }) => {
       const name = token?.name || player.character_name || player.name;
       const lead = token?.follows && map.tokens.find((t) => t.id === token.follows);
-      const where = map ? `${map.name}${lead ? `, following ${lead.name}` : ''}${also.length ? ` (also on ${also.map((m) => m.name).join(', ')})` : ''}` : 'Not on a map';
+      const where = map ? `${map.name}${token?.journey ? `, ${journeyText(token.journey).toLowerCase()}` : ''}${lead ? `, following ${lead.name}` : ''}${also.length ? ` (also on ${also.map((m) => m.name).join(', ')})` : ''}` : 'Not on a map';
       return h('div', { class: 'map-party-row', 'data-user': String(player.id) },
         h('strong', {}, name),
         h('span', { class: 'muted small' }, `${player.name} · ${where}`),
