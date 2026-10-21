@@ -77,7 +77,7 @@ The automated tests (`npm test`) already cover permissions, snapping, fog filter
 - [ ] Privacy check: in the player window, right-click the map and "Open image in new tab". The covered parts are black in the actual image too.
 
 ### Walls and line of sight
-- [ ] In "Fog & walls", press AI walls on a real battle map. Walls appear (purple) after a bit. Note how much is wrong.
+- [ ] In Edit map, press AI walls on a real battle map. Walls appear (purple) after a bit. Note how much is wrong.
 - [ ] Fix them: Erase the wrong ones (click), draw missing ones with Wall (drag). Ends snap together.
 - [ ] Draw a Door across a doorway. In Door mode, clicking it opens and closes it (dashed when open).
 - [ ] Turn on Fog of war and Line of sight. The player sees only what their token can see; enemies behind walls don't show.

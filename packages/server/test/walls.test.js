@@ -154,6 +154,19 @@ test('the DM imports a .dd2vtt as a map (picture, exact grid, walls, doors, ligh
   }
 });
 
+// The Map page overhaul (PR #78) moved the walls into Edit map; this message still sent the DM to the old Fog & walls panel.
+test('regression: importing a .dd2vtt with no picture points the DM to Edit map, not the old Fog & walls panel', async () => {
+  const t = await setup();
+  try {
+    const bare = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'x.dd2vtt', data: Buffer.from(JSON.stringify(await uvttFile({ image: false }))).toString('base64') } });
+    assert.equal(bare.statusCode, 400);
+    assert.match(bare.json().error, /Edit map/);
+    assert.doesNotMatch(bare.json().error, /Fog & walls/);
+  } finally {
+    await t.cleanup();
+  }
+});
+
 test('the DM draws curved and round walls; erasing one piece erases the whole curve', async () => {
   const t = await setup({ llm: createFakeLLM({ structured: () => ({ readable: true, kind: 'battle', name: 'X', description: '', grid: { visible: false, columns: null, rows: null }, scale: { distance: null, unit: null, per: null }, notes: '' }) }) });
   try {
