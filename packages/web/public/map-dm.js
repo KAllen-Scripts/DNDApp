@@ -2,7 +2,7 @@
  * The DM's tools on the map: importing maps, map settings (grid, scale, variants), fog and walls,
  * tokens (adding, editing, pictures, stat blocks, records) and saving tokens to the DM's creatures.
  */
-import { onGone, onMap, renderGrid, select, show, toImage } from './map.js';
+import { KIND_LABELS, onGone, onMap, renderGrid, select, show, toImage } from './map.js';
 import { TOKEN_COLORS, TOKEN_KINDS, TOKEN_KIND_NAMES, TOKEN_SIZES, TOKEN_SIZE_NAMES, UNITS } from './shared/map.js';
 import { api, h, readBase64 } from './api.js';
 import { base, downloadUvtt, report, state, status } from './map-state.js';
@@ -86,6 +86,9 @@ export function settingsDialog() {
   if (!map) return;
   const dialog = $('#map-dialog');
   const name = h('input', { value: map.name, maxLength: 100, required: true });
+  // A world or region map shows tokens as pins of one size (the world).
+  const kind = h('select', { title: 'On a world or region map, tokens are pins that stay the same size as you zoom' }, ...Object.entries(KIND_LABELS).map(([k, label]) => new Option(label, k)));
+  kind.value = map.kind;
   const who = whoField({ shown: map.shown, to: map.shown_to ?? null });
   const hasGrid = h('input', { type: 'checkbox', checked: !!map.grid });
   const size = h('input', { type: 'number', min: '4', step: '0.1', value: map.grid?.size ?? Math.round(map.image.width / 20) });
@@ -155,7 +158,7 @@ export function settingsDialog() {
     const d = Number(distance.value);
     const scale = d > 0 && (per.value === 'width' || grid) ? { distance: d, unit: unit.value, per: per.value } : null;
     const seen = who.read();
-    const saved = await api('PATCH', `${base()}/${map.id}`, { name: name.value.trim() || map.name, shown: seen.shown, shown_to: seen.to, grid, scale });
+    const saved = await api('PATCH', `${base()}/${map.id}`, { name: name.value.trim() || map.name, kind: kind.value, shown: seen.shown, shown_to: seen.to, grid, scale });
     onMap(saved);
   };
   dialog.replaceChildren(
@@ -165,6 +168,7 @@ export function settingsDialog() {
     } },
       h('h2', {}, 'Map settings'),
       field('Name', name),
+      field('Kind', kind),
       h('h3', {}, 'Who can see this map'),
       who.el,
       h('h3', {}, 'Grid'),

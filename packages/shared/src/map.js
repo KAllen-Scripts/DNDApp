@@ -128,6 +128,9 @@ export function normalizeToken(t = {}, map) {
     art: kind !== 'pc' ? normalizeTokenArt(t.art) : null,
     // The DM's merchant this token stands for (players open its shop from the token); null for none.
     merchant: !PLAYER_KINDS.includes(kind) && /^[a-f0-9]{10}$/.test(String(t.merchant ?? '')) ? String(t.merchant) : null,
+    // The token it follows (the world, owner 2026-10-18: characters travel together or apart): it walks behind
+    // that one and goes where it goes, until it's moved on its own; null for none.
+    follows: isTokenId(t.follows) && String(t.follows) !== String(t.id) ? String(t.follows) : null,
   };
 }
 
@@ -325,6 +328,118 @@ export function nearLink(map, link, x, y) {
   return Math.hypot(link.x - x, link.y - y) <= reach;
 }
 
+/**
+ * Maps where tokens are pins of one size on screen, whatever the zoom: a world or region map, where a
+ * character at the map's scale would be a speck (owner, 2026-10-18: each character their own pin).
+ */
+export const PIN_MAP_KINDS = ['world', 'region'];
+export const isPinMap = (map) => PIN_MAP_KINDS.includes(map?.kind);
+
+/**
+ * Where a player's character is: the map with their character's token on it, or null. If the DM put
+ * it on several maps (before one map per character), the one changed last.
+ */
+export function characterMap(maps, userId) {
+  let best = null;
+  for (const m of maps) {
+    if (!m.tokens?.some((t) => t.kind === 'pc' && t.user_id === userId)) continue;
+    if (!best || String(m.updated_at ?? '') > String(best.updated_at ?? '')) best = m;
+  }
+  return best;
+}
+
+/** A token and everyone following it (and following them), leader first. */
+export function followGroup(tokens, id) {
+  const out = [];
+  const seen = new Set();
+  const queue = [id];
+  while (queue.length) {
+    const next = queue.shift();
+    const t = tokens.find((x) => x.id === next);
+    if (!t || seen.has(next)) continue;
+    seen.add(next);
+    out.push(t);
+    for (const f of tokens) if (f.follows === next && !seen.has(f.id)) queue.push(f.id);
+  }
+  return out;
+}
+
+/** Would `id` following `leader` go round in a circle (the leader following it, however far back)? */
+export function followLoop(tokens, id, leader) {
+  const seen = new Set();
+  for (let t = tokens.find((x) => x.id === leader); t && !seen.has(t.id); t = tokens.find((x) => x.id === t.follows)) {
+    if (t.id === id) return true;
+    seen.add(t.id);
+  }
+  return false;
+}
+
+/** The point `back` along a path from its end, walking backwards; and the path up to there. */
+function walkBack(path, back) {
+  for (let i = path.length - 1; i > 0; i--) {
+    const a = path[i - 1];
+    const b = path[i];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len >= back && len > 0) {
+      const f = (len - back) / len;
+      const at = { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+      return { at, path: [...path.slice(0, i), at] };
+    }
+    back -= len;
+  }
+  return { at: path[0], path: [path[0]] };
+}
+
+/**
+ * The leader moved along `route` (from where it was to where it is now): everyone following it walks
+ * behind it along the same way, one behind the other, and anyone following them behind them. Changes
+ * the map's tokens in place. Not in a fight: there everyone moves on their own turn.
+ */
+export function trailFollowers(map, leaderId, route) {
+  const queue = [{ id: leaderId, path: route }];
+  const seen = new Set([leaderId]);
+  while (queue.length) {
+    const { id, path } = queue.shift();
+    const leader = map.tokens.find((t) => t.id === id);
+    let back = tokenPx(map, leader) / 2;
+    for (const f of map.tokens.filter((t) => t.follows === id && !seen.has(t.id))) {
+      seen.add(f.id);
+      const half = tokenPx(map, f) / 2;
+      back += half;
+      const walked = walkBack([{ x: f.x, y: f.y }, ...path], back);
+      Object.assign(f, snapToken(map, f, walked.at.x, walked.at.y));
+      queue.push({ id: f.id, path: [...walked.path.slice(0, -1), { x: f.x, y: f.y }] });
+      back += half;
+    }
+  }
+}
+
+/**
+ * Spots for a group arriving at `at` on a map: the first one there, the rest round it, a token's
+ * width apart (a ring, then a wider ring). On a grid they snap to squares.
+ */
+export function arrivalSpots(map, tokens, at) {
+  const step = Math.max(...tokens.map((t) => tokenPx(map, t)), 1);
+  const out = [];
+  let i = 0;
+  for (const t of tokens) {
+    let x = at.x;
+    let y = at.y;
+    if (i > 0) {
+      const ring = Math.ceil(i / 8);
+      const a = ((i - 1) % 8) * (Math.PI / 4) + (ring - 1) * (Math.PI / 8);
+      x += Math.cos(a) * step * ring;
+      y += Math.sin(a) * step * ring;
+    }
+    out.push(snapToken(map, t, x, y));
+    i++;
+  }
+  return out;
+}
+
+/** Is (x, y) at a place: inside its area, or next to its pin (as near as next to a link)? */
+export const nearPlace = (map, place, x, y) => (place.points ? pointInPolygon(x, y, place.points) : false) || nearLink(map, place, x, y);
+
 export const MAX_PINS = 100;
 export const PIN_COLOR = '#d9a400';
 
@@ -432,6 +547,8 @@ export function normalizeMap(input = {}) {
     name: str(m.name, 100) || 'Map',
     // The DM typed the name (the AI's suggested name only replaces the file name).
     named: m.named === true,
+    // The DM picked its kind (a region, a town…) in Map settings, so the AI reading it doesn't change it.
+    kind_set: m.kind_set === true,
     image,
     shown: m.shown === true,
     // Shown only to these players (user ids); null: every player.
@@ -495,6 +612,8 @@ export function normalizeMap(input = {}) {
     seen.add(token.id);
     out.tokens.push(token);
   }
+  // Following someone who isn't on this map is following nobody.
+  for (const t of out.tokens) if (t.follows && !seen.has(t.follows)) t.follows = null;
   out.templates = normalizeTemplates(m.templates, image);
   out.combat = normalizeCombat(m.combat, out.tokens);
   return out;

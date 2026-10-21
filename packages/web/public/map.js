@@ -9,7 +9,7 @@
  * the server decides where a token really ends up.
  */
 import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from './api.js';
-import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, EFFORTS, playersMap, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, distanceToWall, inTemplate, snapTemplatePoint, groundAt, tokenTall, bridgeAt, isUnder } from './shared/map.js';
+import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, EFFORTS, playersMap, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, distanceToWall, inTemplate, snapTemplatePoint, groundAt, tokenTall, bridgeAt, isUnder, isPinMap } from './shared/map.js';
 import { PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, WALLS_EFFORT_KEY, base, downloadUvtt, report, state, status } from './map-state.js';
 import { canChangeTemplate, placeTemplate, renderTemplates, selectTemplate, templateControls, templateDialog, templateMove, templateUp } from './map-templates.js';
 import { openShop } from './merchants.js';
@@ -19,9 +19,10 @@ import { renderCombat } from './map-combat.js';
 import { companionDialog, companionRolls, dismissCompanion, myCompanion } from './map-companions.js';
 import { initMapFull } from './map-full.js';
 import { groupsDialog, mapOptions, placeEnd, placeMove, placeStart, renderPlaces, shownNote } from './map-places.js';
+import { PIN_PX, followMyCharacter, myCharacterMap, partyDialog, pinFan, travelControls } from './map-world.js';
 
 const $ = (sel) => document.querySelector(sel);
-const KIND_LABELS = { battle: 'Battle map', dungeon: 'Dungeon', building: 'Building', town: 'Town', region: 'Region', world: 'World', other: 'Map' };
+export const KIND_LABELS = { battle: 'Battle map', dungeon: 'Dungeon', building: 'Building', town: 'Town', region: 'Region', world: 'World', other: 'Map' };
 const MAX_ZOOM = 8;
 
 // ---------- loading, and staying up to date ----------
@@ -41,15 +42,16 @@ export async function loadMaps({ campaignId, userId, guarded }) {
   state.maps = maps;
   $('#tab-map').classList.toggle('can-edit', can_edit);
   state.broughtSeen = playersMap(maps)?.brought_at ?? '';
+  state.characterSeen = myCharacterMap()?.id ?? null;
   state.bouncedFrom = null;
-  // Players open on the map the DM brought them to; the DM on the one they had open.
+  // Players open on the map their character is on, else the one the DM brought them to; the DM on the one they had open.
   const remembered = maps.find((m) => m.id === storage.get(PICK_KEY()));
-  await show((!can_edit && playersMap(maps)) || remembered || maps.at(-1) || null);
+  await show((!can_edit && (myCharacterMap() || playersMap(maps))) || remembered || maps.at(-1) || null);
   startLive();
 }
 
 /** Where to go when the map on screen goes away: for players the players' map, else the newest. */
-const fallbackMap = () => (!state.canEdit && playersMap(state.maps)) || state.maps.at(-1) || null;
+const fallbackMap = () => (!state.canEdit && (myCharacterMap() || playersMap(state.maps))) || state.maps.at(-1) || null;
 
 /** Players: go to the map the DM just brought everyone to (once per bring; they can look elsewhere afterwards). */
 function followPlayersMap() {
@@ -91,6 +93,7 @@ function startLive() {
           if (current) onMap(current);
           else if (state.current) await show(fallbackMap());
           followPlayersMap();
+          followMyCharacter();
           renderPicker();
         } catch { /* try again on the next round */ }
       }
@@ -112,6 +115,7 @@ export function onMap(map) {
     show(map);
   }
   followPlayersMap();
+  followMyCharacter();
 }
 
 export function onGone(id) {
@@ -276,7 +280,7 @@ function renderStatus() {
 }
 
 /** Say something about the map on screen in its status line, kept there for a while as the map changes. */
-function noteOnMap(text) {
+export function noteOnMap(text) {
   state.note = { id: state.current?.id, text, until: Date.now() + 10_000 };
   renderStatus();
 }
@@ -914,16 +918,20 @@ const canMove = (token) => state.canEdit || (token.user_id != null && token.user
 export function renderTokens() {
   const map = state.current;
   const layer = $('#map-tokens');
+  // On a world or region map, tokens are pins of one size on screen, fanned out where they meet.
+  const pins = isPinMap(map);
+  const fan = pinFan(map, state.view.k || 1);
+  state.fanZoom = state.view.k;
   layer.replaceChildren(
     ...map.tokens.map((t) => {
-      const d = tokenPx(map, t);
+      const d = pins ? PIN_PX : tokenPx(map, t);
       const dragging = state.drag?.id === t.id;
       const x = dragging ? state.drag.x : t.x;
       const y = dragging ? state.drag.y : t.y;
       const health = t.hp ? healthOf(t.hp) : t.health;
       const picture = tokenPicture(t);
       const el = h('div', {
-        class: `token token-${t.kind}${picture ? ' has-picture' : ''}${canMove(t) ? ' movable' : ''}${t.user_id === state.userId ? ' mine' : ''}${state.selected === t.id ? ' selected' : ''}${dragging ? ' dragging' : ''}${t.hidden ? ' hidden-token' : ''}${health === 'down' ? ' down' : ''}${state.caught.has(t.id) ? ' caught' : ''}${map.combat?.turn === t.id ? ' turn' : ''}${isUnder(map, t) ? ' under' : ''}`,
+        class: `token token-${t.kind}${picture ? ' has-picture' : ''}${canMove(t) ? ' movable' : ''}${t.user_id === state.userId ? ' mine' : ''}${state.selected === t.id ? ' selected' : ''}${dragging ? ' dragging' : ''}${t.hidden ? ' hidden-token' : ''}${health === 'down' ? ' down' : ''}${state.caught.has(t.id) ? ' caught' : ''}${map.combat?.turn === t.id ? ' turn' : ''}${isUnder(map, t) ? ' under' : ''}${pins ? ' token-pin' : ''}${t.follows ? ' following' : ''}`,
         title: [t.name, t.merchant ? 'Merchant: pick to shop' : TOKEN_KIND_NAMES[t.kind], hpText(t), ...t.conditions].filter(Boolean).join(' · '),
         role: 'button',
         tabindex: '0',
@@ -937,6 +945,8 @@ export function renderTokens() {
       t.merchant ? h('span', { class: 'token-shop', 'aria-hidden': 'true' }, '⚖') : null,
       heightBadge(map, t, x, y));
       el.style.cssText = `left:${x - d / 2}px;top:${y - d / 2}px;width:${d}px;height:${d}px;--token:${t.color};font-size:${d * 0.38}px`;
+      const spread = !dragging && fan.get(t.id);
+      if (spread) el.style.cssText += `;--fan-x:${spread.dx}px;--fan-y:${spread.dy}px`;
       el.addEventListener('pointerdown', (e) => tokenDown(e, t));
       el.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -1151,7 +1161,7 @@ function hpFraction(t, health) {
   return HEALTH_FRACTION[health] ?? 1;
 }
 
-async function patchToken(token, body) {
+export async function patchToken(token, body) {
   try {
     const res = await state.guarded(() => api('PATCH', `${base()}/${state.current.id}/tokens/${token.id}`, body));
     if (res) onMap(res.map);
@@ -1297,6 +1307,7 @@ export function renderSelection() {
       h('strong', {}, token.name),
       h('span', { class: 'muted small' }, `${TOKEN_KIND_NAMES[token.kind]} · ${TOKEN_SIZE_NAMES[token.size]}`),
       ...tokenControls(token),
+      ...travelControls(token),
       h('span', { class: 'spacer' }),
       editable && !state.canEdit ? h('span', { class: 'muted small' }, 'Drag to move') : null,
       token.merchant ? h('button', { class: 'primary', title: 'See what this merchant sells, and buy', onclick: () => openShop(token.merchant) }, 'Shop') : null,
@@ -1514,7 +1525,11 @@ function applyView() {
   stage.style.transform = `translate(${x}px, ${y}px)${r ? ` rotate(${r}rad)` : ''} scale(${k})`;
   stage.style.willChange = 'transform';
   clearTimeout(settling);
-  settling = setTimeout(() => (stage.style.willChange = ''), 250);
+  settling = setTimeout(() => {
+    stage.style.willChange = '';
+    // Pins that meet at this zoom fan out (and ones that no longer meet close up).
+    if (isPinMap(state.current) && state.fanZoom !== state.view.k) renderTokens();
+  }, 250);
   // Pins stay the same size on screen at any zoom, and tokens, pins and links stay upright on a turned map.
   stage.style.setProperty('--unzoom', String(1 / k));
   stage.style.setProperty('--unturn', `${-r}rad`);
@@ -2110,6 +2125,7 @@ export function initMapActions() {
   $('#map-pick').addEventListener('change', (e) => show(state.maps.find((m) => m.id === e.target.value) ?? null));
   $('#map-place-groups').addEventListener('click', groupsDialog);
   $('#map-bring').addEventListener('click', bringPlayers);
+  $('#map-party').addEventListener('click', () => partyDialog().catch(report));
   $('#map-fit').addEventListener('click', fit);
   $('#map-north').addEventListener('click', northUp);
   initMapFull();
