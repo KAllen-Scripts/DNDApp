@@ -87,7 +87,7 @@ test('maps: the DM imports a picture; the AI\'s reading arrives live; settings f
     page.type(fieldIn(form, 'Offset down'), '0');
     assert.match(page.$('#map-grid path').getAttribute('d'), /^M0 0V490M70 0V490/);
     page.type(fieldIn(form, 'Name'), 'The Clearing');
-    page.type(form.querySelector('input[type=checkbox]'), true); // players can see it
+    page.type(form.querySelector('select[aria-label="Who can see it"]'), 'all'); // every player can see it
     page.type(fieldIn(form, 'Distance'), '10');
     page.submit(form);
     await page.settle();

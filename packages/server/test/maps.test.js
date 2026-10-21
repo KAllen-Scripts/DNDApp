@@ -8,16 +8,11 @@ import { setup, createFakeLLM, fakeEmbedder, terrain } from './helpers.js';
 import { createContext } from '../src/context.js';
 import { detectGrid } from '../src/maps/read.js';
 import { emptySheet } from '@dndapp/shared/sheet.js';
-import { playerFogMask, inView, playersMap } from '@dndapp/shared/map.js';
+import { playerFogMask, playersMap, maskFillAt } from '@dndapp/shared/map.js';
 
 /** What a player's page draws at a point of the map: 'cover', 'dim' or 'clear'. */
 function fogAt(view, userId, x, y) {
-  let fill = 'clear';
-  for (const s of playerFogMask(view, userId)) {
-    const inside = s.points ? inView(x, y, s.clip ? { points: s.points, clip: s.clip } : s.points) : x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h;
-    if (inside) fill = s.fill;
-  }
-  return fill;
+  return maskFillAt(playerFogMask(view, userId), x, y);
 }
 
 /** What the AI might say about a battle map: a grid of roughly `columns` squares, no scale printed. */
