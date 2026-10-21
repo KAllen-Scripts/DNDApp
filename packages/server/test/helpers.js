@@ -103,14 +103,17 @@ const nulls = () => ({
 /**
  * Fake LLM. Archivist runs call `archivist({ prompt, tools })`; each Q&A
  * question consumes the next entry of `qaScript` (steps: { tool, input } or { answer }).
- * structured() calls (sheet uploads, spell lookups) go to `structured({ purpose, prompt, attachments, schema })`.
+ * structured() calls (sheet uploads, spell lookups) go to `structured({ purpose, prompt, attachments, schema })`,
+ * except the wiki's (`wiki:` purposes), which go to `wiki(opts)` (default: no changes).
  */
-export function createFakeLLM({ qaScript = [], archivist = defaultArchivist, structured, research } = {}) {
+export function createFakeLLM({ qaScript = [], archivist = defaultArchivist, structured, research, wiki = () => ({ changes: [] }) } = {}) {
   const calls = [];
   return {
     calls,
     async structured(opts) {
       calls.push({ task: opts.task, purpose: opts.purpose, system: opts.system, prompt: opts.prompt, attachments: opts.attachments ?? [], ...(opts.effort && { effort: opts.effort }) });
+      // The wiki's AI (src/wiki-ai.js) proposes nothing unless a test says what it proposes.
+      if (opts.purpose.startsWith('wiki:') && wiki) return opts.schema.parse(await wiki(opts));
       if (!structured) throw new Error(`fake llm: no structured() handler for ${opts.purpose}`);
       return opts.schema.parse(await structured(opts));
     },

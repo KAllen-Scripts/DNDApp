@@ -7,11 +7,12 @@
  *   correct  {correction}    archivist applies one DM correction
  *   updates  {}              archivist reads sheet changes, late note edits and handouts (kb/updates.js)
  *   rebuild  {}              wipe derived data, replay every session and correction
+ *   wiki     {}              the AI proposes wiki changes from what the archivist changed (src/wiki-ai.js)
  */
 import { EventEmitter } from 'node:events';
 import { json, wipeDerived } from './db/index.js';
 
-export function createJobs({ db, store, search, pipeline, wiki = null, config, log = console }) {
+export function createJobs({ db, store, search, pipeline, wiki = null, wikiAI = null, config, log = console }) {
   const events = new EventEmitter();
   events.setMaxListeners(0);
   let running = false;
@@ -89,6 +90,10 @@ export function createJobs({ db, store, search, pipeline, wiki = null, config, l
         done++;
       }
       await pipeline.applyUpdates(cid, undefined, stepProgress('Sheets and handouts'));
+      // Replaying every session isn't news for the wiki: its pages and the DM's decisions stay as they are.
+      wikiAI?.skipToEnd(cid);
+    } else if (job.type === 'wiki') {
+      await wikiAI.chronicle(cid, progress);
     } else {
       throw new Error(`Unknown job type ${job.type}`);
     }
@@ -106,7 +111,9 @@ export function createJobs({ db, store, search, pipeline, wiki = null, config, l
         update(job.id, { status: 'running', message: 'Starting', error: null });
         try {
           await runJob(job);
-          update(job.id, { status: 'done', progress: 1, message: 'Done', finished_at: new Date().toISOString() });
+          update(job.id, { status: 'done', progress: 1, message: job.type === 'wiki' ? get(job.id).message : 'Done', finished_at: new Date().toISOString() });
+          // What the archivist changed goes to the AI for the wiki, as proposals the DM approves.
+          if (['ingest', 'updates', 'correct'].includes(job.type) && config?.wiki?.auto && wikiAI?.hasNews(job.campaign_id)) jobs.enqueueWiki(job.campaign_id);
         } catch (err) {
           log.error?.(err);
           update(job.id, { status: 'failed', error: String(err.message ?? err), finished_at: new Date().toISOString() });
@@ -156,6 +163,12 @@ export function createJobs({ db, store, search, pipeline, wiki = null, config, l
       }, ms);
       t.unref?.();
       updateTimers.set(campaignId, t);
+    },
+
+    /** Have the AI propose wiki changes from what the archivist changed (one waiting at a time). */
+    enqueueWiki(campaignId) {
+      const waiting = db.prepare("SELECT id FROM jobs WHERE campaign_id = ? AND type = 'wiki' AND status = 'queued'").get(campaignId);
+      return waiting ? get(waiting.id) : enqueue(campaignId, 'wiki', {});
     },
 
     /** Wipes all derived data and replays every session and correction. */

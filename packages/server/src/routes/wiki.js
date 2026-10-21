@@ -8,7 +8,7 @@ import { BadRequestError } from '../store.js';
 import { WIKI_LIMITS as L } from '../wiki.js';
 
 export function registerWiki(app, r) {
-  const { access, auth, store, wiki } = r;
+  const { access, auth, store, wiki, wikiAI, jobs } = r;
 
   const available = z.union([z.literal('all'), z.literal('dm'), z.array(z.number().int()).max(100)]);
   const fields = {
@@ -25,7 +25,7 @@ export function registerWiki(app, r) {
 
   /** Chosen players must be players of this campaign. */
   function checkPlayers(cid, body) {
-    for (const a of [body.available, ...(body.sections ?? []).map((s) => s.available)]) {
+    for (const a of [body.available, body.page_available, body.players, ...(body.sections ?? []).map((s) => s.available)]) {
       if (!Array.isArray(a)) continue;
       for (const id of a) if (auth.membership(cid, id)?.role !== 'player') throw new BadRequestError(`User ${id} isn't a player in this campaign.`);
     }
@@ -34,11 +34,58 @@ export function registerWiki(app, r) {
 
   const summary = (p) => ({ id: p.id, title: p.title, aliases: p.aliases, kind: p.kind, parent: p.parent, tags: p.tags, available: p.available, updated_at: p.updated_at });
 
-  /** Every page, and the players things can be made available to. */
+  /** The last time the AI read the records for the wiki, if it has: { status, message, finished_at }. */
+  const lastRun = (cid) => {
+    const j = jobs.list(cid, 50).find((x) => x.type === 'wiki');
+    return j ? { id: j.id, status: j.status, message: j.message, error: j.error, finished_at: j.finished_at } : null;
+  };
+
+  /** Every page, the players things can be made available to, and how many AI proposals wait. */
   app.get('/campaigns/:cid/wiki', async (request) => {
     const { cid } = access(request, { dm: true });
     const players = store.roster(cid).filter((m) => m.role === 'player').map((m) => ({ id: m.user_id, name: m.name, character_name: m.character_name }));
-    return { pages: wiki.list(cid).map(summary), players };
+    return { pages: wiki.list(cid).map(summary), players, proposals: wikiAI.count(cid), ai_run: lastRun(cid) };
+  });
+
+  // ---------- what the AI proposes (stage 2 and 3: the DM approves every change) ----------
+
+  /** Proposals waiting for the DM, each with what's on the page now. */
+  app.get('/campaigns/:cid/wiki/proposals', async (request) => {
+    const { cid } = access(request, { dm: true });
+    return { proposals: wikiAI.pending(cid), ai_run: lastRun(cid) };
+  });
+
+  /** Have the AI read what the archivist changed now (it also does after every session when WIKI_AUTO is on). */
+  app.post('/campaigns/:cid/wiki/proposals/run', async (request) => {
+    const { cid } = access(request, { dm: true });
+    jobs.enqueueWiki(cid);
+    return { ai_run: lastRun(cid) };
+  });
+
+  /** Approve one, as it is or with the DM's edits (which make an edited section the DM's). */
+  app.post('/campaigns/:cid/wiki/proposals/:id/approve', async (request) => {
+    const { cid } = access(request, { dm: true });
+    const edits = checkPlayers(cid, z.object({
+      title: fields.title.optional(),
+      kind: fields.kind.optional(),
+      page_available: available.optional(),
+      sections: z.array(z.object({ heading: fields.sections.element.shape.heading.optional(), text: z.string().max(L.text).optional(), available: available.optional() })).max(L.sections).optional(),
+      players: z.array(z.number().int()).max(100).optional(),
+    }).parse(request.body ?? {}));
+    const page = await wikiAI.approve(cid, request.params.id, edits, { by: request.user.id });
+    return { page, proposals: wikiAI.count(cid) };
+  });
+
+  app.post('/campaigns/:cid/wiki/proposals/:id/reject', async (request) => {
+    const { cid } = access(request, { dm: true });
+    wikiAI.reject(cid, request.params.id, { by: request.user.id });
+    return { proposals: wikiAI.count(cid) };
+  });
+
+  app.post('/campaigns/:cid/wiki/proposals/approve-all', async (request) => {
+    const { cid } = access(request, { dm: true });
+    const result = await wikiAI.approveAll(cid, { by: request.user.id });
+    return { ...result, proposals: wikiAI.count(cid) };
   });
 
   /**
