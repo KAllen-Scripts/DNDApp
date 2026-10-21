@@ -299,6 +299,28 @@ test("items: a bought item's picture shows in the buyer's inventory (only theirs
   }
 });
 
+test('merchants: restock every N days of the in-game clock, counted from when the DM set it', async () => {
+  const t = await setup({ llm: llm() });
+  try {
+    const clock = (body) => t.request('POST', `/campaigns/${t.campaign.id}/clock`, { body });
+    await clock({ add: 600 });
+    const { m, base } = await shop(t, { restock_days: 2 });
+    assert.equal(m.restock.days, 2);
+    assert.equal(m.restock.clock, 480 + 600, 'counting starts now by the clock');
+    giveCoins(t, t.sam, { gp: 200 });
+    await t.request('POST', `${base}/buy`, { as: t.sam.token, body: { line: m.stock[0].id, qty: 2 } });
+    const stock = async () => (await t.request('GET', `/campaigns/${t.campaign.id}/merchants`)).json().merchants[0];
+    assert.deepEqual((await clock({ add: 1440 })).json().notes, [], 'a day on: not yet');
+    assert.equal((await stock()).stock[0].qty, 0);
+    const res = (await clock({ add: 1440 })).json();
+    assert.deepEqual(res.notes.map((n) => [n.kind, n.text]), [['restock', 'Mira restocked.']]);
+    assert.equal((await stock()).stock[0].qty, 2, 'two days on: restocked');
+    assert.equal((await stock()).restock.clock, 1080 + 2880, 'the next count starts from that day');
+  } finally {
+    await t.cleanup();
+  }
+});
+
 test('merchants: restock every N long rests the DM calls (short rests do not count), or by hand', async () => {
   const t = await setup({ llm: llm() });
   try {

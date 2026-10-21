@@ -4,7 +4,7 @@
  */
 import { z } from 'zod';
 import { BadRequestError, NotFoundError, sessionDateFor } from '../store.js';
-import { EDITIONS, WEIGHT_RULES } from '@dndapp/shared/settings.js';
+import { EDITIONS, TRAVEL_PARTS, TRAVEL_TIME, WEIGHT_RULES } from '@dndapp/shared/settings.js';
 
 export function registerAccounts(app, r) {
   const { access, auth, config, db, requireAdmin, search, store } = r;
@@ -50,11 +50,18 @@ export function registerAccounts(app, r) {
 
   /**
    * Change the campaign's settings (DM): { weight?: 'capacity' | 'variant' | 'ignore',
-   * edition?: '2014' | '2024' | null } (null: not chosen, follow the books). Everyone in it hears `settings` live.
+   * edition?: '2014' | '2024' | null (null: not chosen, follow the books), travel?: { time?, roads?, terrain?,
+   * vehicles?, marches?, encounters? } (shared/settings.js; the rest stay as they were) }. Everyone in it hears `settings` live.
    */
   app.patch('/campaigns/:cid/settings', async (request) => {
     const a = access(request, { dm: true });
-    const body = z.object({ weight: z.enum(Object.keys(WEIGHT_RULES)).optional(), edition: z.enum(Object.keys(EDITIONS)).nullable().optional() }).strict().parse(request.body ?? {});
+    const body = z.object({
+      weight: z.enum(Object.keys(WEIGHT_RULES)).optional(),
+      edition: z.enum(Object.keys(EDITIONS)).nullable().optional(),
+      travel: z.object({ time: z.enum(Object.keys(TRAVEL_TIME)), ...Object.fromEntries(Object.keys(TRAVEL_PARTS).map((k) => [k, z.boolean()])) }).partial().strict().optional(),
+    }).strict().parse(request.body ?? {});
+    // Travel switches change one at a time.
+    if (body.travel) body.travel = { ...store.getSettings(a.cid).travel, ...body.travel };
     return store.setSettings(a.cid, body);
   });
 

@@ -4,7 +4,8 @@
  * level (or no limit). Players buy on their own: the price comes out of the
  * coins on their character sheet and the item goes into its inventory, and
  * the stock goes down. A merchant can restock (back up to each item's
- * "restock to" level) every so many long rests the DM calls (rests.js).
+ * "restock to" level) every so many long rests the DM calls (rests.js), or
+ * every so many days of the in-game clock (the world's travel: the clock moves on).
  *
  * Players see a merchant only while one of its tokens is on a map they can
  * see, and never the DM's notes. Archived like creatures (library.js); the
@@ -57,6 +58,9 @@ export function normalizeMerchant(m = {}) {
       rests: whole(m.restock?.rests, { max: 1000, fallback: 0 }),
       last_rest_at: m.restock?.last_rest_at ? str(m.restock.last_rest_at, 40) : null,
       last_restock_at: m.restock?.last_restock_at ? str(m.restock.last_restock_at, 40) : null,
+      // Or every `days` days of the in-game clock (null: not by days); `clock` is when it last restocked or started counting.
+      days: whole(m.restock?.days, { min: 1, max: 3650 }),
+      clock: whole(m.restock?.clock, { max: 1e9 }),
     },
     // The latest sales, newest last: { at, user_id, who, item, name, qty, paid (copper) }.
     sales: (Array.isArray(m.sales) ? m.sales : []).slice(-MAX_SALES).map((s) => ({
@@ -70,12 +74,25 @@ export function normalizeMerchant(m = {}) {
 }
 
 /** Every line back up to its restock level (never down: a DM who added more keeps them). */
-export function restocked(m, at) {
+export function restocked(m, at, clock = m.restock.clock) {
   return {
     ...m,
     stock: m.stock.map((l) => (l.full != null && l.qty != null && l.qty < l.full ? { ...l, qty: l.full } : l)),
-    restock: { ...m.restock, rests: 0, last_restock_at: at },
+    restock: { ...m.restock, rests: 0, last_restock_at: at, clock },
   };
+}
+
+/**
+ * The in-game clock moved to `clock` (minutes): a merchant that restocks every so many days does, once
+ * that many days have gone by since it last did. Returns the restocked merchant, or null.
+ */
+export function afterDays(m, clock, at) {
+  if (!m.restock.days || m.removed) return null;
+  const since = m.restock.clock ?? 0;
+  const span = m.restock.days * 1440;
+  if (clock - since < span) return null;
+  // Counting goes on from the last whole span, so a long trip doesn't shift when the next one comes.
+  return restocked(m, at, since + Math.floor((clock - since) / span) * span);
 }
 
 /**
@@ -107,6 +124,18 @@ export function createMerchants({ db, archive, store }) {
         if (!next) continue;
         lib.write(cid, { ...next, updated_at: new Date().toISOString() });
         if (next.restock.rests === 0) out.push(next);
+      }
+      return out;
+    },
+
+    /** The in-game clock moved on to `clock`: merchants that restock by days do if it's time. Returns those that restocked. */
+    clockMoved(cid, clock, { at = new Date().toISOString() } = {}) {
+      const out = [];
+      for (const m of lib.list(cid)) {
+        const next = afterDays(m, clock, at);
+        if (!next) continue;
+        lib.write(cid, { ...next, updated_at: new Date().toISOString() });
+        out.push(next);
       }
       return out;
     },

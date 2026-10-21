@@ -187,7 +187,7 @@ export const PASSWORD = 'correct horse';
  * A campaign with a DM (Kenny) and two players: Sam (Thorin) and Alex (Lyra),
  * with the speaker map linking transcript names to their accounts.
  */
-export async function setup({ llm = createFakeLLM(), config = {}, fetchImage } = {}) {
+export async function setup({ llm = createFakeLLM(), config = {}, fetchImage, random } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dndapp-test-'));
   const paths = {
     archive: path.join(dir, 'archive'),
@@ -197,7 +197,7 @@ export async function setup({ llm = createFakeLLM(), config = {}, fetchImage } =
   // No books unless a test provides some (the real ones would make tests slow and machine-specific).
   const cfg = { ...baseConfig, booksDir: path.join(dir, 'books'), ...config, qa: { ...baseConfig.qa, ...config.qa } };
   const ctx = await createContext({ config: cfg, paths, llm, embedder: fakeEmbedder, log: { error() {} }, fetchImage });
-  const app = buildApp({ ...ctx, logger: false });
+  const app = buildApp({ ...ctx, ...(random && { random }), logger: false });
 
   // Accounts are created as the admin would, then logged in like the web page does.
   const account = async (name, opts = {}) => {

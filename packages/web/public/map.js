@@ -9,7 +9,7 @@
  * the server decides where a token really ends up.
  */
 import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from './api.js';
-import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, EFFORTS, playersMap, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, distanceToWall, inTemplate, snapTemplatePoint, groundAt, tokenTall, bridgeAt, isUnder, isPinMap } from './shared/map.js';
+import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, EFFORTS, playersMap, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, distanceToWall, inTemplate, snapTemplatePoint, groundAt, tokenTall, bridgeAt, isUnder, isPinMap, snapRoadPoint } from './shared/map.js';
 import { PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, WALLS_EFFORT_KEY, base, downloadUvtt, report, state, status } from './map-state.js';
 import { canChangeTemplate, placeTemplate, renderTemplates, selectTemplate, templateControls, templateDialog, templateMove, templateUp } from './map-templates.js';
 import { openShop } from './merchants.js';
@@ -19,7 +19,7 @@ import { renderCombat } from './map-combat.js';
 import { companionDialog, companionRolls, dismissCompanion, myCompanion } from './map-companions.js';
 import { initMapFull } from './map-full.js';
 import { groupsDialog, mapOptions, placeEnd, placeMove, placeStart, renderPlaces, shownNote } from './map-places.js';
-import { clockDialog, journeyText, onClock, renderClock, renderRoutes, travelControls as journeyControls, travelPicked } from './map-travel.js';
+import { clockDialog, journeyText, onClock, renderClock, renderRoads, renderRoutes, roadMode, roads, travelControls as journeyControls, travelPicked } from './map-travel.js';
 import { PIN_PX, followMyCharacter, myCharacterMap, partyDialog, pinFan, travelControls } from './map-world.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -467,6 +467,8 @@ function renderFogTools() {
       : 'Players only see what you reveal. Tick Line of sight to let their tokens see past the walls.';
   $('#map-change-design').hidden = !map.designed;
   for (const b of walls.querySelectorAll('[data-wall-mode]')) b.setAttribute('aria-pressed', String(state.wallMode === b.dataset.wallMode));
+  // Roads and rivers are for world and region maps (journeys keep to them).
+  for (const b of walls.querySelectorAll('.map-road-tool')) b.hidden = !isPinMap(map);
   // Where a new link leads: any other map.
   const linkTo = $('#map-link-to');
   const others = state.maps.filter((m) => m.id !== map.id);
@@ -664,13 +666,14 @@ function renderWalls() {
       );
     }
   }
+  if (state.canEdit && !hidden) renderRoads(svg, map);
   const doors = list.filter((w) => w.door || !state.canEdit);
   for (const w of list) if (!doors.includes(w)) svg.append(line(w, 'wall-halo'));
   for (const w of list) if (!doors.includes(w)) svg.append(line(w, cls(w)));
   // Doors on top, drawn as doors so nobody mistakes them for walls.
   for (const w of doors) svg.append(doorShape(map, w, cls(w)));
   const d = state.wallDraw;
-  const draft = ['door', 'low', 'stairs', 'ladder'].includes(state.wallMode) ? ` ${state.wallMode}` : '';
+  const draft = ['door', 'low', 'stairs', 'ladder', 'road', 'river'].includes(state.wallMode) ? ` ${state.wallMode}` : '';
   const path = (pts) => svgEl('polyline', { points: pts.map((p) => `${p.x},${p.y}`).join(' '), class: `wall-draft${draft}` });
   if (d && state.wallMode === 'circle') svg.append(path(circlePoints(d.a, Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y))));
   else if (d) svg.append(line({ x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y }, `wall-draft${draft}`));
@@ -1630,6 +1633,8 @@ function wallUp(e) {
     if (light) return lights({ remove: light.id });
     const climb = state.wallMode === 'erase' && climbAt(map, at, SNAP_PX / state.view.k);
     if (climb) return climbs({ remove: climb.id });
+    const road = state.wallMode === 'erase' && nearestWall({ walls: map.roads ?? [] }, at, SNAP_PX / state.view.k);
+    if (road) return roads({ remove: road.id });
     const near = nearestWall(map, at, SNAP_PX / state.view.k);
     const door = doorAt(e.clientX, e.clientY);
     if (state.wallMode === 'erase' && near) walls({ remove: near.id });
@@ -1644,7 +1649,8 @@ function wallUp(e) {
     return;
   }
   if (state.wallMode === 'erase' || state.wallMode === 'lock' || state.wallMode === 'light' || state.wallMode === 'link') return;
-  if (Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y) < 1) return;
+  if (Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y) < 1 || (roadMode() && click)) return;
+  if (roadMode()) return roads({ add: { kind: state.wallMode, x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y } });
   if (state.wallMode === 'stairs' || state.wallMode === 'ladder') return climbs({ add: { kind: state.wallMode, x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y } });
   walls({ add: { x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y, door: state.wallMode === 'door', kind: state.wallMode === 'low' ? 'low' : 'wall' } });
 }
@@ -1730,7 +1736,7 @@ function viewDown(e) {
     return;
   }
   if (state.wallMode && !state.pointers.size && !state.wallDraw) {
-    const at = snapWallPoint(state.current, toImage(e.clientX, e.clientY), SNAP_PX / state.view.k);
+    const at = (roadMode() ? snapRoadPoint : snapWallPoint)(state.current, toImage(e.clientX, e.clientY), SNAP_PX / state.view.k);
     state.wallDraw = { pointer: e.pointerId, a: at, b: at, sx: e.clientX, sy: e.clientY };
     return;
   }
@@ -1773,7 +1779,7 @@ function viewMove(e) {
   if (state.raisedEdit?.pointer === e.pointerId) return raisedMove(e);
   if (state.wallDraw?.pointer === e.pointerId) {
     const at = toImage(e.clientX, e.clientY);
-    state.wallDraw.b = state.wallMode === 'circle' ? at : snapWallPoint(state.current, at, SNAP_PX / state.view.k);
+    state.wallDraw.b = state.wallMode === 'circle' ? at : (roadMode() ? snapRoadPoint : snapWallPoint)(state.current, at, SNAP_PX / state.view.k);
     return renderWalls();
   }
   if (state.curveBend) {

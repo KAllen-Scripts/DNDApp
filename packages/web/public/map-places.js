@@ -8,7 +8,8 @@
  * decides what each player gets; the page only draws it.
  */
 import { api, h, storage } from './api.js';
-import { atlasOrder, mapTrail } from './shared/map.js';
+import { atlasOrder, isPinMap, mapTrail } from './shared/map.js';
+import { campaignSettings } from './campaign-settings.js';
 import { base, report, state, status } from './map-state.js';
 import { campaignPlayers, field, recordDialog } from './map-dm.js';
 import { onMap, show, svgEl } from './map.js';
@@ -250,6 +251,35 @@ export function whoField({ shown, to }, { hiddenLabel = 'Nobody (hidden from pla
 }
 
 /** Add a place (`at`: { x, y, points? }) or change one (`place`), DM. */
+/**
+ * Random encounters on the way (the DM's): on or off, the chance in 100, how often it's rolled, and the
+ * table, one encounter per line (dice in a line are rolled). Returns { el, read() → the encounters or null }.
+ */
+export function encounterFields(enc, { what = 'on this map' } = {}) {
+  const on = h('input', { type: 'checkbox', class: 'map-enc-on', checked: !!enc });
+  const chance = h('input', { type: 'number', min: '0', max: '100', step: '1', class: 'map-num map-enc-chance', value: String(enc?.chance ?? 15), 'aria-label': 'Chance in 100' });
+  const every = h('select', { class: 'map-enc-every', 'aria-label': 'Rolled every' }, ...[1, 2, 4, 8, 12, 24].map((n) => new Option(n === 1 ? 'hour' : n === 24 ? 'day' : `${n} hours`, String(n))));
+  every.value = String(enc?.every ?? 4);
+  if (every.value !== String(enc?.every ?? 4)) {
+    every.append(new Option(`${enc.every} hours`, String(enc.every)));
+    every.value = String(enc.every);
+  }
+  const table = h('textarea', { class: 'map-enc-table', rows: 4, placeholder: '1d6+2 wolves\nA merchant caravan heading the other way\n2d4 bandits', 'aria-label': 'Encounters, one per line' });
+  table.value = (enc?.table ?? []).join('\n');
+  const rest = h('div', {}, h('div', { class: 'map-row' }, field('Chance (in 100)', chance), field('Rolled every', every)), field('Encounters, one per line (dice are rolled)', table));
+  const sync = () => { rest.hidden = !on.checked; };
+  on.addEventListener('change', sync);
+  sync();
+  const off = !campaignSettings().travel.encounters;
+  return {
+    el: h('div', { class: 'map-encounters' },
+      h('label', { class: 'map-check' }, on, ` Random encounters ${what}`),
+      rest,
+      h('p', { class: 'muted small' }, off ? 'Random encounters are switched off in Campaign settings, so none are rolled until you switch them on.' : 'Rolled as you move the in-game clock on, for everyone on a journey (on the road or camped); the clock stops at one so you can run it. Only you see these.')),
+    read: () => (on.checked ? { chance: Math.min(100, Math.max(0, Math.round(Number(chance.value) || 0))), every: Number(every.value), table: table.value.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 50) } : null),
+  };
+}
+
 export function placeDialog({ at = null, place = null }) {
   const map = state.current;
   if (!map) return;
@@ -272,9 +302,12 @@ export function placeDialog({ at = null, place = null }) {
   const record = place?.record
     ? h('p', { class: 'small' }, 'About it in the records: ', h('button', { type: 'button', class: 'link', onclick: () => recordDialog(place) }, place.record.title))
     : null;
+  // An area on a world or region map can have its own random encounters (a forest, the marshes).
+  const area = !!(place?.points ?? at?.points) && isPinMap(map);
+  const enc = area ? encounterFields(place?.encounters ?? null, { what: 'in this area (instead of the map’s)' }) : null;
   const save = async () => {
     const r = who.read();
-    const body = { name: name.value.trim(), group: group.value.trim(), to: opens.value || null, revealed: r.shown, revealed_to: r.to };
+    const body = { name: name.value.trim(), group: group.value.trim(), to: opens.value || null, revealed: r.shown, revealed_to: r.to, ...(enc && { encounters: enc.read() }) };
     const saved = place ? await places({ set: { id: place.id, ...body } }) : await places({ add: { ...at, ...body } });
     if (saved) status(`${body.name}: ${!r.shown ? 'hidden from the players' : r.to ? `revealed to ${r.to.length} player${r.to.length === 1 ? '' : 's'}` : 'revealed to every player'}.`);
     return saved;
@@ -294,6 +327,8 @@ export function placeDialog({ at = null, place = null }) {
       who.el,
       h('p', { class: 'muted small' }, 'Players also need to be shown the map it opens to go in. Under fog, they see it only where they can see its spot.'),
       record,
+      enc ? h('h3', {}, 'Random encounters') : null,
+      enc?.el,
       h('div', { class: 'map-dialog-actions' },
         place ? h('button', { type: 'button', class: 'ghost danger', onclick: () => places({ remove: place.id }).then((s) => s && dialog.close()) }, 'Remove') : null,
         h('span', { class: 'spacer' }),
