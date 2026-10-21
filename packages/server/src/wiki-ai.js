@@ -24,7 +24,7 @@ import { z } from 'zod';
 import { renderRecord } from './kb/store.js';
 import { BadRequestError, NotFoundError } from './store.js';
 import { WIKI_LIMITS as L } from './wiki.js';
-import { narrowest, audienceOf, canSeeAudience, wikiKey } from '@dndapp/shared/wiki.js';
+import { narrowest, audienceOf, canSeeAudience, wikiKey, wikiPictures as picturesIn, PICTURE_RE } from '@dndapp/shared/wiki.js';
 import { json } from './db/index.js';
 
 const isProposalId = (id) => /^[a-f0-9]{10}$/.test(String(id));
@@ -91,7 +91,20 @@ Don't propose what's already waiting for the DM, or anything the DM rejected bef
  * @param {object} o.wiki   src/wiki.js
  * @param {object} o.kb     the knowledge base (src/kb/store.js)
  */
-export function createWikiAI({ db, archive, store, kb, wiki, search, llm, config }) {
+export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null, search, llm, config }) {
+  /**
+   * A picture the app already has for a new page (the DM's creature, item,
+   * merchant, map or handout with the page's name), offered beside the
+   * proposal for the DM to take or leave. Matched by name on the server: no AI call.
+   */
+  const suggestPicture = (cid, p) => (p.action === 'new_page' && wikiPictures ? wikiPictures.match(cid, [p.title, ...(p.aliases ?? [])]) : null);
+
+  /** A new text for a section keeps the pictures the DM put in the old one (the AI never sees them as pictures to keep). */
+  const keepPictures = (oldText, newText) => {
+    const missing = [...String(oldText ?? '').matchAll(PICTURE_RE)].filter((m) => !picturesIn(newText).includes(m[2])).map((m) => m[0]);
+    return missing.length ? `${newText.trimEnd()}\n\n${[...new Set(missing)].join('\n')}` : newText;
+  };
+
   const perCall = config?.wiki?.recordsPerCall ?? 25;
 
   const players = (cid) => store.roster(cid).filter((m) => m.role === 'player');
@@ -309,7 +322,7 @@ export function createWikiAI({ db, archive, store, kb, wiki, search, llm, config
     /** Proposals waiting for the DM, oldest first, each with what's there now to compare. */
     pending(cid) {
       return list(cid, 'pending').map((p) => {
-        if (p.action === 'new_page') return p;
+        if (p.action === 'new_page') return { ...p, picture: suggestPicture(cid, p) };
         let page = null;
         try {
           page = wiki.get(cid, p.page_id);
@@ -364,7 +377,8 @@ export function createWikiAI({ db, archive, store, kb, wiki, search, llm, config
 
     /**
      * Approve a proposal, with the DM's edits if any:
-     * { title?, kind?, page_available?, sections?: [{ heading, text, available }], players? }.
+     * { title?, kind?, page_available?, sections?: [{ heading, text, available }], players?, use_picture? }.
+     * A new page takes the picture suggested for it unless use_picture is false.
      * A section the DM edited is the DM's. Returns the page.
      */
     async approve(cid, id, edits = {}, { by }) {
@@ -379,7 +393,9 @@ export function createWikiAI({ db, archive, store, kb, wiki, search, llm, config
       let page;
       if (p.action === 'new_page') {
         const parent = p.parent && wiki.list(cid).some((x) => x.id === p.parent) ? p.parent : null;
-        page = await wiki.create(cid, { title: edits.title ?? p.title, kind: edits.kind ?? p.kind, aliases: p.aliases, parent, available: edits.page_available ?? p.page_available, sections }, { by });
+        const suggested = edits.use_picture === false ? null : suggestPicture(cid, p);
+        const picture = suggested ? { id: (await wikiPictures.copy(cid, suggested, { by })).id, caption: '', available: 'all' } : null;
+        page = await wiki.create(cid, { title: edits.title ?? p.title, kind: edits.kind ?? p.kind, aliases: p.aliases, parent, available: edits.page_available ?? p.page_available, sections, picture }, { by });
       } else {
         const current = wiki.get(cid, p.page_id);
         let fields;
@@ -392,12 +408,12 @@ export function createWikiAI({ db, archive, store, kb, wiki, search, llm, config
           fields = { sections: [...current.sections, ...sections] };
         } else {
           if (!current.sections.some((s) => s.id === p.section_id)) throw new BadRequestError('That section is gone from the page.');
-          fields = { sections: current.sections.map((s) => (s.id === p.section_id ? { ...s, ...sections[0] } : s)) };
+          fields = { sections: current.sections.map((s) => (s.id === p.section_id ? { ...s, ...sections[0], text: keepPictures(s.text, sections[0].text) } : s)) };
         }
         page = await wiki.update(cid, current.id, fields, { by, version: current.version });
       }
       const now = new Date().toISOString();
-      write(cid, { ...p, status: 'approved', page_id: page.id, decided_by: by, decided_at: now, updated_at: now, ...(Object.keys(edits).length && { edited: true }) });
+      write(cid, { ...p, status: 'approved', page_id: page.id, decided_by: by, decided_at: now, updated_at: now, ...(Object.keys(edits).some((k) => k !== 'use_picture') && { edited: true }) });
       return page;
     },
 

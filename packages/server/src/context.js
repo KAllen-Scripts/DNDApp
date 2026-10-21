@@ -13,6 +13,7 @@ import { createUpdates } from './kb/updates.js';
 import { createHandouts } from './handouts.js';
 import { createWiki } from './wiki.js';
 import { createWikiAI } from './wiki-ai.js';
+import { createWikiPictures } from './wiki-pictures.js';
 import { createRolls } from './rolls.js';
 import { createRests } from './rests.js';
 import { createEditions } from './editions.js';
@@ -50,7 +51,8 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const search = createSearch({ db, embedder });
   const kb = createKB({ db, search, config });
   // The DM's wiki: beside the knowledge base, not in it. Ask reads it, filtered to the asker.
-  const wiki = createWiki({ db, archive, store, search });
+  // Its pictures come from wikiPictures (made below, once creatures, items, maps and handouts exist).
+  const wiki = createWiki({ db, archive, store, search, pictures: { has: (cid, id) => wikiPictures.has(cid, id) } });
   // A changed sheet reaches the archivist once the player stops editing for a while.
   const sheets = createSheets({ db, archive, store, onSave: (cid) => jobs.scheduleUpdates(cid) });
   const pictures = createPictures({ db, archive, store });
@@ -65,12 +67,14 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const merchants = createMerchants({ db, archive, store });
   const mapAssets = createMapAssets({ db, archive, store });
   const mapStamps = createMapStamps({ db, archive, store });
+  // The wiki's pictures: uploaded, or copied from a creature, item, merchant, map, handout or token.
+  const wikiPictures = createWikiPictures({ archive, store, creatures, items, merchants, maps, handouts, pictures });
   handouts.events.on('update', ({ campaign_id }) => jobs.scheduleUpdates(campaign_id));
   // Sheet changes, late note edits and handouts reach the archivist between sessions.
   const updates = createUpdates({ db, store, archive, handoutsBetween: handouts.forArchivist });
   const pipeline = createPipeline({ db, store, archive, search, kb, archivist, updates, config });
   // The AI proposes wiki changes from what the archivist changed; the DM approves them.
-  const wikiAI = createWikiAI({ db, archive, store, kb, wiki, search, llm, config });
+  const wikiAI = createWikiAI({ db, archive, store, kb, wiki, wikiPictures, search, llm, config });
   const jobs = createJobs({ db, store, search, pipeline, wiki, wikiAI, config, log });
   const books = createBooks({ dir: config.booksDir, log });
   // The campaign's rules edition (2014 or 2024): rests, Ask and lookups in the books follow it.
@@ -113,5 +117,5 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   // Changes made while the server was off (or before its last run finished) still reach the archivist.
   for (const { id } of db.prepare('SELECT id FROM campaigns').all()) if (updates.pendingSince(id)) jobs.scheduleUpdates(id);
 
-  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, wiki, wikiAI, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, mapStamps, pipeline, jobs, qa, books, editions, spells, forms, sheets, sheetImport, sheetReview, maps, mapReader, designDrafter, statBlocks, creatureFinder, pictures, pictureDescriber, restored };
+  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, wiki, wikiAI, wikiPictures, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, mapStamps, pipeline, jobs, qa, books, editions, spells, forms, sheets, sheetImport, sheetReview, maps, mapReader, designDrafter, statBlocks, creatureFinder, pictures, pictureDescriber, restored };
 }
