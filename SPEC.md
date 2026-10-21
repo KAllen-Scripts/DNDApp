@@ -1,6 +1,8 @@
 # DNDApp — Project Spec
 
-> Status: v0.61 (2026-10-21). The DM's Map page trimmed (owner: "that bar at the bottom… It's in the way of seeing the whole map… we now have a bunch of map editing stuff even though we have a dedicated map editor"): setting a map up (walls, doors, obstacles, heights, stairs, lights, links, places, Map settings) is its own **Edit map** mode instead of being among the play tools; play keeps **Fog & sight**; **New map** imports or opens the creator; what's picked on the map shows **below** the map, rarer controls under More; Add a token's **Who is it?** lists only the Kind picked and can be searched; **AI walls** asks how hard the AI thinks each time (§6.6).
+> Status: v0.62 (2026-10-21). The DM's Map page trimmed (owner: "that bar at the bottom… It's in the way of seeing the whole map… we now have a bunch of map editing stuff even though we have a dedicated map editor"): setting a map up (walls, doors, obstacles, heights, stairs, lights, links, places, Map settings) is its own **Edit map** mode instead of being among the play tools; play keeps **Fog & sight**; **New map** imports or opens the creator; what's picked on the map shows **below** the map, rarer controls under More; Add a token's **Who is it?** lists only the Kind picked and can be searched; **AI walls** asks how hard the AI thinks each time (§6.6).
+>
+> Previously v0.61 (2026-10-21). The DM's wiki, stage 1 (owner: "the DM being able to build a wiki… the AI, but of course manual changes and additions should also be possible"; decisions 2026-10-20): a **Wiki** tab only the DM has, with pages the DM writes (title, other names, kind, inside another page, tags, sections), `[[links]]`, history with "bring this version back", and who each part is **available to** (a page, a section, or a `:::for Thorin` / `:::dm` block inside the text; the narrowest wins; new pages are the DM's alone). **View as** shows a page as a player would. Ask reads the whole wiki for the DM and, for a player, exactly the parts available to them (§6.11). The AI writing pages for the DM to approve, and suggesting reveals, are the next stages.
 >
 > Previously v0.60 (2026-10-20). The fog over heights has two shades (owner's choice): clear where a player sees the floor, lightly shaded where they'd see only someone standing there (a roof seen from below), dark where neither (§6.6 Height).
 >
@@ -147,7 +149,8 @@ DNDApp/
                   subclass-features.js (the Player's Handbook's subclasses and their rows for the same box: Superiority Dice, Portent, Combat Wild Shape...),
                   subclass-features-books.js (other books' subclasses: Xanathar's, Tasha's, Fizban's, DMG 2014, Glory of the Giants),
                   race-features.js (racial traits with uses or numbers, and Xanathar's racial feats, for the same box),
-                  settings.js (a campaign's settings: the weight rule, the rules edition)
+                  settings.js (a campaign's settings: the weight rule, the rules edition),
+                  wiki.js (wiki text: `:::for` / `:::dm` blocks, [[links]], who a part is available to)
     server/
       src/
         index.js          start-up
@@ -161,7 +164,8 @@ DNDApp/
                           maps.js (maps, tokens, fog, walls, lights, terrain, variants, links, pins, pings),
                           map-creator.js (maps made in the creator, starting maps, the AI draft, levels, the DM's own assets and stamps),
                           combat.js (initiative, spell templates), creatures.js (the DM's creatures, Find online),
-                          items.js (the DM's items: look up, Find online), merchants.js (merchants, stock, buying, placing on maps)
+                          items.js (the DM's items: look up, Find online), merchants.js (merchants, stock, buying, placing on maps),
+                          wiki.js (the DM's wiki: pages, history, View as)
         context.js        wires everything together (tests pass a fake AI and embedder)
         config.js         all settings (env vars), PIPELINE_VERSION
         archive.js        archive files
@@ -174,6 +178,7 @@ DNDApp/
         images.js         one set of checks for every uploaded picture (maps get a higher pixel limit) and the
                           token-square / shrunk copies sent to the page
         handouts.js       handouts (archived, restored)
+        wiki.js           the DM's wiki pages (archived, restored, indexed per part with who may see it)
         rolls.js          dice rolls: roll, log and send live (POST /roll and rolls made for something else, like a hit die)
         rests.js          hit dice and rests on players' sheets; rests the DM calls (archived, restored, counted, `events`)
         editions.js       which rules a campaign plays by (2014 or 2024): the DM's setting, else REST_RULES, else the books' Player's Handbook
@@ -185,7 +190,7 @@ DNDApp/
         library.js        the storage items and merchants share (a row per entry, the whole entry archived on each change)
         net/              fetch-public.js (downloads from the public internet only, for Find online's pictures)
         characters/       pictures.js (token and full pictures of characters; the AI's description)
-        db/               schema.sql + migrations (schema v17)
+        db/               schema.sql + migrations (schema v18)
         llm/              providers: claude-code.js, api.js, common.js (operations: structured, agent, research)
         kb/               store.js (knowledge-base records, journal), archivist.js (agent + tools),
                           updates.js (sheet changes, late note changes and handouts for the archivist between sessions)
@@ -207,7 +212,7 @@ DNDApp/
                   admin.js + admin-sessions.js (admin screen); sheet.js (Sheet tab); sheet-class-features.js (the Class features box); sheet-wild-shape.js (the druid's Wild Shape forms, under its row); sheet-place.js (a panel beside the map, Sheet window);
                   map.js (Map tab) with map-state.js (shared state), map-dm.js (the DM's tools), map-combat.js (turn order), map-companions.js (a player's companions and summons),
                   map-templates.js (spell templates), map-full.js (full screen), map-places.js (the world: places, the breadcrumb, who sees a map or a place), map-creator.js (the DM's map creator) with map-creator-panel.js (its tools and tabs) and map-creator-start.js (starting a map, floors of a building); creatures.js (the DM's Creatures tab); items.js (the DM's Items tab); campaign-settings.js (the DM's Settings dialog);
-                  merchants.js (the DM's Merchants tab, and the shop players buy from); archivist.js (the DM's Archivist tab);
+                  merchants.js (the DM's Merchants tab, and the shop players buy from); archivist.js (the DM's Archivist tab); wiki.js (the DM's Wiki tab);
                   table.js (the campaign live stream: others' rolls, rests, the Handouts tab); rests.js (the DM's Rest dialog, rests arriving); dice.js (tray, rolls) with dice-deluxe.js,
                   dice-physics.js, dice-shapes.js (the Deluxe roller) and dice-fx.js (effects); markdown.js (AI text to safe HTML);
                   stat-block.js (the stat block dialog); look.js + look-boot.js (the Look dialog, applied before first paint);
@@ -247,6 +252,7 @@ Electron was dropped (owner's call: overkill, since there's a server and an addr
 - **Map** (§6.6): a Map tab. The DM imports maps (or a PDF page), places tokens, runs the fog, tracks hit points and conditions, and gets stat blocks and records; players see shown maps, move their own token and keep private pins; changes are live.
 - **DM tabs:** for someone with the `dm` role, Creatures replaces the Sheet tab (the DM has no character sheet: no Sheet tab, no Sheet window, and the server refuses `/sheet` for the `dm` role; §6.6), an Archivist tab holds the archivist's open questions and the DM's corrections (§4.1), and Items and Merchants set up shops (§6.9). Players have an Inventory tab instead (§6.4), which the DM doesn't. All of them can go beside the map too.
 - **Handouts tab** (§6.7) for everyone.
+- **Wiki tab** (§6.11) for the DM only; players never get the tab or its requests.
 - **Not built yet: more DM / host features** (split between DM and host to be decided with the DM role): glossary editing; a full speaker-map editor (links are currently set while uploading). Transcript upload is on the admin screen.
 - On each `turn` event from `/ask`, replace displayed text rather than appending.
 
@@ -325,6 +331,7 @@ Also accepted: `[MM:SS]`, fractional seconds, no brackets, `0:01:30 - Name: text
 | `items` | source | The DM's items (JSON: name, kind, rarity, attunement, usual price in copper, weight, description, notes, picture, `source`: dm, book, ai or web, `finding` while the AI searches, removed). Schema v14. |
 | `map_assets` | source | The DM's own pictures for the map creator (JSON: name, picture, its size in pixels, what it blocks by default, removed). Schema v16. |
 | `map_stamps` | source | The DM's own stamps for the map creator (JSON: name, `clip`: the floor, walls, assets, paths and labels of a rectangle of squares, removed; at most 200). Schema v17. |
+| `wiki_pages` | source | The DM's wiki pages (JSON: title, aliases, kind, parent, tags, `available`, sections with heading, text, `by`, `available`; version, removed). Schema v18. |
 | `merchants` | source | Merchants (JSON: name, description, notes, colour, picture, open, `stock`: lines of item, price, qty, restock level; `restock`: every N long rests and the count; the last 50 `sales`, removed). Schema v14. |
 | `rests` | source | Short and long rests the DM called (JSON: kind, when, by, edition, the players in it, who got nothing from it). Schema v13. |
 | `corrections` | source | DM corrections with `after_session` (where to replay them in a rebuild). |
@@ -362,6 +369,7 @@ data/archive/
     maps/<id>/tokens/<file>           a picture the DM gave an NPC or enemy token, as uploaded
     handouts/<id>/<picture>           a handout's picture, as uploaded
     handouts/<id>/changes.jsonl       append-only: the whole handout after each change
+    wiki/<id>/changes.jsonl           append-only: the whole wiki page after each change (its history)
     creatures/<id>/<picture>          a picture for one of the DM's creatures, as uploaded
     creatures/<id>/changes.jsonl      append-only: the whole creature after each change
     items/<id>/<picture>              a picture for one of the DM's items, as uploaded
@@ -381,7 +389,7 @@ data/archive/
 - A transcript can never be replaced (different bytes for an existing session number → 409).
 - **Restore:** on start-up, accounts, campaigns, members, campaign settings, sessions, speakers, glossary, corrections, notes (with their edits and deletes), character sheets and maps (both replayed from their change lines), character pictures, handouts, the DM's creatures, rests the DM called, items, merchants, the DM's map creator assets and stamps, and private map pins missing from the database are restored from the archive, and notes are re-indexed. Then run a rebuild to regenerate the knowledge base.
 - **Rebuild:** `npm run rebuild -- --campaign <id> --yes` (or `POST /rebuild`) wipes all derived data, re-indexes notes, then replays every session in order, each correction right after the session it was made against. Sheet changes and handouts are read in time order between the sessions (those from before a session's day, before it; the rest at the end). The archivist is non-deterministic, so a rebuild gives an equivalent knowledge base, not an identical one.
-- Bump `PIPELINE_VERSION` (now 17, since the archivist was told to archive thoroughly, 2026-10-14) when prompts, tools or the memory design change.
+- Bump `PIPELINE_VERSION` (now 22, since Ask was given the DM's wiki, 2026-10-21) when prompts, tools or the memory design change.
 
 ## 5. Knowledge base and Q&A (core design)
 
@@ -426,6 +434,7 @@ The job runs once nothing has changed for `ARCHIVIST_UPDATES_DELAY_MINUTES` (def
 3. **Tools** (read-only, filtered to the asker): `search_kb`, `list_records`, `get_records`, `list_sessions`, `search_transcript`, `read_transcript`, `search_my_notes`.
 3a. **The group's books** (only when `BOOKS_DIR` has PDFs; they're listed in the system prompt with the year each was first printed, read from its credits page, and their page ranges): `search_books` (1–8 terms the model writes itself, not the player's sentence; keyword search over the page text held in memory, rarer terms and pages matching several terms rank higher, a heading counts double and a heading that is the term counts most (capitalised lines, the PDF's bookmarks, and short lines compared without spaces for headings the OCR split), terms of 3 letters or fewer match whole words only, longer ones the start of a word, OCR mix-ups and line-end hyphens are folded; returns up to 8 pages with a snippet; an unknown or ambiguous book name is an error naming the books), `read_book` (1–2 pages, never cut short), `book_contents` (the PDF's bookmarks, else the capitalised headings on each page; when too long for a tool result, the deepest levels are dropped first). PDF text is joined by position, so an OCR layer's word pieces read as words. Pages are numbered as printed when the page numbers can be read (lines that are only a number, else numbers in running headers and footers; a consistent offset from the PDF's numbering), else by PDF page. Titles are the file name up to any " -- " (downloaded files' extras). No database and nothing stored: the text is read from the PDFs at start-up; a PDF with mostly empty pages is logged as needing OCR. With books, **every rules question is looked up in them** (rules, conditions, spells, features, items, tables, stat blocks): search in the first turn, read the page before answering, follow index hits, and say so when the books don't cover it (then answer from memory). Editions: books first printed 2024 or later use the 2024 rules, earlier ones the 2014 rules; never mixed in one answer; the group's edition is the campaign's setting when the DM has chosen one (§6.10; then it's stated even without books), else taken from their Player's Handbook (both or neither: what the records say, else the answer says which edition it is). Vague questions: it works out which rule is meant, searches with the book's terms plus synonyms, searches again or browses the contents if that misses, and asks when it can't tell. Book pages are cited as `(Player's Handbook p. 195)`; they aren't campaign sources, so there's no `[S…]` citation or evidence for them. The books aren't campaign data, so everyone in any campaign may search them.
 3b. **The DM's creatures** (owner's request, 2026-10-09; only when the asker's role is `dm`): the system prompt lists the DM's saved creatures (name, kind, whether it has a stat block) with the rule that a saved creature of that name is the DM's own version and beats the books, the records and the model's knowledge; creatures named in the question ("Goblin 3", "goblins" match "Goblin") are put in full after the question (`<my_creatures>`); `get_my_creatures` gives others in full (stat block and where it came from, hit points, size, speed, darkvision, the DM's notes). Players never get the list, the block or the tool.
+3c. **The DM's wiki** (§6.11; only when the asker can see some of it): `search_wiki` and `read_wiki_page`, and the pre-search includes wiki parts. The DM gets every part, marked with who it's available to; a player gets only the parts available to them, found by title only (other names can be secrets). Text always comes from the page as it is now, filtered for the asker, never from the search index. Cited as (wiki: Page title). A player with nothing available gets no tools and no mention of a wiki.
 4. **Answer** with citations `[S12]`, `[S12 01:23:45]`, `[S12 01:23:45-01:24:10]`. Evidence (the cited transcript lines) is attached server-side, only for sessions the asker attended.
 5. Follow-ups include the last 3 Q&As and the last answer's sources.
 6. **Formatting:** answers are markdown, optionally with HTML (tables, stat blocks with `class="stat-block"`). The page renders them with `marked` and sanitises with DOMPurify to an allowlist (no links, images, scripts or style attributes), then turns citations into buttons, including inside tables. Stat blocks and records on the Map and Creatures tabs go through the same cleaner (`web/public/markdown.js`). Both libraries are served from `node_modules` at `/vendor/marked.js` and `/vendor/purify.js`.
@@ -453,6 +462,7 @@ Who-knows-what is decided by the archivist and enforced by the server:
 | Creatures | Only the DM (the Creatures tab and its API, and Ask when the DM asks: §5.3 step 3b). A token placed from one is an ordinary token: players see it like any other. |
 | Inventory (equipped gear) | Like the sheet (it is part of it), except that the DM sees what each player has **equipped**: its name, how many, proficient or not, attuned, magic bonus, armour, the to-hit and damage it gives, what magic items do to the sheet, and the AC worked out (and whether the player typed their own AC); also the total weight carried against the campaign's limit (and whether they're encumbered) and how many items they're attuned to. Not what's only carried, nor the rest of the sheet (`GET /gear/equipped`, DM only). A player's item lookup never uses the DM's own items (they may hold secrets); it goes to the PHB tables, the books and the AI. |
 | Items, merchants | The lists, notes and sales: only the DM. The sales say who bought what, so the DM learns some of what players carry (owner, 2026-10-10: fine). A player sees a merchant's shop (name, description, picture, what it sells, prices, how many are left, and each item's description and picture) only while one of its tokens is on a map they can see (shown, not hidden, in their sight); otherwise 404. Buying changes only the buyer's own sheet. A player gets the picture of one of the DM's items only through a shop they can see or while it's in their own inventory (bought there); nothing else of the item. |
+| Wiki | Only the DM reads or writes it (tab and API). Each page, section and `:::for` / `:::dm` block has who it's available to; the narrowest wins. Ask gives a player only the parts available to them (filtered live from the page, never from the index); other names are DM-only. |
 | Archivist | Sees everything, including all notes; decides `known_by`. |
 
 The archivist's rules: openly happened → attendees (everyone if all attended); only in a player's note → that player; whispered/secret perception → that player; absent players don't know unless told later (then widen); mixed records get split; when in doubt, restrict.
@@ -510,6 +520,7 @@ The archivist's rules: openly happened → attendees (everyone if all attended);
 - [x] Wild Shape: druids keep the beast forms they can take on their sheet; in a form, its hit points, scores, saves, skills and attacks roll from the sheet and its token (§6.4).
 - [x] Class features: one box with every class's uses, pools and worked-out numbers (both editions), the player's own rows, Wild Shape as a row; rests give them back; the DM sees what's left (§6.4).
 - [x] Subclass features: the Player's Handbook's subclasses (2014 and 2024) as a section of the same box, with Combat Wild Shape's slot healing and Portent (§6.4).
+- [x] The DM's wiki, stage 1: pages the DM writes, with who each part is available to, links, history, View as; Ask reads it (all for the DM, only what's available for a player) (§6.11).
 - [x] Review sheet: is a character sheet valid for its level, classes and race? Rules checks, then the AI against the books and, for what they don't cover, the web (§6.4).
 
 ### 6.2 Next
@@ -721,6 +732,18 @@ Owner (2026-10-09): "the campaign setting should have an option to ignore weight
 
 - The DM's **Settings** button in the top bar (players don't have it) opens Campaign settings. It holds two settings. **Rules edition** (owner, 2026-10-09: "We WILL want to have a setting to toggle this, per campaign"; built 2026-10-10): 2014 rules, 2024 rules, or not chosen (the default: `REST_RULES`, else the edition of the group's Player's Handbook in the books folder, else 2014; the dialog says which that is now). Rests (§6.8), Ask's rules answers (§5.3) and lookups in the books (spells, stat blocks, Find online, items: that edition's books first, then any) follow it, through `editions.js`. The character sheet's own rules stay 2014 whatever it says (later, §6.3). **Weight limits**: carrying capacity (default), variant encumbrance, or ignore weight limits (§6.4).
 - Kept per campaign (`campaign_settings`, `shared/src/settings.js` `normalizeSettings`), archived as `settings.json` with history, restored on start-up. `PATCH /campaigns/:cid/settings` (DM); everyone gets them with their campaigns (`GET /me`, `GET /campaigns/:cid`) and hears changes live (`settings` on the campaign's live stream), so sheets work themselves out again at once. The server uses them wherever it works a sheet out (token speed on maps, the DM's equipped view, the archivist's sheet text).
+
+### 6.11 The DM's wiki
+
+Owner (2026-10-18): "I want to start work on the DM being able to build a wiki. Our big selling point here is the AI, but of course manual changes and additions should also be possible." Research and options: `/mnt/project-files/research/wiki/campaign-wiki-research.md` (project files). Decisions (2026-10-20): the DM only at first, sharing "at a granular level"; separate from the archivist's records, but Ask reads it; a section the DM edits stays the DM's; the AI's page changes wait for approval; players can't write; the AI suggests reveals and the DM clicks; "If the part of the wiki is available to the players, then their ask should use it."
+
+- **Pages** (`src/wiki.js`, `routes/wiki.js`, `web/public/wiki.js`): title, other names (aliases), kind (free text with suggestions: npc, place, faction…), inside another page (no loops; a deleted page's children move up), tags, and sections (heading, text, `by`: dm or ai, available to). Names are unique across titles and other names; renaming keeps the old title as another name so links keep working. `[[Page]]` and `[[Page|text]]` link pages; a link to a missing page offers to make it; a page lists what mentions it.
+- **Available to** (`shared/src/wiki.js`): a page and each section are "only the DM" (a new page's default), "everyone" (a section's "same as the page") or chosen players. Inside a section's text, `:::for Thorin, Mira` … `:::` and `:::dm` … `:::` mark a block (by character or account name; an unknown name reaches no one and the page warns). What a player gets is the narrowest of page, section and block.
+- **Saving** needs the version the editor opened (else 409: someone else saved first). Every save is archived whole (`wiki/<id>/changes.jsonl`), so History lists every version and any can be brought back as a new one. Delete takes the page off (the archive keeps it).
+- **View as** a player shows exactly what Ask can tell them from the page.
+- **Search index:** each part is indexed as a `wiki` doc with `visible_to` its audience; other names as a DM-only doc. Re-indexed on start-up restore and on a rebuild.
+- **API** (DM only): `GET/POST /campaigns/:cid/wiki`, `GET/PUT/DELETE /campaigns/:cid/wiki/:pid` (`?as=<user id>` for View as), `GET …/history`, `GET …/history/:version`, `POST …/restore`.
+- **Next stages:** the AI drafting and updating pages from sessions and records into a review queue the DM approves (sections it wrote stay `ai` until the DM edits them); the AI suggesting what to reveal to whom after a session; players reading their available parts directly.
 
 ## 7. Security & cost controls
 

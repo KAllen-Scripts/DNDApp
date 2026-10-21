@@ -18,6 +18,7 @@ import { loadTable, stopTable, handoutsOpened } from './table.js';
 import { setRestsCampaign, initRests } from './rests.js';
 import { setSettingsCampaign, initSettings } from './campaign-settings.js';
 import { loadArchivist, initArchivistActions } from './archivist.js';
+import { loadWiki } from './wiki.js';
 import { loadCreatures, initCreatureActions } from './creatures.js';
 import { loadItems, initItemActions } from './items.js';
 import { loadMerchants, initMerchantActions, merchantsOpened } from './merchants.js';
@@ -184,6 +185,8 @@ async function enterCampaign(campaign) {
   const isDm = campaign.role === 'dm';
   // The Archivist tab is the DM's; a player who was on it goes back to the first tab.
   $('[data-tab=archivist]').hidden = !isDm;
+  // So is the Wiki: players reach it only through Ask.
+  $('[data-tab=wiki]').hidden = !isDm;
   // The DM gets Creatures (enemies and NPCs to put on maps) instead of a character sheet.
   $('[data-tab=sheet]').hidden = isDm;
   $('[data-tab=inventory]').hidden = isDm;
@@ -238,6 +241,7 @@ async function enterCampaign(campaign) {
     loadMaps({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
     loadTable({ campaignId: campaign.id, guarded }),
     isDm ? loadArchivist({ campaignId: campaign.id, guarded }) : null,
+    isDm ? loadWiki({ campaignId: campaign.id, guarded }) : null,
     isDm ? loadCreatures({ campaignId: campaign.id, guarded }) : null,
     isDm ? loadItems({ campaignId: campaign.id, guarded }) : null,
     loadMerchants({ campaignId: campaign.id, guarded, isDm }),
@@ -295,7 +299,7 @@ function showTab(name) {
   if (beside === 'handouts') handoutsOpened();
   if (name === 'merchants' || beside === 'merchants') merchantsOpened();
   // The sheet and maps need more room than Ask and Notes.
-  $('#app-view').classList.toggle('wide', name === 'sheet' || name === 'inventory' || name === 'map' || name === 'creatures' || name === 'items' || name === 'merchants');
+  $('#app-view').classList.toggle('wide', name === 'sheet' || name === 'inventory' || name === 'map' || name === 'creatures' || name === 'items' || name === 'merchants' || name === 'wiki');
 }
 
 /** The first tab along the bar that's shown (tabs can be reordered and hidden under Look). */

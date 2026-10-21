@@ -269,6 +269,56 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
 .archivist-panel h2 { margin: 0.5rem 0 0; font-size: 1.05rem; }
 .archivist-panel h3 { margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--muted); }
 
+/* ---------- the DM's wiki ---------- */
+.wiki-panel { display: grid; grid-template-columns: minmax(12rem, 16rem) 1fr; gap: 1rem; align-items: start; overflow-y: auto; }
+.wiki-side { display: grid; gap: 0.5rem; position: sticky; top: 0; max-height: 100%; overflow-y: auto; }
+.wiki-bar { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.wiki-bar input[type="search"] { flex: 1 1 8rem; min-width: 0; }
+.wiki-list h3 { margin: 0.6rem 0 0.2rem 0.4rem; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.wiki-list ul { list-style: none; margin: 0; padding: 0; }
+.wiki-row { display: block; width: 100%; text-align: left; border: none; background: none; padding: 0.3rem 0.5rem; border-radius: 6px; overflow-wrap: anywhere; }
+.wiki-row:hover { background: var(--surface-2); }
+.wiki-row.current { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
+.wiki-main { min-width: 0; }
+.wiki-back { display: none; }
+.wiki-empty h2, .wiki-page h2, .wiki-editor h2 { margin: 0; font-size: 1.25rem; overflow-wrap: anywhere; }
+.wiki-page { display: grid; gap: 0.6rem; }
+.wiki-page-head { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; justify-content: space-between; }
+.wiki-page-head h3 { margin: 0; }
+.wiki-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.wiki-actions select { width: auto; max-width: 100%; }
+.wiki-meta, .wiki-available, .wiki-warn, .wiki-as, .wiki-mentioned { margin: 0; }
+.wiki-available { color: var(--accent); }
+.wiki-warn { color: var(--error); }
+.wiki-section { display: grid; gap: 0.3rem; border-top: 1px solid var(--border); padding-top: 0.6rem; }
+.wiki-section h3 { margin: 0; font-size: 1.05rem; }
+.wiki-text { overflow-wrap: anywhere; }
+.wiki-text > :first-child { margin-top: 0; }
+.wiki-text > :last-child { margin-bottom: 0; }
+.wiki-block { border-left: 3px solid var(--accent); background: var(--surface-2); padding: 0.4rem 0.7rem; border-radius: 0 6px 6px 0; }
+.wiki-block-label { margin-bottom: 0.2rem; }
+button.wiki-link { font-size: inherit; }
+button.wiki-link.missing { color: var(--muted); text-decoration-style: dashed; }
+.wiki-editor { display: grid; gap: 0.6rem; }
+.wiki-edit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr)); gap: 0.5rem 1rem; }
+.wiki-edit-grid label { display: grid; gap: 0.2rem; font-size: 0.85rem; }
+.wiki-edit-sections { display: grid; gap: 0.6rem; }
+.wiki-edit-section { padding: 0.6rem 0.7rem; display: grid; gap: 0.4rem; }
+.wiki-edit-row { display: flex; gap: 0.3rem; align-items: center; }
+.wiki-edit-row input { flex: 1; min-width: 0; }
+.wiki-edit-section textarea { width: 100%; font-family: inherit; }
+.wiki-picker select { width: auto; max-width: 100%; }
+.wiki-picker { display: inline-flex; flex-wrap: wrap; gap: 0.3rem 0.8rem; align-items: center; }
+.wiki-who { display: inline-flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; }
+.wiki-who[hidden] { display: none; }
+.wiki-edit-foot { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.wiki-edit-foot .spacer { flex: 1; }
+.wiki-history { margin: 0; padding-left: 1.4rem; display: grid; gap: 0.2rem; }
+@media (max-width: 720px) {
+  .wiki-panel { grid-template-columns: 1fr; }
+  .wiki-side { position: static; max-height: none; }
+}
+
 /* ---------- the DM's creatures ---------- */
 .creatures-panel { overflow-y: auto; }
 .creatures-bar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
