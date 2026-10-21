@@ -909,7 +909,8 @@ export function canSee(map, polygons, x, y) {
  * The fog as one player sees it, as a mask: a list of shapes drawn in
  * order, each { fill, x, y, w, h } or { fill, points } (with `clip`: only
  * where it's also inside that polygon). fill is 'cover'
- * (fog), 'dim' (seen before: shown darkened) or 'clear'. Without sight
+ * (fog), 'dim' (seen before: shown darkened), 'glimpse' (over heights: someone
+ * standing there would be seen, the floor wouldn't; lightly shaded) or 'clear'. Without sight
  * polygons or explored areas it's the DM's rectangles alone. Empty when
  * the fog is off.
  */
@@ -941,7 +942,7 @@ export function playerFogMask(view, userId) {
 }
 
 /** Mask colours: white is fully fogged, black is clear, grey is the dim view of places seen before. */
-export const FOG_MASK_FILL = { cover: '#ffffff', dim: '#999999', clear: '#000000' };
+export const FOG_MASK_FILL = { cover: '#ffffff', dim: '#999999', glimpse: '#5a5a5a', clear: '#000000' };
 
 /** The nearest wall within `maxDist` of a point (for clicking on one), or null. */
 export function nearestWall(map, p, maxDist) {
@@ -1697,12 +1698,15 @@ function straighten(ring) {
 
 /**
  * Where a player's tokens can't see over the raised areas, as fog shapes
- * on top of their sight: everywhere none of their tokens sees a Medium
- * creature standing (heightClear), outlined smoothly like a wall's shadow
- * (owner, 2026-10-20: the squares looked blocky beside the walls'
- * shadows). One shape of rings per fill: places they explored before stay
- * dim, and the DM's reveals stay clear. Outside what they can see the
- * fog covers it anyway, so only the box around their sight is looked at.
+ * on top of their sight, in two shades (owner, 2026-10-20: a tall creature
+ * up on a roof is seen before a short one): 'glimpse' (a light shade) where
+ * none of their tokens sees the floor but one would see a Medium creature
+ * standing there, fog where they'd see neither. Outlined smoothly like a
+ * wall's shadow (owner, 2026-10-20: the squares looked blocky beside the
+ * walls' shadows), one shape of rings per fill. Fog over places they
+ * explored before stays dim, and the DM's reveals stay clear. Outside what
+ * they can see the fog covers it anyway, so only the box around their
+ * sight is looked at.
  */
 export function heightShadows(map, userId, polygons, explored = []) {
   if (!map.raised?.length || !polygons.length) return [];
@@ -1719,12 +1723,13 @@ export function heightShadows(map, userId, polygons, explored = []) {
   }
   bx0 = Math.max(0, bx0); by0 = Math.max(0, by0); bx1 = Math.min(width, bx1); by1 = Math.min(height, by1);
   if (bx1 <= bx0 || by1 <= by0) return [];
-  // Points a quarter square apart (fewer on a huge map), with a row of outside all round.
-  let step = cell / 4;
-  while (((bx1 - bx0) / step + 3) * ((by1 - by0) / step + 3) > 40000) step *= 1.5;
-  // A multiple of 4 squares across (see below), plus the outside rows.
-  const nx = Math.ceil((bx1 - bx0) / step / 4) * 4 + 3;
-  const ny = Math.ceil((by1 - by0) / step / 4) * 4 + 3;
+  // Points an eighth of a square apart (fewer on a huge map), with a row of outside all round.
+  const FINE = 8;
+  let step = cell / FINE;
+  while (((bx1 - bx0) / step + 3) * ((by1 - by0) / step + 3) > 160000) step *= 1.5;
+  // A whole number of squares across (see below), plus the outside rows.
+  const nx = Math.ceil((bx1 - bx0) / step / FINE) * FINE + 3;
+  const ny = Math.ceil((by1 - by0) / step / FINE) * FINE + 3;
   const fill = map.fog?.map === 'grey' ? 'dim' : 'cover';
   // groundAt and bridgeAt, quicker: each area's box first.
   const areas = map.raised.map((a) => ({ a, box: boundsOf(a.points) }));
@@ -1737,37 +1742,32 @@ export function heightShadows(map, userId, polygons, explored = []) {
       else if (!deck || a.height > deck.height) deck = a;
     }
     ground ??= 0;
-    // Someone standing there (on a bridge or under it: either can be seen).
-    const targets = [{ x, y, z: ground + FOG_TARGET_HEIGHT }, ...(deck ? [{ x, y, z: Math.max(deck.height, ground) + FOG_TARGET_HEIGHT }] : [])];
-    if (eyes.some((eye) => targets.some((target) => heightClear(edges, eye, target)))) return null;
+    // The floor there, then someone standing on it (on a bridge or under it: either can be seen).
+    const floors = [ground, ...(deck ? [Math.max(deck.height, ground)] : [])];
+    const seenAt = (up) => eyes.some((eye) => floors.some((z) => heightClear(edges, eye, { x, y, z: z + up })));
+    if (seenAt(0)) return null;
+    if (seenAt(FOG_TARGET_HEIGHT)) return 'glimpse';
     return explored.some((e) => x >= e.x && x <= e.x + e.w && y >= e.y && y <= e.y + e.h) ? 'dim' : fill;
   };
-  // Each point looked at once (halving a side looks at new ones).
-  const seen = new Map();
-  const hiddenAt = (x, y) => {
-    const key = `${x},${y}`;
-    if (!seen.has(key)) seen.set(key, hidden(x, y));
-    return seen.get(key);
-  };
-  // Every 4th point first (a square apart); the rest only in squares
+  // Every FINE-th point first (a square apart); the rest only in squares
   // whose corners differ (elsewhere they're all the same as the corners).
-  const FILLS = [null, 'cover', 'dim'];
-  const code = (x, y) => FILLS.indexOf(hiddenAt(x, y));
+  const FILLS = [null, 'cover', 'dim', 'glimpse'];
+  const code = (x, y) => FILLS.indexOf(hidden(x, y));
   const codes = new Uint8Array(nx * ny);
-  const coarse = (i) => (i - 1) % 4 === 0;
-  for (let j = 1; j < ny - 1; j += 4) for (let i = 1; i < nx - 1; i += 4) codes[j * nx + i] = code(bx0 + (i - 1) * step, by0 + (j - 1) * step);
+  const coarse = (i) => (i - 1) % FINE === 0;
+  for (let j = 1; j < ny - 1; j += FINE) for (let i = 1; i < nx - 1; i += FINE) codes[j * nx + i] = code(bx0 + (i - 1) * step, by0 + (j - 1) * step);
   const same = (ci, cj) => {
-    const i = 1 + ci * 4, j = 1 + cj * 4;
-    if (ci < 0 || cj < 0 || i + 4 > nx - 2 || j + 4 > ny - 2) return -1;
+    const i = 1 + ci * FINE, j = 1 + cj * FINE;
+    if (ci < 0 || cj < 0 || i + FINE > nx - 2 || j + FINE > ny - 2) return -1;
     const c = codes[j * nx + i];
-    return codes[j * nx + i + 4] === c && codes[(j + 4) * nx + i] === c && codes[(j + 4) * nx + i + 4] === c ? c : -1;
+    return codes[j * nx + i + FINE] === c && codes[(j + FINE) * nx + i] === c && codes[(j + FINE) * nx + i + FINE] === c ? c : -1;
   };
   for (let j = 1; j < ny - 1; j++) {
     for (let i = 1; i < nx - 1; i++) {
       if (coarse(i) && coarse(j)) continue;
       // The squares this point is in (two or four when it's on their sides).
-      const cis = coarse(i) ? [(i - 1) / 4 - 1, (i - 1) / 4] : [Math.floor((i - 1) / 4)];
-      const cjs = coarse(j) ? [(j - 1) / 4 - 1, (j - 1) / 4] : [Math.floor((j - 1) / 4)];
+      const cis = coarse(i) ? [(i - 1) / FINE - 1, (i - 1) / FINE] : [Math.floor((i - 1) / FINE)];
+      const cjs = coarse(j) ? [(j - 1) / FINE - 1, (j - 1) / FINE] : [Math.floor((j - 1) / FINE)];
       let c = null;
       for (const ci of cis) for (const cj of cjs) {
         const v = same(ci, cj);
@@ -1779,9 +1779,9 @@ export function heightShadows(map, userId, polygons, explored = []) {
     }
   }
   const out = [];
-  for (const f of fill === 'dim' ? ['dim'] : ['cover', 'dim']) {
+  for (const f of fill === 'dim' ? ['dim', 'glimpse'] : ['cover', 'dim', 'glimpse']) {
     const want = FILLS.indexOf(f);
-    const rings = outline(codes.map((c) => (c === want ? 1 : 0)), (x, y) => hiddenAt(x, y) === f, bx0 - step, by0 - step, step, nx, ny);
+    const rings = outline(codes.map((c) => (c === want ? 1 : 0)), (x, y) => hidden(x, y) === f, bx0 - step, by0 - step, step, nx, ny);
     if (rings.length) out.push({ fill: f, rings });
   }
   return out;
