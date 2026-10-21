@@ -633,7 +633,7 @@ function renderWalls() {
   svg.setAttribute('viewBox', `0 0 ${map.image.width} ${map.image.height}`);
   svg.classList.toggle('players', !state.canEdit);
   svg.replaceChildren();
-  // The DM can hide the walls for a clean map while playing; they show while Fog & walls is open.
+  // The DM can hide the walls for a clean map while playing; they always show in Edit map.
   const hidden = state.canEdit && storage.get(SHOW_WALLS_KEY) === '0' && $('#map-wall-tools').hidden;
   svg.classList.toggle('walls-hidden', hidden);
   const list = state.canEdit ? map.walls.filter((w) => !hidden || w.door) : (map.doors ?? []);
@@ -1337,17 +1337,17 @@ function doorControls(door) {
   ].filter(Boolean);
 }
 
-/** The raised area the DM picked, while raised areas are on show (Fog & walls open). */
+/** The raised area the DM picked, while raised areas are on show (in Edit map). */
 function selectedArea() {
   if (!state.canEdit || !state.selectedRaised || !raisedShown()) return null;
   return (state.current?.raised ?? []).find((a) => a.id === state.selectedRaised) ?? null;
 }
 
-/** Raised areas are drawn (and can be picked) while Fog & walls is open or a wall tool is on. */
+/** Raised areas are drawn (and can be picked) in Edit map or while a wall tool is on. */
 const raisedShown = () => !!state.wallMode || !$('#map-wall-tools').hidden;
 
 /**
- * The DM picks a raised area (a click on it with Fog & walls open) to check
+ * The DM picks a raised area (a click on it in Edit map) to check
  * the AI's guess or change its height, the area it covers or whether it's a
  * bridge (owner, 2026-10-18: "no obvious way to confirm or change
  * recommended heights. Neither their elevation level or what area they cover").
@@ -1849,7 +1849,7 @@ function viewUp(e) {
     const at = toImage(e.clientX, e.clientY);
     const tpl = e.type === 'pointerup' ? (state.current.templates ?? []).findLast((t) => inTemplate(state.current, t, at.x, at.y)) : null;
     if (tpl) return selectTemplate(tpl.id);
-    // With Fog & walls open, a click on a raised area picks it (the DM).
+    // In Edit map, a click on a raised area picks it (the DM).
     const area = e.type === 'pointerup' && state.canEdit && raisedShown() && !state.wallMode && !state.fogMode ? (state.current.raised ?? []).findLast((a) => pointInPolygon(at.x, at.y, a.points)) : null;
     if (area) return selectRaised(area.id);
     select(null);

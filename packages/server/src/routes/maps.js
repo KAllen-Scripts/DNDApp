@@ -195,7 +195,7 @@ export function registerMaps(app, r) {
     if (isUvtt(buf)) {
       uvtt = readUvtt(buf);
       buf = uvttImage(uvtt);
-      if (!buf) throw new BadRequestError("That file has no picture of the map in it. Import the map's picture, then add the file's walls in Fog & walls.");
+      if (!buf) throw new BadRequestError("That file has no picture of the map in it. Import the map's picture, then add the file's walls in Edit map (Walls from file).");
     }
     // A PDF: draw the page asked for (default the first) and use that as the image.
     let pdf = null;

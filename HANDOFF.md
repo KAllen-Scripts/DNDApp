@@ -1371,6 +1371,14 @@ The owner, with screenshots: "that bar at the bottom. It's in the way of seeing 
 - **AI walls effort:** PR #33's server half brought in (`EFFORTS`, `{ effort }` on `walls/draft`, `wall_draft.effort`, `walls_effort` for the DM); the page asks in a dialog every time (`wallsDraftDialog`), remembers the pick (`dndapp.map.wallsEffort`), shows it in the messages; Try again reuses it. PR #33 closed as superseded.
 - **Tests:** existing map tests moved to the new buttons; four new regression tests (docs/regressions.md); the old "asks who it is once" regression test now checks the one list under Kind. Looked at in headless Chromium at desk and phone sizes (no console errors). `npm test` passes.
 
+### 2026-10-21: Check after the close-together merges (PRs #73 to #78)
+
+The owner: "a lot happened at the same time there. Make sure nothing conflicted… if something was working on fog and walls, did that conflict with the UI cleanup? check it all".
+- **Checked:** every merge since PR #72 (#73 to #78 and the two branch merges), the three times main was merged into the Map page overhaul (#78) and how each conflict was resolved (the shared imports in `routes/maps.js`, the Place button in `index.html`, HANDOFF and SPEC): nothing lost. Smooth and two-shade height fog (#74, #76), places (#75) and the wiki (#77) are all intact on main; every element id the page's scripts look up exists; `PIPELINE_VERSION` went up once per change (22).
+- **Real browser** (scratch script with `setup()` from the server tests and the container's Chromium): the DM's Edit map shows every wall tool (Place, Stairs, Ladder, Raised area included), draws a wall, shows and picks raised areas with their heights, opens AI walls (effort) and Map settings; Done brings the play tools back; Fog & sight's Show walls hides walls outside Edit map only; the token bar shows below the map; New map and Add token (with search) open; a player sees their fog with the height shadows and the right tokens; on a phone the ⋯ sheet has Edit map, Fog & sight, New map and Add token, and the edit bar and token bar float above the bottom tools. No console errors.
+- **Fixed:** wording that still sent the DM to the old "Fog & walls" panel: the server's error for a .dd2vtt with no picture (regression test), code comments, SPEC (§6.6 heights, stairs, links, places, export, full screen, walls) and README. Older change-log entries keep the old name, as history.
+- 590 tests pass.
+
 ## Gotchas and lessons
 
 - **Drawing players' fog in the page failed on the owner's phone (2026-10-14 morning), cause never found; put back that afternoon for a retest with cleared browser data (the owner suspects cached data). Update this entry with the retest's result.** Read this before changing how players' fog is drawn.

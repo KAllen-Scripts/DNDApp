@@ -4,7 +4,7 @@
  * smaller map; the breadcrumb from the top of the world down to the map on screen; the groups of places
  * a viewer can hide (Cities, Roads); and who the DM shows a map or a place to (everyone, or chosen players).
  *
- * The DM adds places with Place in Fog & walls (a click for a pin, a drag for an area). The server
+ * The DM adds places with Place in Edit map (a click for a pin, a drag for an area). The server
  * decides what each player gets; the page only draws it.
  */
 import { api, h, storage } from './api.js';
