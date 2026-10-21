@@ -40,7 +40,7 @@ const edges = (walls, type) => walls.filter((w) => w.type === type).map(({ x1, y
 async function startBlank(page) {
   page.click('[data-tab=map]');
   await page.settle();
-  page.click('#map-create');
+  page.click('#map-new'); page.click('#map-create');
   await page.settle();
   page.click('#creator-blank');
   const { creatorDesign } = await page.module('map-creator.js');

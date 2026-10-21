@@ -36,7 +36,7 @@ test('world: the DM puts a town on the region map that opens its map, for one pl
     await openMapTab(page);
     page.type('#map-pick', vale.id);
     await page.settle();
-    page.click('#map-fog-open');
+    page.click('#map-edit');
     page.click('[data-wall-mode=place]');
     page.pointer('#map-view', 'pointerdown', { clientX: 200, clientY: 150 });
     page.pointer('#map-view', 'pointerup', { clientX: 200, clientY: 150 });

@@ -428,6 +428,8 @@ function renderFogTools() {
   if (map) renderTerrain();
   $('#map-fog-open').setAttribute('aria-pressed', String(!tools.hidden));
   $('#map-view').classList.toggle('fog-drawing', !!map && ((!!state.fogMode && !!map.fog?.enabled) || !!state.wallMode));
+  for (const b of document.querySelectorAll('[data-wall-mode]')) b.setAttribute('aria-pressed', String(state.wallMode === b.dataset.wallMode));
+  for (const b of tools.querySelectorAll('[data-fog-mode]')) b.setAttribute('aria-pressed', String(state.fogMode === b.dataset.fogMode));
   if ((tools.hidden && walls.hidden) || !map) return;
   $('#map-fog-on').checked = !!map.fog?.enabled;
   $('#map-fog-map').value = map.fog.map;
@@ -517,20 +519,9 @@ export function wallsDraftDialog(map) {
       h('span', {}, h('strong', {}, EFFORT_NAMES[e]), e === fallback ? ' (the usual)' : '', h('span', { class: 'muted small' }, ` ${EFFORT_NOTES[e]}`)));
   });
   const replacing = map.walls.some((w) => w.source === 'ai');
-  const start = async () => {
+  const start = () => {
     storage.set(WALLS_EFFORT_KEY, chosen === fallback ? null : chosen);
-    const button = $('#map-walls-draft');
-    // Show it's started straight away; the server's answer brings the live progress.
-    button.disabled = true;
-    button.textContent = 'AI walls: starting…';
-    try {
-      const saved = await state.guarded(() => api('POST', `${base()}/${map.id}/walls/draft`, { effort: chosen }));
-      if (saved) onMap(saved);
-    } catch (err) {
-      report(err);
-    } finally {
-      if (state.current) renderFogTools();
-    }
+    startWallsDraft(map, chosen);
   };
   dialog.replaceChildren(
     h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => {
@@ -550,6 +541,22 @@ export function wallsDraftDialog(map) {
   );
   dialog.onclose = null;
   dialog.showModal();
+}
+
+/** Ask the server for an AI walls draft at this effort. */
+async function startWallsDraft(map, effort) {
+  const button = $('#map-walls-draft');
+  // Show it's started straight away; the server's answer brings the live progress.
+  button.disabled = true;
+  button.textContent = 'AI walls: starting…';
+  try {
+    const saved = await state.guarded(() => api('POST', `${base()}/${map.id}/walls/draft`, EFFORTS.includes(effort) ? { effort } : {}));
+    if (saved) onMap(saved);
+  } catch (err) {
+    report(err);
+  } finally {
+    if (state.current) renderFogTools();
+  }
 }
 
 /** What the AI is doing now, in words, from the map's wall_draft. */
@@ -593,7 +600,7 @@ function renderWallDraft() {
   if (d.status === 'pending') {
     el.replaceChildren(
       h('span', { class: 'spinner', 'aria-hidden': 'true' }),
-      h('span', {}, h('strong', {}, 'AI walls: '), `${wallDraftStep(d)}…`, EFFORT_NAMES[d.effort] ? ` (${EFFORT_NAMES[d.effort].toLowerCase()} effort)` : '', d.started_at ? ` ${sinceText(d.started_at)} so far.` : '', h('span', { class: 'muted' }, ' It takes a few minutes; carry on meanwhile. The walls appear when it\'s done.')),
+      h('span', {}, h('strong', {}, 'AI walls: '), `${wallDraftStep(d)}…`, d.started_at ? ` ${sinceText(d.started_at)} so far.` : '', EFFORT_NAMES[d.effort] ? ` ${EFFORT_NAMES[d.effort]} effort.` : '', h('span', { class: 'muted' }, ' It takes a few minutes; carry on meanwhile. The walls appear when it\'s done.')),
     );
     const tick = setTimeout(() => state.current?.id === map.id && renderWallDraft(), 1000);
     tick.unref?.();
@@ -609,7 +616,8 @@ function renderWallDraft() {
     el.replaceChildren(
       h('span', { class: 'cross', 'aria-hidden': 'true' }, '!'),
       h('span', {}, d.error || "The AI couldn't draft walls."),
-      h('button', { class: 'ghost', onclick: () => $('#map-walls-draft').click() }, 'Try again'),
+      // Again at the same effort; AI walls… picks another.
+      h('button', { class: 'ghost', onclick: () => startWallsDraft(map, d.effort) }, 'Try again'),
       close(),
     );
   }

@@ -294,12 +294,12 @@ export async function tokenDialog(token = null) {
       onclick: () => choose(value),
     }, label);
     const none = token ? 'Nobody in particular' : 'Someone new';
-    list.replaceChildren(
+    list.replaceChildren(...[
       option('', none),
       ...groups.map(([label, items]) => h('div', { class: 'who-group', role: 'group', 'aria-label': label },
         h('div', { class: 'who-group-name muted small' }, label), ...items.map((e) => option(e.value, e.label)))),
       search.value.trim() && !groups.length ? h('p', { class: 'muted small who-none' }, `No ${kind.value === 'pc' ? 'player' : TOKEN_KIND_NAMES[kind.value]} called "${search.value.trim()}". Add them as someone new.`) : null,
-    );
+    ].filter(Boolean));
   };
   const lookUp = h('input', { type: 'checkbox', checked: true });
   const lookUpField = h('label', { class: 'map-check' }, lookUp, ' Fill in its stat block, hit points and size with the AI');

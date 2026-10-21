@@ -137,45 +137,42 @@ test('full screen: only the main tools show; More shows the rest until the map i
   });
 });
 
-test('edit mode: the DM shows or hides the tools for setting up the map, remembered in this browser; players never see it', async () => {
+test('regression: edit mode: Edit map swaps the play tools for the walls, heights and settings; Done goes back; players never see it', async () => {
   const asDm = { ...withMap, before: async (t) => ({ ...(await withMap.before(t)), dana: await addDm(t) }), page: (t, { dana }) => ({ as: dana }) };
-  const editTools = ['#map-add-token', '#map-fog-open', '#map-settings', '#map-import'];
-  let saved;
   await withPage(asDm, async (page) => {
     page.click('[data-tab=map]');
     await page.settle();
     const panel = page.$('#tab-map');
     const edit = page.$('#map-edit');
     assert.ok(edit.classList.contains('dm-only') && edit.classList.contains('map-main'), 'DM only, and out in full screen');
-    for (const sel of editTools) assert.ok(page.$(sel).classList.contains('map-edit-tool'), sel);
-    assert.ok(page.$('#map-show-walls').closest('label').classList.contains('map-edit-tool'));
-    assert.ok(!page.$('#map-variant').classList.contains('map-edit-tool'), 'switching pictures is for play too');
-    assert.equal(edit.getAttribute('aria-pressed'), 'true', 'on to start with');
-    assert.ok(!panel.classList.contains('edit-off'));
+    assert.equal(edit.getAttribute('aria-pressed'), 'false', 'playing to start with');
+    assert.ok(!panel.classList.contains('editing'));
+    assert.ok(!page.visible('#map-wall-tools'));
+    // The play view has no wall tools: Fog & sight is only what players see.
+    assert.equal(page.$$('#map-fog-tools [data-wall-mode]').length, 0);
+    for (const sel of ['#map-sight-on', '#map-dark-on', '#map-memory-on', '#map-show-walls']) assert.ok(page.$(sel).closest('#map-fog-tools'), sel);
+    for (const sel of ['#map-settings', '[data-wall-mode=wall]', '[data-wall-mode=raised]', '#map-walls-draft']) assert.ok(page.$(sel).closest('#map-wall-tools'), sel);
 
-    // Fog & walls open, then edit mode off: the panel closes with the tools.
     page.click('#map-fog-open');
-    page.click('[data-wall-mode=wall]');
-    assert.ok(page.visible('#map-wall-tools'));
     page.click('#map-edit');
-    assert.ok(panel.classList.contains('edit-off'));
-    assert.equal(edit.getAttribute('aria-pressed'), 'false');
-    assert.ok(!page.visible('#map-fog-tools') && !page.visible('#map-wall-tools'));
+    assert.ok(panel.classList.contains('editing'));
+    assert.equal(edit.getAttribute('aria-pressed'), 'true');
+    assert.ok(page.visible('#map-wall-tools') && !page.visible('#map-fog-tools'), 'the edit bar, not the fog panel');
+    page.click('[data-wall-mode=wall]');
+    assert.ok(page.$('#map-view').classList.contains('fog-drawing'));
+    page.click('#map-edit-done');
+    assert.ok(!panel.classList.contains('editing'));
+    assert.ok(!page.visible('#map-wall-tools'));
     assert.ok(!page.$('#map-view').classList.contains('fog-drawing'), 'no wall tool left on');
-    saved = page.window.localStorage.getItem('dndapp.map.editing');
-    assert.equal(saved, '0');
   });
-  // Off again next time; then back on.
-  await withPage({ ...asDm, page: (t, { dana }) => ({ as: dana, storage: { 'dndapp.map.editing': saved } }) }, async (page) => {
+  // Not remembered: the next visit starts playing.
+  await withPage(asDm, async (page) => {
     page.click('[data-tab=map]');
     await page.settle();
-    assert.ok(page.$('#tab-map').classList.contains('edit-off'));
-    page.click('#map-edit');
-    assert.ok(!page.$('#tab-map').classList.contains('edit-off'));
-    assert.equal(page.window.localStorage.getItem('dndapp.map.editing'), null);
+    assert.ok(!page.$('#tab-map').classList.contains('editing'));
   });
   const css = await readFile(new URL('../public/style.css', import.meta.url), 'utf8');
-  assert.match(css, /\.map-panel\.edit-off \.map-edit-tool \{ display: none; \}/);
+  assert.match(css, /\.map-panel\.editing #map-main-bar > :is\([^)]*#map-ping[^)]*\.map-play-tool\) \{ display: none; \}/);
 });
 
 test('full screen: the floating tools are see-through, solid when pointed at, focused or switched on', async () => {
