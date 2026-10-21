@@ -258,6 +258,8 @@ export function normalizePlaces(list, image = {}) {
       record: normalizeRecordLink(p.record),
       revealed: p.revealed === true,
       revealed_to: normalizeUserIds(p.revealed_to),
+      // Its own random encounters for travellers inside its area (a forest, the marshes); the DM's alone.
+      ...(points.length >= 3 && normalizeEncounters(p.encounters) ? { encounters: normalizeEncounters(p.encounters) } : {}),
     });
   }
   return out;
@@ -455,6 +457,28 @@ export const PACES = {
 export const TRAVEL_HOURS_PER_DAY = 8;
 const IN_MILES = { ft: 1 / 5280, m: 1 / 1609.344, mi: 1, km: 1 / 1.609344 };
 
+/**
+ * How they travel (owner, 2026-10-21: "Also wagons"). Over land a day's miles come from the pace whatever
+ * carries them (the books: a mount covers what a walker does in a day, but can gallop for an hour); a wagon
+ * finds everything off the roads as hard going as difficult terrain (our call: the books say nothing, and
+ * the DM can always say how long). Boats go by their own speed (the Player's Handbook's vehicles table, in
+ * miles an hour) and follow rivers; a crew working in shifts keeps a ship going day and night.
+ */
+export const TRAVEL_BY = {
+  foot: { name: 'On foot', hours: 8, effect: '' },
+  riding: { name: 'Riding', hours: 8, effect: 'A day in the saddle covers what a day on foot does; a mount can gallop for an hour at twice the fast pace.' },
+  wagon: { name: 'Wagon or cart', hours: 8, offRoad: 2, effect: 'Off the roads, all ground is as slow as difficult terrain for a wagon (half speed).' },
+  rowboat: { name: 'Rowboat', water: true, mph: 1.5, hours: 8, effect: '1½ miles an hour, rowed.' },
+  keelboat: { name: 'Keelboat', water: true, mph: 1, hours: 24, effect: '1 mile an hour; a crew in shifts keeps it going day and night.' },
+  sailing: { name: 'Sailing ship', water: true, mph: 2, hours: 24, effect: '2 miles an hour; a crew in shifts keeps it going day and night.' },
+  longship: { name: 'Longship', water: true, mph: 3, hours: 24, effect: '3 miles an hour; a crew in shifts keeps it going day and night.' },
+  galley: { name: 'Galley', water: true, mph: 4, hours: 24, effect: '4 miles an hour; a crew in shifts keeps it going day and night.' },
+  warship: { name: 'Warship', water: true, mph: 2.5, hours: 24, effect: '2½ miles an hour; a crew in shifts keeps it going day and night.' },
+};
+
+/** Past this many hours on the road a day, a march is forced: a Constitution save each hour or exhaustion (Player's Handbook). */
+export const MARCH_HOURS = 8;
+
 /** Miles between two points on a map with a scale, or null without one. */
 export function milesBetween(map, a, b) {
   const per = unitsPerPx(map);
@@ -462,18 +486,39 @@ export function milesBetween(map, a, b) {
   return Math.hypot(b.x - a.x, b.y - a.y) * per * (IN_MILES[map.scale.unit] ?? 1);
 }
 
-/**
- * How long a journey of `miles` takes at a pace, in minutes of the clock: 8 hours on the road a day, so
- * 30 miles at a normal pace is a day's travel (8 hours), a night, and 2 hours more the next day.
- */
-export function travelMinutes(miles, pace = 'normal') {
-  const hours = (miles / (PACES[pace] ?? PACES.normal).perDay) * TRAVEL_HOURS_PER_DAY;
-  if (!(hours > 0)) return 0;
-  const nights = Math.ceil(hours / TRAVEL_HOURS_PER_DAY) - 1;
-  return Math.round(nights * 1440 + (hours - nights * TRAVEL_HOURS_PER_DAY) * 60);
+/** How many miles one image pixel is on this map, or null without a scale. */
+export function milesPerPx(map) {
+  const per = unitsPerPx(map);
+  return per == null ? null : per * (IN_MILES[map.scale.unit] ?? 1);
 }
 
-/** A token's journey: { from: {x, y}, to: {x, y}, leaves, arrives (clock minutes), pace, miles (null: no scale), to_name }, or null. */
+/**
+ * How long a journey of `miles` takes, in minutes of the clock: at the pace's miles a day (or a boat's
+ * miles an hour), `hours` on the road a day (8 unless they push on, or a ship's crew works in shifts), so
+ * 30 miles at a normal pace is a day's travel (8 hours), a night, and 2 hours more the next day.
+ */
+export function travelMinutes(miles, pace = 'normal', { by = 'foot', hours } = {}) {
+  const mode = TRAVEL_BY[by] ?? TRAVEL_BY.foot;
+  const mph = mode.water ? mode.mph : (PACES[pace] ?? PACES.normal).perDay / TRAVEL_HOURS_PER_DAY;
+  const perDay = Math.min(24, Math.max(1, hours ?? mode.hours));
+  const onRoad = miles / mph;
+  if (!(onRoad > 0)) return 0;
+  const nights = Math.ceil(onRoad / perDay - 1e-9) - 1;
+  return Math.round(nights * 1440 + (onRoad - nights * perDay) * 60);
+}
+
+/** Is this clock minute of a journey on the road (not stopped for the night)? */
+export const onTheRoadAt = (j, t) => (t - j.leaves) % 1440 < j.hours * 60;
+
+export const MAX_ROUTE_POINTS = 400;
+
+/**
+ * A token's journey: { from: {x, y}, to: {x, y}, leaves, arrives (clock minutes), pace, by (how they travel),
+ * hours (on the road a day), miles (null: no scale), road_miles (along roads or rivers), rough_miles
+ * (through difficult terrain), route ([[x, y, f], ...] the way they go, f how far along it in time, or null
+ * for a straight line), lead (the token leading the group), noted (the clock up to which encounters and
+ * forced marches have been looked at), to_name }, or null.
+ */
 export function normalizeJourney(j, image = {}) {
   if (!j || typeof j !== 'object') return null;
   const { width = 1, height = 1 } = image;
@@ -481,22 +526,111 @@ export function normalizeJourney(j, image = {}) {
   const leaves = Number.isInteger(j.leaves) && j.leaves >= 0 ? j.leaves : null;
   const arrives = Number.isInteger(j.arrives) && j.arrives >= (leaves ?? 0) ? j.arrives : null;
   if (leaves == null || arrives == null) return null;
+  const by = j.by in TRAVEL_BY ? j.by : 'foot';
+  const route = Array.isArray(j.route) && j.route.length >= 2
+    ? j.route.slice(0, MAX_ROUTE_POINTS).map((p) => [round(num(p?.[0], { min: 0, max: width, fallback: 0 }), 1), round(num(p?.[1], { min: 0, max: height, fallback: 0 }), 1), round(num(p?.[2], { min: 0, max: 1, fallback: 0 }), 4)])
+    : null;
+  const miles = (v) => (v == null ? null : round(num(v, { min: 0, max: 1e7, fallback: 0 }), 1));
   return {
     from: point(j.from),
     to: point(j.to),
     leaves,
     arrives,
     pace: j.pace in PACES ? j.pace : 'normal',
-    miles: j.miles == null ? null : round(num(j.miles, { min: 0, max: 1e7, fallback: 0 }), 1),
+    by,
+    hours: Math.round(num(j.hours, { min: 1, max: 24, fallback: TRAVEL_BY[by].hours })),
+    miles: miles(j.miles),
+    road_miles: miles(j.road_miles) ?? 0,
+    rough_miles: miles(j.rough_miles) ?? 0,
+    route,
+    lead: isTokenId(j.lead) ? String(j.lead) : null,
+    noted: Number.isInteger(j.noted) && j.noted >= leaves ? j.noted : leaves,
     to_name: str(j.to_name, 80),
   };
 }
 
-/** Where a journey has got to at clock `now`: { x, y, done } (along a straight line, evenly over the whole time). */
+/**
+ * Where a journey has got to at clock `now`: { x, y, done }. They move only while on the road (`hours` a day
+ * from when they left; camped the rest), evenly over the road time, along the route (each stretch taking
+ * its share of the time: slower through difficult terrain) or a straight line.
+ */
 export function journeyAt(j, now) {
-  const span = j.arrives - j.leaves;
-  const f = span > 0 ? Math.min(1, Math.max(0, (now - j.leaves) / span)) : 1;
-  return { x: round(j.from.x + (j.to.x - j.from.x) * f, 1), y: round(j.from.y + (j.to.y - j.from.y) * f, 1), done: now >= j.arrives };
+  const perDay = (j.hours ?? TRAVEL_HOURS_PER_DAY) * 60;
+  const roadTime = (t) => {
+    const d = Math.max(0, t - j.leaves);
+    return Math.floor(d / 1440) * perDay + Math.min(d % 1440, perDay);
+  };
+  const total = roadTime(j.arrives);
+  const f = total > 0 ? Math.min(1, roadTime(now) / total) : 1;
+  const done = now >= j.arrives;
+  if (!j.route) return { x: round(j.from.x + (j.to.x - j.from.x) * f, 1), y: round(j.from.y + (j.to.y - j.from.y) * f, 1), done };
+  const r = j.route;
+  let i = 0;
+  while (i < r.length - 2 && r[i + 1][2] < f) i++;
+  const [ax, ay, af] = r[i];
+  const [bx, by, bf] = r[i + 1];
+  const g = bf > af ? Math.min(1, Math.max(0, (f - af) / (bf - af))) : 1;
+  return { x: round(ax + (bx - ax) * g, 1), y: round(ay + (by - ay) * g, 1), done };
+}
+
+// ---------- roads, rivers and random encounters (the world's travel) ----------
+
+export const ROAD_KINDS = ['road', 'river'];
+export const MAX_ROADS = 2000;
+
+/**
+ * Roads and rivers on a world or region map: [{ id, kind, x1, y1, x2, y2 }], stretches drawn end to end
+ * like walls. Travellers over land keep to the roads where that's quicker (no difficult terrain on a
+ * road); boats keep to the rivers.
+ */
+export function normalizeRoads(list, image = {}) {
+  const { width = 1, height = 1 } = image;
+  const seen = new Set();
+  const out = [];
+  for (const r of Array.isArray(list) ? list : []) {
+    if (!r || !isTokenId(r.id) || seen.has(r.id) || out.length >= MAX_ROADS) continue;
+    const x1 = num(r.x1, { min: 0, max: width, fallback: null });
+    const y1 = num(r.y1, { min: 0, max: height, fallback: null });
+    const x2 = num(r.x2, { min: 0, max: width, fallback: null });
+    const y2 = num(r.y2, { min: 0, max: height, fallback: null });
+    if (x1 == null || y1 == null || x2 == null || y2 == null || Math.hypot(x2 - x1, y2 - y1) < 1) continue;
+    seen.add(r.id);
+    out.push({ id: String(r.id), kind: pick(r.kind, ROAD_KINDS, 'road'), x1: round(x1, 1), y1: round(y1, 1), x2: round(x2, 1), y2: round(y2, 1) });
+  }
+  return out;
+}
+
+/** Where a road or river being drawn should end: on the nearest end of one within `maxDist`, else where the pointer is. */
+export function snapRoadPoint(map, p, maxDist) {
+  let best = null;
+  let bestD = maxDist;
+  for (const r of map.roads ?? []) {
+    for (const [x, y] of [[r.x1, r.y1], [r.x2, r.y2]]) {
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d <= bestD) {
+        best = { x, y };
+        bestD = d;
+      }
+    }
+  }
+  return best ?? { x: round(p.x, 1), y: round(p.y, 1) };
+}
+
+export const MAX_ENCOUNTER_LINES = 50;
+
+/**
+ * Random encounters while travelling (owner, 2026-10-21: "maybe even random encounters as we travel"), on a
+ * world or region map or an area place on one: every `every` hours a group is out there (on the road or
+ * camped), a `chance` in 100 of one, picked from `table` (one per line; dice in a line are rolled: "1d6+2
+ * wolves"). The DM's alone. Null: none.
+ */
+export function normalizeEncounters(e) {
+  if (!e || typeof e !== 'object') return null;
+  return {
+    chance: Math.round(num(e.chance, { min: 0, max: 100, fallback: 15 })),
+    every: Math.round(num(e.every, { min: 1, max: 24, fallback: 4 })),
+    table: (Array.isArray(e.table) ? e.table : []).map((l) => str(l, 200)).filter(Boolean).slice(0, MAX_ENCOUNTER_LINES),
+  };
 }
 
 export const MAX_PINS = 100;
@@ -655,6 +789,9 @@ export function normalizeMap(input = {}) {
     links: normalizeLinks(m.links, image),
     // Places on it (a town on a region map, a tavern in a town), some opening a smaller map (the world's atlas).
     places: normalizePlaces(m.places, image),
+    // Roads and rivers, and random encounters on the way (world and region maps; the DM's alone).
+    roads: normalizeRoads(m.roads, image),
+    encounters: normalizeEncounters(m.encounters),
     // A map made in the app's creator: what the DM made it from (the DM's alone; players never get it).
     design: m.design && typeof m.design === 'object' ? normalizeDesign(m.design) : null,
     // One level of a building (maps sharing a group are its floors): n = 0 the ground floor, 1 the floor above, -1 the cellar.

@@ -5,7 +5,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { MAX_CLOCK } from '@dndapp/shared/settings.js';
-import { MAP_KINDS, PACES, journeyAt, milesBetween, travelMinutes, CLIMB_KINDS, CONDITIONS, EFFORTS, FOG_MAP, FOG_OPS, MAX_COMPANIONS, MAX_FOG_SHAPES, MAX_CLIMBS, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_PLACES, MAX_PLACE_POINTS, placeProblem, shownTo, arrivalSpots, characterMap, followGroup, followLoop, nearPlace, parentOf, trailFollowers, MAX_RAISED, MAX_TERRAIN, MAX_HEIGHT_FT, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, PLAYER_KINDS, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, ownToken, pathCost, snapToken, stepTurn, tokenPx, walkLevels, wallBetween } from '@dndapp/shared/map.js';
+import { MAP_KINDS, PACES, TRAVEL_BY, MAX_ENCOUNTER_LINES, MAX_ROADS, ROAD_KINDS, journeyAt, CLIMB_KINDS, CONDITIONS, EFFORTS, FOG_MAP, FOG_OPS, MAX_COMPANIONS, MAX_FOG_SHAPES, MAX_CLIMBS, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_PLACES, MAX_PLACE_POINTS, placeProblem, shownTo, arrivalSpots, characterMap, followGroup, followLoop, nearPlace, parentOf, trailFollowers, MAX_RAISED, MAX_TERRAIN, MAX_HEIGHT_FT, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, PLAYER_KINDS, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, ownToken, pathCost, snapToken, stepTurn, tokenPx, walkLevels, wallBetween } from '@dndapp/shared/map.js';
 import sharp from 'sharp';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
@@ -14,12 +14,16 @@ import { MAX_PICTURE_BYTES, createImageCache, inspectMapImage, inspectPicture } 
 import { RateLimitError } from '../qa/agent.js';
 import { isMapId, newTokenId } from '../maps/store.js';
 import { isPdf, renderPdfPage } from '../maps/pdf.js';
+import { onTheWay, planJourney } from '../maps/travel.js';
 import { isUvtt, readUvtt, toUvtt, uvttImage, uvttContents } from '../maps/uvtt.js';
 
 export function registerMaps(app, r) {
-  const { access, archive, auth, config, kb, mapReader, maps, openLiveStream, publicMessage, statBlocks, store, upload } = r;
+  const { access, archive, auth, config, kb, mapReader, maps, merchants, openLiveStream, publicMessage, statBlocks, store, upload } = r;
 
   // ---------- maps (the DM imports them; players see shown maps and move their own token) ----------
+
+  /** Random encounters on the way (shared/map.js normalizeEncounters): a chance in 100 every so many hours, from a table. */
+  const ENCOUNTERS = z.object({ chance: z.number().int().min(0).max(100), every: z.number().int().min(1).max(24), table: z.array(z.string().trim().max(200)).max(MAX_ENCOUNTER_LINES) });
 
   /**
    * Take a token to a spot on another map (`at`, or null for the middle), with everyone following it
@@ -57,9 +61,17 @@ export function registerMaps(app, r) {
 
   /**
    * Move the campaign's clock to `now` (minutes since day 1 began): everyone on a journey moves along
-   * it, and whoever's journey is over arrives. Returns the settings.
+   * it, and whoever's journey is over arrives; merchants that restock by days do. Going forward, what
+   * happens on the way (random encounters, forced marches, as the campaign's travel settings have them)
+   * is noted for the DM, and with `stop` the first encounter stops the clock there. Returns { clock, notes }.
    */
-  function moveClock(cid, now, by) {
+  function moveClock(cid, now, by, { stop = true } = {}) {
+    const before = store.getSettings(cid);
+    let notes = [];
+    if (now > before.clock) {
+      const way = onTheWay(maps.list(cid), before.clock, now, { random: r.random, stop, encounters: before.travel.encounters, marches: before.travel.marches });
+      ({ until: now, notes } = way);
+    }
     const settings = store.setSettings(cid, { clock: now });
     for (const map of maps.list(cid)) {
       if (!map.tokens.some((t) => t.journey)) continue;
@@ -69,10 +81,12 @@ export function registerMaps(app, r) {
           const at = journeyAt(t.journey, now);
           Object.assign(t, snapToken(m, t, at.x, at.y));
           if (at.done) t.journey = null;
+          else t.journey.noted = Math.max(t.journey.noted, Math.min(now, t.journey.arrives));
         }
       }, { by, reason: 'clock' });
     }
-    return settings;
+    for (const m of merchants?.clockMoved(cid, now) ?? []) notes.push({ kind: 'restock', at: now, text: `${m.name} restocked.` });
+    return { clock: settings.clock, notes };
   }
 
   /** The clock (anyone in the campaign): { clock } (minutes since day 1 began). */
@@ -80,11 +94,12 @@ export function registerMaps(app, r) {
 
   /**
    * Move the in-game clock (DM): { add?: minutes (negative goes back), set?: minutes, next_arrival?: true (to
-   * when the next journey ends) }. Journeys move along with it. Returns { clock }.
+   * when the next journey ends), stop?: false (don't stop for random encounters) }. Journeys move along with
+   * it. Returns { clock, notes: what happened on the way, for the DM to run }.
    */
   app.post('/campaigns/:cid/clock', async (request) => {
     const a = access(request, { dm: true });
-    const body = z.object({ add: z.number().int().min(-1440 * 3650).max(1440 * 3650).optional(), set: z.number().int().min(0).max(MAX_CLOCK).optional(), next_arrival: z.literal(true).optional() }).strict().parse(request.body ?? {});
+    const body = z.object({ add: z.number().int().min(-1440 * 3650).max(1440 * 3650).optional(), set: z.number().int().min(0).max(MAX_CLOCK).optional(), next_arrival: z.literal(true).optional(), stop: z.boolean().default(true) }).strict().parse(request.body ?? {});
     let now = store.getSettings(a.cid).clock;
     if (body.set !== undefined) now = body.set;
     if (body.add !== undefined) now += body.add;
@@ -93,15 +108,24 @@ export function registerMaps(app, r) {
       if (!Number.isFinite(next)) throw new BadRequestError('Nobody is on the road.');
       now = next;
     }
-    return { clock: moveClock(a.cid, Math.max(0, Math.min(MAX_CLOCK, now)), request.user.id).clock };
+    return moveClock(a.cid, Math.max(0, Math.min(MAX_CLOCK, now)), request.user.id, { stop: body.stop });
   });
 
+  /** The way a journey would go and how long it takes, as the campaign's travel settings have it. */
+  function plan(map, from, to, { by, pace, hours }, travel) {
+    const flat = { ...map, roads: travel.roads ? map.roads : [], terrain: travel.terrain ? map.terrain : [] };
+    return planJourney(flat, from, to, { by: travel.vehicles ? by : 'foot', pace, hours });
+  }
+
   /**
-   * Send a token on a journey across this map (the world's travel): { x, y, pace?, place?, minutes? }.
-   * It and whoever follows it set off now by the clock and arrive at (x, y) (or the place) when the
-   * clock gets there; the time comes from the miles (the map's scale) at the pace, 8 hours on the road a
-   * day; `minutes` (DM only) says how long instead. { stop: true } ends it where they are now; { arrive:
-   * true } (DM) puts them there now. Players: their own token, to a place revealed to them if a place.
+   * Send a token on a journey across this map (the world's travel): { x, y, place?, pace?, by? (how they
+   * travel: TRAVEL_BY), hours? (on the road a day; past 8 is a forced march), minutes? }. It and whoever
+   * follows it set off now by the clock and arrive at (x, y) (or the place) when the clock gets there; the
+   * way and the time come from the map's scale, roads, rivers and difficult terrain; `minutes` (DM only)
+   * says how long instead. With the campaign's travel time off they get there at once ('skip': the clock
+   * jumps on by the journey). { preview: true } only says what it would be: { plan }. { stop: true } ends
+   * it where they are now; { arrive: true } (DM) puts them there now. Players: their own token, to a place
+   * revealed to them if a place.
    */
   app.post('/campaigns/:cid/maps/:mid/tokens/:tid/journey', async (request) => {
     const a = access(request);
@@ -115,15 +139,21 @@ export function registerMaps(app, r) {
       y: z.number().optional(),
       place: z.string().optional(),
       pace: z.enum(Object.keys(PACES)).default('normal'),
+      by: z.enum(Object.keys(TRAVEL_BY)).default('foot'),
+      hours: z.number().int().min(1).max(24).optional(),
       minutes: z.number().int().min(0).max(1440 * 3650).optional(),
+      preview: z.literal(true).optional(),
       stop: z.literal(true).optional(),
       arrive: z.literal(true).optional(),
     }).strict().parse(request.body ?? {});
     if (body.minutes !== undefined && !dm) throw new AuthError('Only the DM can say how long it takes', 403);
     if (body.arrive && !dm) throw new AuthError('Only the DM can make them arrive now', 403);
     const group = followGroup(map.tokens, token.id);
-    const now = store.getSettings(a.cid).clock;
+    const settings = store.getSettings(a.cid);
+    const travel = settings.travel;
+    let now = settings.clock;
     let journey = null;
+    let skip = 0;
     if (body.stop || body.arrive) {
       if (!token.journey) throw new BadRequestError(`${token.name} isn't on the road.`);
     } else {
@@ -139,10 +169,14 @@ export function registerMaps(app, r) {
         to = { x: Math.min(map.image.width, Math.max(0, body.x)), y: Math.min(map.image.height, Math.max(0, body.y)) };
       }
       const from = { x: token.x, y: token.y };
-      const miles = milesBetween(map, from, to);
-      if (miles == null && body.minutes === undefined) throw new BadRequestError(dm ? "This map has no scale: set one in Map settings, or say how long it takes." : "This map has no scale yet, so there's no telling how long that takes. Ask your DM.");
-      const minutes = body.minutes ?? travelMinutes(miles, body.pace);
-      journey = { from, to, leaves: now, arrives: now + minutes, pace: body.pace, miles: miles == null ? null : Math.round(miles * 10) / 10, to_name: toName };
+      const by = travel.vehicles ? body.by : 'foot';
+      const hours = body.hours ?? TRAVEL_BY[by].hours;
+      const way = plan(map, from, to, { by, pace: body.pace, hours }, travel);
+      const minutes = body.minutes ?? way.minutes;
+      if (body.preview) return { plan: { ...way, minutes, by, hours, time: travel.time, arrives: minutes == null ? null : now + (travel.time === 'clock' ? minutes : travel.time === 'skip' ? minutes : 0) } };
+      if (minutes == null) throw new BadRequestError(dm ? "This map has no scale: set one in Map settings, or say how long it takes." : "This map has no scale yet, so there's no telling how long that takes. Ask your DM.");
+      if (travel.time !== 'clock') skip = travel.time === 'skip' ? minutes : 0;
+      journey = { from, to, leaves: now, arrives: now + (travel.time === 'clock' ? minutes : 0), pace: body.pace, by, hours, miles: way.miles, road_miles: way.road_miles, rough_miles: way.rough_miles, route: way.route, lead: token.id, noted: now, to_name: toName };
     }
     const ids = new Set(group.map((t) => t.id));
     const saved = maps.change(a.cid, map.id, (m) => {
@@ -153,7 +187,8 @@ export function registerMaps(app, r) {
           const dx = t.x - token.x;
           const dy = t.y - token.y;
           const off = (p) => ({ x: Math.min(m.image.width, Math.max(0, p.x + dx)), y: Math.min(m.image.height, Math.max(0, p.y + dy)) });
-          t.journey = { ...journey, from: { x: t.x, y: t.y }, to: off(journey.to) };
+          const route = journey.route && journey.route.map(([x, y, f]) => { const p = off({ x, y }); return [p.x, p.y, f]; });
+          t.journey = { ...journey, from: { x: t.x, y: t.y }, to: off(journey.to), route };
           if (journey.arrives <= now) {
             Object.assign(t, snapToken(m, t, t.journey.to.x, t.journey.to.y));
             t.journey = null;
@@ -165,8 +200,11 @@ export function registerMaps(app, r) {
         }
       }
     }, { by: request.user.id, reason: journey ? 'journey' : body.arrive ? 'arrived' : 'journey stopped' });
-    const out = maps.view(saved, a);
-    return { map: out, token: out.tokens.find((t) => t.id === token.id) ?? null, clock: now };
+    // Skipping past the journey: the clock jumps on by it (and everyone else on the road moves along).
+    let notes = [];
+    if (skip) ({ clock: now, notes } = moveClock(a.cid, Math.min(MAX_CLOCK, now + skip), request.user.id, { stop: false }));
+    const out = maps.view(skip ? maps.get(a.cid, map.id) : saved, a);
+    return { map: out, token: out.tokens.find((t) => t.id === token.id) ?? null, clock: now, ...(dm && { notes }) };
   });
 
   /** A player character's token on any map but these goes (one map per character). */
@@ -525,7 +563,7 @@ export function registerMaps(app, r) {
     const a = access(request, { dm: true });
     const { map } = viewableMap(request);
     const body = z
-      .object({ name: z.string().trim().min(1).max(100).optional(), kind: z.enum(MAP_KINDS).optional(), shown: z.boolean().optional(), shown_to: WHO.optional(), grid: GRID.optional(), scale: SCALE.optional(), variant: z.string().nullable().optional() })
+      .object({ encounters: ENCOUNTERS.nullable().optional(), name: z.string().trim().min(1).max(100).optional(), kind: z.enum(MAP_KINDS).optional(), shown: z.boolean().optional(), shown_to: WHO.optional(), grid: GRID.optional(), scale: SCALE.optional(), variant: z.string().nullable().optional() })
       .parse(request.body ?? {});
     if (body.variant != null && !map.variants.some((v) => v.id === body.variant)) throw new NotFoundError('No such variant');
     checkPlayers(a.cid, body.shown_to);
@@ -540,6 +578,7 @@ export function registerMaps(app, r) {
       if (body.grid !== undefined) m.grid = body.grid;
       if (body.scale !== undefined) m.scale = body.scale;
       if (body.variant !== undefined) m.variant = body.variant;
+      if (body.encounters !== undefined) m.encounters = body.encounters;
     }, { by: request.user.id });
     return maps.view(saved, a);
   });
@@ -638,6 +677,7 @@ export function registerMaps(app, r) {
       record: z.object({ id: z.string() }).nullable(),
       revealed: z.boolean(),
       revealed_to: WHO,
+      encounters: ENCOUNTERS.nullable(),
     });
     const body = z
       .object({
@@ -671,6 +711,7 @@ export function registerMaps(app, r) {
         const p = m.places.find((x) => x.id === body.set.id);
         Object.assign(p, clean(body.set));
         if (p.points === undefined) delete p.points;
+        if (p.encounters === null) delete p.encounters;
       }
       if (body.move) {
         const p = m.places.find((x) => x.id === body.move.id);
@@ -932,6 +973,26 @@ export function registerMaps(app, r) {
       if (body.move) Object.assign(m.lights.find((l) => l.id === body.move.id), { x: body.move.x, y: body.move.y });
       if (body.add) m.lights.push({ ...body.add, id: newTokenId(), source: 'dm' });
     }, { by: request.user.id, reason: 'lights' });
+    return maps.view(saved, a);
+  });
+
+  /**
+   * Roads and rivers (DM): { add?: { kind: road | river, x1, y1, x2, y2 }, remove?: id, clear?: all }. Drawn a
+   * stretch at a time, end to end; journeys keep to them where that's quicker.
+   */
+  app.patch('/campaigns/:cid/maps/:mid/roads', async (request) => {
+    const a = access(request, { dm: true });
+    const { map } = viewableMap(request);
+    const body = z
+      .object({ add: z.object({ kind: z.enum(ROAD_KINDS), x1: z.number(), y1: z.number(), x2: z.number(), y2: z.number() }).optional(), remove: z.string().max(20).optional(), clear: z.literal('all').optional() })
+      .parse(request.body ?? {});
+    if (body.add && map.roads.length >= MAX_ROADS) throw new BadRequestError(`A map can have at most ${MAX_ROADS} stretches of road and river.`);
+    if (body.remove && !map.roads.some((x) => x.id === body.remove)) throw new NotFoundError('No such road');
+    const saved = maps.change(a.cid, map.id, (m) => {
+      if (body.clear) m.roads = [];
+      if (body.remove) m.roads = m.roads.filter((x) => x.id !== body.remove);
+      if (body.add) m.roads.push({ ...body.add, id: newTokenId() });
+    }, { by: request.user.id, reason: 'roads' });
     return maps.view(saved, a);
   });
 

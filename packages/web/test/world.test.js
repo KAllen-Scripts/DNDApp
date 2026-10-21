@@ -277,7 +277,7 @@ test('world: the DM sends Thorin to Daggerford at a normal pace; the clock bring
     page.click('#map-selection .map-travel');
     const form = dialog(page).querySelector('form');
     page.type(fieldIn(form, 'Where to'), t.maps.get(t.campaign.id, vale.id).places[0].id);
-    assert.equal(page.text(form.querySelector('.map-travel-says')), '60 miles: 2 days 4 hours at a normal pace, arriving Day 3, 12:00.');
+    await page.waitFor(() => page.text(form.querySelector('.map-travel-says')) === '60 miles: 2 days 4 hours at a normal pace, arriving Day 3, 12:00.', { what: 'what the trip takes' });
     page.submit(form);
     await page.settle();
     const j = t.maps.get(t.campaign.id, vale.id).tokens[0].journey;
@@ -336,6 +336,7 @@ test("regression: the DM's travel dialog can be sent when the trip's hours aren'
     page.click('#map-selection .map-travel');
     const form = dialog(page).querySelector('form');
     page.type(fieldIn(form, 'Where to'), t.maps.get(t.campaign.id, vale.id).places[0].id);
+    await page.waitFor(() => fieldIn(form, 'Hours').value !== '', { what: 'the hours filled in' });
     assert.ok(form.checkValidity(), `the form can be sent (hours: ${fieldIn(form, 'Hours').value})`);
   });
 });

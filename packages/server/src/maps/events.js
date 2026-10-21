@@ -9,7 +9,7 @@
  * A map shown only to some players says so on each line ("[seen only by user 3,
  * user 5]"), so what happened there is known only to them.
  */
-import { PACES, normalizeMap } from '@dndapp/shared/map.js';
+import { MARCH_HOURS, PACES, TRAVEL_BY, normalizeMap } from '@dndapp/shared/map.js';
 import { clockText, durationText } from '@dndapp/shared/settings.js';
 import { sessionDateFor } from '../store.js';
 import { applyJson } from '../sheets/store.js';
@@ -81,8 +81,10 @@ function travelEvents(before, after, reason, was) {
     if (t.hidden || !b) continue;
     const j = t.journey;
     if (j && (!b.journey || b.journey.leaves !== j.leaves || b.journey.arrives !== j.arrives)) {
-      const far = j.miles != null ? `${j.miles} miles, ` : '';
-      add(`go:${j.to_name}:${j.leaves}:${j.arrives}`, t, (w) => `${w} set off ${j.to_name ? `for ${j.to_name}` : 'on a journey'} ${on} (${far}${durationText(j.arrives - j.leaves)} at a ${PACES[j.pace].name.toLowerCase()} pace; left ${clockText(j.leaves)}, due ${clockText(j.arrives)}).`);
+      const mode = TRAVEL_BY[j.by] ?? TRAVEL_BY.foot;
+      const far = j.miles != null ? `${j.miles} miles${j.road_miles ? `, ${j.road_miles} of them ${mode.water ? 'by river' : 'by road'}` : ''}, ` : '';
+      const how = [j.by !== 'foot' ? `by ${mode.name.toLowerCase()}` : '', j.hours > MARCH_HOURS && !mode.water ? `pushing on ${j.hours} hours a day` : '', mode.water ? '' : `at a ${PACES[j.pace].name.toLowerCase()} pace`].filter(Boolean).join(', ');
+      add(`go:${j.to_name}:${j.leaves}:${j.arrives}`, t, (w) => `${w} set off ${j.to_name ? `for ${j.to_name}` : 'on a journey'} ${on} (${far}${durationText(j.arrives - j.leaves)}${how ? ` ${how}` : ''}; left ${clockText(j.leaves)}, due ${clockText(j.arrives)}).`);
     } else if (!j && b.journey) {
       const bj = b.journey;
       const where = bj.to_name ? ` at ${bj.to_name}` : '';

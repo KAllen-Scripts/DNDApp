@@ -1,6 +1,6 @@
 /**
  * Merchants: shops the DM sets up with items, prices and stock, puts on maps as tokens, and restocks
- * (by hand, or every so many long rests). Players open a merchant's token on the map and buy on their own:
+ * (by hand, every so many long rests, or every so many in-game days). Players open a merchant's token on the map and buy on their own:
  * the coins come off their sheet and the item goes into its inventory (gear.js), ready to equip.
  */
 import fs from 'node:fs';
@@ -26,6 +26,7 @@ export function registerMerchants(app, r) {
     color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a colour like #c9a227'),
     open: z.boolean(),
     restock_every: z.number().int().min(1).max(1000).nullable(),
+    restock_days: z.number().int().min(1).max(3650).nullable(),
   });
   const LINE = z.object({
     price: z.number().int().min(0).max(1e9),
@@ -93,7 +94,12 @@ export function registerMerchants(app, r) {
     if (!l) throw new NotFoundError('That item is no longer sold here.');
     return l;
   };
-  const toFields = ({ restock_every, ...rest }, m) => ({ ...rest, ...(restock_every !== undefined && { restock: { ...(m?.restock ?? {}), every: restock_every } }) });
+  // Restocking by days counts from now by the in-game clock when the DM first sets it.
+  const toFields = ({ restock_every, restock_days, ...rest }, m, clock) => {
+    const restock = { ...(m?.restock ?? {}), ...(restock_every !== undefined && { every: restock_every }), ...(restock_days !== undefined && { days: restock_days }) };
+    if (restock_days != null && (m?.restock.days == null || m.restock.clock == null)) restock.clock = clock;
+    return { ...rest, ...((restock_every !== undefined || restock_days !== undefined) && { restock }) };
+  };
 
   /** The DM's merchants, by name, with their stock and where they are on maps. */
   app.get('/campaigns/:cid/merchants', async (request) => {
@@ -106,7 +112,7 @@ export function registerMerchants(app, r) {
     const a = access(request, { dm: true });
     const { picture, ...rest } = z.object({ picture: PICTURE_UPLOAD.optional() }).passthrough().parse(request.body ?? {});
     const fields = MERCHANT.partial().required({ name: true }).parse(rest);
-    let m = merchants.create(a.cid, toFields(fields), { by: request.user.id });
+    let m = merchants.create(a.cid, toFields(fields, null, r.store.getSettings(a.cid).clock), { by: request.user.id });
     if (picture) m = merchants.update(a.cid, m.id, { art: await merchants.savePicture(a.cid, m.id, Buffer.from(picture.data, 'base64')) });
     reply.status(201);
     return dmView(a.cid, m);
@@ -117,7 +123,7 @@ export function registerMerchants(app, r) {
     const a = access(request, { dm: true });
     const m = merchants.get(a.cid, request.params.mid);
     const body = MERCHANT.partial().parse(request.body ?? {});
-    return dmView(a.cid, merchants.update(a.cid, m.id, toFields(body, m)));
+    return dmView(a.cid, merchants.update(a.cid, m.id, toFields(body, m, r.store.getSettings(a.cid).clock)));
   });
 
   /** Close a merchant down (DM). Its tokens stay on the maps as plain NPCs; the archive keeps it. */
@@ -191,7 +197,7 @@ export function registerMerchants(app, r) {
   /** Restock now (DM): every line back up to its restock level, and the count of long rests starts again. */
   app.post('/campaigns/:cid/merchants/:mid/restock', async (request) => {
     const a = access(request, { dm: true });
-    return dmView(a.cid, change(a.cid, request.params.mid, (m) => restocked(m, new Date().toISOString())));
+    return dmView(a.cid, change(a.cid, request.params.mid, (m) => restocked(m, new Date().toISOString(), r.store.getSettings(a.cid).clock)));
   });
 
   /**

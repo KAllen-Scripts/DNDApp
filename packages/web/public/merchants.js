@@ -84,9 +84,13 @@ function face(m) {
 }
 
 function restockText(m) {
-  if (!m.restock.every) return 'Restocks only when you say.';
   const n = m.restock.every;
-  return `Restocks every ${n === 1 ? 'long rest' : `${n} long rests`}${n > 1 ? ` (${m.restock.rests} so far)` : ''}.`;
+  const d = m.restock.days;
+  const parts = [
+    n ? `every ${n === 1 ? 'long rest' : `${n} long rests`}${n > 1 ? ` (${m.restock.rests} so far)` : ''}` : '',
+    d ? `every ${d === 1 ? 'day' : `${d} days`} of the in-game clock` : '',
+  ].filter(Boolean);
+  return parts.length ? `Restocks ${parts.join(', and ')}.` : 'Restocks only when you say.';
 }
 
 const leftText = (l) => (l.qty == null ? 'no limit' : `${l.qty} left${l.full != null && l.full !== l.qty ? `, restocks to ${l.full}` : ''}`);
@@ -179,17 +183,19 @@ function editDialog(m = null) {
   const open = h('input', { type: 'checkbox', checked: m ? m.open : true });
   const every = countInput(m?.restock.every, 'never');
   every.min = '1';
+  const days = countInput(m?.restock.days, 'never');
+  days.min = '1';
   const color = h('input', { type: 'color', value: m?.color ?? '#c9a227' });
   const picture = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', 'aria-label': 'Picture' });
   formDialog(m ? `Change ${m.name}` : 'New merchant', [
     field('Name', name),
     field('Description', description),
     field('Notes', notes),
-    h('div', { class: 'map-row' }, field('Restock every … long rests', every), field('Token colour', color)),
+    h('div', { class: 'map-row' }, field('Restock every … long rests', every), field('Or every … in-game days', days), field('Token colour', color)),
     h('label', { class: 'map-check' }, open, ' Open: players can buy'),
     field(m?.picture ? 'New picture (optional)' : 'Picture (optional)', picture),
   ], async () => {
-    const body = { name: name.value.trim(), description: description.value, notes: notes.value, open: open.checked, restock_every: count(every) || null, color: color.value };
+    const body = { name: name.value.trim(), description: description.value, notes: notes.value, open: open.checked, restock_every: count(every) || null, restock_days: count(days) || null, color: color.value };
     let saved = await state.guarded(() => (m ? api('PATCH', `${base()}/${m.id}`, body) : api('POST', base(), body)));
     const f = picture.files[0];
     if (saved && f) {

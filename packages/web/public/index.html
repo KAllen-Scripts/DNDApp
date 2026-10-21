@@ -368,6 +368,8 @@
         <button class="ghost" data-wall-mode="lock" aria-pressed="false" title="Click a door to lock or unlock it (players can't open a locked door)">Lock</button>
         <button class="ghost" data-wall-mode="light" aria-pressed="false" title="Click the map to put a light there (a torch, a brazier, a campfire)">Light</button>
         <select id="map-light-kind" aria-label="Which light"></select>
+        <button class="ghost map-road-tool" data-wall-mode="road" aria-pressed="false" title="Drag along a road, a stretch at a time, end to end (stretches join where their ends meet). Journeys keep to the roads where that's quicker, and difficult terrain doesn't slow them there">Road</button>
+        <button class="ghost map-road-tool" data-wall-mode="river" aria-pressed="false" title="Drag along a river, a stretch at a time, end to end. Boats keep to the rivers">River</button>
         <button class="ghost" data-wall-mode="difficult" aria-pressed="false" title="Drag over an area that's hard to move through (moving there costs double)">Difficult terrain</button>
         <span class="map-sep" aria-hidden="true"></span>
         <button class="ghost" data-wall-mode="raised" aria-pressed="false" title="Drag over a roof, a castle's wall-walk, a tower top, a cliff top or a bridge to make a raised area the height in the box. Click one to check or change its height, its shape or whether it's a bridge. Players then see onto it but not past it, and from up there over lower things">Raised area</button>
@@ -380,7 +382,7 @@
         <button class="ghost" data-wall-mode="link" aria-pressed="false" title="Click the map to put stairs or a door to another map there">Link</button>
         <select id="map-link-to" aria-label="Leads to"></select>
         <button class="ghost" data-wall-mode="place" aria-pressed="false" title="Places for the world: click the map to put a town, a tavern or a cave there, or drag out an area. A place can open a smaller map, and you choose which players see it. With Place on, drag a place to move it or click it to change it">Place</button>
-        <button class="ghost" data-wall-mode="erase" aria-pressed="false" title="Click a wall, door, light, difficult terrain, raised area, stairs, ladder, link or place to remove it">Erase</button>
+        <button class="ghost" data-wall-mode="erase" aria-pressed="false" title="Click a wall, door, light, difficult terrain, raised area, stairs, ladder, link, place, road or river to remove it">Erase</button>
         <span class="map-sep" aria-hidden="true"></span>
         <button class="ghost" id="map-walls-draft" title="Let the AI trace the walls and doors from the picture, for you to correct. You pick how hard it thinks first.">AI walls…</button>
         <button class="ghost" id="map-walls-file" title="Exact walls, doors and lights from a Universal VTT file of this map (.dd2vtt or .uvtt, from Dungeondraft, Dungeon Alchemist and many map packs). No AI needed.">Walls from file</button>

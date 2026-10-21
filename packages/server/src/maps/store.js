@@ -380,8 +380,11 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         // only if they're shown that map; never the DM's record or who else it's revealed to.
         places: places
           .filter((p) => placeRevealedTo(p, userId) && [[p.x, p.y], ...(p.points ?? [])].some(([x, y]) => canSee(map, seen.polygons, x, y)))
-          .map(({ target: m, record: _r, revealed_to: _t, ...p }) => (shownTo(m, userId) ? { ...p, record: null, revealed_to: null, to_name: m.name } : { ...p, to: null, record: null, revealed_to: null, to_name: null })),
+          .map(({ target: m, record: _r, revealed_to: _t, encounters: _e, ...p }) => (shownTo(m, userId) ? { ...p, record: null, revealed_to: null, to_name: m.name } : { ...p, to: null, record: null, revealed_to: null, to_name: null })),
         shown_to: null,
+        // Roads and rivers only shape the way journeys go (the server works that out); random encounters are the DM's.
+        roads: [],
+        encounters: null,
         variants: map.variants.filter((v) => v.id === map.variant).map(({ id, name }) => ({ id, name })),
         image_key: `p${variantKey}`,
         designed: false,

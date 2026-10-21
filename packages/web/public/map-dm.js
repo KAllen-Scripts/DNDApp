@@ -3,14 +3,14 @@
  * tokens (adding, editing, pictures, stat blocks, records) and saving tokens to the DM's creatures.
  */
 import { KIND_LABELS, onGone, onMap, renderGrid, select, show, toImage } from './map.js';
-import { TOKEN_COLORS, TOKEN_KINDS, TOKEN_KIND_NAMES, TOKEN_SIZES, TOKEN_SIZE_NAMES, UNITS } from './shared/map.js';
+import { PIN_MAP_KINDS, TOKEN_COLORS, TOKEN_KINDS, TOKEN_KIND_NAMES, TOKEN_SIZES, TOKEN_SIZE_NAMES, UNITS } from './shared/map.js';
 import { api, h, readBase64 } from './api.js';
 import { base, downloadUvtt, report, state, status } from './map-state.js';
 import { creatureList, creatureSaved } from './creatures.js';
 import { markdownBox } from './markdown.js';
 import { showStatBlock, statsFound } from './stat-block.js';
 import { openCreator } from './map-creator.js';
-import { whoField } from './map-places.js';
+import { encounterFields, whoField } from './map-places.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -89,6 +89,12 @@ export function settingsDialog() {
   // A world or region map shows tokens as pins of one size (the world).
   const kind = h('select', { title: 'On a world or region map, tokens are pins that stay the same size as you zoom' }, ...Object.entries(KIND_LABELS).map(([k, label]) => new Option(label, k)));
   kind.value = map.kind;
+  // Random encounters on the way, for a world or region map.
+  const enc = encounterFields(map.encounters ?? null);
+  const encSection = h('div', {}, h('h3', {}, 'Random encounters on the way'), enc.el);
+  const kindChanged = () => { encSection.hidden = !PIN_MAP_KINDS.includes(kind.value); };
+  kind.addEventListener('change', kindChanged);
+  kindChanged();
   const who = whoField({ shown: map.shown, to: map.shown_to ?? null });
   const hasGrid = h('input', { type: 'checkbox', checked: !!map.grid });
   const size = h('input', { type: 'number', min: '4', step: '0.1', value: map.grid?.size ?? Math.round(map.image.width / 20) });
@@ -158,7 +164,7 @@ export function settingsDialog() {
     const d = Number(distance.value);
     const scale = d > 0 && (per.value === 'width' || grid) ? { distance: d, unit: unit.value, per: per.value } : null;
     const seen = who.read();
-    const saved = await api('PATCH', `${base()}/${map.id}`, { name: name.value.trim() || map.name, kind: kind.value, shown: seen.shown, shown_to: seen.to, grid, scale });
+    const saved = await api('PATCH', `${base()}/${map.id}`, { name: name.value.trim() || map.name, kind: kind.value, shown: seen.shown, shown_to: seen.to, grid, scale, ...(PIN_MAP_KINDS.includes(kind.value) && { encounters: enc.read() }) });
     onMap(saved);
   };
   dialog.replaceChildren(
@@ -177,6 +183,7 @@ export function settingsDialog() {
       h('p', { class: 'muted small' }, 'The grid is drawn over the map while this is open, so you can line it up.'),
       h('h3', {}, 'Scale'),
       h('div', { class: 'map-row' }, field('Distance', distance), field('Unit', unit), field('Measured', per)),
+      encSection,
       h('h3', {}, 'Other pictures'),
       h('p', { class: 'muted small' }, 'The same map at night, after a fire, with a secret door showing… Each is stretched to fit this map, so everything stays in place. Pick which one everyone sees in the map bar.'),
       variants,

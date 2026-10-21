@@ -149,8 +149,8 @@ test('gear: weight carried and the campaign\'s weight rule', () => {
   assert.deepEqual(['none', 'encumbered', 'heavy', 'over'].map((l, i) => encumbrance([50, 51, 101, 151][i], 10, 'variant').level), ['none', 'encumbered', 'heavy', 'over']);
   assert.equal(encumbrance(101, 10, 'variant').speed, -20);
   assert.equal(encumbrance(101, 10, 'variant').disadvantage, true);
-  assert.deepEqual(normalizeSettings({ weight: 'nonsense', other: 1 }), { weight: 'capacity', edition: null, clock: 480 });
-  assert.deepEqual(normalizeSettings({ weight: 'ignore' }), { weight: 'ignore', edition: null, clock: 480 });
+  assert.deepEqual(normalizeSettings({ weight: 'nonsense', other: 1 }), { weight: 'capacity', edition: null, clock: 480, travel: { time: 'clock', roads: true, terrain: true, vehicles: true, marches: true, encounters: true } });
+  assert.deepEqual(normalizeSettings({ weight: 'ignore' }), { weight: 'ignore', edition: null, clock: 480, travel: { time: 'clock', roads: true, terrain: true, vehicles: true, marches: true, encounters: true } });
   assert.equal(normalizeSettings({ edition: '2024' }).edition, '2024');
   assert.equal(normalizeSettings({ edition: 2014 }).edition, '2014');
   assert.equal(normalizeSettings({ edition: '5e' }).edition, null);

@@ -4,7 +4,7 @@
  * (table.js calls settingsHeard) and the sheet works itself out again.
  */
 import { api, h } from './api.js';
-import { EDITIONS, WEIGHT_RULES, normalizeSettings } from './shared/settings.js';
+import { EDITIONS, TRAVEL_PARTS, TRAVEL_TIME, WEIGHT_RULES, normalizeSettings } from './shared/settings.js';
 import { setSheetSettings } from './sheet.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -23,6 +23,9 @@ export function setSettingsCampaign({ campaignId, guarded, isDm, settings }) {
   $('#settings-open').hidden = !isDm;
   setSheetSettings(state.settings);
 }
+
+/** The campaign's settings as they are now (the map's travel follows `travel`). */
+export const campaignSettings = () => state.settings;
 
 /** The DM changed the settings (live). */
 export function settingsHeard(settings) {
@@ -60,6 +63,16 @@ function openDialog() {
     .then((r) => { unset.textContent = `Not chosen: follow the Player’s Handbook in the books (now ${r.edition})`; })
     .catch(() => {});
   edition.addEventListener('change', () => save({ edition: edition.value || null }, 'Saved. Rests, Ask and lookups follow it now.'));
+  // Travel in the world: how much detail this table wants (owner, 2026-10-21).
+  const time = h('select', { id: 'setting-travel-time', 'aria-label': 'Travel time' }, Object.entries(TRAVEL_TIME).map(([v, n]) => new Option(n, v)));
+  time.value = state.settings.travel.time;
+  time.addEventListener('change', () => save({ travel: { time: time.value } }, 'Saved. Journeys follow it from now on.'));
+  const parts = Object.entries(TRAVEL_PARTS).map(([k, label]) => {
+    const box = h('input', { type: 'checkbox', 'data-travel': k });
+    box.checked = state.settings.travel[k];
+    box.addEventListener('change', () => save({ travel: { [k]: box.checked } }, 'Saved. Journeys follow it from now on.'));
+    return h('label', { class: 'check' }, box, ` ${label}`);
+  });
   dialog.replaceChildren(
     h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => e.preventDefault() },
       h('h2', {}, 'Campaign settings'),
@@ -67,6 +80,10 @@ function openDialog() {
       h('p', { class: 'muted small' }, EDITION_HELP),
       h('label', { class: 'fld' }, h('span', {}, 'Weight limits'), weight),
       help,
+      h('h3', {}, 'Travel in the world'),
+      h('label', { class: 'fld' }, h('span', {}, 'Travel time'), time),
+      ...parts,
+      h('p', { class: 'muted small' }, 'Switch off whatever your table would rather skip. Journeys already on the road keep going as they set off.'),
       result,
       h('div', { class: 'map-dialog-actions' }, h('span', { class: 'spacer' }), h('button', { type: 'button', class: 'primary', onclick: () => dialog.close() }, 'Done')),
     ),

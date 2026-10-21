@@ -21,7 +21,29 @@ export const EDITIONS = { 2014: '2014 rules', 2024: '2024 rules' };
  * on day 1 at 08:00.
  */
 export const START_CLOCK = 8 * 60;
-export const DEFAULT_SETTINGS = Object.freeze({ weight: 'capacity', edition: null, clock: START_CLOCK });
+
+/**
+ * travel: how much of the world's travel the table wants (owner, 2026-10-21: "Not all tables want the same
+ * level of detail and realism"). time: 'clock' (journeys take their time as the DM moves the clock on),
+ * 'skip' (they get there at once and the clock jumps on by the journey) or 'none' (they get there at once;
+ * the clock stays put). The rest switch parts on and off: roads (journeys keep to roads and rivers), terrain
+ * (difficult terrain slows them), vehicles (riding, wagons and boats; off: everyone walks), marches (pushing
+ * on past 8 hours a day calls for saves), encounters (random encounters on the way).
+ */
+export const TRAVEL_TIME = { clock: 'Journeys take their time as you move the clock on', skip: 'They get there at once, and the clock jumps on by the journey', none: 'They get there at once, and the clock stays put' };
+export const TRAVEL_PARTS = {
+  roads: 'Roads and rivers: journeys keep to them where that’s quicker',
+  terrain: 'Difficult terrain slows journeys',
+  vehicles: 'Riding, wagons and boats (off: everyone goes on foot)',
+  marches: 'Forced marches: past 8 hours a day on the road calls for Constitution saves',
+  encounters: 'Random encounters on the way',
+};
+export const DEFAULT_TRAVEL = Object.freeze({ time: 'clock', roads: true, terrain: true, vehicles: true, marches: true, encounters: true });
+export const normalizeTravel = (t = {}) => ({
+  time: t && t.time in TRAVEL_TIME ? t.time : DEFAULT_TRAVEL.time,
+  ...Object.fromEntries(Object.keys(TRAVEL_PARTS).map((k) => [k, typeof t?.[k] === 'boolean' ? t[k] : DEFAULT_TRAVEL[k]])),
+});
+export const DEFAULT_SETTINGS = Object.freeze({ weight: 'capacity', edition: null, clock: START_CLOCK, travel: DEFAULT_TRAVEL });
 /** The clock goes at most this far (about 27,000 years of days), so it stays a plain number. */
 export const MAX_CLOCK = 1440 * 10_000_000;
 
@@ -31,6 +53,7 @@ export function normalizeSettings(s = {}) {
     weight: s && s.weight in WEIGHT_RULES ? s.weight : DEFAULT_SETTINGS.weight,
     edition: s && String(s.edition) in EDITIONS ? String(s.edition) : DEFAULT_SETTINGS.edition,
     clock: Number.isInteger(s?.clock) && s.clock >= 0 && s.clock <= MAX_CLOCK ? s.clock : DEFAULT_SETTINGS.clock,
+    travel: normalizeTravel(s?.travel),
   };
 }
 

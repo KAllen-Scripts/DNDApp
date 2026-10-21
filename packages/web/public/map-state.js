@@ -32,7 +32,7 @@ export const state = {
   draftGrid: undefined, // grid being edited in the settings dialog (shown live)
   fogMode: null, // DM drawing fog: 'reveal' | 'cover'
   fogDraw: null, // the rectangle being drawn: { pointer, a, b }
-  wallMode: null, // DM working on walls: 'wall' | 'low' | 'door' | 'curve' | 'circle' | 'lock' | 'light' | 'difficult' | 'link' | 'place' | 'erase'
+  wallMode: null, // DM working on walls: 'wall' | 'low' | 'door' | 'curve' | 'circle' | 'lock' | 'light' | 'difficult' | 'link' | 'place' | 'road' | 'river' | 'erase'
   terrainDraw: null, // difficult terrain being drawn: { pointer, a, b }
   placeDraw: null, // the DM putting a place down: { pointer, a, b, sx, sy } (a click makes a pin, a drag an area)
   placeDrag: null, // the DM moving a place: { id, pointer, x, y, sx, sy, moved }

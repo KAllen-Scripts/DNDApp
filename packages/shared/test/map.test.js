@@ -9,6 +9,7 @@ import {
   pathCost, isDifficult, speedFromText, normalizeTerrain, normalizeClimbs, hasClimbSpeed,
   litAreas, inView, normalizeLights, normalizeLightRadii,
   normalizeCombat, stepTurn, dexModifier, abilityModifier, statBlockRolls, ownToken, normalizeTemplates, templateShape, tokensInTemplate, inTemplate, snapTemplatePoint, spellArea,
+  normalizeRoads, normalizeEncounters, normalizeJourney, journeyAt, travelMinutes, TRAVEL_BY,
 } from '../src/map.js';
 
 const battle = normalizeMap({ image: { width: 700, height: 490 }, grid: { size: 70, x: 0, y: 0 }, scale: { distance: 5, unit: 'ft', per: 'square' } });
@@ -585,4 +586,22 @@ test('companions: a player controls their companion tokens, which keep their own
   ]);
   assert.deepEqual(abilities, [{ ability: 'DEX', mod: 2 }]);
   assert.deepEqual(statBlockRolls(''), { abilities: [], attacks: [] });
+});
+
+test('the world, fourth stage: roads, random encounters, ways to travel and journeys that stop for the night', () => {
+  const image = { width: 400, height: 300 };
+  assert.deepEqual(normalizeRoads([{ id: 'road01', kind: 'canal', x1: 0, y1: 0, x2: 500, y2: 10 }, { id: 'road02', x1: 5, y1: 5, x2: 5.5, y2: 5 }, { id: 'road01', x1: 1, y1: 1, x2: 9, y2: 9 }], image),
+    [{ id: 'road01', kind: 'road', x1: 0, y1: 0, x2: 400, y2: 10 }], 'unknown kinds are roads; too short and repeated ones go');
+  assert.equal(normalizeEncounters(null), null);
+  assert.deepEqual(normalizeEncounters({ chance: 150, every: 0, table: ['  wolves ', '', 7] }), { chance: 100, every: 1, table: ['wolves', '7'] });
+  const j = normalizeJourney({ from: { x: 0, y: 0 }, to: { x: 30, y: 0 }, leaves: 0, arrives: 1440 + 120, by: 'hovercraft', hours: 99 }, image);
+  assert.deepEqual([j.by, j.hours, j.route, j.noted], ['foot', 24, null, 0]);
+  // On foot, 8 hours a day: 30 miles is a day's 24, camped overnight, 6 more the next morning.
+  const walk = { ...j, hours: 8 };
+  assert.deepEqual(journeyAt(walk, 480), { x: 24, y: 0, done: false });
+  assert.deepEqual(journeyAt(walk, 1000), { x: 24, y: 0, done: false }, 'camped: they stay put');
+  assert.deepEqual(journeyAt(walk, 1440 + 60), { x: 27, y: 0, done: false });
+  assert.equal(travelMinutes(30, 'normal'), 1440 + 120);
+  assert.equal(travelMinutes(30, 'fast', { by: 'galley' }), 450, 'a galley rows on at 4 miles an hour, day and night, whatever the pace');
+  assert.ok(Object.values(TRAVEL_BY).every((m) => m.name && m.hours));
 });

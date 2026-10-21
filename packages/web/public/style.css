@@ -1429,6 +1429,12 @@ button.busy:disabled { opacity: 1; }
 .map-walls .wall-draft.door { stroke: #ffb74d; }
 .map-walls .wall-draft.low { stroke: #81c784; }
 .map-walls .wall-draft.stairs, .map-walls .wall-draft.ladder { stroke: #c000ff; }
+/* Roads and rivers (the DM's, while editing a world or region map). */
+.map-walls .map-road-line { stroke-width: 4px; stroke-linecap: round; opacity: 0.85; }
+.map-walls .map-road-line.road { stroke: #c08a3e; }
+.map-walls .map-road-line.river { stroke: #4fa3e0; }
+.map-walls .wall-draft.road { stroke: #e0a050; }
+.map-walls .wall-draft.river { stroke: #6cc0ff; }
 .token.hidden-token { opacity: 0.5; border-style: dashed; }
 .token.down :is(.token-initials, .token-picture) { opacity: 0.45; }
 .token.down.has-picture .token-picture { filter: grayscale(1); }
@@ -1715,7 +1721,12 @@ button.busy:disabled { opacity: 1; }
 .map-party-row .spacer { flex: 1; }
 /* Journeys (the world's travel): a dashed line to where each is headed; the in-game clock over the map. */
 .map-routes { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
-.map-routes .map-route { stroke: #f2d675; stroke-width: 2.5px; stroke-dasharray: 7 5; }
+.map-routes .map-route { stroke: #f2d675; stroke-width: 2.5px; stroke-dasharray: 7 5; fill: none; }
+.map-travel-march:empty { display: none; }
+.map-travel-march { color: var(--warn, #e0a050); }
+.map-road-notes { padding-left: 1.2em; }
+.map-road-notes:empty { display: none; }
+.map-road-note.encounter strong { color: var(--warn, #e0a050); }
 .map-routes .map-route-end { fill: #f2d675; stroke: rgb(0 0 0 / 0.6); stroke-width: 1px; }
 .map-view.picking { cursor: crosshair; }
 .map-clock { font-variant-numeric: tabular-nums; white-space: nowrap; }
