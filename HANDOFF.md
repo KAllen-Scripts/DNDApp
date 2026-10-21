@@ -1398,7 +1398,7 @@ The owner, 2026-10-18: "We don't want one token for the whole party, because the
 - **Map settings → Kind** (`PATCH .../maps/:mid` `kind`; `kind_set` keeps it when the AI reads the map again), so the DM can make a map a region or world map.
 - **Page:** new `web/public/map-world.js`: the token bar's Follows… choice, Go into <place> and Out to <map>, pins on world and region maps (40 px on screen, fanned out where they meet, again when the zoom settles), players' pages going where their character goes ("Thorin is here now"; they open on their character's map), and the DM's **Party** panel (Go there, Bring here).
 - Checked in headless Chromium on a test server (desktop DM and player, a 390 px phone): pins fan out, Go into Millbrook takes Thorin and his wolf, the phone opens on the town, the party panel lists everyone; no console errors.
-- Tests: server `world-travel.test.js` (one map per character and Bring here, following and trailing, links/places/leaving with followers, the helpers), web `world.test.js` (a player's page following their character and the Follow/Out to controls; pins fanning out; the party panel). 606 tests. No prompt or schema change, so `PIPELINE_VERSION` stays 22.
+- Tests: server `world-travel.test.js` (one map per character and Bring here, following and trailing, links/places/leaving with followers, the helpers), web `world.test.js` (a player's page following their character and the Follow/Out to controls; pins fanning out; the party panel). 601 tests with the wiki changes merged in. No prompt or schema change, so `PIPELINE_VERSION` stays 22.
 
 ## Gotchas and lessons
 
