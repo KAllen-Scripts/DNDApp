@@ -31,7 +31,8 @@
     "./map-stamps.js": "./src/map-stamps.js",
     "./citations.js": "./src/citations.js",
     "./coins.js": "./src/coins.js",
-    "./settings.js": "./src/settings.js"
+    "./settings.js": "./src/settings.js",
+    "./wiki.js": "./src/wiki.js"
   },
   "scripts": {
     "test": "node --test \"test/*.test.js\"",

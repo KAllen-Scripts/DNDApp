@@ -9,6 +9,8 @@
  *   - player notes: only their own. Not even the DM sees other players' notes.
  * The group's rulebooks (BOOK_DEFS) aren't campaign data, so everyone sees them.
  * The DM's saved creatures (CREATURE_DEFS) are only ever passed in when the DM asks.
+ * The DM's wiki (WIKI_DEFS): the DM gets all of it; a player only the parts
+ * the DM made available to them, filtered again on every read.
  */
 import { z } from 'zod';
 import { formatTimestamp, formatUtterance, parseTimestamp, CITATION_RE } from '@dndapp/shared';
@@ -16,6 +18,7 @@ import { renderRecord } from '../kb/store.js';
 import { preparedTranscript } from '../pipeline/prepare.js';
 import { fitWhole } from '../fit.js';
 import { creatureKey } from '../creatures.js';
+import { unlink } from '@dndapp/shared/wiki.js';
 
 const SessionRange = {
   from_session: z.number().int().nullable().describe('Only from this session number, or null'),
@@ -87,6 +90,17 @@ const CREATURE_DEFS = {
   },
 };
 
+const WIKI_DEFS = {
+  search_wiki: {
+    description: "Search the DM's wiki (keyword + meaning): the DM's own pages about the world, its people, places, lore and plans. Returns the matching pages' sections in full.",
+    schema: z.object({ query: z.string() }),
+  },
+  read_wiki_page: {
+    description: "Read a page of the DM's wiki in full, by its title or another name for it.",
+    schema: z.object({ title: z.string() }),
+  },
+};
+
 const SIZE_NAMES = { 0.5: 'Tiny', 1: 'Small or Medium', 2: 'Large', 3: 'Huge', 4: 'Gargantuan' };
 
 /** One of the DM's creatures, for the model. */
@@ -104,6 +118,30 @@ function renderCreature(c) {
     c.stats ? `Stat block${from}:\n${c.stats.text}` : 'No stat block saved.',
     c.notes ? `DM's notes: ${c.notes}` : '',
   ].filter(Boolean).join('\n');
+}
+
+/** Who a wiki page or section is available to, for the DM. */
+function availableText(a, names) {
+  if (a === 'dm') return 'only the DM';
+  if (a === 'all') return 'everyone';
+  return a.map((id) => names.get(id) ?? `user ${id}`).join(', ') || 'only the DM';
+}
+
+/**
+ * A section of a wiki page, as the model reads it. For the DM it says who the
+ * section and its blocks are available to; a player's copy is already
+ * filtered and has no blocks left.
+ */
+function renderWikiSection(page, section, { forDm, names }) {
+  const head = `--- Wiki: ${page.title}${section.heading ? ` › ${section.heading}` : ''}${page.kind ? ` (${page.kind})` : ''}`;
+  const also = page.aliases.length ? `\nAlso called: ${page.aliases.join(', ')}` : '';
+  let text = unlink(section.text);
+  let who = '';
+  if (forDm) {
+    who = `\nAvailable to: ${section.available === 'all' ? `as the page (${availableText(page.available, names)})` : availableText(section.available, names)}`;
+    text = text.replace(/^\s*:::\s*dm\b.*$/gim, '[Only for the DM:]').replace(/^\s*:::\s*for\b(.*)$/gim, (_, who) => `[Only for ${who.trim()}:]`).replace(/^\s*:::\s*$/gm, '[end]');
+  }
+  return `${head}${also}${who}\n${text.trim() || '(empty)'}`;
 }
 
 /** The book tools' handlers (search_books, read_book, book_contents), clipped like other tool results. */
@@ -153,7 +191,7 @@ export function bookTools(books, { maxChars = 10_000 } = {}) {
  * @param {object[]} [opts.dmCreatures]  the DM's saved creatures; pass them only when the DM is asking
  * @param {object} [opts.books]  the group's rulebooks; the book tools are added only if there are any
  */
-export function createTools({ db, store, kb, search, books, config, campaignId, viewer, dmCreatures = [] }) {
+export function createTools({ db, store, kb, search, books, wiki = null, config, campaignId, viewer, dmCreatures = [] }) {
   const maxChars = config.qa.maxToolResultTokens * 4;
   const clip = (s, max = maxChars) => (s.length > max ? `${s.slice(0, max)}\n…(truncated)` : s);
   const ownNotesOnly = { userId: viewer.userId, seesAll: false };
@@ -192,7 +230,40 @@ export function createTools({ db, store, kb, search, books, config, campaignId, 
         }).text
       : 'No matches.';
 
+  // The DM's wiki. Search finds the pages; what's shown is always the page filtered for the asker now.
+  const hasWiki = !!wiki?.anyFor(campaignId, viewer);
+  const wikiNames = new Map(store.roster(campaignId).map((m) => [m.user_id, m.character_name || m.name]));
+  const wikiPagesFor = async (query, limit) => {
+    const hits = await search.search(campaignId, query, { kinds: ['wiki'], viewer, limit });
+    const pages = [];
+    for (const id of new Set(hits.map((h) => h.ref_id))) {
+      try {
+        const page = wiki.forViewer(campaignId, wiki.get(campaignId, id), viewer);
+        if (page) pages.push(page);
+      } catch {
+        // deleted since it was indexed
+      }
+    }
+    return pages;
+  };
+  const wikiSections = (pages) =>
+    pages.flatMap((page) => page.sections.filter((s) => s.text.trim()).map((section) => ({ page, section })));
+  const renderWiki = (x) => renderWikiSection(x.page, x.section, { forDm: viewer.seesAll, names: wikiNames });
+  const wikiText = (list, empty) =>
+    list.length
+      ? fitWhole(list, maxChars, {
+          sep: '\n\n',
+          render: renderWiki,
+          leftOver: (left) => `Not shown, to keep this reply short (read them with read_wiki_page): ${[...new Set(left.map((x) => x.page.title))].join('; ')}`,
+        }).text
+      : empty;
+
   const handlers = {
+    search_wiki: async ({ query }) => wikiText(wikiSections(await wikiPagesFor(query, 8)), 'No matching wiki pages.'),
+    read_wiki_page: ({ title }) => {
+      const page = wiki.find(campaignId, title, viewer);
+      return page ? wikiText(wikiSections([page]), `The wiki page "${page.title}" is empty.`) : `No wiki page called "${title}".`;
+    },
     search_kb: async ({ query, kind }) => {
       const hits = await search.search(campaignId, query, { kinds: ['kb'], viewer, limit: 6 });
       return records(recordsFromHits(hits).filter((r) => !kind || r.kind === kind), 'No matches.');
@@ -241,10 +312,13 @@ export function createTools({ db, store, kb, search, books, config, campaignId, 
     ...bookHandlers(books, clip, maxChars),
   };
 
-  const defs = { ...DEFS, ...(books?.status().books.length ? BOOK_DEFS : {}), ...(dmCreatures.length ? CREATURE_DEFS : {}) };
+  const defs = { ...DEFS, ...(hasWiki ? WIKI_DEFS : {}), ...(books?.status().books.length ? BOOK_DEFS : {}), ...(dmCreatures.length ? CREATURE_DEFS : {}) };
 
   return {
     /** Agent tools: { name, description, schema, run(input) -> string }. Providers validate input. */
+    /** Whether this asker has any of the wiki to read (the prompt says how to use it only then). */
+    hasWiki,
+
     list: Object.entries(defs).map(([name, d]) => ({ name, description: d.description, schema: d.schema, run: handlers[name] })),
 
     /** The DM's creatures named in the question, in full (so it can answer at once), or ''. */
@@ -265,16 +339,18 @@ export function createTools({ db, store, kb, search, books, config, campaignId, 
     async preSearch(question) {
       const budget = config.qa.preSearchTokens * 4;
       if (budget <= 0) return '';
-      const [kbHits, chunkHits, noteHits] = await Promise.all([
+      const [kbHits, chunkHits, noteHits, wikiPages] = await Promise.all([
         search.search(campaignId, question, { kinds: ['kb'], viewer, limit: 4 }),
         search.search(campaignId, question, { kinds: ['chunk'], viewer, limit: 3 }),
         search.search(campaignId, question, { kinds: ['note'], viewer: ownNotesOnly, limit: 3 }),
+        hasWiki ? wikiPagesFor(question, 3) : [],
       ]);
       // Best of each kind first, then the next best of each, and so on; each piece whole, never cut short.
       const lists = [
         recordsFromHits(kbHits).map((r) => ({ text: renderRecord(r), ref: `record #${r.id} ${r.title}` })),
         chunkHits.map((h) => ({ text: formatChunks([h]), ref: `transcript ${chunkRef(h)}` })),
         noteHits.map((h) => ({ text: formatNotes([h]), ref: `your note ${h.title}` })),
+        wikiSections(wikiPages).map((x) => ({ text: renderWiki(x), ref: `wiki ${x.page.title}${x.section.heading ? ` › ${x.section.heading}` : ''}` })),
       ];
       const parts = [];
       for (let i = 0; lists.some((l) => i < l.length); i++) for (const l of lists) if (l[i]) parts.push(l[i]);

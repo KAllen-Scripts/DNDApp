@@ -11,6 +11,7 @@ import { replayMap } from './maps/store.js';
 import { normalizePins } from '@dndapp/shared/map.js';
 import { normalizePictures } from './characters/pictures.js';
 import { normalizeHandout } from './handouts.js';
+import { normalizeWikiPage } from './wiki.js';
 import { normalizeRest } from './rests.js';
 import { normalizeCreature } from './creatures.js';
 import { normalizeItem } from './items.js';
@@ -340,7 +341,7 @@ export function createStore({ db, archive, config }) {
           }
         }
         for (const entry of archive.readAll()) {
-          const { campaign, sessions, members, speakers, settings = null, glossary, corrections, playerNotes, sheets = [], maps = [], characters = [], handouts = [], creatures = [], rests = [], items = [], merchants = [], mapAssets = [], mapStamps = [] } = entry;
+          const { campaign, sessions, members, speakers, settings = null, glossary, corrections, playerNotes, sheets = [], maps = [], characters = [], handouts = [], creatures = [], rests = [], items = [], merchants = [], mapAssets = [], mapStamps = [], wiki = [] } = entry;
           if (db.prepare('SELECT 1 FROM campaigns WHERE slug = ?').get(campaign.slug)) continue;
           const cid = Number(
             db
@@ -415,6 +416,8 @@ export function createStore({ db, archive, config }) {
           for (const x of mapAssets.map(normalizeMapAsset)) insAsset.run(x.id, cid, JSON.stringify(x), x.created_at, x.updated_at);
           const insStamp = db.prepare('INSERT OR IGNORE INTO map_stamps (id, campaign_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)');
           for (const x of mapStamps.map(normalizeMapStamp)) insStamp.run(x.id, cid, JSON.stringify(x), x.created_at, x.updated_at);
+          const insPage = db.prepare('INSERT OR IGNORE INTO wiki_pages (id, campaign_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)');
+          for (const x of wiki.map(normalizeWikiPage)) insPage.run(x.id, cid, JSON.stringify(x), x.created_at, x.updated_at);
           const insRest = db.prepare('INSERT OR IGNORE INTO rests (id, campaign_id, kind, at, data) VALUES (?, ?, ?, ?, ?)');
           for (const r of rests.map(normalizeRest)) insRest.run(r.id, cid, r.kind, r.at, JSON.stringify(r));
           restored.push(campaign.slug);

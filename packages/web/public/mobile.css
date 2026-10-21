@@ -261,3 +261,7 @@
 :root[data-phone] .campaign-list { margin: 0.5rem 0.4rem 0; }
 :root[data-phone] .access-row > * { min-width: 0; }
 :root[data-phone] .admin td.actions button { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
+
+/* The DM's wiki: the list of pages, or one page with a way back to the list. */
+:root[data-phone] .wiki-panel.wiki-reading .wiki-side { display: none; }
+:root[data-phone] .wiki-back { display: inline-block; justify-self: start; margin-bottom: 0.4rem; }
