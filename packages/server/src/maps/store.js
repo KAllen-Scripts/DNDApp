@@ -367,7 +367,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         },
         // The party's own (characters, companions and summons) show their hit points; a companion's stat block
         // goes to the player who controls it, so they can roll for it. Anyone else's hit points only as how hurt they look.
-        tokens: tokens.map((t) => ({ ...t, follows: visible.has(t.follows) ? t.follows : null })).map((t) => {
+        tokens: tokens.map((t) => ({ ...t, follows: visible.has(t.follows) ? t.follows : null, journey: t.journey && !ownToken(t, userId) ? { ...t.journey, to_name: '' } : t.journey })).map((t) => {
           if (t.kind === 'pc') return { ...t, stats: null, record: null };
           if (t.kind === 'companion') return { ...t, stats: t.user_id === userId ? t.stats : null, record: null };
           return { ...t, hp: null, health: healthOf(t.hp), stats: null, record: null };

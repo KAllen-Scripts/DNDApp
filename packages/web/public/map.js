@@ -19,6 +19,7 @@ import { renderCombat } from './map-combat.js';
 import { companionDialog, companionRolls, dismissCompanion, myCompanion } from './map-companions.js';
 import { initMapFull } from './map-full.js';
 import { groupsDialog, mapOptions, placeEnd, placeMove, placeStart, renderPlaces, shownNote } from './map-places.js';
+import { clockDialog, journeyText, onClock, renderClock, renderRoutes, travelControls as journeyControls, travelPicked } from './map-travel.js';
 import { PIN_PX, followMyCharacter, myCharacterMap, partyDialog, pinFan, travelControls } from './map-world.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -35,8 +36,10 @@ export async function loadMaps({ campaignId, userId, guarded }) {
   state.images.clear();
   for (const url of state.tokenPictures.values()) if (url) URL.revokeObjectURL(url);
   state.tokenPictures.clear();
-  const { can_edit, maps, walls_effort } = await api('GET', base());
+  const { can_edit, maps, walls_effort, clock } = await api('GET', base());
   state.canEdit = can_edit;
+  state.clock = clock ?? null;
+  renderClock();
   state.wallsEffort = walls_effort ?? '';
   state.editing = false;
   state.maps = maps;
@@ -77,6 +80,7 @@ function startLive() {
           if (event === 'map') onMap(data);
           else if (event === 'gone') onGone(data.id);
           else if (event === 'ping' || event === 'draw') onSignal(event, data);
+          else if (event === 'clock') onClock(data);
         }, { signal: controller.signal });
       } catch (err) {
         if (controller.signal.aborted) return;
@@ -87,8 +91,9 @@ function startLive() {
       // Catch up on anything missed while disconnected.
       if (!controller.signal.aborted) {
         try {
-          const { maps } = await api('GET', base());
+          const { maps, clock } = await api('GET', base());
           state.maps = maps;
+          if (clock != null) onClock({ clock });
           const current = maps.find((m) => m.id === state.current?.id) ?? null;
           if (current) onMap(current);
           else if (state.current) await show(fallbackMap());
@@ -231,6 +236,7 @@ export function render() {
     $('#map-tokens').replaceChildren();
     $('#map-pins').replaceChildren();
     $('#map-links').replaceChildren();
+    renderRoutes();
     renderPlaces();
     $('#map-templates').replaceChildren();
     $('#map-ruler-line').replaceChildren();
@@ -256,6 +262,7 @@ export function render() {
   renderWalls();
   renderTemplates();
   renderTokens();
+  renderRoutes();
   renderRuler();
   renderLinks();
   renderPlaces();
@@ -932,7 +939,7 @@ export function renderTokens() {
       const picture = tokenPicture(t);
       const el = h('div', {
         class: `token token-${t.kind}${picture ? ' has-picture' : ''}${canMove(t) ? ' movable' : ''}${t.user_id === state.userId ? ' mine' : ''}${state.selected === t.id ? ' selected' : ''}${dragging ? ' dragging' : ''}${t.hidden ? ' hidden-token' : ''}${health === 'down' ? ' down' : ''}${state.caught.has(t.id) ? ' caught' : ''}${map.combat?.turn === t.id ? ' turn' : ''}${isUnder(map, t) ? ' under' : ''}${pins ? ' token-pin' : ''}${t.follows ? ' following' : ''}`,
-        title: [t.name, t.merchant ? 'Merchant: pick to shop' : TOKEN_KIND_NAMES[t.kind], hpText(t), ...t.conditions].filter(Boolean).join(' · '),
+        title: [t.name, t.merchant ? 'Merchant: pick to shop' : TOKEN_KIND_NAMES[t.kind], hpText(t), ...t.conditions, t.journey ? journeyText(t.journey) : ''].filter(Boolean).join(' · '),
         role: 'button',
         tabindex: '0',
         'aria-label': t.name,
@@ -1308,6 +1315,7 @@ export function renderSelection() {
       h('span', { class: 'muted small' }, `${TOKEN_KIND_NAMES[token.kind]} · ${TOKEN_SIZE_NAMES[token.size]}`),
       ...tokenControls(token),
       ...travelControls(token),
+      ...journeyControls(token),
       h('span', { class: 'spacer' }),
       editable && !state.canEdit ? h('span', { class: 'muted small' }, 'Drag to move') : null,
       token.merchant ? h('button', { class: 'primary', title: 'See what this merchant sells, and buy', onclick: () => openShop(token.merchant) }, 'Shop') : null,
@@ -1670,6 +1678,11 @@ function viewDown(e) {
     e.currentTarget.setPointerCapture(e.pointerId);
     state.stroke = { pointer: e.pointerId, points: [toImage(e.clientX, e.clientY)] };
     return renderSignals();
+  }
+  // Picking where a token travels to.
+  if (state.travelPick && !state.pointers.size) {
+    e.preventDefault();
+    return travelPicked(toImage(e.clientX, e.clientY));
   }
   const aiming = state.measuring || !!state.templateDraft;
   if (e.target.closest('.token, .map-pin') && !aiming) return;
@@ -2126,6 +2139,7 @@ export function initMapActions() {
   $('#map-place-groups').addEventListener('click', groupsDialog);
   $('#map-bring').addEventListener('click', bringPlayers);
   $('#map-party').addEventListener('click', () => partyDialog().catch(report));
+  $('#map-clock').addEventListener('click', clockDialog);
   $('#map-fit').addEventListener('click', fit);
   $('#map-north').addEventListener('click', northUp);
   initMapFull();

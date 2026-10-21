@@ -6,7 +6,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setup, terrain } from './helpers.js';
-import { arrivalSpots, characterMap, followGroup, followLoop, trailFollowers } from '@dndapp/shared/map.js';
+import { arrivalSpots, characterMap, followGroup, followLoop, trailFollowers, travelMinutes } from '@dndapp/shared/map.js';
+import { clockText, durationText } from '@dndapp/shared/settings.js';
+import { mapEvents } from '../src/maps/events.js';
 
 async function newMap(t, name, patch = { shown: true }) {
   const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { filename: 'map.png', name, data: (await terrain(400, 300)).toString('base64') } });
@@ -155,4 +157,90 @@ test('world: following, trailing and arriving, worked out', () => {
   const spots = arrivalSpots(map, map.tokens.slice(0, 3), { x: 500, y: 500 });
   assert.deepEqual(spots[0], { x: 500, y: 500 });
   assert.equal(new Set(spots.map((s) => `${s.x},${s.y}`)).size, 3, 'no two on the same spot');
+});
+
+// ---------- stage three: travel and time ----------
+
+test('world: a journey across a region map takes the miles at the pace, and the clock brings them there', async () => {
+  const t = await setup();
+  try {
+    const vale = await newMap(t, 'The Vale');
+    const campaign = `/campaigns/${t.campaign.id}`;
+    const base = `${campaign}/maps/${vale.id}`;
+    // 100 miles across 400 px: a quarter of a mile a pixel.
+    await t.request('PATCH', base, { body: { kind: 'region', scale: { distance: 100, unit: 'mi', per: 'width' } } });
+    const place = (await t.request('PATCH', `${base}/places`, { body: { add: { name: 'Daggerford', x: 290, y: 150, revealed: true } } })).json().places[0];
+    const thorin = await addToken(t, vale, { kind: 'pc', user_id: t.sam.id, name: 'Thorin', x: 50, y: 150 });
+    const lyra = await addToken(t, vale, { kind: 'pc', user_id: t.alex.id, name: 'Lyra', x: 40, y: 150 });
+    await t.request('PATCH', `${base}/tokens/${lyra.id}`, { body: { follows: thorin.id }, as: t.alex.token });
+    assert.equal((await t.request('GET', `${campaign}/clock`, { as: t.sam.token })).json().clock, 480, 'day 1, 08:00');
+
+    // Sam sets off for Daggerford: 60 miles at a normal pace is 20 hours on the road, so two nights and 4 hours.
+    assert.equal((await t.request('POST', `${base}/tokens/${thorin.id}/journey`, { body: { place: place.id, minutes: 10 }, as: t.sam.token })).statusCode, 403, 'only the DM says how long');
+    let res = await t.request('POST', `${base}/tokens/${thorin.id}/journey`, { body: { place: place.id }, as: t.sam.token });
+    assert.equal(res.statusCode, 200, res.body);
+    const j = res.json().token.journey;
+    assert.deepEqual([j.miles, j.leaves, j.arrives, j.to_name, j.pace], [60, 480, 480 + 2 * 1440 + 240, 'Daggerford', 'normal']);
+    const lyraJourney = tokensOn(t, vale).find((x) => x.id === lyra.id).journey;
+    assert.equal(lyraJourney.arrives, j.arrives, 'Lyra goes along');
+    assert.equal(lyraJourney.to_name, 'Daggerford');
+
+    // Only the DM moves the clock; halfway there, they're halfway along.
+    assert.equal((await t.request('POST', `${campaign}/clock`, { body: { add: 60 }, as: t.sam.token })).statusCode, 403);
+    res = await t.request('POST', `${campaign}/clock`, { body: { add: (j.arrives - j.leaves) / 2 } });
+    assert.equal(res.json().clock, 480 + 1560);
+    assert.equal(tokensOn(t, vale).find((x) => x.id === thorin.id).x, 170);
+    // To when the next journey ends: they arrive and are off the road.
+    res = await t.request('POST', `${campaign}/clock`, { body: { next_arrival: true } });
+    assert.equal(res.json().clock, j.arrives);
+    const [th, ly] = tokensOn(t, vale);
+    assert.deepEqual([th.x, th.journey, ly.x, ly.journey], [290, null, 280, null]);
+    assert.equal((await t.request('POST', `${campaign}/clock`, { body: { next_arrival: true } })).statusCode, 400, 'nobody on the road');
+
+    // Stopping on the way, and the DM's own time on a map with no scale.
+    await t.request('POST', `${base}/tokens/${thorin.id}/journey`, { body: { x: 50, y: 150, pace: 'fast' }, as: t.sam.token });
+    await t.request('POST', `${campaign}/clock`, { body: { add: 60 } });
+    res = await t.request('POST', `${base}/tokens/${thorin.id}/journey`, { body: { stop: true }, as: t.sam.token });
+    const stopped = res.json().token;
+    assert.ok(stopped.x < 290 && stopped.x > 50 && stopped.journey === null, `${stopped.x}`);
+    const road = await newMap(t, 'Road');
+    const bram = await addToken(t, road, { kind: 'npc', name: 'Bram', x: 10, y: 10 });
+    assert.equal((await t.request('POST', `${campaign}/maps/${road.id}/tokens/${bram.id}/journey`, { body: { x: 300, y: 10 } })).statusCode, 400, 'no scale, no time given');
+    res = await t.request('POST', `${campaign}/maps/${road.id}/tokens/${bram.id}/journey`, { body: { x: 300, y: 10, minutes: 120 } });
+    assert.equal(res.json().token.journey.arrives - res.json().token.journey.leaves, 120);
+
+    // A long rest moves the clock on 8 hours when the DM says so.
+    const before = (await t.request('GET', `${campaign}/clock`)).json().clock;
+    await t.request('POST', `${campaign}/rests`, { body: { kind: 'long', clock: true } });
+    assert.equal((await t.request('GET', `${campaign}/clock`)).json().clock, before + 480);
+    assert.equal(tokensOn(t, road)[0].journey, null, 'Bram got there in the night');
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('world: travel time, the clock in words, and journeys in the map events', () => {
+  assert.equal(travelMinutes(24, 'normal'), 8 * 60, 'a day on the road');
+  assert.equal(travelMinutes(30, 'normal'), 1440 + 2 * 60, 'then a night and 2 hours more');
+  assert.equal(travelMinutes(18, 'slow'), 8 * 60);
+  assert.equal(travelMinutes(30, 'fast'), 8 * 60);
+  assert.equal(clockText(480 + 13 * 1440 + 630), 'Day 14, 18:30');
+  assert.equal(durationText(1440 + 300), '1 day 5 hours');
+  const image = { file: 'image.png', type: 'image/png', width: 100, height: 100 };
+  const at = (h, m = 0) => new Date(2026, 9, 8, h, m).toISOString();
+  const tok = (id, name, journey = null) => ({ id, name, kind: 'pc', user_id: 1, x: 10, y: 10, journey });
+  const j = { from: { x: 10, y: 10 }, to: { x: 90, y: 10 }, leaves: 480, arrives: 2160, pace: 'normal', miles: 30, to_name: 'Daggerford' };
+  const histories = [{
+    id: 'aaaaaaaaaa',
+    entries: [
+      { saved_at: at(19), changes: [{ p: [], v: { name: 'The Vale', image, shown: true, tokens: [tok('aaa111', 'Thorin'), tok('bbb222', 'Lyra'), tok('ccc333', 'Bram')] } }] },
+      { saved_at: at(19, 5), reason: 'journey', changes: [{ p: ['tokens', 0, 'journey'], v: j }, { p: ['tokens', 1, 'journey'], v: j }] },
+      { saved_at: at(19, 30), reason: 'clock', changes: [{ p: ['tokens', 0, 'journey'], v: null }, { p: ['tokens', 1, 'journey'], v: null }] },
+    ],
+  }];
+  assert.deepEqual(mapEvents(histories, { date: '2026-10-08', rolloverHour: 6 }), [
+    '[19:00] The DM showed the map "The Vale".',
+    '[19:05] Thorin and Lyra set off for Daggerford on "The Vale" (30 miles, 1 day 4 hours at a normal pace; left Day 1, 08:00, due Day 2, 12:00).',
+    '[19:30] Thorin and Lyra arrived at Daggerford on "The Vale" (Day 2, 12:00).',
+  ]);
 });

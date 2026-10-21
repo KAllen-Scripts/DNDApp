@@ -9,7 +9,8 @@
  * A map shown only to some players says so on each line ("[seen only by user 3,
  * user 5]"), so what happened there is known only to them.
  */
-import { normalizeMap } from '@dndapp/shared/map.js';
+import { PACES, normalizeMap } from '@dndapp/shared/map.js';
+import { clockText, durationText } from '@dndapp/shared/settings.js';
 import { sessionDateFor } from '../store.js';
 import { applyJson } from '../sheets/store.js';
 
@@ -51,11 +52,45 @@ function eventsOf(before, after, reason) {
     const added = t.conditions.filter((c) => !b.conditions.includes(c));
     if (added.length) out.push(`${who(t)} became ${added.join(', ')} ${on}.`);
   }
+  out.push(...travelEvents(before, after, reason, was));
   const doors = new Map(before.walls.filter((w) => w.door).map((w) => [w.id, w]));
   const opened = after.walls.filter((w) => w.door && w.open && doors.has(w.id) && !doors.get(w.id).open).length;
   if (opened) out.push(`${opened === 1 ? 'A door was' : `${opened} doors were`} opened ${on}.`);
   const found = after.walls.filter((w) => w.secret && w.revealed && doors.get(w.id)?.secret && !doors.get(w.id).revealed).length;
   if (found) out.push(`${found === 1 ? 'A secret door was' : `${found} secret doors were`} found ${on}.`);
+  return out;
+}
+
+/** Names in a list: "Thorin", "Thorin and Lyra", "Thorin, Lyra and Mira". */
+const joinNames = (list) => (list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list.at(-1)}` : list[0]);
+
+/**
+ * Journeys on the map (the world's travel): who set off, where to, how far and when they're due, and who
+ * arrived or stopped, with the in-game day and time. Those going together are said together.
+ */
+function travelEvents(before, after, reason, was) {
+  const out = [];
+  const on = `on "${after.name}"`;
+  const groups = new Map();
+  const add = (key, t, text) => {
+    if (!groups.has(key)) groups.set(key, { who: [], text });
+    groups.get(key).who.push(who(t));
+  };
+  for (const t of after.tokens) {
+    const b = was.get(t.id);
+    if (t.hidden || !b) continue;
+    const j = t.journey;
+    if (j && (!b.journey || b.journey.leaves !== j.leaves || b.journey.arrives !== j.arrives)) {
+      const far = j.miles != null ? `${j.miles} miles, ` : '';
+      add(`go:${j.to_name}:${j.leaves}:${j.arrives}`, t, (w) => `${w} set off ${j.to_name ? `for ${j.to_name}` : 'on a journey'} ${on} (${far}${durationText(j.arrives - j.leaves)} at a ${PACES[j.pace].name.toLowerCase()} pace; left ${clockText(j.leaves)}, due ${clockText(j.arrives)}).`);
+    } else if (!j && b.journey) {
+      const bj = b.journey;
+      const where = bj.to_name ? ` at ${bj.to_name}` : '';
+      if (reason === 'journey stopped') add(`stop:${bj.to_name}`, t, (w) => `${w} stopped on the way${bj.to_name ? ` to ${bj.to_name}` : ''} ${on}.`);
+      else if (reason === 'clock' || reason === 'arrived') add(`at:${bj.to_name}:${bj.arrives}`, t, (w) => `${w} arrived${where} ${on}${reason === 'clock' ? ` (${clockText(bj.arrives)})` : ''}.`);
+    }
+  }
+  for (const { who: w, text } of groups.values()) out.push(text(joinNames(w)));
   return out;
 }
 

@@ -44,11 +44,13 @@ async function openDialog() {
   const nameOf = (id) => { const m = players.find((p) => p.id === id); return m ? m.character_name || m.name : 'someone'; };
   const ticks = players.map((p) => h('input', { type: 'checkbox', checked: true, value: p.id, 'aria-label': p.character_name || p.name }));
   const result = h('p', { class: 'muted small rest-result', role: 'status' });
+  // The in-game clock moves on by the rest (an hour, or 8 hours), and journeys with it.
+  const clock = h('input', { type: 'checkbox', id: 'rest-clock', checked: true });
   const call = async (kind) => {
     const chosen = ticks.filter((t) => t.checked).map((t) => Number(t.value));
     if (!chosen.length) return (result.textContent = 'Tick at least one player.');
     try {
-      const rest = await state.guarded(() => api('POST', `${base()}/rests`, { kind, to: chosen.length === players.length ? 'everyone' : chosen }));
+      const rest = await state.guarded(() => api('POST', `${base()}/rests`, { kind, to: chosen.length === players.length ? 'everyone' : chosen, clock: clock.checked }));
       if (!rest) return;
       const skipped = rest.skipped.map(nameOf);
       result.textContent = `${kind === 'long' ? 'Long' : 'Short'} rest done for ${rest.user_ids.map(nameOf).join(', ')}.${skipped.length ? ` ${skipped.join(', ')} ${skipped.length === 1 ? 'was' : 'were'} at 0 hit points and got nothing from it.` : ''}`;
@@ -67,6 +69,7 @@ async function openDialog() {
         : h('p', { class: 'muted' }, 'There are no players in this campaign yet.'),
       h('p', { class: 'muted small' }, h('strong', {}, 'Short rest: '), WHAT.short()),
       h('p', { class: 'muted small' }, h('strong', {}, 'Long rest: '), WHAT.long(edition), ` (${edition} rules)`),
+      h('label', { class: 'map-check small', title: 'Anyone on a journey moves along too' }, clock, ' Move the in-game clock on (an hour for a short rest, 8 hours for a long one)'),
       result,
       rests.length ? h('details', {}, h('summary', { class: 'small' }, 'Recent rests'), list) : list,
       h('div', { class: 'map-dialog-actions' },

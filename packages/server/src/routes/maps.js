@@ -4,7 +4,8 @@
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { MAP_KINDS, CLIMB_KINDS, CONDITIONS, EFFORTS, FOG_MAP, FOG_OPS, MAX_COMPANIONS, MAX_FOG_SHAPES, MAX_CLIMBS, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_PLACES, MAX_PLACE_POINTS, placeProblem, shownTo, arrivalSpots, characterMap, followGroup, followLoop, nearPlace, parentOf, trailFollowers, MAX_RAISED, MAX_TERRAIN, MAX_HEIGHT_FT, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, PLAYER_KINDS, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, ownToken, pathCost, snapToken, stepTurn, tokenPx, walkLevels, wallBetween } from '@dndapp/shared/map.js';
+import { MAX_CLOCK } from '@dndapp/shared/settings.js';
+import { MAP_KINDS, PACES, journeyAt, milesBetween, travelMinutes, CLIMB_KINDS, CONDITIONS, EFFORTS, FOG_MAP, FOG_OPS, MAX_COMPANIONS, MAX_FOG_SHAPES, MAX_CLIMBS, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_PLACES, MAX_PLACE_POINTS, placeProblem, shownTo, arrivalSpots, characterMap, followGroup, followLoop, nearPlace, parentOf, trailFollowers, MAX_RAISED, MAX_TERRAIN, MAX_HEIGHT_FT, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, PLAYER_KINDS, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, ownToken, pathCost, snapToken, stepTurn, tokenPx, walkLevels, wallBetween } from '@dndapp/shared/map.js';
 import sharp from 'sharp';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
@@ -16,7 +17,7 @@ import { isPdf, renderPdfPage } from '../maps/pdf.js';
 import { isUvtt, readUvtt, toUvtt, uvttImage, uvttContents } from '../maps/uvtt.js';
 
 export function registerMaps(app, r) {
-  const { access, archive, auth, config, kb, mapReader, maps, openLiveStream, publicMessage, statBlocks, upload } = r;
+  const { access, archive, auth, config, kb, mapReader, maps, openLiveStream, publicMessage, statBlocks, store, upload } = r;
 
   // ---------- maps (the DM imports them; players see shown maps and move their own token) ----------
 
@@ -43,13 +44,130 @@ export function registerMaps(app, r) {
       // One map per character: an old token of theirs here goes.
       m.tokens = m.tokens.filter((t) => !(t.kind === 'pc' && characters.has(t.user_id)));
       group.forEach((t, i) => {
-        const token = { ...t, ...(i === 0 ? apply : {}), id: ids.get(t.id), follows: t.follows && ids.has(t.follows) ? ids.get(t.follows) : i === 0 ? null : t.follows };
+        const token = { ...t, ...(i === 0 ? apply : {}), journey: null, id: ids.get(t.id), follows: t.follows && ids.has(t.follows) ? ids.get(t.follows) : i === 0 ? null : t.follows };
         m.tokens.push({ ...token, ...snapToken(m, token, spots[i].x, spots[i].y) });
       });
     }, { by, reason: `arrived from ${from.id}` });
     for (const user of characters) clearCharacter(cid, user, [from.id, target.id], by);
     return { arrived, id: ids.get(leaderId) };
   }
+
+
+  // ---------- travel and time (the world, third stage) ----------
+
+  /**
+   * Move the campaign's clock to `now` (minutes since day 1 began): everyone on a journey moves along
+   * it, and whoever's journey is over arrives. Returns the settings.
+   */
+  function moveClock(cid, now, by) {
+    const settings = store.setSettings(cid, { clock: now });
+    for (const map of maps.list(cid)) {
+      if (!map.tokens.some((t) => t.journey)) continue;
+      maps.change(cid, map.id, (m) => {
+        for (const t of m.tokens) {
+          if (!t.journey) continue;
+          const at = journeyAt(t.journey, now);
+          Object.assign(t, snapToken(m, t, at.x, at.y));
+          if (at.done) t.journey = null;
+        }
+      }, { by, reason: 'clock' });
+    }
+    return settings;
+  }
+
+  /** The clock (anyone in the campaign): { clock } (minutes since day 1 began). */
+  app.get('/campaigns/:cid/clock', async (request) => ({ clock: store.getSettings(access(request).cid).clock }));
+
+  /**
+   * Move the in-game clock (DM): { add?: minutes (negative goes back), set?: minutes, next_arrival?: true (to
+   * when the next journey ends) }. Journeys move along with it. Returns { clock }.
+   */
+  app.post('/campaigns/:cid/clock', async (request) => {
+    const a = access(request, { dm: true });
+    const body = z.object({ add: z.number().int().min(-1440 * 3650).max(1440 * 3650).optional(), set: z.number().int().min(0).max(MAX_CLOCK).optional(), next_arrival: z.literal(true).optional() }).strict().parse(request.body ?? {});
+    let now = store.getSettings(a.cid).clock;
+    if (body.set !== undefined) now = body.set;
+    if (body.add !== undefined) now += body.add;
+    if (body.next_arrival) {
+      const next = Math.min(...maps.list(a.cid).flatMap((m) => m.tokens.filter((t) => t.journey && t.journey.arrives > now).map((t) => t.journey.arrives)));
+      if (!Number.isFinite(next)) throw new BadRequestError('Nobody is on the road.');
+      now = next;
+    }
+    return { clock: moveClock(a.cid, Math.max(0, Math.min(MAX_CLOCK, now)), request.user.id).clock };
+  });
+
+  /**
+   * Send a token on a journey across this map (the world's travel): { x, y, pace?, place?, minutes? }.
+   * It and whoever follows it set off now by the clock and arrive at (x, y) (or the place) when the
+   * clock gets there; the time comes from the miles (the map's scale) at the pace, 8 hours on the road a
+   * day; `minutes` (DM only) says how long instead. { stop: true } ends it where they are now; { arrive:
+   * true } (DM) puts them there now. Players: their own token, to a place revealed to them if a place.
+   */
+  app.post('/campaigns/:cid/maps/:mid/tokens/:tid/journey', async (request) => {
+    const a = access(request);
+    const { map, view } = viewableMap(request);
+    const dm = a.role === 'dm';
+    const token = (dm ? map.tokens : view.tokens).find((t) => t.id === request.params.tid);
+    if (!token) throw new NotFoundError('No such token');
+    if (!dm && !ownToken(token, a.userId)) throw new AuthError('You can only send your own character and companions.', 403);
+    const body = z.object({
+      x: z.number().optional(),
+      y: z.number().optional(),
+      place: z.string().optional(),
+      pace: z.enum(Object.keys(PACES)).default('normal'),
+      minutes: z.number().int().min(0).max(1440 * 3650).optional(),
+      stop: z.literal(true).optional(),
+      arrive: z.literal(true).optional(),
+    }).strict().parse(request.body ?? {});
+    if (body.minutes !== undefined && !dm) throw new AuthError('Only the DM can say how long it takes', 403);
+    if (body.arrive && !dm) throw new AuthError('Only the DM can make them arrive now', 403);
+    const group = followGroup(map.tokens, token.id);
+    const now = store.getSettings(a.cid).clock;
+    let journey = null;
+    if (body.stop || body.arrive) {
+      if (!token.journey) throw new BadRequestError(`${token.name} isn't on the road.`);
+    } else {
+      let to;
+      let toName = '';
+      if (body.place) {
+        const place = view.places.find((p) => p.id === body.place);
+        if (!place) throw new NotFoundError('No such place');
+        to = { x: place.x, y: place.y };
+        toName = place.name;
+      } else {
+        if (body.x == null || body.y == null) throw new BadRequestError('Where to?');
+        to = { x: Math.min(map.image.width, Math.max(0, body.x)), y: Math.min(map.image.height, Math.max(0, body.y)) };
+      }
+      const from = { x: token.x, y: token.y };
+      const miles = milesBetween(map, from, to);
+      if (miles == null && body.minutes === undefined) throw new BadRequestError(dm ? "This map has no scale: set one in Map settings, or say how long it takes." : "This map has no scale yet, so there's no telling how long that takes. Ask your DM.");
+      const minutes = body.minutes ?? travelMinutes(miles, body.pace);
+      journey = { from, to, leaves: now, arrives: now + minutes, pace: body.pace, miles: miles == null ? null : Math.round(miles * 10) / 10, to_name: toName };
+    }
+    const ids = new Set(group.map((t) => t.id));
+    const saved = maps.change(a.cid, map.id, (m) => {
+      for (const t of m.tokens) {
+        if (!ids.has(t.id)) continue;
+        if (journey) {
+          // Followers keep their place round the leader all the way.
+          const dx = t.x - token.x;
+          const dy = t.y - token.y;
+          const off = (p) => ({ x: Math.min(m.image.width, Math.max(0, p.x + dx)), y: Math.min(m.image.height, Math.max(0, p.y + dy)) });
+          t.journey = { ...journey, from: { x: t.x, y: t.y }, to: off(journey.to) };
+          if (journey.arrives <= now) {
+            Object.assign(t, snapToken(m, t, t.journey.to.x, t.journey.to.y));
+            t.journey = null;
+          }
+        } else if (t.journey) {
+          const at = body.arrive ? { ...t.journey.to } : journeyAt(t.journey, now);
+          Object.assign(t, snapToken(m, t, at.x, at.y));
+          t.journey = null;
+        }
+      }
+    }, { by: request.user.id, reason: journey ? 'journey' : body.arrive ? 'arrived' : 'journey stopped' });
+    const out = maps.view(saved, a);
+    return { map: out, token: out.tokens.find((t) => t.id === token.id) ?? null, clock: now };
+  });
 
   /** A player character's token on any map but these goes (one map per character). */
   function clearCharacter(cid, userId, except, by) {
@@ -218,7 +336,7 @@ export function registerMaps(app, r) {
     const a = access(request);
     const dm = a.role === 'dm';
     // The DM also gets the AI walls effort used when they don't pick one (EFFORT_WALLS).
-    return { can_edit: dm, ...(dm && { walls_effort: config.llm.tasks.walls.effort }), maps: maps.list(a.cid).map((m) => maps.view(m, a)).filter(Boolean) };
+    return { can_edit: dm, clock: store.getSettings(a.cid).clock, ...(dm && { walls_effort: config.llm.tasks.walls.effort }), maps: maps.list(a.cid).map((m) => maps.view(m, a)).filter(Boolean) };
   });
 
   /**
@@ -319,11 +437,19 @@ export function registerMaps(app, r) {
       const { campaign_id: _c, from_dm: _d, ...out } = sig;
       sse.send(sig.kind, out);
     };
+    // The in-game clock, when the DM moves it.
+    const clock = ({ campaign_id, settings }) => {
+      if (campaign_id !== cid) return;
+      if (!current()) return sse.end();
+      sse.send('clock', { clock: settings.clock });
+    };
     maps.events.on('update', listener);
     maps.events.on('signal', signal);
+    store.events.on('settings', clock);
     sse.onClose(() => {
       maps.events.off('update', listener);
       maps.events.off('signal', signal);
+      store.events.off('settings', clock);
     });
   });
 
@@ -1157,6 +1283,7 @@ export function registerMaps(app, r) {
         if (moves) {
           // Moved on its own, it stops following; whoever follows it walks behind it (not in a fight, where everyone has their turn).
           if (body.follows === undefined) t.follows = null;
+          t.journey = null;
           if (!m.combat) trailFollowers(m, t.id, [...route.slice(0, -1), { x: t.x, y: t.y }]);
         }
       }, { by: request.user.id, reason: moving ? 'token moved' : 'token changed' })
@@ -1292,5 +1419,5 @@ export function registerMaps(app, r) {
     return { map: maps.view(saved, a) };
   });
 
-  Object.assign(r, { linkRecord, mapAiAllowed, tokenArt, viewableMap });
+  Object.assign(r, { linkRecord, mapAiAllowed, moveClock, tokenArt, viewableMap });
 }

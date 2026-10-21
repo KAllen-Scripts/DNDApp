@@ -75,7 +75,7 @@ test('the DM calls a long rest for chosen players from the Rest button', async (
     page.click(ticks[0]); // not Lyra
     page.click(page.$$('#rest-dialog button').find((b) => b.textContent === 'Long rest'));
     await page.settle();
-    assert.deepEqual(page.requests.filter((r) => r.path.endsWith('/rests') && r.method === 'POST').at(-1).body, { kind: 'long', to: [t.sam.id] });
+    assert.deepEqual(page.requests.filter((r) => r.path.endsWith('/rests') && r.method === 'POST').at(-1).body, { kind: 'long', to: [t.sam.id], clock: true });
     assert.equal(page.text('#rest-dialog .rest-result'), 'Long rest done for Thorin.');
     assert.match(page.text('#rest-dialog .rest-list'), /Long rest, .*: Thorin/);
     const { sheet } = await serverSheet(t);

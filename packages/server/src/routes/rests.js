@@ -70,15 +70,18 @@ export function registerRests(app, r) {
   });
 
   /**
-   * Call a rest for the party (DM): { kind: short | long, to?: "everyone" | [player ids] }.
-   * Every sheet in it is changed, and the players hear about it live.
+   * Call a rest for the party (DM): { kind: short | long, to?: "everyone" | [player ids], clock?: true }.
+   * Every sheet in it is changed, and the players hear about it live. With clock, the in-game clock moves
+   * on by the rest (an hour for a short rest, 8 hours for a long one), and journeys with it.
    */
   app.post('/campaigns/:cid/rests', async (request, reply) => {
     const a = access(request, { dm: true });
-    const { kind, to } = z
-      .object({ kind: z.enum(REST_KINDS), to: z.union([z.literal('everyone'), z.array(z.number().int()).min(1).max(100)]).default('everyone') })
+    const { kind, to, clock } = z
+      .object({ kind: z.enum(REST_KINDS), to: z.union([z.literal('everyone'), z.array(z.number().int()).min(1).max(100)]).default('everyone'), clock: z.boolean().default(false) })
       .parse(request.body);
+    const rest = await rests.call(a.cid, { kind, to, by: request.user.id });
+    if (clock) r.moveClock(a.cid, r.store.getSettings(a.cid).clock + (kind === 'long' ? 8 * 60 : 60), request.user.id);
     reply.status(201);
-    return rests.view(await rests.call(a.cid, { kind, to, by: request.user.id }), a);
+    return rests.view(rest, a);
   });
 }

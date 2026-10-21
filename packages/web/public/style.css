@@ -1713,3 +1713,12 @@ button.busy:disabled { opacity: 1; }
 .map-party { display: grid; gap: 0.4rem; margin: 0.5rem 0; }
 .map-party-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.4rem 0.5rem; border: 1px solid var(--border); border-radius: 0.5rem; }
 .map-party-row .spacer { flex: 1; }
+/* Journeys (the world's travel): a dashed line to where each is headed; the in-game clock over the map. */
+.map-routes { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.map-routes .map-route { stroke: #f2d675; stroke-width: 2.5px; stroke-dasharray: 7 5; }
+.map-routes .map-route-end { fill: #f2d675; stroke: rgb(0 0 0 / 0.6); stroke-width: 1px; }
+.map-view.picking { cursor: crosshair; }
+.map-clock { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.map-clock:disabled { opacity: 1; cursor: default; }
+.map-clock-now { font-size: 1.3rem; font-weight: 700; margin: 0.25rem 0 0.5rem; }
+.map-road { margin: 0.25rem 0; padding-left: 1.2rem; }

@@ -131,6 +131,8 @@ export function normalizeToken(t = {}, map) {
     // The token it follows (the world, owner 2026-10-18: characters travel together or apart): it walks behind
     // that one and goes where it goes, until it's moved on its own; null for none.
     follows: isTokenId(t.follows) && String(t.follows) !== String(t.id) ? String(t.follows) : null,
+    // On the road (the world's travel): where it set off from and is going, and when, by the campaign's clock; null when not.
+    journey: normalizeJourney(t.journey, map?.image),
   };
 }
 
@@ -439,6 +441,63 @@ export function arrivalSpots(map, tokens, at) {
 
 /** Is (x, y) at a place: inside its area, or next to its pin (as near as next to a link)? */
 export const nearPlace = (map, place, x, y) => (place.points ? pointInPolygon(x, y, place.points) : false) || nearLink(map, place, x, y);
+
+/**
+ * Travel pace (Player's Handbook, both editions): miles a day, a day's travel being 8 hours on the road
+ * (the books' table: slow 18, normal 24, fast 30; their miles an hour, 2, 3 and 4, don't quite add up to
+ * that, so a day's miles are what counts). What each pace costs differs by edition; `effect` says both.
+ */
+export const PACES = {
+  slow: { name: 'Slow', perDay: 18, effect: 'Able to move stealthily (2014); advantage on Perception and Survival checks (2024)' },
+  normal: { name: 'Normal', perDay: 24, effect: '' },
+  fast: { name: 'Fast', perDay: 30, effect: '−5 to passive Perception (2014); disadvantage on Perception and Survival checks (2024)' },
+};
+export const TRAVEL_HOURS_PER_DAY = 8;
+const IN_MILES = { ft: 1 / 5280, m: 1 / 1609.344, mi: 1, km: 1 / 1.609344 };
+
+/** Miles between two points on a map with a scale, or null without one. */
+export function milesBetween(map, a, b) {
+  const per = unitsPerPx(map);
+  if (per == null) return null;
+  return Math.hypot(b.x - a.x, b.y - a.y) * per * (IN_MILES[map.scale.unit] ?? 1);
+}
+
+/**
+ * How long a journey of `miles` takes at a pace, in minutes of the clock: 8 hours on the road a day, so
+ * 30 miles at a normal pace is a day's travel (8 hours), a night, and 2 hours more the next day.
+ */
+export function travelMinutes(miles, pace = 'normal') {
+  const hours = (miles / (PACES[pace] ?? PACES.normal).perDay) * TRAVEL_HOURS_PER_DAY;
+  if (!(hours > 0)) return 0;
+  const nights = Math.ceil(hours / TRAVEL_HOURS_PER_DAY) - 1;
+  return Math.round(nights * 1440 + (hours - nights * TRAVEL_HOURS_PER_DAY) * 60);
+}
+
+/** A token's journey: { from: {x, y}, to: {x, y}, leaves, arrives (clock minutes), pace, miles (null: no scale), to_name }, or null. */
+export function normalizeJourney(j, image = {}) {
+  if (!j || typeof j !== 'object') return null;
+  const { width = 1, height = 1 } = image;
+  const point = (p) => ({ x: num(p?.x, { min: 0, max: width, fallback: 0 }), y: num(p?.y, { min: 0, max: height, fallback: 0 }) });
+  const leaves = Number.isInteger(j.leaves) && j.leaves >= 0 ? j.leaves : null;
+  const arrives = Number.isInteger(j.arrives) && j.arrives >= (leaves ?? 0) ? j.arrives : null;
+  if (leaves == null || arrives == null) return null;
+  return {
+    from: point(j.from),
+    to: point(j.to),
+    leaves,
+    arrives,
+    pace: j.pace in PACES ? j.pace : 'normal',
+    miles: j.miles == null ? null : round(num(j.miles, { min: 0, max: 1e7, fallback: 0 }), 1),
+    to_name: str(j.to_name, 80),
+  };
+}
+
+/** Where a journey has got to at clock `now`: { x, y, done } (along a straight line, evenly over the whole time). */
+export function journeyAt(j, now) {
+  const span = j.arrives - j.leaves;
+  const f = span > 0 ? Math.min(1, Math.max(0, (now - j.leaves) / span)) : 1;
+  return { x: round(j.from.x + (j.to.x - j.from.x) * f, 1), y: round(j.from.y + (j.to.y - j.from.y) * f, 1), done: now >= j.arrives };
+}
 
 export const MAX_PINS = 100;
 export const PIN_COLOR = '#d9a400';

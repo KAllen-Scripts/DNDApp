@@ -84,7 +84,7 @@ test('the DM imports a map: archived as uploaded, read by the AI, hidden from pl
 
     // Players can't see it, or tell that it exists.
     const base = `/campaigns/${t.campaign.id}/maps`;
-    assert.deepEqual((await t.request('GET', base, { as: t.sam.token })).json(), { can_edit: false, maps: [] });
+    assert.deepEqual((await t.request('GET', base, { as: t.sam.token })).json(), { can_edit: false, clock: 480, maps: [] });
     assert.equal((await t.request('GET', `${base}/${map.id}`, { as: t.sam.token })).statusCode, 404);
     assert.equal((await t.request('GET', `${base}/${map.id}/image`, { as: t.sam.token })).statusCode, 404);
     // Only the DM imports or changes maps.
