@@ -78,7 +78,7 @@ test('look: the dialog opens from the login screen; a click chooses, applies and
     assert.deepEqual(saved(page), {
       theme: 'frost', layout: 'classic', density: 'cozy', chat: 'letters', sheetStyle: 'match', sheetLayout: 'single',
       mapBar: 'top', besideSide: 'right', tokenLabels: 'always', phone: 'auto', startTab: 'ask',
-      accent: '', tabOrder: ['ask', 'notes', 'sheet', 'inventory', 'creatures', 'items', 'merchants', 'map', 'handouts', 'archivist'], hiddenTabs: [], hiddenTools: [],
+      accent: '', tabOrder: ['ask', 'notes', 'sheet', 'inventory', 'creatures', 'items', 'merchants', 'map', 'handouts', 'archivist', 'wiki'], hiddenTabs: [], hiddenTools: [],
     });
 
     page.click('.look-reset');

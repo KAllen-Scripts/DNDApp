@@ -32,6 +32,7 @@
  *     map_assets/<id>/<picture file>   one of the DM's own assets for the map creator, as uploaded
  *     map_assets/<id>/changes.jsonl    the whole asset after each change, append-only
  *     rests.jsonl                      short and long rests the DM called, append-only
+ *     wiki/<id>/changes.jsonl          the whole page of the DM's wiki after each save, append-only
  *     sessions/0001/
  *       transcript.txt                 byte-for-byte as uploaded, read-only
  *       meta.json                      number, title, played_on, sha256
@@ -229,6 +230,11 @@ export function createArchive(root) {
 
     appendHandout: (slug, id, entry) => appendLine(path.join(campaignDir(slug), 'handouts', mapDir(id), 'changes.jsonl'), entry),
 
+    appendWikiPage: (slug, id, entry) => appendLine(path.join(campaignDir(slug), 'wiki', mapDir(id), 'changes.jsonl'), entry),
+
+    /** Every saved version of a wiki page, oldest first. */
+    readWikiChanges: (slug, id) => readLines(path.join(campaignDir(slug), 'wiki', mapDir(id), 'changes.jsonl')),
+
     /** Keep a token's picture (the DM's, for an NPC or enemy) exactly as uploaded (never replaced). */
     saveTokenImage(slug, mapId, file, buf) {
       const dest = path.join(campaignDir(slug), 'maps', mapDir(mapId), 'tokens', path.basename(file));
@@ -360,6 +366,7 @@ export function createArchive(root) {
           merchants: lastOfEach('merchants'),
           mapAssets: lastOfEach('map_assets'),
           mapStamps: lastOfEach('map_stamps'),
+          wiki: lastOfEach('wiki'),
           rests: readLines(path.join(campaignDir(slug), 'rests.jsonl')),
         };
       }

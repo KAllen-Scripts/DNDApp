@@ -122,6 +122,7 @@
         <button role="tab" data-tab="map" aria-selected="false"><span class="tab-icon" aria-hidden="true">⌖</span><span data-label="Map">Map</span></button>
         <button role="tab" data-tab="handouts" aria-selected="false"><span class="tab-icon" aria-hidden="true">✉</span><span data-label="Handouts">Handouts</span></button>
         <button role="tab" data-tab="archivist" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">☰</span><span data-label="Archivist">Archivist</span></button>
+        <button role="tab" data-tab="wiki" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">❦</span><span data-label="Wiki">Wiki</span></button>
       </nav>
       <button id="tab-popout" class="ghost" title="Open this page in its own window (to keep it open beside another, or on another screen)">Pop out</button>
       <button id="dice-open" class="ghost dice-open" title="Roll dice">Dice</button>
@@ -199,6 +200,19 @@
       </form>
       <h3>Earlier corrections</h3>
       <ol id="dm-corrections" class="dm-corrections"></ol>
+    </section>
+
+    <!-- The DM's wiki (wiki.js): pages about the world; players reach only what's available to them, through Ask. -->
+    <section id="tab-wiki" class="panel wiki-panel" hidden>
+      <aside class="wiki-side" aria-label="Wiki pages">
+        <div class="wiki-bar">
+          <button id="wiki-new" type="button" class="primary">New page</button>
+          <input id="wiki-filter" type="search" placeholder="Find a page…" aria-label="Find a page" autocomplete="off">
+        </div>
+        <span id="wiki-status" class="muted small" role="status"></span>
+        <nav id="wiki-list" class="wiki-list"></nav>
+      </aside>
+      <div id="wiki-main" class="wiki-main"></div>
     </section>
 
     <!-- Character sheet (sheet.js) -->

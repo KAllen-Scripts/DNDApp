@@ -11,7 +11,7 @@
 import { EventEmitter } from 'node:events';
 import { json, wipeDerived } from './db/index.js';
 
-export function createJobs({ db, store, search, pipeline, config, log = console }) {
+export function createJobs({ db, store, search, pipeline, wiki = null, config, log = console }) {
   const events = new EventEmitter();
   events.setMaxListeners(0);
   let running = false;
@@ -60,6 +60,8 @@ export function createJobs({ db, store, search, pipeline, config, log = console 
       wipeDerived(db, cid);
       search.invalidate(cid);
       await pipeline.reindexNotes(cid);
+      // The wiki isn't derived, but its search docs are wiped with the rest.
+      await wiki?.reindex(cid);
       const sessions = db.prepare('SELECT number FROM sessions WHERE campaign_id = ? ORDER BY number').all(cid).map((s) => s.number);
       const corrections = store.getCorrections(cid);
       // Each correction is replayed right after the session it was made against.

@@ -21,6 +21,12 @@ export class RateLimitError extends Error {}
 /** For the DM only, after the list of their creatures (owner's request, 2026-10-09). */
 const DM_CREATURES = `How to use the DM's creatures: when the DM asks about a creature or NPC (its stats, attacks, AC, hit points, tactics), check their creatures first. A saved one with that name ("Goblin 3" or "the goblins" mean "Goblin") is the DM's own version: its stat block and notes take priority over the books, the campaign records and your own knowledge, even where they differ from the official creature. Get it with get_my_creatures (creatures named in the question are already included below), answer from it, and say it's from their Creatures tab. Use the books or your knowledge only when none matches or it has no stat block, and then say so.`;
 
+/** The DM's wiki, for the DM (owner, 2026-10-20: "When the DM asks questions this should draw from the archivist AND the wiki"). */
+const WIKI_DM = `How to use the DM's wiki: the DM keeps a wiki of their own pages about the world (people, places, factions, secrets, plans), separate from the archivist's records. For questions about the campaign, use both: search_wiki and read_wiki_page for the wiki, the knowledge-base tools for the records. The wiki is the DM's own word on what is true in the world, including what the players haven't found out; the records are what happened in play. When they disagree, say so and give both. Each wiki section says who the DM has made it available to; when the DM asks what the players know, use that and the records' known_by. Cite wiki pages like this: (wiki: Page title).`;
+
+/** The parts of the DM's wiki made available to this player (owner, 2026-10-20: "If the part of the wiki is available to the players, then their ask should use it"). */
+const WIKI_PLAYER = `How to use the wiki: the DM has shared some pages of their wiki with this player (search_wiki, read_wiki_page). It's the DM's own word about the world, so treat it like the DM's narration. Use it alongside the records for questions about the campaign, and cite it like this: (wiki: Page title).`;
+
 const SYSTEM = `You answer a player's questions during their Dungeons & Dragons campaign. The sessions were recorded and transcribed by speech-to-text, and an archivist AI maintains a knowledge base from them (its guide to how it's organised is below). Players also keep private notes. You can search all of it with your tools; everything you can see has already been filtered to what this player's character may know.
 
 First, decide what kind of question it is:
@@ -92,7 +98,7 @@ export function groupEdition(shelf, chosen = null) {
   return "The group's edition: unknown. Use the edition the archivist's guide or pinned records say they play; if nothing says, say which edition your answer is from.";
 }
 
-export function createQA({ db, store, kb, search, books, creatures = null, editions = null, llm, config }) {
+export function createQA({ db, store, kb, search, books, creatures = null, editions = null, wiki = null, llm, config }) {
   const Q = config.qa;
 
   function checkRate(userId) {
@@ -165,6 +171,7 @@ export function createQA({ db, store, kb, search, books, creatures = null, editi
     const who = member
       ? `${member.name}${member.role === 'dm' ? ' (the DM; may see everything except players\' private notes)' : member.character_name ? `, who plays ${member.character_name}` : ''}`
       : 'a member of the campaign';
+    const tools = createTools({ db, store, kb, search, books, wiki, config, campaignId, viewer, dmCreatures });
     const system = [
       SYSTEM,
       `Campaign: ${campaign.name}\nYou are answering: ${who}.`,
@@ -181,12 +188,12 @@ export function createQA({ db, store, kb, search, books, creatures = null, editi
             .map((c) => `- ${c.name} (${c.kind === 'npc' ? 'NPC' : 'enemy'}${c.stats ? '' : ', no stat block'})`)
             .join('\n')}\n</dm_creatures>\n${DM_CREATURES}`
         : '',
+      tools.hasWiki ? (viewer.seesAll ? WIKI_DM : WIKI_PLAYER) : '',
       pinned.length ? `<pinned_records>\n${pinned.map(renderRecord).join('\n\n---\n\n')}\n</pinned_records>` : '',
     ]
       .filter(Boolean)
       .join('\n\n');
 
-    const tools = createTools({ db, store, kb, search, books, config, campaignId, viewer, dmCreatures });
     const found = await tools.preSearch(question);
     const mine = tools.myCreaturesIn(question);
     const prompt =

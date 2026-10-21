@@ -101,6 +101,10 @@ If one can't start (no WebGL), the other is tried, then the result just appears.
 
 The **Handouts** tab: the DM gives players a picture and/or text (a letter, a wanted poster, a riddle), to everyone or to chosen players, and can change who gets it or take it back. Players see only the ones given to them; a new one arrives straight away and puts a count on the tab. Handouts are archived, and the archivist gets them (with who got them) between sessions.
 
+### The DM's Wiki tab
+
+Only the DM has it. Pages for people, places, factions, lore, anything: each has sections, other names, a kind, tags and can sit inside another page; `[[Page name]]` links pages. Every page, section, and block of text (`:::for Thorin` … `:::`, `:::dm` … `:::`) says who it's available to; new pages are the DM's alone. View as shows a page as a player sees it. Ask uses all of it for the DM and only what's available to the asking player. Every save is kept, and History can bring an older version back.
+
 ### The DM's Archivist tab
 
 Only the DM has it. It lists the archivist's questions (when sources disagree, e.g. two spellings of an NPC), each with an answer box and Dismiss; an answer becomes a correction. Below, the DM can send any correction in plain words and see earlier ones. The archivist applies them in the background.
@@ -276,6 +280,10 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET / POST | `/campaigns/:cid/handouts` | Handouts given to you (DM: all) `{can_edit, handouts}` / give one (DM) `{title, text?, to: "everyone" \| [user ids], picture?: {filename, data (base64)}}` (text or a picture) |
 | PATCH / DELETE | `/campaigns/:cid/handouts/:hid` | Change one (DM) `{title?, text?, to?}` / take it back (DM; kept in the archive) |
 | GET | `/campaigns/:cid/handouts/:hid/image` | A handout's picture (only for those it was given to, and the DM) |
+| GET / POST | `/campaigns/:cid/wiki` | The DM's wiki pages and the campaign's players `{pages, players}` / make a page `{title, aliases?, kind?, parent?, tags?, available?: "dm" \| "all" \| [user ids], sections?: [{heading, text, available?}]}` (DM only) |
+| GET / PUT / DELETE | `/campaigns/:cid/wiki/:pid` | A page with `mentioned_in` and `unknown_names` (`?as=<user id>`: what that player may see, or `null`) / save it `{version, …}` (409 if someone saved first) / delete it (kept in the archive) (DM only) |
+| GET | `/campaigns/:cid/wiki/:pid/history` (`/:version`) | Every version of a page / one version (DM only) |
+| POST | `/campaigns/:cid/wiki/:pid/restore` | Bring an earlier version back as a new one `{version}` (DM only) |
 | GET / POST | `/campaigns/:cid/maps` | Maps you can see `{can_edit, maps}` (players: only shown maps, without the AI's description) / import one (DM) `{filename, data (base64), name?, page?, read?}` (an image, or a PDF and the page to use, default 1); with `read: true` the AI reads it in the background (otherwise `reading.status` is `none` until `POST .../read`). 429 past `MAP_AI_PER_HOUR` AI calls |
 | POST | `/campaigns/:cid/maps/design` | Make a map in the creator (DM) `{name, design}` (SPEC §6.6 "Making a map"): the server draws its picture and sets up its grid, walls, doors, lights and difficult terrain; starts hidden |
 | GET / PUT | `/campaigns/:cid/maps/:mid/design` | A made map's design (DM) `{design}` / save it again `{design}`: a new picture, the creator's walls, links, lights and terrain replaced, everything else kept |

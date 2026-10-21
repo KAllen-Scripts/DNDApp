@@ -357,6 +357,17 @@ CREATE TABLE IF NOT EXISTS rests (
 );
 CREATE INDEX IF NOT EXISTS rests_campaign ON rests(campaign_id, kind, at);
 
+-- The DM's wiki: pages about the world, with who each part is available to.
+-- Archived as wiki/<id>/changes.jsonl (the whole page each save). Schema v18.
+CREATE TABLE IF NOT EXISTS wiki_pages (
+  id           TEXT PRIMARY KEY,  -- random, also the archive folder name
+  campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  data         TEXT NOT NULL,     -- JSON; see normalizeWikiPage in src/wiki.js
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS wiki_pages_campaign ON wiki_pages(campaign_id);
+
 CREATE TABLE IF NOT EXISTS jobs (
   id           INTEGER PRIMARY KEY,
   campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,

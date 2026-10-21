@@ -28,6 +28,7 @@ const MODULES = {
   'shared/rolls.js': '@dndapp/shared/rolls.js',
   'shared/gear.js': '@dndapp/shared/gear.js',
   'shared/settings.js': '@dndapp/shared/settings.js',
+  'shared/wiki.js': '@dndapp/shared/wiki.js',
   'shared/map.js': '@dndapp/shared/map.js',
   'shared/map-design.js': '@dndapp/shared/map-design.js',
   'shared/map-paint.js': '@dndapp/shared/map-paint.js',
