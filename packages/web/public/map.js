@@ -9,12 +9,12 @@
  * the server decides where a token really ends up.
  */
 import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from './api.js';
-import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, playersMap, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, distanceToWall, inTemplate, snapTemplatePoint, groundAt, tokenTall, bridgeAt, isUnder } from './shared/map.js';
-import { EDITING_KEY, PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, base, downloadUvtt, report, state, status } from './map-state.js';
+import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, EFFORTS, playersMap, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, distanceToWall, inTemplate, snapTemplatePoint, groundAt, tokenTall, bridgeAt, isUnder } from './shared/map.js';
+import { PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, WALLS_EFFORT_KEY, base, downloadUvtt, report, state, status } from './map-state.js';
 import { canChangeTemplate, placeTemplate, renderTemplates, selectTemplate, templateControls, templateDialog, templateMove, templateUp } from './map-templates.js';
 import { openShop } from './merchants.js';
 import { openCreator } from './map-creator.js';
-import { chooseTokenPicture, fillStats, forgetPlayers, importMap, recordDialog, removeToken, removeTokenPicture, saveCreature, settingsDialog, statsDialog, tokenDialog } from './map-dm.js';
+import { chooseTokenPicture, fillStats, forgetPlayers, importMap, newMapDialog, recordDialog, removeToken, removeTokenPicture, saveCreature, settingsDialog, statsDialog, tokenDialog } from './map-dm.js';
 import { renderCombat } from './map-combat.js';
 import { companionDialog, companionRolls, dismissCompanion, myCompanion } from './map-companions.js';
 import { initMapFull } from './map-full.js';
@@ -34,8 +34,10 @@ export async function loadMaps({ campaignId, userId, guarded }) {
   state.images.clear();
   for (const url of state.tokenPictures.values()) if (url) URL.revokeObjectURL(url);
   state.tokenPictures.clear();
-  const { can_edit, maps } = await api('GET', base());
+  const { can_edit, maps, walls_effort } = await api('GET', base());
   state.canEdit = can_edit;
+  state.wallsEffort = walls_effort ?? '';
+  state.editing = false;
   state.maps = maps;
   $('#tab-map').classList.toggle('can-edit', can_edit);
   state.broughtSeen = playersMap(maps)?.brought_at ?? '';
@@ -209,8 +211,8 @@ async function bringPlayers() {
 function howToSeeAnything(map) {
   const f = map.fog;
   if (!f?.enabled || f.map !== 'dark' || f.shapes.some((s) => s.op === 'reveal')) return '';
-  if (!f.sight) return 'reveal parts, or tick Line of sight, in Fog & walls';
-  if (!map.tokens.some((t) => t.kind === 'pc')) return 'reveal parts in Fog & walls, or add their characters (they see from their tokens)';
+  if (!f.sight) return 'reveal parts, or tick Line of sight, in Fog & sight';
+  if (!map.tokens.some((t) => t.kind === 'pc')) return 'reveal parts in Fog & sight, or add their characters (they see from their tokens)';
   return '';
 }
 
@@ -234,7 +236,7 @@ export function render() {
     $('#map-signals').replaceChildren();
     empty.hidden = false;
     empty.textContent = state.canEdit
-      ? 'No maps yet. Import one (a battle map, a town, a region, anything; Map settings has the AI read its grid and scale), or make one from scratch with Make a map. Then add tokens.'
+      ? 'No maps yet. Press New map to import one (a battle map, a town, a region, anything) or make one from scratch. Then add tokens.'
       : 'No maps to see yet. Your DM shares them here.';
     status('');
     return;
@@ -416,12 +418,19 @@ function renderFogTools() {
   const map = state.current;
   const tools = $('#map-fog-tools');
   const walls = $('#map-wall-tools');
-  walls.hidden = tools.hidden;
-  // Raised areas show (with their heights) while the walls panel is open.
+  // Edit map: its tools instead of the play tools (and no fog panel meanwhile).
+  const editing = state.editing && !!map;
+  walls.hidden = !editing;
+  if (editing) tools.hidden = true;
+  $('#tab-map').classList.toggle('editing', editing);
+  $('#map-edit').setAttribute('aria-pressed', String(editing));
+  // Raised areas show (with their heights) while editing.
   if (map) renderTerrain();
   $('#map-fog-open').setAttribute('aria-pressed', String(!tools.hidden));
   $('#map-view').classList.toggle('fog-drawing', !!map && ((!!state.fogMode && !!map.fog?.enabled) || !!state.wallMode));
-  if (tools.hidden || !map) return;
+  for (const b of document.querySelectorAll('[data-wall-mode]')) b.setAttribute('aria-pressed', String(state.wallMode === b.dataset.wallMode));
+  for (const b of tools.querySelectorAll('[data-fog-mode]')) b.setAttribute('aria-pressed', String(state.fogMode === b.dataset.fogMode));
+  if ((tools.hidden && walls.hidden) || !map) return;
   $('#map-fog-on').checked = !!map.fog?.enabled;
   $('#map-fog-map').value = map.fog.map;
   $('#map-fog-map').disabled = !map.fog.enabled;
@@ -439,6 +448,13 @@ function renderFogTools() {
   const memory = $('#map-memory-on');
   memory.checked = map.fog.memory;
   memory.disabled = !map.fog.enabled || !map.fog.sight || map.fog.map !== 'dark';
+  tools.querySelector('[data-wall-action="forget"]').disabled = !map.fog?.enabled || !map.fog.sight || !map.fog.memory;
+  $('#map-fog-hint').textContent = !map.fog?.enabled
+    ? 'With fog on, players see nothing until you reveal parts (pick Reveal and drag over the map), or tick Line of sight.'
+    : map.fog.sight
+      ? `Players see what their own token can see${map.fog.dark ? ' where there is light or their darkvision reaches' : ''}. Walls, doors and lights are set in Edit map.`
+      : 'Players only see what you reveal. Tick Line of sight to let their tokens see past the walls.';
+  $('#map-change-design').hidden = !map.designed;
   for (const b of walls.querySelectorAll('[data-wall-mode]')) b.setAttribute('aria-pressed', String(state.wallMode === b.dataset.wallMode));
   // Where a new link leads: any other map.
   const linkTo = $('#map-link-to');
@@ -464,22 +480,84 @@ function renderFogTools() {
   draftButton.disabled = drafting;
   draftButton.classList.toggle('busy', drafting);
   draftButton.setAttribute('aria-busy', String(drafting));
-  draftButton.textContent = drafting ? 'AI walls: working…' : 'AI walls';
+  draftButton.textContent = drafting ? 'AI walls: working…' : 'AI walls…';
   walls.querySelector('[data-wall-action="clear-ai"]').disabled = ![...map.walls, ...(map.lights ?? []), ...(map.terrain ?? [])].some((w) => w.source === 'ai');
-  walls.querySelector('[data-wall-action="forget"]').disabled = !map.fog?.enabled || !map.fog.sight || !map.fog.memory;
   const count = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const doors = map.walls.filter((w) => w.door).length;
   const low = map.walls.filter((w) => w.kind === 'low').length;
-  $('#map-wall-hint').textContent = !map.fog?.enabled
-    ? 'Turn on Fog of war first. Then, with Line of sight, players see what their own token can see past the walls.'
-    : map.fog.sight
-      ? `${count(map.walls.length - doors - low, 'wall')}, ${count(low, 'obstacle')}, ${count(doors, 'door')}, ${count(map.lights?.length ?? 0, 'light')}. Players see what their own token can see${map.fog.dark ? ' where there is light or their darkvision reaches' : ''}, and open doors next to them.`
-      : 'Players only see what you reveal. Tick Line of sight to let their tokens see past the walls.';
+  $('#map-wall-hint').textContent = `${count(map.walls.length - doors - low, 'wall')}, ${count(low, 'obstacle')}, ${count(doors, 'door')}, ${count(map.lights?.length ?? 0, 'light')}.${map.fog?.enabled && map.fog.sight ? '' : ' They block players\' sight once Fog & sight has Line of sight on.'}`;
 }
 
 /** The DM's dismissed AI walls messages: the map's id → the finished_at they closed. */
 const WALL_NOTE_KEY = (mapId) => `dndapp.map.wallNoteSeen.${mapId}`;
 let wallDraftTick = null;
+
+/** How hard the AI thinks about walls, in words, with what it means. */
+export const EFFORT_NAMES = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
+const EFFORT_NOTES = {
+  low: 'Quickest. Fine for a simple room; misses more on a busy map.',
+  medium: 'Quick, and good on plain maps.',
+  high: 'Careful. Good for most maps.',
+  xhigh: 'More careful still: slower, and better at doors and broken walls.',
+  max: 'The most careful and the slowest. Uses the most of your Claude usage.',
+};
+
+/**
+ * AI walls (the DM): first how hard the AI thinks, in a dialog, so the choice
+ * can't be missed (owner, 2026-10-20: "I don't see the option to change
+ * reasoning effort"). The last pick is kept in this browser.
+ */
+export function wallsDraftDialog(map) {
+  if (!map) return;
+  const dialog = $('#map-dialog');
+  const fallback = EFFORTS.includes(state.wallsEffort) ? state.wallsEffort : 'xhigh';
+  const kept = storage.get(WALLS_EFFORT_KEY);
+  let chosen = EFFORTS.includes(kept) ? kept : fallback;
+  const options = EFFORTS.map((e) => {
+    const radio = h('input', { type: 'radio', name: 'walls-effort', value: e, checked: e === chosen, onchange: () => (chosen = e) });
+    return h('label', { class: 'map-effort' }, radio,
+      h('span', {}, h('strong', {}, EFFORT_NAMES[e]), e === fallback ? ' (the usual)' : '', h('span', { class: 'muted small' }, ` ${EFFORT_NOTES[e]}`)));
+  });
+  const replacing = map.walls.some((w) => w.source === 'ai');
+  const start = () => {
+    storage.set(WALLS_EFFORT_KEY, chosen === fallback ? null : chosen);
+    startWallsDraft(map, chosen);
+  };
+  dialog.replaceChildren(
+    h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => {
+      e.preventDefault();
+      dialog.close();
+      start();
+    } },
+      h('h2', {}, 'AI walls'),
+      h('p', { class: 'muted small' }, `The AI traces the walls, doors, lights, stairs and heights from the picture, for you to correct. It takes a few minutes; carry on meanwhile.${replacing ? " Its earlier draft is replaced; walls you drew stay." : ''}`),
+      h('fieldset', { class: 'map-efforts' }, h('legend', {}, 'How hard should it think?'), ...options),
+      h('div', { class: 'map-dialog-actions' },
+        h('span', { class: 'spacer' }),
+        h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel'),
+        h('button', { class: 'primary', id: 'map-walls-start' }, replacing ? 'Draft again' : 'Start'),
+      ),
+    ),
+  );
+  dialog.onclose = null;
+  dialog.showModal();
+}
+
+/** Ask the server for an AI walls draft at this effort. */
+async function startWallsDraft(map, effort) {
+  const button = $('#map-walls-draft');
+  // Show it's started straight away; the server's answer brings the live progress.
+  button.disabled = true;
+  button.textContent = 'AI walls: starting…';
+  try {
+    const saved = await state.guarded(() => api('POST', `${base()}/${map.id}/walls/draft`, EFFORTS.includes(effort) ? { effort } : {}));
+    if (saved) onMap(saved);
+  } catch (err) {
+    report(err);
+  } finally {
+    if (state.current) renderFogTools();
+  }
+}
 
 /** What the AI is doing now, in words, from the map's wall_draft. */
 export function wallDraftStep(d) {
@@ -522,13 +600,13 @@ function renderWallDraft() {
   if (d.status === 'pending') {
     el.replaceChildren(
       h('span', { class: 'spinner', 'aria-hidden': 'true' }),
-      h('span', {}, h('strong', {}, 'AI walls: '), `${wallDraftStep(d)}…`, d.started_at ? ` ${sinceText(d.started_at)} so far.` : '', h('span', { class: 'muted' }, ' It takes a few minutes; carry on meanwhile. The walls appear when it\'s done.')),
+      h('span', {}, h('strong', {}, 'AI walls: '), `${wallDraftStep(d)}…`, d.started_at ? ` ${sinceText(d.started_at)} so far.` : '', EFFORT_NAMES[d.effort] ? ` ${EFFORT_NAMES[d.effort]} effort.` : '', h('span', { class: 'muted' }, ' It takes a few minutes; carry on meanwhile. The walls appear when it\'s done.')),
     );
     const tick = setTimeout(() => state.current?.id === map.id && renderWallDraft(), 1000);
     tick.unref?.();
     wallDraftTick = tick;
   } else if (d.status === 'done') {
-    const took = d.started_at ? ` in ${sinceText(d.started_at, Date.parse(d.finished_at))}` : '';
+    const took = (d.started_at ? ` in ${sinceText(d.started_at, Date.parse(d.finished_at))}` : '') + (EFFORT_NAMES[d.effort] ? ` (${EFFORT_NAMES[d.effort].toLowerCase()} effort)` : '');
     el.replaceChildren(
       h('span', { class: 'tick', 'aria-hidden': 'true' }, '✓'),
       h('span', {}, h('strong', {}, 'AI walls done: '), `${foundText(d.found)}${took}. They're drawn in purple; fix anything it got wrong.`, d.notes ? h('span', { class: 'muted' }, ` ${d.notes}`) : ''),
@@ -538,7 +616,8 @@ function renderWallDraft() {
     el.replaceChildren(
       h('span', { class: 'cross', 'aria-hidden': 'true' }, '!'),
       h('span', {}, d.error || "The AI couldn't draft walls."),
-      h('button', { class: 'ghost', onclick: () => $('#map-walls-draft').click() }, 'Try again'),
+      // Again at the same effort; AI walls… picks another.
+      h('button', { class: 'ghost', onclick: () => startWallsDraft(map, d.effort) }, 'Try again'),
       close(),
     );
   }
@@ -748,6 +827,23 @@ async function walls(body) {
     if (saved) onMap(saved);
   } catch (err) {
     report(err);
+  }
+}
+
+/**
+ * Edit map (the DM): the map's walls, doors, heights, lights, links and
+ * settings take the place of the play tools, so playing on the map isn't
+ * crowded by setting it up (owner, 2026-10-20).
+ */
+export function setEditing(on) {
+  state.editing = on && !!state.current;
+  setTool({});
+  if (!state.editing) Object.assign(state, { selectedRaised: null, selectedDoor: null });
+  renderFogTools();
+  if (state.current) {
+    renderWalls();
+    renderTerrain();
+    renderSelection();
   }
 }
 
@@ -1128,7 +1224,6 @@ function tokenControls(token) {
       patchToken(token, { hp: next });
     });
     parts.push(h('span', { class: 'hp-text' }, hpText(token) || 'No HP'), change);
-    parts.push(lightSelect(token), ...heightInputs(token));
     const add = h('select', { 'aria-label': 'Add a condition' }, new Option('+ Condition', ''), ...CONDITIONS.filter((c) => !token.conditions.includes(c)).map((c) => new Option(c, c)));
     add.addEventListener('change', () => add.value && patchToken(token, { conditions: [...token.conditions, add.value] }));
     parts.push(add);
@@ -1175,6 +1270,27 @@ export function renderSelection() {
   bar.dataset.pin = pin ? pin.id : '';
   if (pin) return bar.replaceChildren(...pinControls(pin));
   if (!token) return bar.replaceChildren();
+  // Don't rebuild the menu while someone is typing in it (a height, say).
+  if (bar.dataset.token === token.id && bar.querySelector('.sel-more')?.contains(document.activeElement)) return;
+  bar.dataset.token = token.id;
+  // The less used ones (light, height, picture, keeping, removing) wait under More, so the bar stays one short row.
+  const editable = canMove(token);
+  const more = [
+    editable ? h('label', { class: 'map-check small' }, 'Light ', lightSelect(token)) : null,
+    ...(editable ? heightInputs(token) : []),
+    state.canEdit && token.record ? h('button', { class: 'ghost', title: `What the campaign's records say about ${token.record.title}`, onclick: () => recordDialog(token) }, 'Record') : null,
+    myCompanion(token) && !state.canEdit && !token.stats ? h('button', { class: 'ghost', title: 'Look up its stat block, hit points and size with the AI', onclick: () => fillStats(token) }, 'Stat block (AI)') : null,
+    myCompanion(token) && !state.canEdit ? h('button', { class: 'ghost danger', onclick: () => dismissCompanion(token) }, 'Dismiss') : null,
+    state.canEdit && !token.stats && token.kind !== 'pc' ? h('button', { class: 'ghost', title: 'Fill in its stat block, hit points and size with the AI', onclick: () => fillStats(token) }, 'Stat block (AI)') : null,
+    state.canEdit && token.kind !== 'pc' ? h('button', { class: 'ghost', title: 'Give this token a picture (players see it on the map)', onclick: () => chooseTokenPicture(token) }, token.picture ? 'New picture' : 'Picture') : null,
+    state.canEdit && token.kind !== 'pc' && token.picture ? h('button', { class: 'ghost', title: 'Go back to initials', onclick: () => removeTokenPicture(token) }, 'No picture') : null,
+    state.canEdit && token.kind !== 'pc' ? h('button', { class: 'ghost', title: 'Keep this one (picture, stat block and all) in your creatures, to put on other maps', onclick: () => saveCreature(token) }, 'Save to creatures') : null,
+    state.canEdit ? h('button', { class: 'ghost danger', onclick: () => removeToken(token) }, 'Remove') : null,
+  ].filter(Boolean);
+  const menu = more.length ? h('details', { class: 'sel-more', ...(state.selectionMore === token.id && { open: true }) },
+    h('summary', { class: 'ghost', title: 'Light, height, picture and more' }, 'More'),
+    h('div', { class: 'sel-more-menu' }, ...more)) : null;
+  menu?.addEventListener('toggle', () => (state.selectionMore = menu.open ? token.id : null));
   bar.replaceChildren(
     ...[
       h('span', { class: 'swatch', style: `background:${token.color}` }),
@@ -1182,19 +1298,12 @@ export function renderSelection() {
       h('span', { class: 'muted small' }, `${TOKEN_KIND_NAMES[token.kind]} · ${TOKEN_SIZE_NAMES[token.size]}`),
       ...tokenControls(token),
       h('span', { class: 'spacer' }),
-      canMove(token) && !state.canEdit ? h('span', { class: 'muted small' }, 'Drag to move') : null,
+      editable && !state.canEdit ? h('span', { class: 'muted small' }, 'Drag to move') : null,
       token.merchant ? h('button', { class: 'primary', title: 'See what this merchant sells, and buy', onclick: () => openShop(token.merchant) }, 'Shop') : null,
-      state.canEdit && token.record ? h('button', { class: 'ghost', title: `What the campaign's records say about ${token.record.title}`, onclick: () => recordDialog(token) }, 'Record') : null,
       token.kind === 'companion' && token.stats && (state.canEdit || myCompanion(token)) ? h('button', { class: 'primary', title: 'Roll its attacks and checks from its stat block', onclick: () => companionRolls(token) }, 'Roll') : null,
       (state.canEdit || myCompanion(token)) && token.stats ? h('button', { class: 'ghost', onclick: () => statsDialog(token) }, 'Stat block') : null,
-      myCompanion(token) && !state.canEdit && !token.stats ? h('button', { class: 'ghost', title: 'Look up its stat block, hit points and size with the AI', onclick: () => fillStats(token) }, 'Stat block (AI)') : null,
-      myCompanion(token) && !state.canEdit ? h('button', { class: 'ghost danger', onclick: () => dismissCompanion(token) }, 'Dismiss') : null,
-      state.canEdit && !token.stats && token.kind !== 'pc' ? h('button', { class: 'ghost', title: 'Fill in its stat block, hit points and size with the AI', onclick: () => fillStats(token) }, 'Stat block (AI)') : null,
-      state.canEdit && token.kind !== 'pc' ? h('button', { class: 'ghost', title: 'Give this token a picture (players see it on the map)', onclick: () => chooseTokenPicture(token) }, token.picture ? 'New picture' : 'Picture') : null,
-      state.canEdit && token.kind !== 'pc' && token.picture ? h('button', { class: 'ghost', title: 'Go back to initials', onclick: () => removeTokenPicture(token) }, 'No picture') : null,
-      state.canEdit && token.kind !== 'pc' ? h('button', { class: 'ghost', title: 'Keep this one (picture, stat block and all) in your creatures, to put on other maps', onclick: () => saveCreature(token) }, 'Save to creatures') : null,
       state.canEdit ? h('button', { class: 'ghost', onclick: () => tokenDialog(token) }, 'Edit') : null,
-      state.canEdit ? h('button', { class: 'ghost danger', onclick: () => removeToken(token) }, 'Remove') : null,
+      menu,
       h('button', { class: 'ghost icon-btn', 'aria-label': 'Close', onclick: () => select(null) }, '✕'),
     ].filter(Boolean),
   );
@@ -1985,6 +2094,11 @@ export function initMapActions() {
     if (!state.fitted) fit();
   }).observe(view);
 
+  // The picked token's More menu closes on a press anywhere else.
+  document.addEventListener('pointerdown', (e) => {
+    const menu = $('#map-selection .sel-more[open]');
+    if (menu && !e.target.closest?.('.sel-more')) menu.open = false;
+  });
   document.addEventListener('keydown', (e) => {
     if ((e.key === ' ' || e.key === 'w' || e.key === 'W') && state.drag && addWaypoint()) e.preventDefault();
     if (e.key === 'Escape' && state.curveBend) {
@@ -2011,35 +2125,23 @@ export function initMapActions() {
     storage.set(SHOW_GRID_KEY, showGrid.checked ? '1' : null);
     if (state.current) renderGrid();
   });
-  $('#map-import').addEventListener('click', () => $('#map-file').click());
-  $('#map-create').addEventListener('click', () => openCreator().catch(report));
+  $('#map-new').addEventListener('click', newMapDialog);
   $('#map-file').addEventListener('change', (e) => {
     const file = e.target.files[0];
     e.target.value = '';
     if (file) state.guarded(() => importMap(file)).catch(report);
   });
-  // The DM's edit mode: their tools for setting up the map show or hide (kept per browser).
-  const setEditing = (on) => {
-    storage.set(EDITING_KEY, on ? null : '0');
-    $('#tab-map').classList.toggle('edit-off', !on);
-    $('#map-edit').setAttribute('aria-pressed', String(on));
-    if (!on && !$('#map-fog-tools').hidden) {
-      $('#map-fog-tools').hidden = true;
-      setTool({});
-      renderFogTools();
-      if (state.current) renderWalls();
-    }
-  };
-  setEditing(storage.get(EDITING_KEY) !== '0');
-  $('#map-edit').addEventListener('click', () => setEditing($('#tab-map').classList.contains('edit-off')));
+  // Edit map (the DM): the map's walls, heights and settings, with the play tools out of the way.
+  $('#map-edit').addEventListener('click', () => setEditing(!state.editing));
+  $('#map-edit-done').addEventListener('click', () => setEditing(false));
+  $('#map-change-design').addEventListener('click', () => openCreator(state.current).catch(report));
   $('#map-add-token').addEventListener('click', () => tokenDialog().catch(report));
   $('#map-add-companion').addEventListener('click', () => companionDialog());
   $('#map-fog-open').addEventListener('click', () => {
     const tools = $('#map-fog-tools');
     tools.hidden = !tools.hidden;
-    if (tools.hidden) setTool({});
+    if (tools.hidden && state.fogMode) setTool({});
     renderFogTools();
-    if (state.current) renderWalls(); // hidden walls show while the panel is open
   });
   $('#map-fog-on').addEventListener('change', (e) => {
     const on = e.target.checked;
@@ -2061,22 +2163,7 @@ export function initMapActions() {
   for (const b of document.querySelectorAll('[data-wall-mode]')) {
     b.addEventListener('click', () => setTool({ wallMode: state.wallMode === b.dataset.wallMode ? null : b.dataset.wallMode }));
   }
-  $('#map-walls-draft').addEventListener('click', async (e) => {
-    const map = state.current;
-    if (map.walls.some((w) => w.source === 'ai') && !confirm("Replace the AI's walls with a new draft? Walls you drew stay.")) return;
-    // Show it's started straight away; the server's answer brings the live progress.
-    const button = e.currentTarget;
-    button.disabled = true;
-    button.textContent = 'AI walls: starting…';
-    try {
-      const saved = await state.guarded(() => api('POST', `${base()}/${map.id}/walls/draft`, {}));
-      if (saved) onMap(saved);
-    } catch (err) {
-      report(err);
-    } finally {
-      if (state.current) renderFogTools();
-    }
-  });
+  $('#map-walls-draft').addEventListener('click', () => wallsDraftDialog(state.current));
   $('#map-walls-file').addEventListener('click', () => $('#map-walls-file-input').click());
   $('#map-walls-export').addEventListener('click', () => downloadUvtt(state.current).catch(report));
   $('#map-walls-file-input').addEventListener('change', async (e) => {

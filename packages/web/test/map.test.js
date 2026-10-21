@@ -6,6 +6,7 @@
  * The map view is given a 700 x 490 size (the test maps' size), so after
  * "Fit" a point on screen is the same point on the map.
  */
+import fs from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withPage, addDm, upload, importMap, addToken, mapReading, createFakeLLM, makePdf, terrain, SAMPLE } from './helpers.js';
@@ -27,6 +28,14 @@ const dialogButton = (page, text) => [...dialog(page).querySelectorAll('button')
 const selectionButton = (page, text) => [...page.$('#map-selection').querySelectorAll('button')].find((b) => b.textContent === text);
 const mapsOf = async (t) => (await t.request('GET', `/campaigns/${t.campaign.id}/maps`)).json().maps;
 const fieldIn = (root, label) => [...root.querySelectorAll('label')].find((l) => l.firstChild?.textContent === label)?.querySelector('input, select');
+/** Add a token's "Who is it?": pick the Kind (if given), then click someone in the list. */
+function pickWho(page, value, kind) {
+  const form = page.$('#map-dialog form');
+  if (kind) page.type(fieldIn(form, 'Kind'), kind);
+  page.click(page.el(`#map-dialog .who-option[data-value="${value}"]`));
+}
+/** The names "Who is it?" lists now, by group. */
+const whoGroups = (page) => Object.fromEntries(page.$$('#map-dialog .who-group').map((g) => [g.getAttribute('aria-label'), [...g.querySelectorAll('.who-option')].map((o) => o.textContent)]));
 
 /** Drag with the mouse: down on `from`, through `points`, up at the last one (screen = map pixels after Fit). */
 /** The fog shapes the page drew last (on the fog's canvas). */
@@ -50,7 +59,7 @@ test('maps: with none, players are told the DM shares them here; the DM is told 
   });
   await withPage({ before: async (t) => ({ dana: await addDm(t) }), page: (t, { dana }) => ({ as: dana }) }, async (page) => {
     page.click('[data-tab=map]');
-    assert.match(page.text('#map-empty'), /No maps yet. Import one/);
+    assert.match(page.text('#map-empty'), /No maps yet. Press New map/);
     assert.ok(page.$('#tab-map').classList.contains('can-edit'));
   });
 });
@@ -58,7 +67,7 @@ test('maps: with none, players are told the DM shares them here; the DM is told 
 test('maps: the DM imports a picture; the AI\'s reading arrives live; settings fix the grid and scale and show it', async () => {
   await withPage({ setup: { llm: mapLLM() }, before: async (t) => ({ dana: await addDm(t) }), page: (t, { dana }) => ({ as: dana }) }, async (page, t) => {
     await openMapTab(page);
-    page.click('#map-import');
+    page.click('#map-new'); page.click('#map-import');
     page.setFiles('#map-file', [{ name: 'forest_clearing.png', type: 'image/png', content: await terrain(700, 490, { size: 35 }) }]);
     // Not read until the DM asks (owner, 2026-10-16); Map settings has Read with the AI.
     await page.waitFor(() => t.maps.list(t.campaign.id).length === 1, { what: 'the import' });
@@ -148,8 +157,7 @@ test('maps: the DM adds tokens; HP changes ("-3", "+10", "4"), conditions, hidde
     page.click('#map-add-token');
     await page.waitFor(() => dialog(page).open);
     const form = () => dialog(page).querySelector('form');
-    page.type(fieldIn(form(), 'Who is it?'), `p:${t.sam.id}`);
-    assert.ok(fieldIn(form(), 'Kind').closest('label').hidden, 'a player is always a player character');
+    pickWho(page, `p:${t.sam.id}`, 'pc');
     assert.equal(fieldIn(form(), 'Name').value, 'Thorin');
     page.submit(form());
     await page.settle();
@@ -356,7 +364,7 @@ test("maps: the DM's Show players this map shows a hidden map, moves the players
     page.click('#map-bring');
     await page.waitFor(() => page.text('#map-bring') === 'Players are here', { what: 'the button to say the players are here' });
     assert.ok(page.$('#map-bring').disabled);
-    assert.match(page.text('#map-status'), /The players now see this map, but only fog: reveal parts, or tick Line of sight, in Fog & walls/);
+    assert.match(page.text('#map-status'), /The players now see this map, but only fog: reveal parts, or tick Line of sight, in Fog & sight/);
     assert.deepEqual(page.$$('#map-pick option').map((o) => o.textContent), ['Road', 'Keep (players here)']);
     assert.equal(t.maps.get(t.campaign.id, keep.id).shown, true, 'bringing them shows it');
 
@@ -492,10 +500,10 @@ test('walls: the DM draws walls and doors (snapped to wall ends and grid corners
   }, async (page, t) => {
     await openMapTab(page);
     const map = async () => (await mapsOf(t))[0];
-    page.click('#map-fog-open');
+    page.click('#map-edit');
     assert.ok(page.visible('#map-wall-tools'));
     assert.ok(page.$('#map-sight-on').disabled, 'line of sight needs the fog on');
-    assert.match(page.text('#map-wall-hint'), /Turn on Fog of war first/);
+    assert.match(page.text('#map-wall-hint'), /once Fog & sight has Line of sight on/);
 
     // A wall: drawn while dragging; its start snaps to the grid corner (35, 35).
     page.click('[data-wall-mode=wall]');
@@ -528,15 +536,20 @@ test('walls: the DM draws walls and doors (snapped to wall ends and grid corners
     await page.settle();
     assert.deepEqual((await map()).walls.map((w) => w.door), [true]);
 
-    // Line of sight, once the fog is on (turning fog on goes straight to revealing).
+    // Done editing; line of sight, once the fog is on (turning fog on goes straight to revealing).
+    page.click('#map-edit-done');
+    assert.equal(page.$('[data-wall-mode=erase]').getAttribute('aria-pressed'), 'false');
+    page.click('#map-fog-open');
+    assert.ok(page.visible('#map-fog-tools') && !page.visible('#map-wall-tools'));
     page.type('#map-fog-on', true);
     await page.settle();
     assert.equal(page.$('[data-fog-mode=reveal]').getAttribute('aria-pressed'), 'true');
-    assert.equal(page.$('[data-wall-mode=erase]').getAttribute('aria-pressed'), 'false');
     page.type('#map-sight-on', true);
     await page.settle();
     assert.equal((await map()).fog.sight, true);
-    assert.match(page.text('#map-wall-hint'), /0 walls, 0 obstacles, 1 door/);
+    page.click('#map-edit');
+    assert.equal(page.$('[data-fog-mode=reveal]').getAttribute('aria-pressed'), 'false', 'editing puts the fog tool down');
+    assert.equal(page.text('#map-wall-hint'), '0 walls, 0 obstacles, 1 door, 0 lights.');
 
     // Lock the door (it shows red), draw an obstacle players see over.
     page.click('[data-wall-mode=lock]');
@@ -551,6 +564,8 @@ test('walls: the DM draws walls and doors (snapped to wall ends and grid corners
     assert.ok(page.$('#map-walls line.wall.low'));
 
     // What players get of the parts they can't see; remembering where they've been.
+    page.click('#map-edit-done');
+    page.click('#map-fog-open');
     assert.equal(page.$('#map-fog-map').value, 'dark');
     page.type('#map-fog-map', 'grey');
     await page.settle();
@@ -565,7 +580,8 @@ test('walls: the DM draws walls and doors (snapped to wall ends and grid corners
     assert.ok(page.$('[data-wall-action=forget]').disabled);
 
     // The AI's draft arrives live, in its own colour, and can be cleared.
-    page.click('#map-walls-draft');
+    page.click('#map-edit');
+    page.click('#map-walls-draft'); page.submit('#map-dialog form');
     // Its first draft is drawn as soon as it has one, before the check is done (owner, 2026-10-16).
     await page.waitFor(() => page.$('#map-walls line.wall.ai'), { what: "the AI's walls" });
     await page.waitFor(() => t.maps.list(t.campaign.id)[0].wall_draft.status === 'done', { what: 'the draft done' });
@@ -596,9 +612,9 @@ test('AI walls: the DM sees it working (step and time so far), then what it foun
   }, async (page) => {
     await openMapTab(page);
     assert.ok(!page.visible('#map-ai-note'), 'nothing to say yet');
-    page.click('#map-fog-open');
+    page.click('#map-edit');
     const button = page.$('#map-walls-draft');
-    page.click('#map-walls-draft');
+    page.click('#map-walls-draft'); page.submit('#map-dialog form');
     // Straight away, before the server answers.
     assert.equal(button.textContent, 'AI walls: starting…');
     assert.ok(button.disabled);
@@ -611,15 +627,15 @@ test('AI walls: the DM sees it working (step and time so far), then what it foun
     assert.match(page.text('#map-ai-note'), /AI walls: tracing the walls, doors and lights… \d+ s so far\./);
     assert.match(page.text('#map-ai-note'), /carry on meanwhile/);
     // It shows over the map whatever tools are open.
-    page.click('#map-fog-open');
+    page.click('#map-edit-done');
     assert.ok(page.visible('#map-ai-note'));
-    page.click('#map-fog-open');
+    page.click('#map-edit');
 
     release();
     await page.waitFor(() => /AI walls done/.test(page.text('#map-ai-note')), { what: 'the done message' });
-    assert.match(page.text('#map-ai-note'), /AI walls done: 1 wall and 1 door in \d+ s\. They're drawn in purple/);
+    assert.match(page.text('#map-ai-note'), /AI walls done: 1 wall and 1 door in \d+ s \(extra high effort\)\. They're drawn in purple/);
     assert.match(page.text('#map-ai-note'), /Rough around the tower\./);
-    assert.equal(button.textContent, 'AI walls');
+    assert.equal(button.textContent, 'AI walls…');
     assert.ok(!button.disabled);
     assert.ok(!page.$('#map-ai-note .spinner'));
     // Pressing on the message is the message's, not the map's: the map doesn't take the pointer
@@ -637,7 +653,7 @@ test('AI walls: the DM sees it working (step and time so far), then what it foun
     // The next go fails: the DM is told why, and tries again from the message.
     fail = true;
     release = null;
-    page.click('#map-walls-draft');
+    page.click('#map-walls-draft'); page.submit('#map-dialog form');
     await page.waitFor(() => release, { what: 'the AI asked again' });
     release();
     await page.waitFor(() => page.$('#map-ai-note.failed'), { what: 'the failed message' });
@@ -672,19 +688,110 @@ test('regression: Add a token asks who it is once (players, your creatures and t
     const form = dialog(page).querySelector('form');
     const labels = [...form.querySelectorAll('label.map-field > span')].map((l) => l.textContent);
     for (const old of ['From your creatures', "From the campaign's records", 'Player']) assert.ok(!labels.includes(old), `no separate "${old}" field`);
-    assert.equal(form.querySelectorAll('select').length, 3, 'who, kind and size');
-    const who = fieldIn(form, 'Who is it?');
-    assert.equal(who.options[0].textContent, 'Someone new');
-    const groups = Object.fromEntries([...who.querySelectorAll('optgroup')].map((g) => [g.label, [...g.querySelectorAll('option')].map((o) => o.textContent)]));
-    assert.ok(groups.Players.includes('Thorin (sam)') || groups.Players.some((o) => o.startsWith('Thorin')), 'the players');
-    assert.deepEqual(groups['Your creatures'], ['Mira the innkeeper (NPC)']);
-    assert.ok(groups["In the campaign's records"].includes('Brother Hal'));
-    // The kind is only asked when it isn't already known.
-    page.type(who, `p:${t.sam.id}`);
-    assert.ok(fieldIn(form, 'Kind').closest('label').hidden);
-    page.type(who, '');
-    assert.ok(!fieldIn(form, 'Kind').closest('label').hidden);
+    assert.equal(page.$$('#map-dialog [role=listbox]').length, 1, 'one list of who it is');
+    assert.equal(page.text('#map-dialog .who-option'), 'Someone new');
+    page.type(fieldIn(form, 'Kind'), 'pc');
+    assert.ok(whoGroups(page).Players.some((o) => o.startsWith('Thorin')), 'the players');
+    page.type(fieldIn(form, 'Kind'), 'npc');
+    assert.deepEqual(whoGroups(page)['Your creatures'], ['Mira the innkeeper (NPC)']);
+    assert.ok(whoGroups(page)["In the campaign's records"].includes('Brother Hal'));
+    pickWho(page, `p:${t.sam.id}`, 'pc');
+    assert.equal(fieldIn(form, 'Kind').value, 'pc');
+    assert.equal(fieldIn(form, 'Name').value, 'Thorin');
+  });
+});
+
+// The owner (2026-10-20): "we can select what kind, but the list still shows all. Also, this list should be searchable".
+test('regression: Add a token\'s "Who is it?" shows only the Kind picked, and its search box narrows it', async () => {
+  await withPage({
+    setup: { llm: createFakeLLM({ structured: async () => mapReading() }) },
+    before: async (t) => {
+      const dana = await addDm(t);
+      const map = await importMap(t, { patch: SHOWN });
+      for (const [name, kind] of [['Mira the innkeeper', 'npc'], ['Goblin boss', 'enemy'], ['Goblin archer', 'enemy'], ['Ogre', 'enemy']]) {
+        await t.request('POST', `/campaigns/${t.campaign.id}/creatures`, { body: { name, kind } });
+      }
+      return { dana, map };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page) => {
+    await openMapTab(page);
+    page.click('#map-add-token');
+    await page.waitFor(() => dialog(page).open);
+    const form = dialog(page).querySelector('form');
     assert.equal(fieldIn(form, 'Kind').value, 'enemy');
+    assert.deepEqual(whoGroups(page)['Your creatures'], ['Goblin archer (enemy)', 'Goblin boss (enemy)', 'Ogre (enemy)'], 'enemies only');
+    assert.ok(!whoGroups(page).Players, 'no players for an enemy');
+    page.type(fieldIn(form, 'Kind'), 'npc');
+    assert.deepEqual(whoGroups(page)['Your creatures'], ['Mira the innkeeper (NPC)'], 'NPCs only');
+    page.type(fieldIn(form, 'Kind'), 'enemy');
+    const search = page.el('#map-dialog input[type=search]');
+    page.type(search, 'gob');
+    assert.deepEqual(whoGroups(page)['Your creatures'], ['Goblin archer (enemy)', 'Goblin boss (enemy)']);
+    page.type(search, 'ARCHER');
+    assert.deepEqual(whoGroups(page)['Your creatures'], ['Goblin archer (enemy)'], 'any case');
+    page.type(search, 'dragon');
+    assert.deepEqual(whoGroups(page), {});
+    assert.match(page.text('#map-dialog .who-none'), /No Enemy called "dragon"/);
+    assert.equal(page.text('#map-dialog .who-option'), 'Someone new', 'someone new is always there');
+  });
+});
+
+// The owner (2026-10-20): "I don't see the option to change reasoning effort for AI walls".
+test('regression: AI walls asks how hard the AI should think every time, sends it, and remembers the pick', async () => {
+  const llm = createFakeLLM({
+    structured: async (opts) => (opts.purpose.startsWith('map:walls') ? { walls: [{ points: [{ x: 500, y: 0 }, { x: 500, y: 1000 }] }], doors: [], notes: '' } : mapReading()),
+  });
+  await withPage({
+    setup: { llm },
+    before: async (t) => ({ dana: await addDm(t), map: await importMap(t, { patch: SHOWN }) }),
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t) => {
+    await openMapTab(page);
+    page.click('#map-edit');
+    page.click('#map-walls-draft');
+    assert.ok(dialog(page).open, 'a dialog, not a hidden setting');
+    const radios = () => page.$$('#map-dialog input[name=walls-effort]');
+    assert.deepEqual(radios().map((r) => r.value), ['low', 'medium', 'high', 'xhigh', 'max']);
+    assert.equal(radios().find((r) => r.checked).value, 'xhigh', "the server's usual to start with");
+    assert.match(page.text('#map-dialog'), /Extra high \(the usual\)/);
+    page.type(radios()[0], true);
+    page.submit('#map-dialog form');
+    await page.waitFor(() => t.maps.list(t.campaign.id)[0].wall_draft.status === 'done', { what: 'the draft done' });
+    assert.equal(t.maps.list(t.campaign.id)[0].wall_draft.effort, 'low');
+    await page.waitFor(() => /AI walls done/.test(page.text('#map-ai-note')), { what: 'the done message' });
+    assert.match(page.text('#map-ai-note'), /\(low effort\)/);
+    page.click('#map-walls-draft');
+    assert.equal(radios().find((r) => r.checked).value, 'low', 'kept for next time');
+  });
+});
+
+// The owner (2026-10-20): the picked token's bar "is in the way of seeing the whole map".
+test('regression: what is picked on the map shows below the map, not over it (except full screen and phones)', async () => {
+  const css = fs.readFileSync(new URL('../public/style.css', import.meta.url), 'utf8');
+  const rule = css.match(/\n\.map-selection \{([^}]*)\}/)[1];
+  assert.doesNotMatch(rule, /position:\s*absolute/, 'in the page');
+  assert.match(css, /:root:is\(\[data-map-full\], \[data-phone\]\) \.map-selection \{[^}]*position: absolute/);
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const map = await importMap(t, { patch: SHOWN });
+      await addToken(t, map, { kind: 'enemy', name: 'Ogre', x: 297.5, y: 297.5 });
+      return { dana: await addDm(t) };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page) => {
+    await openMapTab(page);
+    assert.ok(!page.$('#map-view').contains(page.$('#map-selection')), 'not inside the map');
+    assert.equal(page.$('#map-selection').previousElementSibling, page.$('#map-view'), 'right below it');
+    page.key(tokenEl(page, 'Ogre'), 'Enter');
+    assert.ok(page.visible('#map-selection'));
+    // One short row: the rarer controls (light, height, picture, keeping, removing) wait under More.
+    const more = page.$('#map-selection details.sel-more');
+    assert.ok(more && !more.open);
+    for (const text of ['Picture', 'Save to creatures', 'Remove']) assert.ok([...more.querySelectorAll('button')].some((b) => b.textContent === text), text);
+    assert.ok(more.querySelector('[aria-label="Light carried"]') && more.querySelector('[aria-label="Height in feet"]'));
+    assert.ok([...page.$('#map-selection').children].some((b) => b.textContent === 'Edit'), 'Edit stays out');
   });
 });
 
@@ -698,8 +805,8 @@ test('regression: pressing on the AI walls message does not start a pan, so it c
     page: (t, { dana }) => ({ as: dana }),
   }, async (page) => {
     await openMapTab(page);
-    page.click('#map-fog-open');
-    page.click('#map-walls-draft');
+    page.click('#map-edit');
+    page.click('#map-walls-draft'); page.submit('#map-dialog form');
     await page.waitFor(() => /AI walls done/.test(page.text('#map-ai-note')), { what: 'the done message' });
     page.pointer('#map-ai-note [aria-label=Close]', 'pointerdown', { clientX: 350, clientY: 20 });
     assert.ok(!page.$('#map-view').hasPointerCapture(1), 'the map took the pointer');
@@ -865,7 +972,7 @@ test('curved and round walls, hiding the walls, and walls from a map maker\'s fi
   }, async (page, t) => {
     await openMapTab(page);
     const map = async () => (await mapsOf(t))[0];
-    page.click('#map-fog-open');
+    page.click('#map-edit');
 
     // Curve: drag from end to end, move to bend it, click.
     page.click('[data-wall-mode=curve]');
@@ -895,12 +1002,12 @@ test('curved and round walls, hiding the walls, and walls from a map maker\'s fi
     await page.settle();
     assert.equal((await map()).walls.length, curve, 'the whole circle went');
 
-    // Walls hidden for a clean map: gone once Fog & walls is closed, back while it's open.
+    // Walls hidden for a clean map (Fog & sight's Show walls): gone once done editing, back while editing.
     page.type('#map-show-walls', false);
-    assert.ok(page.$('#map-walls line.wall'), 'still shown while the panel is open');
-    page.click('#map-fog-open');
+    assert.ok(page.$('#map-walls line.wall'), 'still shown while editing');
+    page.click('#map-edit-done');
     assert.ok(!page.$('#map-walls line.wall'));
-    page.click('#map-fog-open');
+    page.click('#map-edit');
     assert.ok(page.$('#map-walls line.wall'));
     page.type('#map-show-walls', true);
 
@@ -1122,10 +1229,10 @@ test("records: a token for someone in the campaign's records; the DM reads what 
     page.click('#map-add-token');
     await page.waitFor(() => dialog(page).open);
     const form = dialog(page).querySelector('form');
-    const record = fieldIn(form, 'Who is it?');
-    const hal = [...record.options].find((o) => o.textContent === 'Brother Hal');
+    page.type(fieldIn(form, 'Kind'), 'npc');
+    const hal = page.$$('#map-dialog .who-option').find((o) => o.textContent === 'Brother Hal');
     assert.ok(hal, 'the archivist recorded Brother Hal');
-    page.type(record, hal.value);
+    page.click(hal);
     assert.equal(fieldIn(form, 'Name').value, 'Brother Hal');
     assert.equal(fieldIn(form, 'Kind').value, 'npc');
     page.submit(form);
@@ -1209,7 +1316,7 @@ test('companions: a player adds their wolf (stat block from the AI), rolls its b
     const form = dialog(page).querySelector('form');
     const tick = [...form.querySelectorAll('label.map-check')].find((l) => /companion or summon of theirs/.test(l.textContent));
     assert.ok(tick.hidden, 'only once a player is picked');
-    page.type(fieldIn(form, 'Who is it?'), `p:${t.sam.id}`);
+    pickWho(page, `p:${t.sam.id}`, 'pc');
     assert.ok(!tick.hidden);
     page.type(tick.querySelector('input'), true);
     page.type(fieldIn(form, 'Name'), 'Hawk');

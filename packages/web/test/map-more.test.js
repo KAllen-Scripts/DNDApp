@@ -50,7 +50,9 @@ test('lights: the DM turns on darkness, places a torch and a brazier, and erases
     await page.settle();
     assert.equal((await mapOf(t, map)).fog.dark, true);
 
-    // A torch (the default), then a brazier picked from the list.
+    assert.match(page.text('#map-fog-hint'), /where there is light or their darkvision reaches/);
+    // A torch (the default), then a brazier picked from the list, in Edit map.
+    page.click('#map-edit');
     page.click('[data-wall-mode=light]');
     click(page, 300, 200);
     await page.settle();
@@ -61,7 +63,7 @@ test('lights: the DM turns on darkness, places a torch and a brazier, and erases
     assert.deepEqual(lights.map(({ x, y, bright, dim }) => ({ x, y, bright, dim })), [{ x: 300, y: 200, bright: 20, dim: 20 }, { x: 500, y: 300, bright: 20, dim: 20 }]);
     assert.equal(page.$$('#map-walls .light-dim').length, 2);
     assert.equal(Number(page.$('#map-walls .light-dim').getAttribute('r')), 280); // 40 ft
-    assert.match(page.text('#map-wall-hint'), /2 lights.*where there is light or their darkvision reaches/);
+    assert.match(page.text('#map-wall-hint'), /2 lights\./);
 
     // Erase: a click on the light removes it.
     page.click('[data-wall-mode=erase]');
@@ -192,7 +194,7 @@ test('difficult terrain: the DM drags an area (snapped to squares) and erases it
     page: (t, { dana }) => ({ as: dana }),
   }, async (page, t, { map }) => {
     await openMapTab(page);
-    page.click('#map-fog-open');
+    page.click('#map-edit');
     page.click('[data-wall-mode=difficult]');
     page.pointer('#map-view', 'pointerdown', { clientX: 40, clientY: 40 });
     page.pointer('#map-view', 'pointermove', { clientX: 100, clientY: 90 });
@@ -254,7 +256,7 @@ test('links: the DM puts stairs to the cellar; a player next to them takes their
     await openMapTab(page);
     page.type('#map-pick', map.id);
     await page.settle();
-    page.click('#map-fog-open');
+    page.click('#map-edit');
     page.click('[data-wall-mode=link]');
     assert.equal(page.$('#map-link-to').value, cellar.id);
     click(page, 105, 52);
@@ -299,7 +301,7 @@ test('raised areas: the DM drags one at the height in the box, clicks it to chan
     page: (t, { dana }) => ({ as: dana }),
   }, async (page, t, { map }) => {
     await openMapTab(page);
-    page.click('#map-fog-open');
+    page.click('#map-edit');
     page.click('[data-wall-mode=raised]');
     page.type('#map-raised-height', '25');
     page.pointer('#map-view', 'pointerdown', { clientX: 40, clientY: 40 });
@@ -378,7 +380,7 @@ test("the AI's guessed heights show with a question mark; Check AI heights goes 
     page: (t, { dana }) => ({ as: dana }),
   }, async (page, t, { map }) => {
     await openMapTab(page);
-    page.click('#map-fog-open');
+    page.click('#map-edit');
     assert.deepEqual(page.$$('#map-terrain .raised-label').map((x) => x.textContent), ['↑10 ft?', '↑30 ft?', '↑20 ft?']);
     assert.equal(page.text('#map-raised-check'), 'Check AI heights (3)');
     assert.equal(page.text('#map-raised-accept'), 'Accept all (3)');

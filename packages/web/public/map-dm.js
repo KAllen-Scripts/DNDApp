@@ -61,6 +61,23 @@ function askPage(filename) {
   });
 }
 
+/** New map (the DM): import one, or make one from scratch in the map creator. */
+export function newMapDialog() {
+  const dialog = $('#map-dialog');
+  const choice = (id, title, text, onclick) => h('button', { type: 'button', id, class: 'ghost map-choice', onclick: () => { dialog.close(); onclick(); } },
+    h('strong', {}, title), h('span', { class: 'muted small' }, text));
+  dialog.replaceChildren(
+    h('form', { method: 'dialog', class: 'map-dialog-inner' },
+      h('h2', {}, 'New map'),
+      choice('map-import', 'Import a map', 'A picture (PNG, JPEG, WebP), a page of a PDF, or a Universal VTT file (.dd2vtt, .uvtt) with its walls.', () => $('#map-file').click()),
+      choice('map-create', 'Make a map', 'From scratch in the map creator: paint floors, draw rooms, walls and doors, and place furniture, trees and your own pictures.', () => openCreator().catch(report)),
+      h('div', { class: 'map-dialog-actions' }, h('span', { class: 'spacer' }), h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel')),
+    ),
+  );
+  dialog.onclose = null;
+  dialog.showModal();
+}
+
 export const field = (label, input) => h('label', { class: 'map-field' }, h('span', {}, label), input);
 
 /** Map settings: name, who sees it (every player or chosen ones), grid (drawn on the map while editing), scale, the AI's reading. */
@@ -161,7 +178,7 @@ export function settingsDialog() {
       variants,
       field('Add a picture', addVariant),
       h('h3', {}, 'Other VTTs'),
-      h('p', { class: 'muted small' }, 'Download the map as a Universal VTT file (.dd2vtt): its picture, grid, walls, doors and lights, for Foundry, Dungeondraft and others. Brought back here, it also keeps its heights, stairs, ladders, obstacles and secret doors. (Also in Fog & walls.)'),
+      h('p', { class: 'muted small' }, 'Download the map as a Universal VTT file (.dd2vtt): its picture, grid, walls, doors and lights, for Foundry, Dungeondraft and others. Brought back here, it also keeps its heights, stairs, ladders, obstacles and secret doors. (Also in Edit map.)'),
       h('button', { type: 'button', class: 'ghost', id: 'map-export', disabled: !map.grid, title: map.grid ? '' : 'Set the grid first', onclick: () => downloadUvtt(map).catch(report) }, 'Download .dd2vtt'),
       h('h3', {}, 'What the AI saw'),
       h('p', { class: 'muted small map-ai' }, reading.status === 'pending' ? 'Reading…' : reading.status === 'failed' ? reading.error : reading.status === 'none' ? 'Not read yet. Read with the AI finds its name, grid and scale.' : aiText || 'Nothing to add.'),
@@ -236,23 +253,53 @@ export async function tokenDialog(token = null) {
   // "Who is it?": one list for everyone a token can stand for, so the dialog
   // asks it once. A player ("p:id"), one of the DM's saved creatures ("c:id",
   // new tokens only: picking one goes to placing it), or someone from the
-  // campaign's records, what the archivist has written down ("r:id").
+  // campaign's records, what the archivist has written down ("r:id"). It shows
+  // only those of the Kind picked, and a search box narrows it (owner,
+  // 2026-10-20: "the list still shows all… it'll get large quickly").
   const { records } = (await state.guarded(() => api('GET', `${base()}/records`))) ?? { records: [] };
   const saved = token ? [] : creatureList().filter((c) => !c.finding);
-  const recordOption = (r) => new Option(`${r.title}${r.person ? '' : ` (${r.kind})`}`, `r:${r.id}`);
-  const group = (label, options) => (options.length ? h('optgroup', { label }, ...options) : null);
-  const people = records.filter((r) => r.person).map(recordOption);
-  if (token?.record && !records.some((r) => r.id === token.record.id)) people.push(new Option(token.record.title, `r:${token.record.id}`));
-  const who = h('select', {},
-    new Option(token ? 'Nobody in particular' : 'Someone new', ''),
-    group('Players', players.map((p) => new Option(`${p.character_name || p.name} (${p.name})`, `p:${p.id}`))),
-    group('Your creatures', saved.map((c) => new Option(`${c.name} (${c.kind === 'npc' ? 'NPC' : 'enemy'})`, `c:${c.id}`))),
-    group("In the campaign's records", people),
-    group('Other things in the records', records.filter((r) => !r.person).map(recordOption)));
-  who.value = token?.user_id ? `p:${token.user_id}` : token?.record ? `r:${token.record.id}` : '';
+  // Someone from the records is an NPC, unless the archivist files them as a monster or a foe.
+  const foe = (r) => /monster|creature|enem|villain|beast|foe/i.test(r.kind);
+  const linked = token?.record && !records.some((r) => r.id === token.record.id) ? [{ id: token.record.id, title: token.record.title, kind: '', person: true }] : [];
+  const everyRecord = [...records, ...linked];
+  const entry = (value, label, extra = {}) => ({ value, label, ...extra });
+  const entries = {
+    p: players.map((p) => entry(`p:${p.id}`, `${p.character_name || p.name} (${p.name})`)),
+    c: saved.map((c) => entry(`c:${c.id}`, `${c.name} (${c.kind === 'npc' ? 'NPC' : 'enemy'})`, { kind: c.kind === 'npc' ? 'npc' : 'enemy' })),
+    r: everyRecord.map((r) => entry(`r:${r.id}`, `${r.title}${r.person ? '' : ` (${r.kind})`}`, { kind: foe(r) ? 'enemy' : 'npc', person: !!r.person })),
+  };
+  let chosen = token?.user_id ? `p:${token.user_id}` : token?.record ? `r:${token.record.id}` : '';
   const picked = () => {
-    const [type, id] = who.value.split(':');
+    const [type, id] = chosen.split(':');
     return { type: type || null, id: id ? Number(id) || id : null };
+  };
+  const search = h('input', { type: 'search', placeholder: 'Search…', 'aria-label': 'Search for who it is', autocomplete: 'off' });
+  const list = h('div', { class: 'who-list', role: 'listbox', 'aria-label': 'Who is it?' });
+  // What the Kind picked offers: players for a player character; else your creatures and the records of that kind
+  // (places and things from the records only when searched for, as they're rarely tokens).
+  const groupsFor = (k, query) => {
+    const q = query.trim().toLowerCase();
+    const match = (e) => !q || e.label.toLowerCase().includes(q);
+    if (k === 'pc') return [['Players', entries.p.filter(match)]];
+    return [
+      ['Your creatures', entries.c.filter((e) => e.kind === k && match(e))],
+      ["In the campaign's records", entries.r.filter((e) => e.person && e.kind === k && match(e))],
+      ['Other things in the records', q ? entries.r.filter((e) => !e.person && match(e)) : []],
+    ];
+  };
+  const renderList = () => {
+    const groups = groupsFor(kind.value, search.value).filter(([, items]) => items.length);
+    const option = (value, label) => h('button', {
+      type: 'button', role: 'option', class: 'who-option', 'data-value': value, 'aria-selected': String(chosen === value),
+      onclick: () => choose(value),
+    }, label);
+    const none = token ? 'Nobody in particular' : 'Someone new';
+    list.replaceChildren(...[
+      option('', none),
+      ...groups.map(([label, items]) => h('div', { class: 'who-group', role: 'group', 'aria-label': label },
+        h('div', { class: 'who-group-name muted small' }, label), ...items.map((e) => option(e.value, e.label)))),
+      search.value.trim() && !groups.length ? h('p', { class: 'muted small who-none' }, `No ${kind.value === 'pc' ? 'player' : TOKEN_KIND_NAMES[kind.value]} called "${search.value.trim()}". Add them as someone new.`) : null,
+    ].filter(Boolean));
   };
   const lookUp = h('input', { type: 'checkbox', checked: true });
   const lookUpField = h('label', { class: 'map-check' }, lookUp, ' Fill in its stat block, hit points and size with the AI');
@@ -263,15 +310,14 @@ export async function tokenDialog(token = null) {
   const companionField = h('label', { class: 'map-check', title: 'They move it, track its hit points and roll for it from its stat block' }, companion, ' A companion or summon of theirs, not their character');
   const isCompanion = () => picked().type === 'p' && companion.checked;
   const sync = () => {
-    // A player's token is always theirs, so there is no kind to ask.
-    kindField.hidden = picked().type === 'p';
     companionField.hidden = picked().type !== 'p';
     lookUpField.hidden = !!token || (kind.value !== 'enemy' && !isCompanion());
     if (!colorTouched) color.value = TOKEN_COLORS[isCompanion() ? 'companion' : kind.value];
+    renderList();
   };
-  kind.addEventListener('change', sync);
-  companion.addEventListener('change', sync);
-  who.addEventListener('change', () => {
+  // Who it is, picked from the list.
+  const choose = (value) => {
+    chosen = value;
     const { type, id } = picked();
     if (type === 'c') {
       const c = saved.find((x) => x.id === id || String(x.id) === String(id));
@@ -280,18 +326,28 @@ export async function tokenDialog(token = null) {
     }
     if (type === 'p') {
       const p = players.find((x) => x.id === id);
-      kind.value = 'pc';
       // Named after their character unless something else is typed.
       if (p && !name.value.trim() && !companion.checked) name.value = p.character_name || p.name;
     } else if (type === 'r') {
-      const r = records.find((x) => x.id === id);
+      const r = everyRecord.find((x) => x.id === id);
       if (r && (!token || !name.value.trim())) name.value = r.title.slice(0, 80);
-      // Someone from the records is an NPC, unless the archivist files them as a monster or a foe.
-      if (r && !token) kind.value = /monster|creature|enem|villain|beast|foe/i.test(r.kind) ? 'enemy' : 'npc';
-    } else if (kind.value === 'pc' && !token) {
-      kind.value = 'enemy';
     }
     sync();
+  };
+  // Another kind: the list shows those, and whoever was picked goes if they aren't one.
+  kind.addEventListener('change', () => {
+    const { type } = picked();
+    const stillThere = groupsFor(kind.value, '').some(([, items]) => items.some((e) => e.value === chosen));
+    if (type && !stillThere && !(type === 'r' && token)) chosen = '';
+    sync();
+  });
+  companion.addEventListener('change', sync);
+  search.addEventListener('input', renderList);
+  // Enter in the search box picks the only (or first) match rather than adding the token.
+  search.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    list.querySelector('.who-group .who-option')?.click();
   });
   sync();
 
@@ -332,9 +388,10 @@ export async function tokenDialog(token = null) {
       state.guarded(save).then(() => dialog.close()).catch(report);
     } },
       h('h2', {}, token ? 'Change token' : 'Add a token'),
-      field('Who is it?', who),
+      kindField,
+      h('div', { class: 'map-field who-field' }, h('span', {}, 'Who is it?'), search, list),
       companionField,
-      h('div', { class: 'map-row map-row-name' }, field('Name', name), kindField),
+      field('Name', name),
       h('div', { class: 'map-row' }, field('Size', size), field('Colour', color), field('Max HP', hpMax), field(`Darkvision (${map.scale?.unit ?? 'ft'})`, darkvision)),
       h('label', { class: 'map-check' }, hidden, ' Hidden from players (an ambush, someone lurking)'),
       lookUpField,

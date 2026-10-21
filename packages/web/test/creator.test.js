@@ -38,7 +38,7 @@ const buttonIn = (page, sel, text) => [...page.$(sel).querySelectorAll('button')
 async function openNew(page) {
   page.click('[data-tab=map]');
   await page.settle();
-  page.click('#map-create');
+  page.click('#map-new'); page.click('#map-create');
   await page.settle();
   assert.ok(page.$('#map-creator').open);
 }
@@ -62,7 +62,7 @@ test('creator: the DM starts blank, draws a room with a door, a pond and a campf
   await withPage(dm(), async (page, t) => {
     page.click('[data-tab=map]');
     await page.settle();
-    assert.match(page.text('#map-empty'), /Make a map/);
+    assert.match(page.text('#map-empty'), /New map/);
     await openNew(page);
     // A new map starts with the choice of how: blank, made by the server, or drafted by the AI.
     assert.ok(page.visible('#creator-start'));
@@ -359,7 +359,7 @@ test('creator: unsaved work is kept in the browser and offered back; closing wit
     buttonIn(page, '#map-creator', 'Close').click();
     assert.match(page.dialogs.at(-1).message, /Close without saving/);
     assert.equal(page.window.localStorage.getItem(key(t)), null);
-    page.click('#map-create');
+    page.click('#map-new'); page.click('#map-create');
     await page.settle();
     assert.ok(page.$('#creator-start'));
     assert.equal(page.dialogs.length, 2, 'nothing offered back');
@@ -367,7 +367,7 @@ test('creator: unsaved work is kept in the browser and offered back; closing wit
 
     // Saying no to unsaved work forgets it too.
     page.window.localStorage.setItem(key(t), JSON.stringify({ name: 'Lost work', design: kept, at: Date.now() }));
-    page.click('#map-create');
+    page.click('#map-new'); page.click('#map-create');
     await page.settle();
     assert.match(page.dialogs.at(-1).message, /Carry on with it/);
     assert.ok(page.$('#creator-start'));

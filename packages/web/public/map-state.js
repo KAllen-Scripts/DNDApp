@@ -11,6 +11,8 @@ export const state = {
   userId: null,
   guarded: (fn) => fn(),
   canEdit: false,
+  editing: false, // the DM's Edit map: the map's walls, heights and settings instead of the play tools
+  wallsEffort: '', // the AI walls effort the server uses unless the DM picks another (EFFORT_WALLS)
   maps: [],
   current: null, // the map on screen
   broughtSeen: '', // players: the latest time the DM brought everyone to a map that this page has gone along with
@@ -60,7 +62,8 @@ export const base = () => `/campaigns/${state.campaignId}/maps`;
 export const PICK_KEY = () => `dndapp.map.${state.campaignId}`;
 export const SHOW_GRID_KEY = 'dndapp.map.showGrid';
 export const SHOW_WALLS_KEY = 'dndapp.map.showWalls';
-export const EDITING_KEY = 'dndapp.map.editing';
+/** The DM's last pick of AI walls effort (none: the server's usual, EFFORT_WALLS). */
+export const WALLS_EFFORT_KEY = 'dndapp.map.wallsEffort';
 
 export function status(text, error = false) {
   const el = $('#map-status');
