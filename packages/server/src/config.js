@@ -18,7 +18,7 @@ const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
  * Bump this whenever chunking, prompts, schemas or the memory design change.
  * Every generated output is tagged with it so we know which approach made it.
  */
-export const PIPELINE_VERSION = 22;
+export const PIPELINE_VERSION = 23;
 
 const DEFAULT_MODEL = env.MODEL || 'claude-opus-5-5';
 
@@ -71,6 +71,8 @@ export const config = {
       walls: { model: env.MODEL_WALLS || env.MODEL_MAPS || DEFAULT_MODEL, effort: env.EFFORT_WALLS || 'xhigh' },
       // Maps: planning a whole map in the map creator from the DM's description (and sketch).
       design: { model: env.MODEL_DESIGN || env.MODEL_MAPS || DEFAULT_MODEL, effort: env.EFFORT_DESIGN || 'high' },
+      // The DM's wiki: proposing pages and changes from what the archivist recorded (waits for the DM's approval).
+      wiki: { model: env.MODEL_WIKI || DEFAULT_MODEL, effort: env.EFFORT_WIKI || 'medium' },
     },
     // API provider only: re-run refused requests on Anthropic's recommended fallback model.
     fallbacks: env.LLM_FALLBACKS !== 'off',
@@ -107,6 +109,12 @@ export const config = {
     maxRecordTokens: num(env.KB_MAX_RECORD_TOKENS, 8000),
   },
 
+  wiki: {
+    // After each archivist run, the AI proposes wiki changes from what it recorded (WIKI_AUTO=off: only when the DM asks).
+    auto: env.WIKI_AUTO !== 'off',
+    // Records the AI reads in one go; more are read in several goes.
+    recordsPerCall: num(env.WIKI_RECORDS_PER_CALL, 25),
+  },
   notes: {
     // Notes written before this hour count towards the previous day's session.
     rolloverHour: num(env.NOTES_ROLLOVER_HOUR, 6),

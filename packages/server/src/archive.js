@@ -33,6 +33,7 @@
  *     map_assets/<id>/changes.jsonl    the whole asset after each change, append-only
  *     rests.jsonl                      short and long rests the DM called, append-only
  *     wiki/<id>/changes.jsonl          the whole page of the DM's wiki after each save, append-only
+ *     wiki/proposals.jsonl             what the AI proposed for the wiki, the whole proposal after each change (append-only)
  *     sessions/0001/
  *       transcript.txt                 byte-for-byte as uploaded, read-only
  *       meta.json                      number, title, played_on, sha256
@@ -232,6 +233,9 @@ export function createArchive(root) {
 
     appendWikiPage: (slug, id, entry) => appendLine(path.join(campaignDir(slug), 'wiki', mapDir(id), 'changes.jsonl'), entry),
 
+    /** What the AI proposed for the wiki: the whole proposal after each change (made, approved, rejected). */
+    appendWikiProposal: (slug, entry) => appendLine(path.join(campaignDir(slug), 'wiki', 'proposals.jsonl'), entry),
+
     /** Every saved version of a wiki page, oldest first. */
     readWikiChanges: (slug, id) => readLines(path.join(campaignDir(slug), 'wiki', mapDir(id), 'changes.jsonl')),
 
@@ -367,6 +371,8 @@ export function createArchive(root) {
           mapAssets: lastOfEach('map_assets'),
           mapStamps: lastOfEach('map_stamps'),
           wiki: lastOfEach('wiki'),
+          // The last line for each proposal is where it stands.
+          wikiProposals: [...new Map(readLines(path.join(campaignDir(slug), 'wiki', 'proposals.jsonl')).map((p) => [p.id, p])).values()],
           rests: readLines(path.join(campaignDir(slug), 'rests.jsonl')),
         };
       }

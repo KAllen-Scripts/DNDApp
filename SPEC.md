@@ -1,6 +1,8 @@
 # DNDApp — Project Spec
 
-> Status: v0.62 (2026-10-21). The DM's Map page trimmed (owner: "that bar at the bottom… It's in the way of seeing the whole map… we now have a bunch of map editing stuff even though we have a dedicated map editor"): setting a map up (walls, doors, obstacles, heights, stairs, lights, links, places, Map settings) is its own **Edit map** mode instead of being among the play tools; play keeps **Fog & sight**; **New map** imports or opens the creator; what's picked on the map shows **below** the map, rarer controls under More; Add a token's **Who is it?** lists only the Kind picked and can be searched; **AI walls** asks how hard the AI thinks each time (§6.6).
+> Status: v0.63 (2026-10-21). The AI keeps the DM's wiki up to date, with the DM's approval (owner: "Start on them", the wiki's next stages): after each session, correction or batch of sheet changes, the AI reads what the archivist changed and proposes new pages, changed or new sections, and **reveals** (making a section available to players the records say now know it). Each waits in **The AI's changes** on the Wiki tab for Approve, Edit then approve, or Reject; a rejected change isn't proposed again. Who each proposed part is available to comes from the records' known_by, never from the AI (§6.11).
+>
+> Previously v0.62 (2026-10-21). The DM's Map page trimmed (owner: "that bar at the bottom… It's in the way of seeing the whole map… we now have a bunch of map editing stuff even though we have a dedicated map editor"): setting a map up (walls, doors, obstacles, heights, stairs, lights, links, places, Map settings) is its own **Edit map** mode instead of being among the play tools; play keeps **Fog & sight**; **New map** imports or opens the creator; what's picked on the map shows **below** the map, rarer controls under More; Add a token's **Who is it?** lists only the Kind picked and can be searched; **AI walls** asks how hard the AI thinks each time (§6.6).
 >
 > Previously v0.61 (2026-10-21). The DM's wiki, stage 1 (owner: "the DM being able to build a wiki… the AI, but of course manual changes and additions should also be possible"; decisions 2026-10-20): a **Wiki** tab only the DM has, with pages the DM writes (title, other names, kind, inside another page, tags, sections), `[[links]]`, history with "bring this version back", and who each part is **available to** (a page, a section, or a `:::for Thorin` / `:::dm` block inside the text; the narrowest wins; new pages are the DM's alone). **View as** shows a page as a player would. Ask reads the whole wiki for the DM and, for a player, exactly the parts available to them (§6.11). The AI writing pages for the DM to approve, and suggesting reveals, are the next stages.
 >
@@ -179,6 +181,7 @@ DNDApp/
                           token-square / shrunk copies sent to the page
         handouts.js       handouts (archived, restored)
         wiki.js           the DM's wiki pages (archived, restored, indexed per part with who may see it)
+        wiki-ai.js        the AI's proposals for the wiki after each archivist run, and approving them
         rolls.js          dice rolls: roll, log and send live (POST /roll and rolls made for something else, like a hit die)
         rests.js          hit dice and rests on players' sheets; rests the DM calls (archived, restored, counted, `events`)
         editions.js       which rules a campaign plays by (2014 or 2024): the DM's setting, else REST_RULES, else the books' Player's Handbook
@@ -331,6 +334,8 @@ Also accepted: `[MM:SS]`, fractional seconds, no brackets, `0:01:30 - Name: text
 | `items` | source | The DM's items (JSON: name, kind, rarity, attunement, usual price in copper, weight, description, notes, picture, `source`: dm, book, ai or web, `finding` while the AI searches, removed). Schema v14. |
 | `map_assets` | source | The DM's own pictures for the map creator (JSON: name, picture, its size in pixels, what it blocks by default, removed). Schema v16. |
 | `map_stamps` | source | The DM's own stamps for the map creator (JSON: name, `clip`: the floor, walls, assets, paths and labels of a rectangle of squares, removed; at most 200). Schema v17. |
+| `wiki_proposals` | source | The AI's proposed wiki changes (JSON: action new_page / update_section / add_section / reveal, the page and section, proposed sections with who each is available to, players for a reveal, reason, run; status pending / approved / rejected / replaced). Schema v19. |
+| `wiki_chronicle` | derived | How far the AI has read `kb_journal` for the wiki. Schema v19. |
 | `wiki_pages` | source | The DM's wiki pages (JSON: title, aliases, kind, parent, tags, `available`, sections with heading, text, `by`, `available`; version, removed). Schema v18. |
 | `merchants` | source | Merchants (JSON: name, description, notes, colour, picture, open, `stock`: lines of item, price, qty, restock level; `restock`: every N long rests and the count; the last 50 `sales`, removed). Schema v14. |
 | `rests` | source | Short and long rests the DM called (JSON: kind, when, by, edition, the players in it, who got nothing from it). Schema v13. |
@@ -370,6 +375,7 @@ data/archive/
     handouts/<id>/<picture>           a handout's picture, as uploaded
     handouts/<id>/changes.jsonl       append-only: the whole handout after each change
     wiki/<id>/changes.jsonl           append-only: the whole wiki page after each change (its history)
+    wiki/proposals.jsonl              append-only: the AI's proposed wiki changes, the whole proposal after each change
     creatures/<id>/<picture>          a picture for one of the DM's creatures, as uploaded
     creatures/<id>/changes.jsonl      append-only: the whole creature after each change
     items/<id>/<picture>              a picture for one of the DM's items, as uploaded
@@ -389,7 +395,7 @@ data/archive/
 - A transcript can never be replaced (different bytes for an existing session number → 409).
 - **Restore:** on start-up, accounts, campaigns, members, campaign settings, sessions, speakers, glossary, corrections, notes (with their edits and deletes), character sheets and maps (both replayed from their change lines), character pictures, handouts, the DM's creatures, rests the DM called, items, merchants, the DM's map creator assets and stamps, and private map pins missing from the database are restored from the archive, and notes are re-indexed. Then run a rebuild to regenerate the knowledge base.
 - **Rebuild:** `npm run rebuild -- --campaign <id> --yes` (or `POST /rebuild`) wipes all derived data, re-indexes notes, then replays every session in order, each correction right after the session it was made against. Sheet changes and handouts are read in time order between the sessions (those from before a session's day, before it; the rest at the end). The archivist is non-deterministic, so a rebuild gives an equivalent knowledge base, not an identical one.
-- Bump `PIPELINE_VERSION` (now 22, since Ask was given the DM's wiki, 2026-10-21) when prompts, tools or the memory design change.
+- Bump `PIPELINE_VERSION` (now 23, since the AI proposes wiki changes, 2026-10-21) when prompts, tools or the memory design change.
 
 ## 5. Knowledge base and Q&A (core design)
 
@@ -462,7 +468,7 @@ Who-knows-what is decided by the archivist and enforced by the server:
 | Creatures | Only the DM (the Creatures tab and its API, and Ask when the DM asks: §5.3 step 3b). A token placed from one is an ordinary token: players see it like any other. |
 | Inventory (equipped gear) | Like the sheet (it is part of it), except that the DM sees what each player has **equipped**: its name, how many, proficient or not, attuned, magic bonus, armour, the to-hit and damage it gives, what magic items do to the sheet, and the AC worked out (and whether the player typed their own AC); also the total weight carried against the campaign's limit (and whether they're encumbered) and how many items they're attuned to. Not what's only carried, nor the rest of the sheet (`GET /gear/equipped`, DM only). A player's item lookup never uses the DM's own items (they may hold secrets); it goes to the PHB tables, the books and the AI. |
 | Items, merchants | The lists, notes and sales: only the DM. The sales say who bought what, so the DM learns some of what players carry (owner, 2026-10-10: fine). A player sees a merchant's shop (name, description, picture, what it sells, prices, how many are left, and each item's description and picture) only while one of its tokens is on a map they can see (shown, not hidden, in their sight); otherwise 404. Buying changes only the buyer's own sheet. A player gets the picture of one of the DM's items only through a shop they can see or while it's in their own inventory (bought there); nothing else of the item. |
-| Wiki | Only the DM reads or writes it (tab and API). Each page, section and `:::for` / `:::dm` block has who it's available to; the narrowest wins. Ask gives a player only the parts available to them (filtered live from the page, never from the index); other names are DM-only. |
+| Wiki | Only the DM reads or writes it (tab and API), and only the DM sees the AI's proposals and its wiki jobs (players' job lists leave them out). A proposed part is offered to the players who know every record it was written from (`known_by`); a change never widens a section; a reveal reaches only players who know the records behind it, and the DM approves each. Each page, section and `:::for` / `:::dm` block has who it's available to; the narrowest wins. Ask gives a player only the parts available to them (filtered live from the page, never from the index); other names are DM-only. |
 | Archivist | Sees everything, including all notes; decides `known_by`. |
 
 The archivist's rules: openly happened → attendees (everyone if all attended); only in a player's note → that player; whispered/secret perception → that player; absent players don't know unless told later (then widen); mixed records get split; when in doubt, restrict.
@@ -520,6 +526,7 @@ The archivist's rules: openly happened → attendees (everyone if all attended);
 - [x] Wild Shape: druids keep the beast forms they can take on their sheet; in a form, its hit points, scores, saves, skills and attacks roll from the sheet and its token (§6.4).
 - [x] Class features: one box with every class's uses, pools and worked-out numbers (both editions), the player's own rows, Wild Shape as a row; rests give them back; the DM sees what's left (§6.4).
 - [x] Subclass features: the Player's Handbook's subclasses (2014 and 2024) as a section of the same box, with Combat Wild Shape's slot healing and Portent (§6.4).
+- [x] The AI keeps the wiki up to date: proposals after every archivist run (new pages, changed sections, reveals) that the DM approves, edits or rejects (§6.11).
 - [x] The DM's wiki, stage 1: pages the DM writes, with who each part is available to, links, history, View as; Ask reads it (all for the DM, only what's available for a player) (§6.11).
 - [x] Review sheet: is a character sheet valid for its level, classes and race? Rules checks, then the AI against the books and, for what they don't cover, the web (§6.4).
 
@@ -743,7 +750,12 @@ Owner (2026-10-18): "I want to start work on the DM being able to build a wiki. 
 - **View as** a player shows exactly what Ask can tell them from the page.
 - **Search index:** each part is indexed as a `wiki` doc with `visible_to` its audience; other names as a DM-only doc. Re-indexed on start-up restore and on a rebuild.
 - **API** (DM only): `GET/POST /campaigns/:cid/wiki`, `GET/PUT/DELETE /campaigns/:cid/wiki/:pid` (`?as=<user id>` for View as), `GET …/history`, `GET …/history/:version`, `POST …/restore`.
-- **Next stages:** the AI drafting and updating pages from sessions and records into a review queue the DM approves (sections it wrote stay `ai` until the DM edits them); the AI suggesting what to reveal to whom after a session; players reading their available parts directly.
+- **The AI's changes** (owner, 2026-10-21: "Start on them"; `src/wiki-ai.js`, the "The AI's changes" view of the Wiki tab). After every archivist run (session, correction, sheets and handouts; `WIKI_AUTO=off` turns this off) a `wiki` job reads what the archivist changed since last time (`kb_journal`, 25 records per AI call, task `wiki`: `MODEL_WIKI`, `EFFORT_WIKI` medium) with every page's title, the pages those records are about in full (named in them, or found by searching the wiki), what's waiting and what the DM rejected, and proposes: **new pages** (one per person, place, faction, item, quest, and one per session), **changed sections**, **new sections** and **reveals**. The DM can also press **Read the records now** (for a campaign that had sessions before the wiki).
+  - **Who it's available to** is worked out by the server: a proposed section goes to the players who know every record it cites (none valid: only the DM); a new page is as wide as its widest section; a change never widens a section (it can narrow it); a **reveal** offers a section to players who can't see it yet and who know the records cited, and approving it widens the section (and the page, keeping its other sections as they were).
+  - **Approving:** Approve, Edit then approve (the edited section is then the DM's), or Reject; Approve all. A section the AI wrote says so on the page and stays `by: "ai"` until the DM changes it (in the editor or by editing a proposal), then it's the DM's for good; for a DM section the AI only makes a "suggestion" when the records disagree. A newer proposal for the same thing replaces one still waiting; a rejected one isn't made again (and the AI is shown it).
+  - **Archive and rebuild:** proposals are archived whole after each change (`wiki/proposals.jsonl`) and restored; how far the AI has read is derived, and a rebuild moves it to the end, so replaying every session proposes nothing.
+  - API (DM only): `GET …/wiki/proposals`, `POST …/wiki/proposals/run`, `POST …/wiki/proposals/:id/approve` (`{ title?, kind?, page_available?, sections?: [{ heading?, text?, available? }], players? }`), `POST …/wiki/proposals/:id/reject`, `POST …/wiki/proposals/approve-all`. `GET …/wiki` also gives `proposals` (how many wait) and `ai_run` (the last wiki job).
+- **Later:** the AI as a writing partner on demand (draft a page from a description, expand or tidy one, import old notes, check the wiki for contradictions); players reading their available parts directly, if the owner opens the wiki to them.
 
 ## 7. Security & cost controls
 

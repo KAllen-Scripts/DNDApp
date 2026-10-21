@@ -277,18 +277,20 @@ export function registerCampaign(app, r) {
 
   app.get('/campaigns/:cid/jobs', async (request) => {
     const { cid, role } = access(request);
-    return jobs.list(cid).map((j) => forViewer(role, j));
+    return jobs.list(cid).filter((j) => role === 'dm' || j.type !== 'wiki').map((j) => forViewer(role, j));
   });
 
   /** Live job progress (SSE). Sends the current state of recent jobs, then updates. */
   app.get('/campaigns/:cid/jobs/events', async (request, reply) => {
     const { cid, role, userId } = access(request);
     const { sse, current } = openLiveStream(request, reply, { cid, role, userId });
-    for (const j of jobs.list(cid, 5).reverse()) sse.send('job', forViewer(role, j));
+    // Players never hear of the DM's wiki, so its jobs are the DM's alone.
+    for (const j of jobs.list(cid, 5).reverse()) if (role === 'dm' || j.type !== 'wiki') sse.send('job', forViewer(role, j));
     const listener = (job) => {
       if (job.campaign_id !== cid) return;
       const now = current();
       if (!now) return sse.end();
+      if (now.role !== 'dm' && job.type === 'wiki') return;
       sse.send('job', forViewer(now.role, job));
     };
     jobs.events.on('update', listener);

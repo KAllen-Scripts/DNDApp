@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { withPage, addDm } from './helpers.js';
+import { withPage, addDm, createFakeLLM } from './helpers.js';
 
 const button = (page, scope, text) => page.$$(`${scope} button`).find((b) => b.textContent.trim() === text);
 
@@ -77,5 +77,63 @@ test('wiki tab: the DM makes a page, links it, sees it as a player, edits it and
     await page.settle();
     const back = (await t.request('GET', `/campaigns/${t.campaign.id}/wiki/${lady.id}`)).json().page;
     assert.equal(back.version, 3);
+  });
+});
+
+test("wiki tab: the AI's changes wait in a list; the DM edits one before approving and approves a reveal", async () => {
+  let secrets;
+  let samId;
+  const llm = createFakeLLM({
+    wiki: ({ prompt }) => {
+      const id = (title) => Number(new RegExp(`#(\\d+) ${title}`).exec(prompt)?.[1]);
+      return {
+        changes: [
+          { action: 'new_page', page_id: null, section_id: null, new_page: { title: 'The Mill', kind: 'place', aliases: [], parent_title: null, sections: [{ heading: 'Where', text: 'North of Brindle.', sources: [id('The mill')] }] }, section: null, players: [], sources: [], reason: 'A new place.' },
+          { action: 'reveal', page_id: secrets.id, section_id: secrets.sections[0].id, new_page: null, section: null, players: [samId], sources: [id('The ledger')], reason: 'Thorin read the ledger.' },
+        ],
+      };
+    },
+  });
+  await withPage({
+    setup: { llm },
+    before: async (t) => {
+      const dana = await addDm(t);
+      samId = t.sam.id;
+      secrets = await t.wiki.create(t.campaign.id, { title: 'Secrets', available: 'dm', sections: [{ heading: 'The ledger', text: 'The cult owes the Baron.', available: 'all' }] }, { by: dana.id });
+      await t.kb.create(t.campaign.id, 'test', { kind: 'place', title: 'The mill', body: 'North of Brindle.' });
+      await t.kb.create(t.campaign.id, 'test', { kind: 'clue', title: 'The ledger', body: 'The cult owes the Baron.', known_by: [t.sam.id] });
+      t.jobs.enqueueWiki(t.campaign.id);
+      await t.jobs.idle();
+      return { dana };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t) => {
+    page.click('[data-tab=wiki]');
+    await page.waitFor(() => page.text('#wiki-review') === "The AI's changes (2)");
+    page.click('#wiki-review');
+    await page.waitFor(() => page.$$('.wiki-proposal').length === 2);
+    const [made, reveal] = page.$$('.wiki-proposal');
+    assert.match(made.textContent, /New page.*The Mill/);
+    assert.match(made.textContent, /Available as the page/);
+    assert.match(reveal.textContent, /Reveal.*Secrets › The ledger/);
+    assert.match(reveal.textContent, /Thorin/);
+
+    // Edit the new page before approving: the section becomes the DM's.
+    page.click([...made.querySelectorAll('button')].find((b) => b.textContent === 'Edit'));
+    page.type(made.querySelector('[aria-label="Proposed text"]'), 'North of Brindle, by the river.');
+    page.click([...made.querySelectorAll('button')].find((b) => b.textContent === 'Approve with my changes'));
+    await page.waitFor(() => page.text('#wiki-status').includes('Approved: The Mill'));
+    const mill = (await t.request('GET', `/campaigns/${t.campaign.id}/wiki`)).json().pages.find((p) => p.title === 'The Mill');
+    const full = (await t.request('GET', `/campaigns/${t.campaign.id}/wiki/${mill.id}`)).json().page;
+    assert.equal(full.sections[0].text, 'North of Brindle, by the river.');
+    assert.equal(full.sections[0].by, 'dm');
+
+    await page.waitFor(() => page.$$('.wiki-proposal').length === 1);
+    page.click([...page.$('.wiki-proposal').querySelectorAll('button')].find((b) => b.textContent === 'Approve'));
+    await page.waitFor(() => page.text('#wiki-main').includes('Nothing waiting for you'));
+    assert.equal(page.text('#wiki-review'), "The AI's changes");
+    const asSam = (await t.request('GET', `/campaigns/${t.campaign.id}/wiki/${secrets.id}?as=${t.sam.id}`)).json().page;
+    assert.match(asSam.sections[0].text, /owes the Baron/);
+    await page.settle();
   });
 });

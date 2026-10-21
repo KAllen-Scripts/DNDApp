@@ -426,3 +426,21 @@ CREATE TABLE IF NOT EXISTS qa_log (
   created_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS qa_log_user ON qa_log(user_id, created_at);
+
+-- What the AI proposes for the DM's wiki (new pages, changed sections, reveals), waiting for the DM.
+-- Archived as wiki/proposals.jsonl (the whole proposal after each change). Schema v19.
+CREATE TABLE IF NOT EXISTS wiki_proposals (
+  id           TEXT PRIMARY KEY,
+  campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  status       TEXT NOT NULL,     -- pending | approved | rejected | replaced
+  data         TEXT NOT NULL,     -- JSON; see normalizeProposal in src/wiki-ai.js
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS wiki_proposals_campaign ON wiki_proposals(campaign_id, status);
+
+-- How far the AI has read the archivist's journal for the wiki (derived: a rebuild moves it to the end).
+CREATE TABLE IF NOT EXISTS wiki_chronicle (
+  campaign_id  INTEGER PRIMARY KEY REFERENCES campaigns(id) ON DELETE CASCADE,
+  journal_id   INTEGER NOT NULL DEFAULT 0
+);
