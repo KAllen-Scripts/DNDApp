@@ -27,9 +27,11 @@
  */
 
 export const DESIGN_VERSION = 2;
-export const DESIGN_CELL = 70; // pixels per square in the map's picture
+export const DESIGN_CELL = 70; // pixels per square in the map's picture, at least (and for maps made before sharper pictures)
+export const DESIGN_CELL_MAX = 140; // pixels per square for small and medium maps
+export const DESIGN_PICTURE_MAX = 4200; // the long side of a map's picture, at most
 export const DESIGN_MIN = 4;
-export const DESIGN_MAX = 60; // squares across or down (60 x 70 px = 4200 px)
+export const DESIGN_MAX = 60; // squares across or down (60 x 70 px = DESIGN_PICTURE_MAX)
 export const MAX_DESIGN_WALLS = 1500;
 export const MAX_DESIGN_ASSETS = 800;
 export const MAX_DESIGN_PATHS = 80;
@@ -1492,6 +1494,16 @@ const groupOf = (id) => `cw${id}`.padEnd(6, '0').slice(0, 16);
  * assets that give light, difficult terrain (floors, rivers, assets like
  * rubble), stairs and ladders, and ways to other maps (assets with `to`).
  */
+/**
+ * How many pixels a square a new map's picture gets: 140 for maps up to 30
+ * squares on their long side, less for bigger ones so the picture stays
+ * within 4,200 px (phones refuse much bigger pictures), never under 70.
+ */
+export function designCell(design) {
+  const side = Math.max(design.cols, design.rows, 1);
+  return Math.max(DESIGN_CELL, Math.min(DESIGN_CELL_MAX, Math.floor(DESIGN_PICTURE_MAX / side)));
+}
+
 export function designToMap(design, cell = DESIGN_CELL) {
   const px = (v) => round(v * cell, 1);
   const walls = [];

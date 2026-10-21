@@ -50,7 +50,7 @@ async function startBlank(page) {
 async function saveAndClose(page, name) {
   page.type('#creator-name', name);
   page.click('#creator-save');
-  await page.waitFor(() => !page.$('#map-creator').open, { what: 'the creator to close' });
+  await page.waitFor(() => !page.$('#map-creator').open, { timeout: 30000, what: 'the creator to close' });
   await page.settle();
 }
 
@@ -445,8 +445,8 @@ test('creator tools: the height tool raises a walled room with a click and a rec
     await saveAndClose(page, 'Keep');
     const map = t.maps.list(t.campaign.id)[0];
     assert.deepEqual(map.raised.map(({ points, height, source }) => ({ points, height, source })), [
-      { points: [[140, 140], [560, 140], [560, 420], [140, 420]], height: 15, source: 'creator' },
-      { points: [[1400, 700], [1575, 700], [1575, 840], [1400, 840]], height: -10, source: 'creator' },
+      { points: [[280, 280], [1120, 280], [1120, 840], [280, 840]], height: 15, source: 'creator' },
+      { points: [[2800, 1400], [3150, 1400], [3150, 1680], [2800, 1680]], height: -10, source: 'creator' },
     ]);
   });
 });

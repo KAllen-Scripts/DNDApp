@@ -12,6 +12,7 @@ import { ASSETS, DESIGN_CELL, EMPTY, FLOORS, LABEL_FONTS, LOOK, PATH_KINDS, asse
 import { sightPolygon } from './map.js';
 import { TAU, shade, rgba, lightness, hash2, noise, fbm, circle, oval, rect, poly, line, polyline, blobPoints, smoothShape, radial, glow } from './map-paint.js';
 import { drawBuiltIn } from './map-art-assets.js';
+import { artRef, floorArt, propArt, wallArt } from './map-art-library.js';
 
 export { drawBuiltIn };
 export const VOID_COLOUR = LOOK.void;
@@ -28,6 +29,38 @@ const rndOf = (c, r, s) => {
 };
 /** How detailed to draw at this many pixels a square. */
 const detailAt = (cell) => (cell >= 36 ? 2 : cell >= 16 ? 1 : 0);
+
+/**
+ * A texture from the map art (map-art-library.js) as a fill: the picture
+ * repeated, `art.tile` squares across, shifted by the seed so neighbouring
+ * floors don't line up. Null when it isn't loaded (the drawing is used instead).
+ */
+function artPattern(ctx, images, art, cell, seed, { turn = 0, scale = 1 } = {}) {
+  const img = art && images?.get(artRef(art.file));
+  if (!img?.width) return null;
+  const pat = ctx.createPattern(img, 'repeat');
+  if (!pat) return null;
+  const s = (art.tile * scale * cell) / img.width;
+  const cos = Math.cos(turn) * s;
+  const sin = Math.sin(turn) * s;
+  pat.setTransform?.({ a: cos, b: sin, c: -sin, d: cos, e: hash2(seed, 1, 7) * img.width * s, f: hash2(seed, 2, 7) * img.height * s });
+  return pat;
+}
+
+/** Big soft light and dark patches over a texture, so its repeats don't show. */
+function artMottle(g, c, r) {
+  if (!g.detail) return;
+  const { ctx, cell: k } = g;
+  const n = fbm(c * 0.17, r * 0.17, g.seed + 11) - 0.5;
+  if (Math.abs(n) < 0.04) return;
+  const rnd = rndOf(c, r, g.seed + 12);
+  const cx = (c + 0.5 + (rnd() - 0.5) * 0.6) * k;
+  const cy = (r + 0.5 + (rnd() - 0.5) * 0.6) * k;
+  const rad = k * (0.8 + rnd() * 0.4);
+  const col = n > 0 ? '#fff4e0' : '#140c04';
+  ctx.fillStyle = radial(ctx, cx, cy, rad, rgba(col, Math.min(0.22, Math.abs(n) * 0.55)), rgba(col, 0));
+  ctx.fillRect(cx - rad, cy - rad, rad * 2, rad * 2);
+}
 
 // ---------- natural edges ----------
 
@@ -827,7 +860,7 @@ const rank = (ch) => (isNatural(ch) ? blendOf(ch) : -100);
  * look isn't soft), then the edges: shade where floor meets nothing, foam
  * where water meets land.
  */
-export function drawFloor(ctx, design, cell = DESIGN_CELL, region = null) {
+export function drawFloor(ctx, design, cell = DESIGN_CELL, region = null, images = null) {
   const look = normalizeLook(design.look);
   const { cols, rows, floor } = design;
   const R = region
@@ -869,6 +902,22 @@ export function drawFloor(ctx, design, cell = DESIGN_CELL, region = null) {
   /** One floor's texture (base colour, soft patches from `patches`, marks from `cells`), inside the clip already set. */
   const paint = (ch, cells, patches = cells) => {
     const g = { ctx, cell, detail, ch, f: FLOORS[ch], seed: FSEED(ch), at, depth, cols, soft: look.soft };
+    const pat = artPattern(ctx, images, floorArt(ch), cell, g.seed);
+    if (pat) {
+      ctx.fillStyle = pat;
+      ctx.fillRect(M.x1 * cell, M.y1 * cell, (M.x2 - M.x1) * cell, (M.y2 - M.y1) * cell);
+      // Natural ground: the same texture again over it, turned and a little bigger, half see-through, so its repeats
+      // don't line up into a grid.
+      const again = isNatural(ch) && artPattern(ctx, images, floorArt(ch), cell, g.seed + 3, { turn: 0.61, scale: 1.37 });
+      if (again) {
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = again;
+        ctx.fillRect(M.x1 * cell, M.y1 * cell, (M.x2 - M.x1) * cell, (M.y2 - M.y1) * cell);
+        ctx.globalAlpha = 1;
+      }
+      for (const [c, r] of patches) artMottle(g, c, r);
+      return;
+    }
     ctx.fillStyle = g.f.base;
     ctx.fillRect(M.x1 * cell, M.y1 * cell, (M.x2 - M.x1) * cell, (M.y2 - M.y1) * cell);
     for (const [c, r] of patches) mottle(g, c, r);
@@ -1219,13 +1268,22 @@ function lumps(pts, k, wd, seed) {
 function wallPass(ctx, l, pass, k, low) {
   const L = l.L;
   const wd = L.w * k * (low ? 0.55 : 1);
-  const colour = pass === 'edge' ? L.edge : pass === 'body' ? L.body : L.top;
+  // With a texture: the texture is the wall's body, and its top is only a faint light along the middle.
+  let colour = pass === 'edge' ? L.edge : pass === 'body' ? l.pat ?? L.body : L.top;
+  if (l.pat && pass === 'top') {
+    if (L.kind === 'lumps' || L.kind === 'stakes') return;
+    colour = 'rgba(255,248,235,0.12)';
+  }
   if (L.kind === 'lumps' || L.kind === 'stakes') {
     const seed = L.kind === 'stakes' ? 41 : L === WALL_LOOK.hedge ? 43 : 47;
     const list = L.kind === 'stakes' ? along(l.pts, k * (low ? 0.14 : 0.2)).map((p) => ({ x: p.x, y: p.y, r: wd * 0.45 })) : lumps(l.pts, k * (low ? 0.6 : 1), wd, seed);
     for (const p of list) {
       if (pass === 'edge') circle(ctx, p.x, p.y, p.r + k * 0.035, colour);
-      else if (pass === 'body') circle(ctx, p.x, p.y, p.r, L.kind === 'stakes' ? radial(ctx, p.x, p.y, p.r, L.top, L.body, p.x - p.r * 0.3, p.y - p.r * 0.3) : colour);
+      else if (pass === 'body') {
+        circle(ctx, p.x, p.y, p.r, l.pat ?? (L.kind === 'stakes' ? radial(ctx, p.x, p.y, p.r, L.top, L.body, p.x - p.r * 0.3, p.y - p.r * 0.3) : colour));
+        // A textured stake or lump still looks round: lit at its top left.
+        if (l.pat) circle(ctx, p.x, p.y, p.r, radial(ctx, p.x, p.y, p.r, 'rgba(255,248,235,0.14)', 'rgba(0,0,0,0.3)', p.x - p.r * 0.35, p.y - p.r * 0.35));
+      }
       else if (L.kind === 'lumps') circle(ctx, p.x - p.r * 0.2, p.y - p.r * 0.25, p.r * 0.55, rgba(colour, 0.75));
       else circle(ctx, p.x, p.y, p.r * 0.35, rgba(shade(L.top, 0.1), 0.8));
     }
@@ -1259,6 +1317,8 @@ function wallPass(ctx, l, pass, k, low) {
 function wallDetail(ctx, l, k, detail, low) {
   const L = l.L;
   if (!detail) return;
+  // A texture has its own joints, grain and leaves; only rivets and a ruin's fallen stones are drawn over it.
+  if (l.pat && !(l.w.style === 'iron' || L.kind === 'ruin')) return;
   const wd = L.w * k * (low ? 0.55 : 1);
   const lw = Math.max(0.6, k * 0.018);
   if (L.kind === 'line' || L.kind === 'ruin') {
@@ -1280,7 +1340,7 @@ function wallDetail(ctx, l, k, detail, low) {
       const half = low ? 0.5 : 0;
       const a = odd ? half : -0.5;
       const b = odd ? 0.5 : -half;
-      line(ctx, p.x + p.nx * wd * a, p.y + p.ny * wd * a, p.x + p.nx * wd * b, p.y + p.ny * wd * b, rgba(L.edge, 0.6), lw, 'butt');
+      if (!l.pat) line(ctx, p.x + p.nx * wd * a, p.y + p.ny * wd * a, p.x + p.nx * wd * b, p.y + p.ny * wd * b, rgba(L.edge, 0.6), lw, 'butt');
     }
     if (L.kind === 'ruin' && detail > 1) {
       const rnd = rndOf(Math.round(l.pts[0][0]), Math.round(l.pts[0][1]), 53);
@@ -1343,11 +1403,16 @@ function drawLow(ctx, l, k, detail, shadows) {
  * then low walls and fences, then doorways (a sill and jambs: the map draws
  * the door itself, open or shut) and archways (a pillar each side).
  */
-export function drawWalls(ctx, design, cell = DESIGN_CELL, look = design.look) {
+export function drawWalls(ctx, design, cell = DESIGN_CELL, look = design.look, images = null) {
   const shadows = look?.shadows !== false;
   const detail = detailAt(cell);
   const k = cell;
-  const lines = design.walls.map((w) => ({ w, pts: toPx(wallPoints(w, Math.PI / 40), k), L: WALL_LOOK[w.style] ?? WALL_LOOK.stone }));
+  const pats = new Map();
+  const patOf = (style) => {
+    if (!pats.has(style)) pats.set(style, artPattern(ctx, images, wallArt(style), k, style.length * 131));
+    return pats.get(style);
+  };
+  const lines = design.walls.map((w) => ({ w, pts: toPx(wallPoints(w, Math.PI / 40), k), L: WALL_LOOK[w.style] ?? WALL_LOOK.stone, pat: patOf(WALL_LOOK[w.style] ? w.style : 'stone') }));
   const solid = lines.filter((l) => SOLID.has(l.w.type));
   if (shadows) {
     for (const l of solid) {
@@ -1411,6 +1476,54 @@ export function drawWalls(ctx, design, cell = DESIGN_CELL, look = design.look) {
 
 // ---------- assets ----------
 
+/** A new canvas, from `makeCanvas` or the page; null where there's neither (or no 2d drawing, as in tests). */
+function newCanvas(w, h, makeCanvas) {
+  const c = makeCanvas ? makeCanvas(w, h) : globalThis.document ? Object.assign(globalThis.document.createElement('canvas'), { width: w, height: h }) : null;
+  return c?.getContext?.('2d') ? c : null;
+}
+
+// Each prop picture's shadow, made once: a soft dark copy blurred small (blurring at full size took the server about
+// a tenth of a second a prop, ten seconds for a tavern) and stretched when drawn.
+const SHADOW_PX = 96;
+const SHADOW_PAD = 8;
+const shadows = new WeakMap();
+function pictureShadow(img, makeCanvas) {
+  if (shadows.has(img)) return shadows.get(img);
+  const k = SHADOW_PX / Math.max(img.width, img.height);
+  const w = Math.max(1, Math.round(img.width * k));
+  const h = Math.max(1, Math.round(img.height * k));
+  const c = newCanvas(w + SHADOW_PAD * 2, h + SHADOW_PAD * 2, makeCanvas);
+  if (c) {
+    const g = c.getContext('2d');
+    // Only the shadow lands on the canvas: the picture itself is drawn far off it.
+    g.shadowColor = 'rgba(0,0,0,0.55)';
+    g.shadowBlur = 5;
+    g.shadowOffsetX = 10000;
+    g.drawImage(img, SHADOW_PAD - 10000, SHADOW_PAD, w, h);
+  }
+  const out = c ? { c, w } : null;
+  shadows.set(img, out);
+  return out;
+}
+
+/**
+ * A prop's picture from the map art, as big as fits its box (keeping its
+ * shape) times `fill` (small things, like a lantern, don't fill their box),
+ * with a soft shadow `sx`, `sy` away (down and to the right on the map;
+ * null for none).
+ */
+function drawPicture(ctx, img, w, h, fill, shadow, makeCanvas) {
+  const s = Math.min(w / img.width, h / img.height) * fill;
+  const dw = img.width * s;
+  const dh = img.height * s;
+  const sh = shadow && pictureShadow(img, makeCanvas);
+  if (sh) {
+    const k = dw / sh.w;
+    ctx.drawImage(sh.c, shadow.sx - dw / 2 - SHADOW_PAD * k, shadow.sy - dh / 2 - SHADOW_PAD * k, sh.c.width * k, sh.c.height * k);
+  }
+  ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+}
+
 /** An asset that's missing its picture (an upload not loaded yet): a dashed box. */
 function drawMissing(ctx, w, h) {
   ctx.strokeStyle = 'rgba(255,255,255,0.6)';
@@ -1427,8 +1540,8 @@ const idSeed = (id) => {
   return s;
 };
 
-/** One placed asset. `images`: 'u:<id>' -> something drawImage takes. */
-export function drawAsset(ctx, a, cell = DESIGN_CELL, images = new Map(), look = LOOK) {
+/** One placed asset. `images`: 'u:<id>' -> something drawImage takes; `makeCanvas(w, h)` for pictures' shadows (else the page's). */
+export function drawAsset(ctx, a, cell = DESIGN_CELL, images = new Map(), look = LOOK, makeCanvas = null) {
   ctx.save();
   ctx.translate(a.x * cell, a.y * cell);
   const rad = ((a.rot ?? 0) * Math.PI) / 180;
@@ -1443,7 +1556,11 @@ export function drawAsset(ctx, a, cell = DESIGN_CELL, images = new Map(), look =
     let sx = wx * Math.cos(rad) + wy * Math.sin(rad);
     const sy = -wx * Math.sin(rad) + wy * Math.cos(rad);
     if (a.flip) sx = -sx;
-    drawBuiltIn(ctx, a.a, w, h, { seed: idSeed(a.id), tint: a.tint, sx, sy, shadows: look?.shadows !== false });
+    // A prop the DM recoloured keeps its drawn look, so the colour shows.
+    const art = !a.tint || a.tint === ASSETS[a.a].tint ? propArt(a.a) : null;
+    const img = art && images.get(artRef(art.file));
+    if (img?.width) drawPicture(ctx, img, w, h, art.fill ?? 1, look?.shadows !== false ? { sx, sy } : null, makeCanvas);
+    else drawBuiltIn(ctx, a.a, w, h, { seed: idSeed(a.id), tint: a.tint, sx, sy, shadows: look?.shadows !== false });
   } else if (images.get(a.a)) ctx.drawImage(images.get(a.a), -w / 2, -h / 2, w, h);
   else drawMissing(ctx, w, h);
   ctx.restore();
@@ -1656,14 +1773,14 @@ export function drawLabels(ctx, design, cell = DESIGN_CELL) {
 export function drawDesign(ctx, design, { cell = DESIGN_CELL, images = new Map(), floor = true, look = true, labels = true, grid = true, makeCanvas = null } = {}) {
   const lk = normalizeLook(design.look);
   if (floor) {
-    drawFloor(ctx, design, cell);
+    drawFloor(ctx, design, cell, null, images);
     drawPaths(ctx, design, cell);
   }
   const order = drawOrder(design.assets);
-  for (const a of order) if (layerOf(a) === 0) drawAsset(ctx, a, cell, images, lk);
-  drawWalls(ctx, design, cell, lk);
-  for (const a of order) if (layerOf(a) === 1) drawAsset(ctx, a, cell, images, lk);
-  for (const a of order) if (layerOf(a) === 2) drawAsset(ctx, a, cell, images, lk);
+  for (const a of order) if (layerOf(a) === 0) drawAsset(ctx, a, cell, images, lk, makeCanvas);
+  drawWalls(ctx, design, cell, lk, images);
+  for (const a of order) if (layerOf(a) === 1) drawAsset(ctx, a, cell, images, lk, makeCanvas);
+  for (const a of order) if (layerOf(a) === 2) drawAsset(ctx, a, cell, images, lk, makeCanvas);
   if (look) drawLook(ctx, design, cell, { makeCanvas, grid });
   if (labels) drawLabels(ctx, design, cell);
 }
@@ -1673,8 +1790,8 @@ export function drawDesign(ctx, design, { cell = DESIGN_CELL, images = new Map()
 const sample = (cols, rows, floor, extra = {}) => ({ v: 2, cols, rows, floor, walls: [], assets: [], paths: [], labels: [], look: { ...LOOK, shadows: false }, ...extra });
 
 /** A sample of a floor, `size` pixels square. */
-export function drawFloorSwatch(ctx, ch, size) {
-  drawFloor(ctx, sample(2, 2, [ch + ch, ch + ch]), size / 2);
+export function drawFloorSwatch(ctx, ch, size, images = null) {
+  drawFloor(ctx, sample(2, 2, [ch + ch, ch + ch]), size / 2, null, images);
 }
 
 /** A sample of a path kind across a `w` x `h` box. */
@@ -1687,11 +1804,11 @@ export function drawPathSwatch(ctx, kind, w, h) {
 }
 
 /** A sample of a wall style (and type) across a `w` x `h` box. */
-export function drawWallSwatch(ctx, style, type, w, h) {
+export function drawWallSwatch(ctx, style, type, w, h, images = null) {
   const cell = h / 2;
   const cols = Math.ceil(w / cell);
   const d = sample(cols, 2, ['s'.repeat(cols), 's'.repeat(cols)], { walls: [{ id: 'swatch02', x1: 0, y1: 1, x2: cols, y2: 1, type, style }] });
-  drawFloor(ctx, d, cell);
-  drawWalls(ctx, d, cell, d.look);
+  drawFloor(ctx, d, cell, null, images);
+  drawWalls(ctx, d, cell, d.look, images);
 }
 

@@ -20,6 +20,8 @@ import {
   resizeDesign, scatterAssets, smoothPoints, transformClip, wallAt, wallPoints,
 } from './shared/map-design.js';
 import { drawAsset, drawDesign, drawFloor, drawPaths } from './shared/map-art.js';
+import { MAP_ART, artFiles, artRef, propArt } from './shared/map-art-library.js';
+import { loadArt } from './map-art-loader.js';
 import { onMap, show } from './map.js';
 import { api, fileUrl, h, readBase64, LoggedOut } from './api.js';
 import { base, downloadUvtt, report, state } from './map-state.js';
@@ -75,7 +77,7 @@ export async function openCreator(map = null) {
     undo: [],
     redo: [],
     drag: null, // what the pointer is doing while it's down
-    images: new Map(), // 'u:<id>' -> the DM's picture, loaded
+    images: new Map(), // 'u:<id>' -> the DM's picture, loaded; 'art:<file>' -> the map art's (map-art-library.js)
     assets: [], // the DM's own
     stamps: { builtIn: [], own: [] },
     search: '',
@@ -477,8 +479,34 @@ function cancel() {
 
 // ---------- drawing the preview ----------
 
+/**
+ * Ask for the map art the design draws with. Each picture that arrives is
+ * put with the others; a floor or wall texture redraws the whole floor, a
+ * prop just the preview.
+ */
+function wantArt() {
+  const placing = propArt(c.asset)?.file;
+  for (const file of placing ? [...artFiles(c.design), placing] : artFiles(c.design)) {
+    if (c.images.has(artRef(file))) continue;
+    loadArt(file, (f, img) => {
+      if (!c || c.images.has(artRef(f))) return;
+      c.images.set(artRef(f), img);
+      const texture = [...Object.values(MAP_ART.floors), ...Object.values(MAP_ART.walls)].some((x) => x.file === f);
+      if (!texture) return redraw();
+      if (c.artFrame) return;
+      const later = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (fn) => setTimeout(fn, 0);
+      c.artFrame = later(() => {
+        if (!c) return;
+        c.artFrame = 0;
+        refreshFloor();
+      });
+    });
+  }
+}
+
 /** Draw the whole floor again (after a size, zoom, look or undo change), then everything on it. */
 function refreshFloor() {
+  wantArt();
   const px = cell();
   const W = Math.round(c.design.cols * px);
   const H = Math.round(c.design.rows * px);
@@ -487,7 +515,7 @@ function refreshFloor() {
   fc.height = H;
   const ctx = fc.getContext('2d');
   if (ctx) {
-    drawFloor(ctx, c.design, px);
+    drawFloor(ctx, c.design, px, null, c.images);
     drawPaths(ctx, c.design, px);
   }
   c.floorCanvas = fc;
@@ -504,7 +532,8 @@ function paintRegion(box) {
   const ctx = c.floorCanvas?.getContext('2d');
   if (!ctx) return;
   const region = { x1: box.x1 - 1, y1: box.y1 - 1, x2: box.x2 + 1, y2: box.y2 + 1 };
-  drawFloor(ctx, c.design, cell(), region);
+  wantArt();
+  drawFloor(ctx, c.design, cell(), region, c.images);
   drawPaths(ctx, c.design, cell(), region);
 }
 
@@ -532,6 +561,7 @@ function drawNow() {
   const ctx = canvas?.getContext('2d');
   if (!ctx || !c.floorCanvas) return;
   const px = cell();
+  wantArt();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(c.floorCanvas, 0, 0);
   drawDesign(ctx, c.design, { cell: px, images: c.images, floor: false, look: c.previewLook, labels: true, grid: c.previewLook, makeCanvas });

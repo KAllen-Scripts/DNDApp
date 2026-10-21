@@ -41,6 +41,8 @@ const MODULES = {
   'shared/map-art-pieces.js': '@dndapp/shared/map-art-pieces.js',
   'shared/map-art-temple.js': '@dndapp/shared/map-art-temple.js',
   'shared/map-art-farm.js': '@dndapp/shared/map-art-farm.js',
+  'shared/map-art-library.js': '@dndapp/shared/map-art-library.js',
+  'shared/map-art-files.js': '@dndapp/shared/map-art-files.js',
   'shared/coins.js': '@dndapp/shared/coins.js',
   'shared/point-buy.js': '@dndapp/shared/point-buy.js',
   'shared/class-features.js': '@dndapp/shared/class-features.js',
