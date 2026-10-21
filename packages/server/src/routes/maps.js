@@ -4,7 +4,7 @@
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { CLIMB_KINDS, CONDITIONS, EFFORTS, FOG_MAP, FOG_OPS, MAX_COMPANIONS, MAX_FOG_SHAPES, MAX_CLIMBS, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_PLACES, MAX_PLACE_POINTS, placeProblem, shownTo, MAX_RAISED, MAX_TERRAIN, MAX_HEIGHT_FT, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, PLAYER_KINDS, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, ownToken, pathCost, snapToken, stepTurn, tokenPx, walkLevels, wallBetween } from '@dndapp/shared/map.js';
+import { MAP_KINDS, CLIMB_KINDS, CONDITIONS, EFFORTS, FOG_MAP, FOG_OPS, MAX_COMPANIONS, MAX_FOG_SHAPES, MAX_CLIMBS, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_PLACES, MAX_PLACE_POINTS, placeProblem, shownTo, arrivalSpots, characterMap, followGroup, followLoop, nearPlace, parentOf, trailFollowers, MAX_RAISED, MAX_TERRAIN, MAX_HEIGHT_FT, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, PLAYER_KINDS, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, ownToken, pathCost, snapToken, stepTurn, tokenPx, walkLevels, wallBetween } from '@dndapp/shared/map.js';
 import sharp from 'sharp';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
@@ -19,6 +19,49 @@ export function registerMaps(app, r) {
   const { access, archive, auth, config, kb, mapReader, maps, openLiveStream, publicMessage, statBlocks, upload } = r;
 
   // ---------- maps (the DM imports them; players see shown maps and move their own token) ----------
+
+  /**
+   * Take a token to a spot on another map (`at`, or null for the middle), with everyone following it
+   * (the world: characters travel together or apart, owner 2026-10-18). They arrive round the spot,
+   * still following. A player character is on one map at a time: their token anywhere else goes.
+   * `apply`: changes to the leader on the way (the DM's Add token). Returns the map they arrived on
+   * and the leader's id there.
+   */
+  function moveGroup(cid, from, leaderId, target, at, { by, apply = {} }) {
+    const group = followGroup(from.tokens, leaderId);
+    const moving = new Set(group.map((t) => t.id));
+    if (target.tokens.filter((t) => !moving.has(t.id)).length + group.length > MAX_TOKENS) throw new BadRequestError(`${target.name} is full.`);
+    const spots = arrivalSpots(target, group, at ?? { x: target.image.width / 2, y: target.image.height / 2 });
+    maps.change(cid, from.id, (m) => {
+      if (m.combat?.turn && moving.has(m.combat.turn)) Object.assign(m.combat, stepTurn(m.combat, 1));
+      m.tokens = m.tokens.filter((t) => !moving.has(t.id));
+    }, { by, reason: `left for ${target.id}` });
+    // Ids stay the same unless one is taken there; whoever follows follows the new one.
+    const ids = new Map(group.map((t) => [t.id, target.tokens.some((x) => x.id === t.id) ? newTokenId() : t.id]));
+    const characters = new Set(group.filter((t) => t.kind === 'pc' && t.user_id != null).map((t) => t.user_id));
+    const arrived = maps.change(cid, target.id, (m) => {
+      // One map per character: an old token of theirs here goes.
+      m.tokens = m.tokens.filter((t) => !(t.kind === 'pc' && characters.has(t.user_id)));
+      group.forEach((t, i) => {
+        const token = { ...t, ...(i === 0 ? apply : {}), id: ids.get(t.id), follows: t.follows && ids.has(t.follows) ? ids.get(t.follows) : i === 0 ? null : t.follows };
+        m.tokens.push({ ...token, ...snapToken(m, token, spots[i].x, spots[i].y) });
+      });
+    }, { by, reason: `arrived from ${from.id}` });
+    for (const user of characters) clearCharacter(cid, user, [from.id, target.id], by);
+    return { arrived, id: ids.get(leaderId) };
+  }
+
+  /** A player character's token on any map but these goes (one map per character). */
+  function clearCharacter(cid, userId, except, by) {
+    for (const m of maps.list(cid)) {
+      if (except.includes(m.id) || !m.tokens.some((t) => t.kind === 'pc' && t.user_id === userId)) continue;
+      maps.change(cid, m.id, (doc) => {
+        const gone = new Set(doc.tokens.filter((t) => t.kind === 'pc' && t.user_id === userId).map((t) => t.id));
+        if (doc.combat?.turn && gone.has(doc.combat.turn)) Object.assign(doc.combat, stepTurn(doc.combat, 1));
+        doc.tokens = doc.tokens.filter((t) => !gone.has(t.id));
+      }, { by, reason: 'character went elsewhere' });
+    }
+  }
 
   // AI reads of imported maps per person per hour.
   const mapAiCalls = new Map();
@@ -58,7 +101,7 @@ export function registerMaps(app, r) {
           if (r.name && !m.named) m.name = r.name;
           if (!keepGrid && JSON.stringify(m.grid) === before.grid) m.grid = r.grid;
           if (!keepGrid && JSON.stringify(m.scale) === before.scale) m.scale = r.scale;
-          m.kind = r.kind;
+          if (!m.kind_set) m.kind = r.kind;
           m.description = r.description;
           m.reading = { status: 'done', error: '', notes: r.notes };
         }, { reason: 'read by the AI' }),
@@ -356,7 +399,7 @@ export function registerMaps(app, r) {
     const a = access(request, { dm: true });
     const { map } = viewableMap(request);
     const body = z
-      .object({ name: z.string().trim().min(1).max(100).optional(), shown: z.boolean().optional(), shown_to: WHO.optional(), grid: GRID.optional(), scale: SCALE.optional(), variant: z.string().nullable().optional() })
+      .object({ name: z.string().trim().min(1).max(100).optional(), kind: z.enum(MAP_KINDS).optional(), shown: z.boolean().optional(), shown_to: WHO.optional(), grid: GRID.optional(), scale: SCALE.optional(), variant: z.string().nullable().optional() })
       .parse(request.body ?? {});
     if (body.variant != null && !map.variants.some((v) => v.id === body.variant)) throw new NotFoundError('No such variant');
     checkPlayers(a.cid, body.shown_to);
@@ -365,6 +408,7 @@ export function registerMaps(app, r) {
         m.name = body.name;
         m.named = true;
       }
+      if (body.kind !== undefined && body.kind !== m.kind) Object.assign(m, { kind: body.kind, kind_set: true });
       if (body.shown !== undefined) m.shown = body.shown;
       if (body.shown_to !== undefined) m.shown_to = body.shown_to;
       if (body.grid !== undefined) m.grid = body.grid;
@@ -535,19 +579,57 @@ export function registerMaps(app, r) {
     if (!dm && !nearLink(map, link, token.x, token.y)) throw new BadRequestError(`Move ${token.name} next to it first.`);
     const target = maps.get(a.cid, link.to);
     if (!dm && !shownTo(target, a.userId)) throw new NotFoundError('No such map');
-    if (target.tokens.length >= MAX_TOKENS) throw new BadRequestError(`${target.name} is full.`);
     const levels = map.level && target.level?.group === map.level.group && target.image.width === map.image.width && target.image.height === map.image.height;
     const backs = target.links.filter((l) => l.to === map.id);
     const back = levels ? backs.sort((p, q) => Math.hypot(p.x - link.x, p.y - link.y) - Math.hypot(q.x - link.x, q.y - link.y))[0] ?? { x: link.x, y: link.y } : backs[0];
-    const { x, y } = snapToken(target, token, back?.x ?? target.image.width / 2, back?.y ?? target.image.height / 2);
-    maps.change(a.cid, map.id, (m) => {
-      if (m.combat?.turn === token.id) Object.assign(m.combat, stepTurn(m.combat, 1));
-      m.tokens = m.tokens.filter((t) => t.id !== token.id);
-    }, { by: request.user.id, reason: `left for ${target.id}` });
-    const id = target.tokens.some((t) => t.id === token.id) ? newTokenId() : token.id;
-    const arrived = maps.change(a.cid, target.id, (m) => {
-      m.tokens.push({ ...token, id, x, y });
-    }, { by: request.user.id, reason: `arrived from ${map.id}` });
+    const { arrived, id } = moveGroup(a.cid, map, token.id, target, back ?? null, { by: request.user.id });
+    return { map: maps.view(arrived, a), token: id };
+  });
+
+  /**
+   * Go into a place (the world): { token }. The token, and whoever follows it, goes to the map the place
+   * opens, arriving at that map's way back out (a link to this map) or its middle. Players take their own
+   * character or companion, standing at a place revealed to them that opens a map they're shown.
+   */
+  app.post('/campaigns/:cid/maps/:mid/places/:pid/enter', async (request) => {
+    const a = access(request);
+    const { map, view } = viewableMap(request);
+    const { token: tid } = z.object({ token: z.string() }).parse(request.body ?? {});
+    const place = view.places.find((p) => p.id === request.params.pid);
+    if (!place?.to) throw new NotFoundError('No such place');
+    const token = map.tokens.find((t) => t.id === tid);
+    if (!token) throw new NotFoundError('No such token');
+    const dm = a.role === 'dm';
+    if (!dm && !ownToken(token, a.userId)) throw new AuthError('You can only move your own character and companions.', 403);
+    if (!dm && !nearPlace(map, place, token.x, token.y)) throw new BadRequestError(`Move ${token.name} to ${place.name} first.`);
+    const target = maps.get(a.cid, place.to);
+    if (target.removed || (!dm && !shownTo(target, a.userId))) throw new NotFoundError('No such map');
+    const way = target.links.find((l) => l.to === map.id);
+    const { arrived, id } = moveGroup(a.cid, map, token.id, target, way ?? null, { by: request.user.id });
+    return { map: maps.view(arrived, a), token: id };
+  });
+
+  /**
+   * Leave this map for the map around it (the world): { token }. The token and whoever follows it arrive
+   * at this map's place there. Players take their own; where this map has ways back out (links to the map
+   * around it) they can see, they have to stand at one.
+   */
+  app.post('/campaigns/:cid/maps/:mid/leave', async (request) => {
+    const a = access(request);
+    const { map, view } = viewableMap(request);
+    const { token: tid } = z.object({ token: z.string() }).parse(request.body ?? {});
+    const token = map.tokens.find((t) => t.id === tid);
+    if (!token) throw new NotFoundError('No such token');
+    const up = parentOf(maps.list(a.cid), map.id);
+    if (!up) throw new BadRequestError(`${map.name} isn't inside another map.`);
+    const dm = a.role === 'dm';
+    if (!dm) {
+      if (!ownToken(token, a.userId)) throw new AuthError('You can only move your own character and companions.', 403);
+      if (!shownTo(up.map, a.userId)) throw new BadRequestError(`${map.name} isn't inside another map you can see.`);
+      const ways = view.links.filter((l) => l.to === up.map.id);
+      if (ways.length && !ways.some((l) => nearLink(map, l, token.x, token.y))) throw new BadRequestError(`Move ${token.name} to the way out first.`);
+    }
+    const { arrived, id } = moveGroup(a.cid, map, token.id, up.map, up.place, { by: request.user.id });
     return { map: maps.view(arrived, a), token: id };
   });
 
@@ -909,9 +991,11 @@ export function registerMaps(app, r) {
     // Under a bridge rather than on it (it changes by itself as the token moves; this sets it by hand).
     under: z.boolean(),
     merchant: z.string().regex(/^[a-f0-9]{10}$/).nullable(),
+    // The token it follows on this map (null: nobody).
+    follows: z.string().nullable(),
   });
   // What a player may change on their own token; everything else is the DM's.
-  const OWNER_FIELDS = new Set(['x', 'y', 'hp', 'conditions', 'light', 'darkvision', 'height', 'elevation', 'under']);
+  const OWNER_FIELDS = new Set(['x', 'y', 'hp', 'conditions', 'light', 'darkvision', 'height', 'elevation', 'under', 'follows']);
   // On their companions and summons, a player may also rename it, resize it, recolour it and write its stat block.
   const COMPANION_FIELDS = new Set([...OWNER_FIELDS, 'name', 'size', 'color', 'stats', 'speed']);
   // What a player sends to add a companion or summon of their own.
@@ -947,6 +1031,29 @@ export function registerMaps(app, r) {
     if (map.tokens.length >= MAX_TOKENS) throw new BadRequestError(`A map can have at most ${MAX_TOKENS} tokens.`);
     checkTokenOwner(a.cid, body);
     linkRecord(a.cid, body);
+    // A player character is on one map at a time: adding them where they aren't brings their token (and
+    // whoever follows them) over from the map they're on (the party panel's Bring here).
+    if (body.kind === 'pc' && body.user_id != null) {
+      const { x, y, ...apply } = body;
+      const at = { x: x ?? map.image.width / 2, y: y ?? map.image.height / 2 };
+      const here = map.tokens.find((t) => t.kind === 'pc' && t.user_id === body.user_id);
+      const elsewhere = characterMap(maps.list(a.cid).filter((m) => m.id !== map.id), body.user_id);
+      if (here) {
+        const saved = maps.change(a.cid, map.id, (m) => {
+          const t = m.tokens.find((x) => x.id === here.id);
+          Object.assign(t, apply, snapToken(m, { ...t, ...apply }, at.x, at.y));
+        }, { by: request.user.id, reason: 'token changed' });
+        clearCharacter(a.cid, body.user_id, [map.id], request.user.id);
+        reply.status(201);
+        return { map: maps.view(saved, a), token: saved.tokens.find((t) => t.id === here.id) };
+      }
+      if (elsewhere) {
+        const leader = elsewhere.tokens.find((t) => t.kind === 'pc' && t.user_id === body.user_id);
+        const { arrived, id } = moveGroup(a.cid, elsewhere, leader.id, map, at, { by: request.user.id, apply });
+        reply.status(201);
+        return { map: maps.view(arrived, a), token: arrived.tokens.find((t) => t.id === id) };
+      }
+    }
     const id = newTokenId();
     const saved = maps.change(a.cid, map.id, (m) => {
       const token = { size: 1, ...body, id, x: body.x ?? m.image.width / 2, y: body.y ?? m.image.height / 2 };
@@ -978,7 +1085,8 @@ export function registerMaps(app, r) {
     if (!at) throw new BadRequestError('Put it somewhere you can see, or ask the DM to put your character on this map first.');
     const id = newTokenId();
     const saved = maps.change(a.cid, map.id, (m) => {
-      const token = { size: 1, ...body, kind: 'companion', user_id: a.userId, id, hidden: false, ...at };
+      // It follows its character about (and goes where they go) until it's moved on its own.
+      const token = { size: 1, ...body, kind: 'companion', user_id: a.userId, id, hidden: false, ...at, follows: own?.id ?? null };
       if (token.hp && token.hp.current == null) token.hp.current = token.hp.max;
       Object.assign(token, snapToken(m, { size: TOKEN_SIZES.includes(token.size) ? token.size : 1 }, token.x, token.y));
       m.tokens.push(token);
@@ -1011,6 +1119,17 @@ export function registerMaps(app, r) {
     }
     checkTokenOwner(a.cid, { ...token, ...body });
     linkRecord(a.cid, body);
+    // Following someone this viewer can see on this map, and not round in a circle.
+    if (body.follows != null) {
+      if (!view.tokens.some((t) => t.id === body.follows) || body.follows === token.id) throw new NotFoundError('No such token');
+      if (followLoop(map.tokens, token.id, body.follows)) throw new BadRequestError(`${map.tokens.find((t) => t.id === body.follows).name} is following ${token.name} already.`);
+    }
+    // A player character is on one map at a time (the party panel's Bring here moves them).
+    const becomes = { ...token, ...body };
+    if (becomes.kind === 'pc' && becomes.user_id != null && (token.kind !== 'pc' || token.user_id !== becomes.user_id)) {
+      const elsewhere = characterMap(maps.list(a.cid), becomes.user_id);
+      if (elsewhere) throw new BadRequestError(`That character is on ${elsewhere.id === map.id ? 'this map' : `"${elsewhere.name}"`} already. Bring them here from the party panel instead.`);
+    }
     // Players can't walk through walls or closed doors (the DM can put any token anywhere).
     const moves = body.x !== undefined || body.y !== undefined;
     const route = moves ? [{ x: token.x, y: token.y }, ...path.map(([x, y]) => ({ x, y })), snapToken(map, token, body.x ?? token.x, body.y ?? token.y)] : [];
@@ -1035,6 +1154,11 @@ export function registerMaps(app, r) {
         // In a fight, count how far it has moved this turn (difficult terrain costs double, climbing extra).
         const entry = moves && m.combat?.entries.find((e) => e.id === t.id);
         if (entry) entry.moved = (entry.moved ?? 0) + (pathCost(map, route, token)?.value ?? 0);
+        if (moves) {
+          // Moved on its own, it stops following; whoever follows it walks behind it (not in a fight, where everyone has their turn).
+          if (body.follows === undefined) t.follows = null;
+          if (!m.combat) trailFollowers(m, t.id, [...route.slice(0, -1), { x: t.x, y: t.y }]);
+        }
       }, { by: request.user.id, reason: moving ? 'token moved' : 'token changed' })
       : null;
     const out = maps.view(changed ?? maps.get(a.cid, map.id), a);

@@ -146,3 +146,108 @@ test('world: the DM shows a map to chosen players in Map settings', async () => 
     assert.deepEqual(page.$$('#map-pick option').map((o) => o.textContent), ['Tower (shown to 1)']);
   });
 });
+
+// ---------- stage two: where everyone is ----------
+
+/** Pick a token on the map (a press and let go without moving). */
+function pick(page, id, x, y) {
+  page.pointer(page.$(`.token[data-id="${id}"]`), 'pointerdown', { clientX: x, clientY: y });
+  page.pointer('#map-view', 'pointerup', { clientX: x, clientY: y });
+}
+
+const addToken = async (t, map, body) => (await t.request('POST', `/campaigns/${t.campaign.id}/maps/${map.id}/tokens`, { body })).json().token;
+
+test("world: a player's page goes where their character goes; they follow Lyra and go into the town with her", async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const vale = await importMap(t, { patch: { ...SHOWN, name: 'The Vale' } });
+      const town = await importMap(t, { patch: { ...SHOWN, name: 'Millbrook' } });
+      const road = await importMap(t, { patch: { ...SHOWN, name: 'Road' } });
+      await t.request('PATCH', `/campaigns/${t.campaign.id}/maps/${vale.id}/places`, { body: { add: { name: 'Millbrook', x: 200, y: 150, to: town.id, revealed: true } } });
+      const thorin = await addToken(t, vale, { kind: 'pc', user_id: t.sam.id, name: 'Thorin', x: 400, y: 300 });
+      const lyra = await addToken(t, vale, { kind: 'pc', user_id: t.alex.id, name: 'Lyra', x: 200, y: 150 });
+      return { vale, town, road, thorin, lyra };
+    },
+    page: (t) => ({ as: t.sam }),
+  }, async (page, t, { vale, town, road, thorin, lyra }) => {
+    await openMapTab(page);
+    assert.equal(page.$('#map-pick').value, vale.id, `it opens where Thorin is, not the newest map (${road.name})`);
+
+    // Thorin follows Lyra.
+    pick(page, thorin.id, 400, 300);
+    const follow = page.$('#map-selection select.map-follow');
+    assert.ok(follow, 'a Follow choice for his own character');
+    page.type(follow, lyra.id);
+    await page.settle();
+    assert.equal(t.maps.get(t.campaign.id, vale.id).tokens.find((x) => x.id === thorin.id).follows, lyra.id);
+    assert.ok(!page.$('#map-selection .map-enter'), 'Thorin isn\'t at the town himself');
+
+    // Alex takes Lyra into the town: Thorin goes along, and Sam's page with him.
+    const res = await t.request('POST', `/campaigns/${t.campaign.id}/maps/${vale.id}/places/${t.maps.get(t.campaign.id, vale.id).places[0].id}/enter`, { body: { token: lyra.id }, as: t.alex.token });
+    assert.equal(res.statusCode, 200, res.body);
+    await page.waitFor(() => page.$('#map-pick').value === town.id, { what: 'the page to go to the town' });
+    assert.match(page.text('#map-status'), /Thorin is here now/);
+    assert.equal(trail(page), 'The Vale›Millbrook');
+
+    // Out to the vale again (the town has no way out drawn, so from anywhere).
+    const there = t.maps.get(t.campaign.id, town.id).tokens.find((x) => x.name === 'Thorin');
+    pick(page, there.id, there.x, there.y);
+    const out = page.$('#map-selection .map-leave');
+    assert.equal(out.textContent, 'Out to The Vale');
+    page.click(out);
+    await page.settle();
+    assert.equal(page.$('#map-pick').value, vale.id);
+    const back = t.maps.get(t.campaign.id, vale.id).tokens.find((x) => x.name === 'Thorin');
+    assert.ok(Math.hypot(back.x - 200, back.y - 150) < 15, `out at the town (${back.x}, ${back.y})`);
+    assert.equal(back.follows, null, 'on his own: he left Lyra behind');
+  });
+});
+
+test('world: on a region map tokens are pins of one size that fan out where they meet; the party panel brings a character over', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const vale = await importMap(t, { patch: { ...SHOWN, name: 'The Vale' } });
+      const inn = await importMap(t, { patch: { ...SHOWN, name: 'Inn' } });
+      await addToken(t, vale, { kind: 'pc', user_id: t.sam.id, name: 'Thorin', x: 300, y: 200 });
+      await addToken(t, vale, { kind: 'pc', user_id: t.alex.id, name: 'Lyra', x: 302, y: 201 });
+      return { vale, inn, dana: await addDm(t) };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t, { vale, inn }) => {
+    await openMapTab(page);
+    page.type('#map-pick', vale.id);
+    await page.settle();
+    assert.ok(!page.$('#map-tokens .token-pin'), 'ordinary tokens until it is a region map');
+    // The DM says it's a region map in Map settings.
+    page.click('#map-edit');
+    page.click('#map-settings');
+    const form = dialog(page).querySelector('form');
+    page.type(fieldIn(form, 'Kind'), 'region');
+    page.submit(form);
+    await page.settle();
+    page.click('#map-edit-done');
+    assert.deepEqual([t.maps.get(t.campaign.id, vale.id).kind, t.maps.get(t.campaign.id, vale.id).kind_set], ['region', true]);
+    const pins = page.$$('#map-tokens .token');
+    assert.ok(pins.every((el) => el.classList.contains('token-pin')));
+    assert.ok(pins.every((el) => el.style.width === '40px'), 'one size on screen');
+    const fans = pins.map((el) => [el.style.getPropertyValue('--fan-x'), el.style.getPropertyValue('--fan-y')].join());
+    assert.equal(new Set(fans).size, 2, 'the two pins fan out instead of covering each other');
+
+    // The party panel, from the inn.
+    page.type('#map-pick', inn.id);
+    await page.settle();
+    page.click('#map-party');
+    await page.settle();
+    const rows = () => page.$$('#map-dialog .map-party-row');
+    assert.deepEqual(rows().map((r) => r.querySelector('strong').textContent), ['Lyra', 'Thorin']);
+    assert.match(rows()[1].textContent, /The Vale/);
+    page.click([...rows()[1].querySelectorAll('button')].find((b) => b.textContent === 'Bring here'));
+    await page.settle();
+    assert.deepEqual(t.maps.get(t.campaign.id, inn.id).tokens.map((x) => x.name), ['Thorin']);
+    assert.deepEqual(t.maps.get(t.campaign.id, vale.id).tokens.map((x) => x.name), ['Lyra']);
+    assert.match(rows()[1].textContent, /Inn/);
+    assert.ok(page.$('#map-tokens .token:not(.token-pin)'), 'on the inn Thorin is an ordinary token');
+  });
+});

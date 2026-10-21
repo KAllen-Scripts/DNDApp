@@ -1688,3 +1688,12 @@ button.busy:disabled { opacity: 1; }
   .creator-start { grid-template-columns: 1fr; }
   .creator-props { left: 0.5rem; right: 0.5rem; width: auto; max-height: 55%; }
 }
+
+/* World and region maps (the world, owner 2026-10-18): tokens are pins of one size on screen, and pins that meet fan out round their spot. */
+.token.token-pin { transform: scale(var(--unzoom, 1)) translate(var(--fan-x, 0px), var(--fan-y, 0px)); transform-origin: 50% 50%; }
+.token.token-pin .token-name { font-size: 0.75em; }
+.token.token-pin.selected, .token.token-pin:hover { z-index: 2; }
+/* The DM's party panel. */
+.map-party { display: grid; gap: 0.4rem; margin: 0.5rem 0; }
+.map-party-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.4rem 0.5rem; border: 1px solid var(--border); border-radius: 0.5rem; }
+.map-party-row .spacer { flex: 1; }
