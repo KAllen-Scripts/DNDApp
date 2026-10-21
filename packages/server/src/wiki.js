@@ -44,7 +44,7 @@ export function normalizeWikiPage(p = {}) {
       id: String(s.id ?? crypto.randomBytes(3).toString('hex')),
       heading: String(s.heading ?? '').trim(),
       text: String(s.text ?? ''),
-      // Who wrote it: the DM (and, from stage 2, the AI).
+      // Who wrote it: the DM, or the AI (a proposal the DM approved as it was).
       by: s.by === 'ai' ? 'ai' : 'dm',
       // 'all' here means "as the page".
       available: normalizeAvailable(s.available, 'all'),
@@ -214,6 +214,15 @@ export function createWiki({ db, archive, store, search }) {
         throw new ArchiveConflictError('This page was changed since you opened it. Open it again to see the changes, then make yours.');
       }
       const next = { ...before, ...fields };
+      // Who wrote each section: an AI section the DM changes becomes the DM's for good (owner, 2026-10-20); one saved unchanged stays the AI's.
+      if (fields.sections) {
+        const was = new Map(before.sections.map((s) => [s.id, s]));
+        next.sections = fields.sections.map((s) => {
+          if (s.by) return s;
+          const old = s.id && was.get(s.id);
+          return { ...s, by: old?.by === 'ai' && old.text === s.text && old.heading === (s.heading ?? '').trim() ? 'ai' : 'dm' };
+        });
+      }
       if (fields.title != null && wikiKey(fields.title) !== wikiKey(before.title)) {
         const aliases = fields.aliases ?? before.aliases;
         next.aliases = aliases.some((a) => wikiKey(a) === wikiKey(before.title)) ? aliases : [...aliases, before.title];

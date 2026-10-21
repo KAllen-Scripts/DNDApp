@@ -308,6 +308,22 @@ button.wiki-link.missing { color: var(--muted); text-decoration-style: dashed; }
 .wiki-edit-row input { flex: 1; min-width: 0; }
 .wiki-edit-section textarea { width: 100%; font-family: inherit; }
 .wiki-picker select { width: auto; max-width: 100%; }
+.wiki-review-btn { text-align: left; }
+.wiki-review-btn.waiting { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.wiki-review-btn.current { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
+.wiki-by-ai { margin: 0; font-style: italic; }
+.wiki-run { margin: 0; }
+.wiki-proposals { display: grid; gap: 0.8rem; }
+.wiki-proposal { padding: 0.7rem 0.8rem; display: grid; gap: 0.5rem; }
+.wiki-proposal-head { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; overflow-wrap: anywhere; }
+.wiki-proposal p { margin: 0; }
+.wiki-tag { border: 1px solid var(--accent); color: var(--accent); border-radius: 999px; padding: 0 0.5rem; white-space: nowrap; }
+.wiki-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+.wiki-now { opacity: 0.75; border-right: 1px solid var(--border); padding-right: 0.8rem; }
+.wiki-proposed { display: grid; gap: 0.3rem; min-width: 0; }
+.wiki-proposed h3, .wiki-now h3 { margin: 0; font-size: 1rem; }
+.wiki-proposed textarea { width: 100%; font-family: inherit; }
+@media (max-width: 720px) { .wiki-compare { grid-template-columns: 1fr; } .wiki-now { border-right: none; padding-right: 0; border-bottom: 1px solid var(--border); padding-bottom: 0.6rem; } }
 .wiki-picker { display: inline-flex; flex-wrap: wrap; gap: 0.3rem 0.8rem; align-items: center; }
 .wiki-who { display: inline-flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; }
 .wiki-who[hidden] { display: none; }

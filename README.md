@@ -105,6 +105,8 @@ The **Handouts** tab: the DM gives players a picture and/or text (a letter, a wa
 
 Only the DM has it. Pages for people, places, factions, lore, anything: each has sections, other names, a kind, tags and can sit inside another page; `[[Page name]]` links pages. Every page, section, and block of text (`:::for Thorin` … `:::`, `:::dm` … `:::`) says who it's available to; new pages are the DM's alone. View as shows a page as a player sees it. Ask uses all of it for the DM and only what's available to the asking player. Every save is kept, and History can bring an older version back.
 
+After each session (and each correction or batch of sheet changes) the AI reads what the archivist recorded and proposes wiki changes: new pages, changed or new sections, and reveals ("Thorin read the ledger: make that section available to him?"). They wait under **The AI's changes** for the DM to approve, edit then approve, or reject; nothing reaches a page before that. Each proposed part is offered only to the players who know it. A section the AI wrote stays the AI's to keep up to date until the DM changes it. **Read the records now** runs it on demand (for a campaign that already had sessions); `WIKI_AUTO=off` leaves it to that button. `MODEL_WIKI` and `EFFORT_WIKI` (default `medium`) set its model and effort.
+
 ### The DM's Archivist tab
 
 Only the DM has it. It lists the archivist's questions (when sources disagree, e.g. two spellings of an NPC), each with an answer box and Dismiss; an answer becomes a correction. Below, the DM can send any correction in plain words and see earlier ones. The archivist applies them in the background.
@@ -284,6 +286,11 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET / PUT / DELETE | `/campaigns/:cid/wiki/:pid` | A page with `mentioned_in` and `unknown_names` (`?as=<user id>`: what that player may see, or `null`) / save it `{version, …}` (409 if someone saved first) / delete it (kept in the archive) (DM only) |
 | GET | `/campaigns/:cid/wiki/:pid/history` (`/:version`) | Every version of a page / one version (DM only) |
 | POST | `/campaigns/:cid/wiki/:pid/restore` | Bring an earlier version back as a new one `{version}` (DM only) |
+| GET | `/campaigns/:cid/wiki/proposals` | The AI's proposed changes waiting for the DM, each with what's on the page now, and its last run `{proposals, ai_run}` (DM only) |
+| POST | `/campaigns/:cid/wiki/proposals/run` | Have the AI read what the archivist changed now (DM only) |
+| POST | `/campaigns/:cid/wiki/proposals/:id/approve` | Approve one, optionally edited `{title?, kind?, page_available?, sections?: [{heading?, text?, available?}], players?}` (DM only; an edited section becomes the DM's) |
+| POST | `/campaigns/:cid/wiki/proposals/:id/reject` | Reject one; the AI won't propose it again (DM only) |
+| POST | `/campaigns/:cid/wiki/proposals/approve-all` | Approve every waiting change as it is `{approved, failed}` (DM only) |
 | GET / POST | `/campaigns/:cid/maps` | Maps you can see `{can_edit, maps}` (players: only shown maps, without the AI's description) / import one (DM) `{filename, data (base64), name?, page?, read?}` (an image, or a PDF and the page to use, default 1); with `read: true` the AI reads it in the background (otherwise `reading.status` is `none` until `POST .../read`). 429 past `MAP_AI_PER_HOUR` AI calls |
 | POST | `/campaigns/:cid/maps/design` | Make a map in the creator (DM) `{name, design}` (SPEC §6.6 "Making a map"): the server draws its picture and sets up its grid, walls, doors, lights and difficult terrain; starts hidden |
 | GET / PUT | `/campaigns/:cid/maps/:mid/design` | A made map's design (DM) `{design}` / save it again `{design}`: a new picture, the creator's walls, links, lights and terrain replaced, everything else kept |
