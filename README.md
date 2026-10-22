@@ -82,7 +82,7 @@ Players have an **Inventory** tab: look an item up by name (PHB weapons and armo
 
 The DM's **Settings** button holds the campaign's settings: the **Rules edition** (2014 or 2024: rests, Ask's rules answers and lookups in the books follow it; the character sheet itself always uses the 2014 rules for now) and **Weight limits** (carrying capacity, variant encumbrance, or ignore). It also holds **Your own backgrounds**: the DM's own, with their skills, tools, languages, equipment, gold and a feature or origin feat, which every player's sheet then suggests.
 
-On the sheet, the **Background** box suggests the books' backgrounds for the campaign's edition (and the DM's own). Pick one and it fills in the sheet: its skills ticked, its feature or feat in Features & traits, its tools and languages, and equipment and gold only where they're empty. A note says what changed, with Undo.
+On the sheet, the **Background** box suggests the books' backgrounds for the campaign's edition (and the DM's own). Pick one and it fills in the sheet: its skills ticked, its feature or feat in Features & traits, its tools and languages, and equipment and gold only where they're empty. A note says what changed, with Undo. Above the sheet, **Help making a character** (open while the sheet has no class) says what the class, race or species and background give and what to choose, by the campaign's edition: click a skill to tick it, or put the class's starting equipment in the Equipment box.
 
 ### Dice
 
