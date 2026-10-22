@@ -31,6 +31,9 @@ const dice = (a) => /^\s*(\d+d\d+(?:\s*[+-]\s*\d+)?)/i.exec(a.damage ?? '')?.[1]
  * @param {() => void} ctx.changed  the sheet changed: save soon
  * @param {() => Promise<void>} ctx.flush  save now (before the server needs the companion)
  */
+/** The creature names the SRD offers, fetched once per campaign. */
+const srdNames = new Map();
+
 export function companionsBox({ state, changed, flush }) {
   const el = h('section', { class: 'sh-box companions' });
   const base = () => `/campaigns/${state.campaignId}`;
@@ -193,11 +196,12 @@ export function companionsBox({ state, changed, flush }) {
       creatures.replaceChildren(...names.map((n) => h('option', { value: n })));
       if (s?.creatures?.length && !s.creatures.includes(creature.value)) creature.value = '';
     };
-    state.guarded(() => api('GET', `${base()}/forms`)).then((forms) => {
+    if (!srdNames.has(base())) srdNames.set(base(), state.guarded(() => api('GET', `${base()}/forms`)).then((forms) => (forms ?? []).map((f) => f.name)).catch(() => { srdNames.delete(base()); return []; }));
+    srdNames.get(base()).then((names) => {
       if (!from.isConnected) return;
-      srd = (forms ?? []).map((f) => f.name);
+      srd = names;
       fill();
-    }).catch(() => {});
+    });
     from.addEventListener('change', fill);
     fill();
     const add = async (e) => {
@@ -234,7 +238,7 @@ export function companionsBox({ state, changed, flush }) {
   }
 
   paint();
-  loadWhere();
+  if (list().length) loadWhere();
   state.renders.push(paint);
   return el;
 }

@@ -109,7 +109,7 @@ test('full screen: only the main tools show; More shows the rest until the map i
     const bar = page.$('#map-main-bar');
     const more = page.$('#map-more');
     const main = page.$$('#map-main-bar > .map-main').map((el) => el.id);
-    assert.deepEqual(main, ['map-bring', 'map-fit', 'map-ruler', 'map-ping', 'map-draw', 'map-template', 'map-combat-open', 'map-full', 'map-edit']);
+    assert.deepEqual(main, ['map-bring', 'map-fit', 'map-ruler', 'map-ping', 'map-draw', 'map-template', 'map-combat-open', 'map-add-companion', 'map-full', 'map-edit']);
 
     page.click('#map-full');
     await page.settle();
