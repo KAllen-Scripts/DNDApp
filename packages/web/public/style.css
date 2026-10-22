@@ -112,14 +112,36 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
 }
 #app-view > .topbar { padding-inline: max(16px, calc((100% - var(--bar-width)) / 2 + 16px)); }
 .tab-icon { display: none; }
-.who { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
-.who select { width: auto; max-width: 100%; padding: 0.3rem 0.5rem; }
+.topbar .who { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.topbar .who select { width: auto; max-width: 100%; padding: 0.3rem 0.5rem; }
 .tabs { display: flex; gap: 0.25rem; background: var(--surface-2); padding: 0.2rem; border-radius: 9px; }
 .tabs button { border: none; background: transparent; padding: 0.35rem 0.9rem; border-radius: 7px; }
 .tabs button[aria-selected="true"] { background: var(--surface); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }
 /* Each tab keeps room for its name in bold, so picking one doesn't nudge the others. */
 .tabs button > [data-label] { display: inline-flex; flex-direction: column; align-items: center; }
 .tabs button > [data-label]::after { content: attr(data-label); font-weight: 600; height: 0; overflow: hidden; visibility: hidden; }
+/* The tools beside the tabs: small icon-and-word buttons, so the bar fits on one row (two only when the window is too narrow). */
+#app-view > .topbar { gap: 0.5rem; }
+#app-view > .topbar .tabs button { padding-inline: 0.75rem; }
+.bar-tool { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.7rem; white-space: nowrap; }
+.bar-icon { font-size: 1.05em; line-height: 1; }
+.bar-caret { font-size: 0.75em; color: var(--muted); }
+#account-name { max-width: 9rem; overflow: hidden; text-overflow: ellipsis; }
+/* The account menu: campaign settings, Look, change password, log out (app.js initAccountMenu). */
+.account-menu { position: relative; }
+.account-menu-list {
+  display: none; position: absolute; z-index: 20; right: 0; top: calc(100% + 0.35rem); min-width: 12rem;
+  flex-direction: column; gap: 0.1rem; padding: 0.35rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+}
+.account-menu-list.open { display: flex; }
+.account-menu-list button { border: none; text-align: left; padding: 0.5rem 0.75rem; border-radius: 6px; white-space: nowrap; }
+.account-menu-list button:hover { background: var(--surface-2); }
+/* A narrower window: the tools keep only their icons (the names are in their tooltips). */
+@media (max-width: 1180px) {
+  :root:not([data-phone]) #app-view > .topbar .bar-tool:not(#account-menu-open) .bar-label,
+  :root:not([data-phone]) #app-view > .topbar .dice-open span { display: none; }
+}
 
 .panel { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0.75rem 16px 16px; gap: 0.75rem; }
 .panel-head { display: flex; gap: 0.5rem; align-items: center; }
@@ -250,7 +272,25 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
 .handout { padding: 0.75rem 0.9rem; display: grid; gap: 0.5rem; }
 .handout-head { display: flex; align-items: baseline; gap: 0.75rem; justify-content: space-between; flex-wrap: wrap; }
 .handout-head h3 { margin: 0; }
-.handout-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.handout-text { margin: 0; overflow-wrap: anywhere; }
+.handout-text > :first-child { margin-top: 0; }
+.handout-text > :last-child { margin-bottom: 0; }
+.handout-text table, .md-preview table { border-collapse: collapse; margin: 0.4rem 0; }
+.handout-text :is(th, td), .md-preview :is(th, td) { border: 1px solid var(--border); padding: 0.2rem 0.45rem; vertical-align: top; }
+
+/* Markdown text shown formatted until it's clicked to edit (markdown.js markdownEditor). */
+.md-editor { display: grid; gap: 0.15rem; min-width: 0; }
+.md-editor > textarea { width: 100%; }
+.md-preview {
+  min-height: calc(min(var(--md-rows, 4), 6) * 1.45em + 0.9rem); max-height: max(calc(var(--md-rows, 4) * 1.45em * 1.6), 14rem); overflow: auto;
+  padding: 0.45rem 0.6rem; border-radius: 8px; box-shadow: none; cursor: text; text-align: left;
+}
+.md-preview:hover { border-color: var(--muted); }
+.md-preview > :first-child { margin-top: 0; }
+.md-preview > :last-child { margin-bottom: 0; }
+.md-preview p { margin: 0.35rem 0; }
+.md-bar { display: flex; justify-content: flex-end; }
+.md-toggle { font-size: 0.8rem; }
 .handout-picture-link { display: block; padding: 0; border: none; background: none; cursor: zoom-in; justify-self: start; max-width: 100%; }
 .handout-picture { display: block; max-width: min(100%, 28rem); max-height: 22rem; border-radius: 8px; object-fit: contain; }
 .handout-picture-link.zoomed { cursor: zoom-out; justify-self: stretch; }
@@ -552,7 +592,7 @@ table.stock .stock-actions button { padding: 0.15rem 0.45rem; font-size: 0.8rem;
 
 @media (max-width: 560px) {
   .topbar { gap: 0.5rem; }
-  .who { flex-basis: 100%; }
+  .topbar .who { flex-basis: 100%; }
   .tabs { flex: 1; }
   .tabs button { flex: 1; }
   .composer:not(.note-composer) { flex-direction: column; align-items: stretch; }
@@ -906,6 +946,9 @@ input.num, .sheet .num { text-align: center; }
 }
 .sh-box { container-type: inline-size; display: flex; flex-direction: column; min-width: 0; padding: var(--pad); }
 .sh-box > textarea { flex: 1 1 auto; }
+.sh-box > .md-editor { flex: 1 1 auto; grid-template-rows: 1fr auto; }
+.sh-box > .md-editor > .md-preview { max-height: none; }
+.sheet .md-preview { font-size: 0.92rem; line-height: 1.45; }
 
 /* Rows of columns (the layouts in themes.css set how many). A column stretches
    to the tallest in its row and its last block grows, so the bottoms line up. */
@@ -1344,6 +1387,7 @@ details.spell > summary::-webkit-details-marker { display: none; }
   .sh-tabs .sh-tabpanel[hidden] { display: flex !important; }
   .sh-box, .sh-line, .ability, .stat, .slot, details.spell { break-inside: avoid; }
   textarea { resize: none; border: none; }
+  .md-preview { max-height: none; overflow: visible; border: none; padding: 0; }
 }
 
 /* ---------- maps (map.js) ---------- */
@@ -1752,23 +1796,33 @@ button.busy:disabled { opacity: 1; }
 .token.turn { outline: 0.14em solid #ffd54a; outline-offset: 0.12em; }
 .token.turn::before { content: ''; position: absolute; inset: -0.32em; border-radius: inherit; border: 0.08em dashed rgb(255 213 74 / 0.85); pointer-events: none; }
 .map-combat {
-  position: absolute; top: 0.5rem; right: 0.5rem; z-index: 4; width: min(17rem, calc(100% - 1rem)); max-height: calc(100% - 1rem);
-  display: grid; grid-template-rows: auto 1fr auto; gap: 0.4rem; padding: 0.6rem 0.7rem; overflow: hidden;
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 2px 10px rgb(0 0 0 / 0.3); cursor: default;
+  position: absolute; top: 0.5rem; right: 0.5rem; z-index: 4; width: min(20rem, calc(100% - 1rem)); max-height: calc(100% - 1rem);
+  display: grid; grid-template-rows: auto 1fr auto; gap: 0.45rem; padding: 0.55rem 0.6rem 0.6rem; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 4px 16px rgb(0 0 0 / 0.28); cursor: default;
 }
 .map-combat[hidden] { display: none; }
-.map-combat header { display: flex; align-items: center; gap: 0.4rem; }
-.map-combat header strong { flex: 1; }
-.map-combat ol { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: grid; gap: 0.2rem; align-content: start; }
-.map-combat li { display: flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.35rem; border-radius: calc(var(--radius) / 2); }
-.map-combat li.current { background: color-mix(in srgb, #ffd54a 28%, transparent); font-weight: 600; }
+/* Moved by its header (map-combat.js): left and top are set on it. */
+.map-combat.moved { right: auto; }
+.map-combat header { display: flex; align-items: center; gap: 0.4rem; min-width: 0; padding-bottom: 0.35rem; border-bottom: 1px solid var(--border); cursor: grab; touch-action: none; user-select: none; }
+.map-combat.moving, .map-combat.moving header { cursor: grabbing; }
+:root[data-phone] .map-combat header { cursor: default; touch-action: auto; }
+.map-combat header strong { flex: none; }
+.map-combat header .whose { flex: 1; min-width: 0; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-combat ol { list-style: none; margin: 0; padding: 0; overflow: hidden auto; display: grid; gap: 0.15rem; align-content: start; }
+/* Every row fits the panel: the name gives way (…), the rest keep their size. */
+.map-combat li { display: flex; align-items: center; gap: 0.35rem; min-width: 0; padding: 0.25rem 0.35rem; border-radius: calc(var(--radius) / 2); border-left: 3px solid transparent; }
+.map-combat li.current { background: color-mix(in srgb, #ffd54a 28%, transparent); border-left-color: #e0a800; font-weight: 600; }
 .map-combat li.hidden-token { opacity: 0.6; }
-.map-combat li .swatch { width: 0.8rem; height: 0.8rem; border-radius: 50%; flex: none; }
-.map-combat li .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
-.map-combat li .init { min-width: 2ch; text-align: right; font-variant-numeric: tabular-nums; }
-.map-combat li input { width: 3.6rem; padding: 0.15rem 0.3rem; font-size: 0.85rem; }
-.map-combat button { padding: 0.2rem 0.55rem; font-size: 0.85rem; }
-.map-combat footer { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+.map-combat li .swatch { width: 0.7rem; height: 0.7rem; border-radius: 50%; flex: none; }
+.map-combat li .who { display: block; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.map-combat li .hp { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 400; }
+.map-combat li .init { flex: none; min-width: 2.6rem; text-align: center; font-variant-numeric: tabular-nums; }
+.map-combat li input { flex: none; width: 2.6rem; padding: 0.15rem 0.2rem; font-size: 0.85rem; text-align: center; -moz-appearance: textfield; appearance: textfield; }
+.map-combat li input::-webkit-inner-spin-button, .map-combat li input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.map-combat li button:not(.who) { flex: none; padding: 0.15rem 0.4rem; }
+.map-combat button { padding: 0.2rem 0.5rem; font-size: 0.85rem; }
+.map-combat footer { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; padding-top: 0.4rem; border-top: 1px solid var(--border); }
+.map-combat footer:empty { display: none; }
 .map-combat footer select { width: auto; max-width: 100%; padding: 0.2rem 0.3rem; font-size: 0.85rem; }
 .map-combat p { margin: 0; }
 .map-walls .light-dim { fill: rgb(255 213 74 / 0.08); stroke: #ffd54a; stroke-width: 1.5px; stroke-dasharray: 5 5; vector-effect: non-scaling-stroke; }
