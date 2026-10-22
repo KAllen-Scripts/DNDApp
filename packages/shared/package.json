@@ -13,6 +13,8 @@
     "./race-features.js": "./src/race-features.js",
     "./dice.js": "./src/dice.js",
     "./rolls.js": "./src/rolls.js",
+    "./attacks.js": "./src/attacks.js",
+    "./attack-riders.js": "./src/attack-riders.js",
     "./gear.js": "./src/gear.js",
     "./point-buy.js": "./src/point-buy.js",
     "./map.js": "./src/map.js",
