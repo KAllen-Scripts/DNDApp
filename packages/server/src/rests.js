@@ -106,7 +106,7 @@ export function createRests({ db, archive, store, sheets, rolls, books = null, c
     async useFeature(cid, userId, id, { visibility = 'party', slot = null } = {}) {
       const current = sheets.get(cid, userId);
       const ed = await edition(cid);
-      const { values } = computeSheet(current.sheet);
+      const { values } = computeSheet(current.sheet, { ...store?.getSettings?.(cid), edition: ed });
       const row = featureRow(current.sheet, id, { edition: ed, values });
       if (row?.action === 'portent') {
         const rolled = rolls.roll(cid, userId, { notation: `${row.dice}d20`, label: row.name, visibility });
