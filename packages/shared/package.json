@@ -19,6 +19,7 @@
     "./attacks.js": "./src/attacks.js",
     "./attack-riders.js": "./src/attack-riders.js",
     "./gear.js": "./src/gear.js",
+    "./item-actions.js": "./src/item-actions.js",
     "./item-names.js": "./src/item-names.js",
     "./point-buy.js": "./src/point-buy.js",
     "./map.js": "./src/map.js",

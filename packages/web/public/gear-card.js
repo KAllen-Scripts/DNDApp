@@ -9,6 +9,7 @@ import { h } from './api.js';
 import { ABILITY_NAMES, formatBonus } from './shared/sheet.js';
 import { EFFECT_TARGETS } from './shared/gear.js';
 import { markdownBox } from './markdown.js';
+import { actionSummary } from './shared/item-actions.js';
 
 export const GEAR_KINDS = { weapon: 'Weapon', armor: 'Armour', gear: 'Gear', tool: 'Tool', potion: 'Potion', scroll: 'Scroll', magic: 'Magic item', other: 'Other' };
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -40,6 +41,7 @@ export function gearFacts(g) {
   }
   if (g.charges) out.push(['Charges', `${g.charges.max}${g.charges.recharge ? `, regains ${g.charges.recharge}${g.charges.when ? ` at ${g.charges.when}` : ''}` : ''}`]);
   if (g.heal) out.push(['Heals', g.heal]);
+  for (const a of g.actions ?? []) out.push([a.kind === 'summon' ? 'Summons' : a.kind === 'spell' ? 'Casts' : 'Use', `${a.name}: ${actionSummary(a)}${a.source === 'ai' ? ' (the AI read this: check it)' : ''}`]);
   if (g.effects?.length) out.push(['On your sheet', g.effects.map(effectText).join(', ')]);
   if (g.weight != null) out.push(['Weight', lb(g.weight)]);
   return out;
