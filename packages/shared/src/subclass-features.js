@@ -472,7 +472,7 @@ export const SUBCLASS_FEATURES = [
   // ---------- Sorcerer ----------
   {
     id: 'draconic_resilience', class: 'sorcerer', sc: 'draconic', name: 'Draconic Resilience', from: (c) => (c.edition === '2024' ? 3 : 1), kind: 'info', page: both(102),
-    note: (c) => `Hit point maximum +${c.level} (add it to your maximum). Without armour: AC ${c.edition === '2024' ? `${10 + c.mod('dex') + c.mod('cha')} (10 + Dex + Cha)` : `${13 + c.mod('dex')} (13 + Dex)`}.${c.level >= 6 ? ` Elemental Affinity: +${c.mod('cha')} damage with spells of your dragon's type${c.edition === '2014' ? '; 1 sorcery point for an hour of resistance to it' : ', and resistance to it'}.` : ''}`,
+    note: (c) => `Hit point maximum +${c.level} and, without armour, AC ${c.edition === '2024' ? `${10 + c.mod('dex') + c.mod('cha')} (10 + Dex + Cha)` : `${13 + c.mod('dex')} (13 + Dex)`} (both worked into your sheet).${c.level >= 6 ? ` Elemental Affinity: +${c.mod('cha')} damage with spells of your dragon's type${c.edition === '2014' ? '; 1 sorcery point for an hour of resistance to it' : ', and resistance to it'}.` : ''}`,
   },
   {
     id: 'dragon_wings', class: 'sorcerer', sc: 'draconic', name: 'Dragon Wings', from: 14, page: both(103),

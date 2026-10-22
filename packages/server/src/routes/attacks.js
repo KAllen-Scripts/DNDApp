@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { ROLL_MODES } from '@dndapp/shared/dice.js';
 import { PLAYER_KINDS, ownToken, tokensInTemplate } from '@dndapp/shared/map.js';
 import { computeSheet } from '@dndapp/shared/sheet.js';
+import { spendForAttack } from '@dndapp/shared/attack-extras.js';
 import { activeForm, formHasHp, setFormHp } from '@dndapp/shared/wild-shape.js';
 import {
   attackRiders, attackSituation, concentrationDc, creatureActions, creatureDefenses, refundSlot, resolveAttack,
@@ -263,6 +264,16 @@ export function registerAttacks(app, r) {
 
     const defenses = new Map(targets.map((t) => [t.id, defensesOf(a.cid, t, edition)]));
     const riders = pre.sheet ? attackRiders(pre.sheet.sheet, pre.sheet.calc.values, action, { edition }).filter((rd) => body.riders.includes(rd.id)) : [];
+    // What the riders use up (Divine Smite's slot, a superiority die...): refused now if there's none left, spent below on a hit.
+    const spends = riders.filter((rd) => rd.spend).map((rd) => ({ ...rd.spend, name: rd.name }));
+    let sheetAfterSpends = null;
+    if (spends.length && pre.sheet) {
+      try {
+        sheetAfterSpends = spendForAttack(sheetAfterSlot ?? pre.sheet.sheet, spends, { edition, values: pre.sheet.calc.values });
+      } catch (err) {
+        throw new BadRequestError(`${err.message} Untick ${spends.map((x) => x.name).join(' and ')} to attack without it.`);
+      }
+    }
     const result = resolveAttack({
       action,
       attacker,
@@ -276,6 +287,7 @@ export function registerAttacks(app, r) {
     const waits = !dm && attackSettings(a.cid).damage === 'dm';
     const later = [];
     if (sheetAfterSlot) later.push({ user_id: attacker.user_id, sheet: sheetAfterSlot, reason: `cast ${action.name} on the map (${ordinal(slotLevel)}-level ${used === 'pact' ? 'Pact Magic ' : ''}slot)`, by: a.userId });
+    if (sheetAfterSpends && result.targets.some((t) => t.hit === true)) later.push({ user_id: attacker.user_id, sheet: sheetAfterSpends, reason: `${spends.map((x) => x.name).join(' and ')} with ${action.name} on the map`, by: a.userId });
     const id = newTokenId();
     const saved = maps.change(a.cid, map.id, (m) => {
       const entry = {
