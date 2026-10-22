@@ -17,6 +17,7 @@ import { MAX_CLIMBS, MAX_RAISED, MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, 
 import { DESIGN_CELL, designToMap } from '@dndapp/shared/map-design.js';
 import { computeSheet } from '@dndapp/shared/sheet.js';
 import { activeForm, formHasHp, setFormHp } from '@dndapp/shared/wild-shape.js';
+import { attackLogFor } from '@dndapp/shared/attacks.js';
 import { createSight } from './sight.js';
 import { mapEvents } from './events.js';
 import { diffJson, applyJson } from '../sheets/store.js';
@@ -357,6 +358,8 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
           .map(({ id, x1, y1, x2, y2, open, locked }) => ({ id, x1, y1, x2, y2, open, locked })),
         wall_draft: { status: '', error: '', notes: '', step: '', parts: 0, parts_done: 0, started_at: '', effort: '', finished_at: '', found: null },
         fog: { ...map.fog, explored: seen.explored },
+        // Attacks made on the map: only ones where they can see someone in it, an enemy's AC only if the DM shows it.
+        attacks: attackLogFor(map.attacks, { dm: false, visible, own: new Set(map.tokens.filter((t) => ownToken(t, userId)).map((t) => t.id)), showAc: settings.attacks.show_ac }),
         // Areas of effect: their own, and ones whose point of origin they can see.
         templates: map.templates.filter((t) => t.user_id === userId || canSee(map, seen.polygons, t.x, t.y)),
         // The turn order holds only the tokens they can see; on an unseen token's turn, `turn` is null and `turn_unseen` says so.
