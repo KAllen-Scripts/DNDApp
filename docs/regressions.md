@@ -15,6 +15,7 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-21 | The owner never found players' companions (PR #58): the map's Companion button was the only way in, and in full screen it hid behind More. Companions now live on the sheet too. | `web/test/companions.test.js`: regression: the map's Companion button is one of the main map tools, not hidden behind More in full screen |
 | 2026-10-21 | Ask's book search ignored the campaign's edition (the spell and creature lookups didn't), so answers quoted and compared the 2014 and 2024 books. | `server/test/ask-speed.test.js`: regression: Ask's search_books looks in the campaign's edition's books first (it mixed both editions), and in all of them when those have nothing |
 | 2026-10-21 | The Inventory's add box always suggested weapons and armour, whatever kind of item was picked (the kind picker only worked for Add by hand). | `web/test/sheet.test.js`: regression: the Inventory suggests names of the kind picked, not always weapons |
 | 2026-10-21 | Drawing a made map's picture at 140 px a square takes seconds; on the server's own thread that froze rolls and live updates meanwhile. | `server/test/creator.test.js`: regression: drawing a made map's picture happens off the server's thread, so it keeps answering meanwhile |
