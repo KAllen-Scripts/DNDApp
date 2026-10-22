@@ -19,14 +19,27 @@
 import crypto from 'node:crypto';
 import { NotFoundError, BadRequestError } from './store.js';
 import { ArchiveConflictError } from './archive.js';
-import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, wikiKey } from '@dndapp/shared/wiki.js';
+import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, unpicture, wikiKey, isPictureId, pagePictureIds } from '@dndapp/shared/wiki.js';
 
-export const WIKI_LIMITS = { title: 200, kind: 60, alias: 200, aliases: 50, tags: 30, tag: 60, sections: 200, heading: 200, text: 200_000 };
+export const WIKI_LIMITS = { title: 200, kind: 60, alias: 200, aliases: 50, tags: 30, tag: 60, sections: 200, heading: 200, text: 200_000, caption: 300, gallery: 60, facts: 30, label: 60, value: 500 };
 
 export const isWikiId = (id) => /^[a-f0-9]{10}$/.test(String(id));
 
 /** 'all', 'dm', or a list of user ids, from whatever was stored. */
 const normalizeAvailable = (a, fallback) => (a === 'all' || a === 'dm' ? a : Array.isArray(a) ? [...new Set(a.map(Number).filter(Number.isInteger))] : fallback);
+
+/**
+ * One of a page's pictures (its main picture, its banner, or one in its
+ * gallery): { id, caption, available } ('all' = as the page). A banner also
+ * has `focus`, how far down the picture the strip across the top is cut
+ * (0 the top, 100 the bottom).
+ */
+function normalizePicture(x, { banner = false } = {}) {
+  if (!x || !isPictureId(x.id)) return null;
+  const out = { id: String(x.id), caption: String(x.caption ?? '').trim().slice(0, WIKI_LIMITS.caption), available: normalizeAvailable(x.available, 'all') };
+  if (banner) out.focus = Number.isFinite(Number(x.focus)) ? Math.min(100, Math.max(0, Math.round(Number(x.focus)))) : 50;
+  return out;
+}
 
 /** A page read from the database or the archive, with anything unknown dropped. Text is never cut short. */
 export function normalizeWikiPage(p = {}) {
@@ -49,6 +62,15 @@ export function normalizeWikiPage(p = {}) {
       // 'all' here means "as the page".
       available: normalizeAvailable(s.available, 'all'),
     })),
+    // Pictures (2026-10-21): the main picture (a portrait, a view of the place) beside the facts, a banner across the top, and a gallery.
+    picture: normalizePicture(p.picture),
+    banner: normalizePicture(p.banner, { banner: true }),
+    gallery: (Array.isArray(p.gallery) ? p.gallery : []).map((x) => normalizePicture(x)).filter(Boolean).slice(0, WIKI_LIMITS.gallery),
+    // At a glance (an infobox): short facts like "Race: Half-elf", each with who it's available to ('all' = as the page).
+    facts: (Array.isArray(p.facts) ? p.facts : [])
+      .map((f) => ({ label: String(f?.label ?? '').trim().slice(0, WIKI_LIMITS.label), value: String(f?.value ?? '').trim().slice(0, WIKI_LIMITS.value), available: normalizeAvailable(f?.available, 'all') }))
+      .filter((f) => f.label || f.value)
+      .slice(0, WIKI_LIMITS.facts),
     version: Number(p.version) || 1,
     created_by: p.created_by ?? null,
     created_at: String(p.created_at ?? ''),
@@ -61,8 +83,9 @@ export function normalizeWikiPage(p = {}) {
 /**
  * @param {object} o
  * @param {object} o.search  the search index; the wiki is indexed as kind 'wiki', one doc per part with its audience
+ * @param {object} [o.pictures]  the wiki's pictures (src/wiki-pictures.js): a page's main picture, banner and gallery must be among them
  */
-export function createWiki({ db, archive, store, search }) {
+export function createWiki({ db, archive, store, search, pictures = null }) {
   const rows = (cid) =>
     db.prepare('SELECT data FROM wiki_pages WHERE campaign_id = ? ORDER BY id').all(cid).map((r) => normalizeWikiPage(JSON.parse(r.data))).filter((p) => !p.removed);
 
@@ -95,9 +118,16 @@ export function createWiki({ db, archive, store, search }) {
    */
   function filtered(page, viewer, roster) {
     if (!viewer || viewer.seesAll) return page;
-    if (!canSeeAudience(viewer, audienceOf(page.available))) return null;
+    const pageAudience = audienceOf(page.available);
+    if (!canSeeAudience(viewer, pageAudience)) return null;
+    // A picture or a fact is available to the narrowest of the page and its own setting.
+    const sees = (x) => x && canSeeAudience(viewer, narrowest(pageAudience, audienceOf(x.available)));
+    const picture = sees(page.picture) ? page.picture : null;
+    const banner = sees(page.banner) ? page.banner : null;
+    const gallery = page.gallery.filter(sees);
+    const facts = page.facts.filter(sees);
     const visible = parts(page, roster).filter((p) => p.text.trim() && canSeeAudience(viewer, p.audience));
-    if (!visible.length) return null;
+    if (!visible.length && !facts.length && !picture && !banner && !gallery.length) return null;
     const sections = [];
     for (const p of visible) {
       const last = sections.at(-1);
@@ -105,7 +135,23 @@ export function createWiki({ db, archive, store, search }) {
       else sections.push({ ...p.section, text: p.text });
     }
     // Other names can be secrets: a player gets only the title.
-    return { ...page, aliases: [], sections };
+    return { ...page, aliases: [], sections, picture, banner, gallery, facts };
+  }
+
+  /** What a page's facts and picture captions say, grouped by who they're available to (for search). */
+  function extras(page) {
+    const pageAudience = audienceOf(page.available);
+    const groups = new Map();
+    const add = (x, line) => {
+      if (!line.trim()) return;
+      const audience = narrowest(pageAudience, audienceOf(x.available));
+      const key = JSON.stringify(audience);
+      if (!groups.has(key)) groups.set(key, { audience, lines: [] });
+      groups.get(key).lines.push(line);
+    };
+    for (const f of page.facts) add(f, `${f.label}${f.label && f.value ? ': ' : ''}${unlink(f.value)}`);
+    for (const x of [page.picture, page.banner, ...page.gallery]) if (x?.caption) add(x, `Picture: ${x.caption}`);
+    return [...groups.values()];
   }
 
   /**
@@ -119,9 +165,10 @@ export function createWiki({ db, archive, store, search }) {
       .filter((p) => p.text.trim())
       .map((p) => ({
         title: `${page.title}${p.section.heading ? ` › ${p.section.heading}` : ''}`,
-        text: `${page.kind ? `(${page.kind}) ` : ''}${page.title}\n${unlink(p.text)}`,
+        text: `${page.kind ? `(${page.kind}) ` : ''}${page.title}\n${unpicture(unlink(p.text))}`,
         visible_to: p.audience,
       }));
+    for (const g of extras(page)) docs.push({ title: `${page.title} › At a glance`, text: `${page.kind ? `(${page.kind}) ` : ''}${page.title}\n${g.lines.join('\n')}`, visible_to: g.audience });
     if (page.aliases.length) docs.push({ title: page.title, text: `${page.title}\nAlso called: ${page.aliases.join(', ')}`, visible_to: [] });
     await search.replaceDocs(cid, { kind: 'wiki', ref_id: page.id }, docs);
   }
@@ -137,6 +184,9 @@ export function createWiki({ db, archive, store, search }) {
 
   function check(cid, page, excludeId) {
     if (!page.title) throw new BadRequestError('A page needs a title.');
+    if (pictures) {
+      for (const x of [page.picture, page.banner, ...page.gallery]) if (x && !pictures.has(cid, x.id)) throw new BadRequestError('One of those pictures is missing. Add it again.');
+    }
     const taken = new Map();
     for (const p of rows(cid)) {
       if (p.id === excludeId) continue;
@@ -169,6 +219,20 @@ export function createWiki({ db, archive, store, search }) {
 
     /** The page as a viewer may see it, or null. The DM gets it whole. */
     forViewer: (cid, page, viewer) => filtered(page, viewer, players(cid)),
+
+    /**
+     * May this viewer see this picture? The DM sees every one; a player only
+     * one on a page, in a part of it, that's available to them (a picture in
+     * a `:::dm` block, or a gallery picture only for the DM, never is).
+     */
+    pictureVisible(cid, id, viewer) {
+      if (!viewer || viewer.seesAll) return true;
+      const roster = players(cid);
+      return rows(cid).some((p) => {
+        const mine = filtered(p, viewer, roster);
+        return !!mine && pagePictureIds(mine).includes(id);
+      });
+    },
 
     /** Pages this viewer has anything available on (for Ask: is the wiki worth offering?). */
     anyFor: (cid, viewer) => rows(cid).some((p) => filtered(p, viewer, players(cid))),
@@ -267,9 +331,9 @@ export function createWiki({ db, archive, store, search }) {
     /** Bring back an earlier version, as a new save (nothing is lost: the version it replaces stays in the history). */
     async restore(cid, id, version, { by }) {
       const old = wiki.version(cid, id, version);
-      const { title, aliases, kind, parent, tags, available, sections } = old;
+      const { title, aliases, kind, parent, tags, available, sections, picture, banner, gallery, facts } = old;
       const current = wiki.get(cid, id);
-      return wiki.update(cid, id, { title, aliases, kind, parent: parent && rows(cid).some((p) => p.id === parent) ? parent : null, tags, available, sections }, { by, version: current.version });
+      return wiki.update(cid, id, { title, aliases, kind, parent: parent && rows(cid).some((p) => p.id === parent) ? parent : null, tags, available, sections, picture, banner, gallery, facts }, { by, version: current.version });
     },
 
     /** Index every page again (after a rebuild wipes the search index, or a restore from the archive). */

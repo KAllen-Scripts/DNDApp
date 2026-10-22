@@ -147,11 +147,12 @@
 :root[data-phone] .sheet-panel > .sheet,
 :root[data-phone] .sheet-panel > .inventory { margin-top: 0.1rem; }
 
-/* Inventory: the item box and Add in one row; Add by hand in ⋯. */
+/* Inventory: the kind, the item box and Look up in one row; Add by hand in ⋯. */
 :root[data-phone] #gear-add { margin-bottom: 0; }
 :root[data-phone] #gear-add #gear-name { flex: 1; min-width: 0; padding: 0.45rem 0.6rem; }
-:root[data-phone] #gear-add button[type=submit] { flex: none; padding: 0.45rem 0.8rem; font-size: 0; }
-:root[data-phone] #gear-add button[type=submit]::after { content: "Add"; font-size: 0.95rem; }
+:root[data-phone] #gear-add button[type=submit] { flex: none; padding: 0.45rem 0.7rem; }
+:root[data-phone] #gear-add #gear-kind { flex: none; width: 5.6rem; padding: 0.45rem 0.3rem; }
+:root[data-phone] .gear-preview { margin: 1.8rem 0 0.4rem; }
 :root[data-phone] #gear-add #gear-status:empty { display: none; }
 :root[data-phone] .creatures-panel > .creatures-bar [role=status]:empty { display: none; }
 :root[data-phone] :is(#gear-add #gear-status, .creatures-panel > .creatures-bar [role=status]) { position: absolute; left: 0.6rem; right: 3.2rem; bottom: -1.5rem; padding: 0.15rem 0.5rem; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 2px 8px rgb(0 0 0 / 0.15); }
@@ -264,4 +265,8 @@
 
 /* The DM's wiki: the list of pages, or one page with a way back to the list. */
 :root[data-phone] .wiki-panel.wiki-reading .wiki-side { display: none; }
+/* The front page's cards are the list on a phone. */
+:root[data-phone] .wiki-list { display: none; }
+:root[data-phone] .wiki-panel { align-content: start; }
+:root[data-phone] .wiki-side { overflow: visible; }
 :root[data-phone] .wiki-back { display: inline-block; justify-self: start; margin-bottom: 0.4rem; }

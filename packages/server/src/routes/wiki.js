@@ -1,15 +1,20 @@
 /**
- * The DM's wiki (src/wiki.js). Every route is the DM's: players have no Wiki
- * tab and reach the wiki only through Ask, which reads just the parts
- * available to them.
+ * The DM's wiki (src/wiki.js). Every route is the DM's but one: players have
+ * no Wiki tab and reach the wiki only through Ask, which reads just the parts
+ * available to them. The one is a picture's bytes, which a player gets only
+ * when the picture is in a part of a page available to them.
  */
 import { z } from 'zod';
-import { BadRequestError } from '../store.js';
+import { BadRequestError, NotFoundError } from '../store.js';
 import { WIKI_LIMITS as L } from '../wiki.js';
+import { MAX_PICTURE_BYTES } from '../images.js';
+import { SOURCE_KINDS } from '../wiki-pictures.js';
+import { wikiPieces, wikiPictures as picturesIn, unlink, unpicture } from '@dndapp/shared/wiki.js';
 
 export function registerWiki(app, r) {
-  const { access, auth, store, wiki, wikiAI, jobs } = r;
+  const { access, auth, store, wiki, wikiAI, wikiPictures, jobs } = r;
 
+  const pictureId = z.string().regex(/^[a-f0-9]{10}$/);
   const available = z.union([z.literal('all'), z.literal('dm'), z.array(z.number().int()).max(100)]);
   const fields = {
     title: z.string().trim().min(1).max(L.title),
@@ -21,18 +26,36 @@ export function registerWiki(app, r) {
     sections: z
       .array(z.object({ id: z.string().regex(/^[a-f0-9]{6}$/).optional(), heading: z.string().trim().max(L.heading), text: z.string().max(L.text), available }))
       .max(L.sections),
+    picture: z.object({ id: pictureId, caption: z.string().max(L.caption).default(''), available: available.default('all') }).nullable(),
+    banner: z.object({ id: pictureId, caption: z.string().max(L.caption).default(''), available: available.default('all'), focus: z.number().min(0).max(100).default(50) }).nullable(),
+    gallery: z.array(z.object({ id: pictureId, caption: z.string().max(L.caption).default(''), available: available.default('all') })).max(L.gallery),
+    facts: z.array(z.object({ label: z.string().max(L.label), value: z.string().max(L.value), available: available.default('all') })).max(L.facts),
   };
 
   /** Chosen players must be players of this campaign. */
   function checkPlayers(cid, body) {
-    for (const a of [body.available, body.page_available, body.players, ...(body.sections ?? []).map((s) => s.available)]) {
+    const own = [...(body.sections ?? []), ...(body.facts ?? []), ...(body.gallery ?? []), body.picture, body.banner].filter(Boolean).map((x) => x.available);
+    for (const a of [body.available, body.page_available, body.players, ...own]) {
       if (!Array.isArray(a)) continue;
       for (const id of a) if (auth.membership(cid, id)?.role !== 'player') throw new BadRequestError(`User ${id} isn't a player in this campaign.`);
     }
     return body;
   }
 
-  const summary = (p) => ({ id: p.id, title: p.title, aliases: p.aliases, kind: p.kind, parent: p.parent, tags: p.tags, available: p.available, updated_at: p.updated_at });
+  /**
+   * A page in the DM's list: enough for the cards and the preview shown over
+   * a link (its picture and its opening words). Only the DM gets the list.
+   */
+  const summary = (p) => ({
+    id: p.id, title: p.title, aliases: p.aliases, kind: p.kind, parent: p.parent, tags: p.tags, available: p.available, updated_at: p.updated_at,
+    picture: p.picture?.id ?? p.banner?.id ?? p.gallery[0]?.id ?? p.sections.flatMap((s) => picturesIn(s.text))[0] ?? null,
+    excerpt: excerpt(p),
+  });
+  const excerpt = (p) => {
+    const plain = (p.sections.map((s) => wikiPieces(s.text).filter((x) => !x.block).map((x) => x.text).join(' ')).find((t) => t.trim()) ?? '');
+    const text = unpicture(unlink(plain)).replace(/\[picture[^\]]*\]/g, '').replace(/[#>*_`|~-]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return text.length > 220 ? `${text.slice(0, 217).replace(/\s+\S*$/, '')}…` : text;
+  };
 
   /** The last time the AI read the records for the wiki, if it has: { status, message, finished_at }. */
   const lastRun = (cid) => {
@@ -45,6 +68,57 @@ export function registerWiki(app, r) {
     const { cid } = access(request, { dm: true });
     const players = store.roster(cid).filter((m) => m.role === 'player').map((m) => ({ id: m.user_id, name: m.name, character_name: m.character_name }));
     return { pages: wiki.list(cid).map(summary), players, proposals: wikiAI.count(cid), ai_run: lastRun(cid) };
+  });
+
+  // ---------- pictures ----------
+
+  const pictureBody = { bodyLimit: Math.ceil(MAX_PICTURE_BYTES * 1.4) + 64 * 1024 };
+  const pictureView = (x) => ({ id: x.id, width: x.width, height: x.height, name: x.name, from: x.from });
+
+  /** The wiki's pictures (newest first), and everything else in the app with a picture the DM could use. */
+  app.get('/campaigns/:cid/wiki/pictures', async (request) => {
+    const { cid } = access(request, { dm: true });
+    return { pictures: wikiPictures.list(cid), sources: wikiPictures.sources(cid) };
+  });
+
+  /**
+   * Add a picture (DM): { filename, data (base64) } for an upload, a paste or
+   * a drop, or { from: { kind, id } } for a copy of a creature's, item's,
+   * merchant's, map's, handout's or token's picture.
+   */
+  app.post('/campaigns/:cid/wiki/pictures', pictureBody, async (request, reply) => {
+    const { cid } = access(request, { dm: true });
+    const body = z.union([
+      z.object({ filename: z.string().max(200).default(''), data: z.string().min(1) }),
+      z.object({ from: z.object({ kind: z.enum(SOURCE_KINDS), id: z.string().max(40) }) }),
+    ]).parse(request.body ?? {});
+    const x = body.from
+      ? await wikiPictures.copy(cid, body.from, { by: request.user.id })
+      : await wikiPictures.upload(cid, Buffer.from(body.data, 'base64'), { by: request.user.id, name: body.filename.replace(/\.[^.]*$/, '') });
+    reply.status(201);
+    return { picture: pictureView(x) };
+  });
+
+  /** A small copy of a creature's, item's, map's… picture, for the DM's chooser. */
+  app.get('/campaigns/:cid/wiki/picture-sources/:kind/:id', async (request, reply) => {
+    const { cid } = access(request, { dm: true });
+    const { buf, type } = await wikiPictures.sourceThumb(cid, request.params.kind, request.params.id);
+    return reply.type(type).header('X-Content-Type-Options', 'nosniff').header('Cache-Control', 'private, max-age=300').send(buf);
+  });
+
+  /**
+   * A picture, made smaller on the server (?size=thumb for cards and
+   * galleries). The DM gets any; a player only one in a part of a page
+   * available to them, and otherwise the same 404 as a picture that doesn't
+   * exist, so nothing says it's there.
+   */
+  app.get('/campaigns/:cid/wiki/pictures/:picid', async (request, reply) => {
+    const a = access(request);
+    const id = request.params.picid;
+    const { size } = z.object({ size: z.enum(['thumb', 'full']).default('full') }).parse(request.query ?? {});
+    if (!wikiPictures.has(a.cid, id) || !wiki.pictureVisible(a.cid, id, { userId: a.userId, seesAll: a.role === 'dm' })) throw new NotFoundError('No such picture');
+    const { buf, type } = await wikiPictures.image(a.cid, id, size);
+    return reply.type(type).header('X-Content-Type-Options', 'nosniff').header('Cache-Control', 'private, max-age=31536000, immutable').send(buf);
   });
 
   // ---------- what the AI proposes (stage 2 and 3: the DM approves every change) ----------
@@ -71,6 +145,7 @@ export function registerWiki(app, r) {
       page_available: available.optional(),
       sections: z.array(z.object({ heading: fields.sections.element.shape.heading.optional(), text: z.string().max(L.text).optional(), available: available.optional() })).max(L.sections).optional(),
       players: z.array(z.number().int()).max(100).optional(),
+      use_picture: z.boolean().optional(),
     }).parse(request.body ?? {}));
     const page = await wikiAI.approve(cid, request.params.id, edits, { by: request.user.id });
     return { page, proposals: wikiAI.count(cid) };
@@ -106,7 +181,7 @@ export function registerWiki(app, r) {
 
   app.post('/campaigns/:cid/wiki', async (request, reply) => {
     const { cid } = access(request, { dm: true });
-    const body = checkPlayers(cid, z.object({ ...fields, aliases: fields.aliases.default([]), kind: fields.kind.default(''), parent: fields.parent.default(null), tags: fields.tags.default([]), available: available.default('dm'), sections: fields.sections.default([]) }).parse(request.body ?? {}));
+    const body = checkPlayers(cid, z.object({ ...fields, aliases: fields.aliases.default([]), kind: fields.kind.default(''), parent: fields.parent.default(null), tags: fields.tags.default([]), available: available.default('dm'), sections: fields.sections.default([]), picture: fields.picture.default(null), banner: fields.banner.default(null), gallery: fields.gallery.default([]), facts: fields.facts.default([]) }).parse(request.body ?? {}));
     const page = await wiki.create(cid, body, { by: request.user.id });
     reply.status(201);
     return { page, unknown_names: wiki.unknownNames(cid, page) };

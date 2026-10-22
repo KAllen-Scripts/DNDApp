@@ -101,6 +101,7 @@ const WEB_MODULES = {
   '/shared/dice.js': '@dndapp/shared/dice.js',
   '/shared/rolls.js': '@dndapp/shared/rolls.js',
   '/shared/gear.js': '@dndapp/shared/gear.js',
+  '/shared/item-names.js': '@dndapp/shared/item-names.js',
   '/shared/point-buy.js': '@dndapp/shared/point-buy.js',
   '/shared/settings.js': '@dndapp/shared/settings.js',
   '/shared/map.js': '@dndapp/shared/map.js',
@@ -308,7 +309,7 @@ export function exposureWarnings({ host, publicUrl }) {
 
 const trustProxySetting = (v) => (v === 'true' ? true : v === 'false' || v === 'off' || v === '' ? false : v);
 
-export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, sheetReview, editions, spells, forms, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, handouts, wiki, wikiAI, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, mapStamps, designDrafter, archive, config, random = (sides) => crypto.randomInt(1, sides + 1), logger = true }) {
+export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, sheetReview, editions, spells, forms, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, handouts, wiki, wikiAI, wikiPictures, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, mapStamps, designDrafter, archive, config, random = (sides) => crypto.randomInt(1, sides + 1), logger = true }) {
   const app = Fastify({
     logger,
     bodyLimit: SMALL_BODY,
@@ -419,7 +420,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     !db.prepare('SELECT 1 FROM attendance WHERE session_id = ?').get(sessionId);
 
   // The routes, by part of the app (routes/). Each takes what it needs from r and adds what later ones use.
-  const r = { db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, sheetReview, editions, spells, forms, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, handouts, wiki, wikiAI, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, mapStamps, designDrafter, archive, config, random, upload, requireAdmin, access, openLiveStream, forViewer, attended, openSse, publicMessage, DATE };
+  const r = { db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, sheetReview, editions, spells, forms, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, handouts, wiki, wikiAI, wikiPictures, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, mapStamps, designDrafter, archive, config, random, upload, requireAdmin, access, openLiveStream, forViewer, attended, openSse, publicMessage, DATE };
   registerAccounts(app, r);
   registerCampaign(app, r);
   registerCharacters(app, r);
