@@ -48,7 +48,20 @@ export const normalizeTravel = (t = {}) => ({
   time: t && t.time in TRAVEL_TIME ? t.time : DEFAULT_TRAVEL.time,
   ...Object.fromEntries(Object.keys(TRAVEL_PARTS).map((k) => [k, typeof t?.[k] === 'boolean' ? t[k] : DEFAULT_TRAVEL[k]])),
 });
-export const DEFAULT_SETTINGS = Object.freeze({ weight: 'capacity', edition: null, clock: START_CLOCK, travel: DEFAULT_TRAVEL, backgrounds: Object.freeze([]) });
+/**
+ * attacks: attacks and area spells from the map (owner, 2026-10-21: "This should be optional as a feature").
+ * on: players and the DM can attack from the map (on by default, so people find it); damage: how damage from
+ * players' attacks lands, 'auto' (straight away) or 'dm' (it waits for the DM's Apply); show_ac: players see
+ * an enemy's AC on the result (off: only hit or miss).
+ */
+export const ATTACK_DAMAGE = { auto: 'Straight away', dm: 'When the DM applies it (the DM gets Apply buttons)' };
+export const DEFAULT_ATTACKS = Object.freeze({ on: true, damage: 'auto', show_ac: false });
+export const normalizeAttackSettings = (a = {}) => ({
+  on: typeof a?.on === 'boolean' ? a.on : DEFAULT_ATTACKS.on,
+  damage: a && a.damage in ATTACK_DAMAGE ? a.damage : DEFAULT_ATTACKS.damage,
+  show_ac: typeof a?.show_ac === 'boolean' ? a.show_ac : DEFAULT_ATTACKS.show_ac,
+});
+export const DEFAULT_SETTINGS = Object.freeze({ weight: 'capacity', edition: null, clock: START_CLOCK, travel: DEFAULT_TRAVEL, attacks: DEFAULT_ATTACKS, backgrounds: Object.freeze([]) });
 /** The clock goes at most this far (about 27,000 years of days), so it stays a plain number. */
 export const MAX_CLOCK = 1440 * 10_000_000;
 
@@ -59,6 +72,7 @@ export function normalizeSettings(s = {}) {
     edition: s && String(s.edition) in EDITIONS ? String(s.edition) : DEFAULT_SETTINGS.edition,
     clock: Number.isInteger(s?.clock) && s.clock >= 0 && s.clock <= MAX_CLOCK ? s.clock : DEFAULT_SETTINGS.clock,
     travel: normalizeTravel(s?.travel),
+    attacks: normalizeAttackSettings(s?.attacks),
     backgrounds: normalizeCustomBackgrounds(s?.backgrounds),
   };
 }

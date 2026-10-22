@@ -4,7 +4,7 @@
  * (table.js calls settingsHeard) and the sheet works itself out again.
  */
 import { api, h } from './api.js';
-import { EDITIONS, TRAVEL_PARTS, TRAVEL_TIME, WEIGHT_RULES, normalizeSettings } from './shared/settings.js';
+import { ATTACK_DAMAGE, EDITIONS, TRAVEL_PARTS, TRAVEL_TIME, WEIGHT_RULES, normalizeSettings } from './shared/settings.js';
 import { setSheetSettings } from './sheet.js';
 import { backgroundsSection } from './campaign-backgrounds.js';
 
@@ -77,6 +77,16 @@ function openDialog() {
     box.addEventListener('change', () => save({ travel: { [k]: box.checked } }, 'Saved. Journeys follow it from now on.'));
     return h('label', { class: 'check' }, box, ` ${label}`);
   });
+  // Attacks from the map (owner, 2026-10-21: "This should be optional as a feature").
+  const attacks = state.settings.attacks;
+  const attackOn = h('input', { type: 'checkbox', id: 'setting-attacks-on', checked: attacks.on });
+  const attackDamage = h('select', { id: 'setting-attacks-damage', 'aria-label': 'Damage from players\u2019 attacks' }, Object.entries(ATTACK_DAMAGE).map(([v, n]) => new Option(n, v)));
+  attackDamage.value = attacks.damage;
+  const attackAc = h('input', { type: 'checkbox', id: 'setting-attacks-ac', checked: attacks.show_ac });
+  const attackSaved = 'Saved. The map follows it now.';
+  attackOn.addEventListener('change', () => save({ attacks: { on: attackOn.checked } }, attackSaved));
+  attackDamage.addEventListener('change', () => save({ attacks: { damage: attackDamage.value } }, attackSaved));
+  attackAc.addEventListener('change', () => save({ attacks: { show_ac: attackAc.checked } }, attackSaved));
   // The DM's own backgrounds (campaign-backgrounds.js): every player's sheet suggests them.
   const backgrounds = backgroundsSection({ list: () => state.settings.backgrounds, save: (list, done) => save({ backgrounds: list }, done) });
   dialog.replaceChildren(
@@ -90,6 +100,11 @@ function openDialog() {
       h('label', { class: 'fld' }, h('span', {}, 'Travel time'), time),
       ...parts,
       h('p', { class: 'muted small' }, 'Switch off whatever your table would rather skip. Journeys already on the road keep going as they set off.'),
+      h('h3', {}, 'Attacks from the map'),
+      h('label', { class: 'check' }, attackOn, ' Players and I can attack and cast spells from the map (pick an enemy, then Attack)'),
+      h('label', { class: 'fld' }, h('span', {}, 'Damage from players\u2019 attacks lands'), attackDamage),
+      h('label', { class: 'check' }, attackAc, ' Players see an enemy\u2019s AC on the result (otherwise just hit or miss)'),
+      h('p', { class: 'muted small' }, 'The server rolls to hit against AC, the saves and the damage, and changes the hit points. You can undo any attack from its card or the Attack log.'),
       backgrounds.el,
       result,
       h('div', { class: 'map-dialog-actions' }, h('span', { class: 'spacer' }), h('button', { type: 'button', class: 'primary', onclick: () => dialog.close() }, 'Done')),

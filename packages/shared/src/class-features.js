@@ -143,7 +143,7 @@ export const FEATURES = [
   },
   {
     id: 'martial_arts', class: 'monk', name: 'Martial Arts', from: 1, kind: 'info', page: 'PHB 2014 p. 78; PHB 2024 p. 101',
-    note: (c) => `Unarmed strikes and monk weapons: 1d${c.edition === '2024' ? step([[1, 6], [5, 8], [11, 10], [17, 12]], c.level) : step([[1, 4], [5, 6], [11, 8], [17, 10]], c.level)} damage, Strength or Dexterity.`,
+    note: (c) => `Unarmed strikes and monk weapons: 1d${c.edition === '2024' ? step([[1, 6], [5, 8], [11, 10], [17, 12]], c.level) : step([[1, 4], [5, 6], [11, 8], [17, 10]], c.level)} damage, Strength or Dexterity (worked into your attacks when you wear no armour or shield).`,
   },
   {
     id: 'uncanny_metabolism', class: 'monk', name: 'Uncanny Metabolism', edition: '2024', from: 2, kind: 'uses', max: () => 1, recharge: 'long', page: 'PHB 2024 p. 102',
@@ -179,7 +179,7 @@ export const FEATURES = [
   },
   {
     id: 'aura_of_protection', class: 'paladin', name: 'Aura of Protection', from: 6, kind: 'info', page: 'PHB 2014 p. 85; PHB 2024 p. 111',
-    note: (c) => `You and friends within ${c.level >= 18 ? 30 : 10} feet add +${atLeast1(c.mod('cha'))} to saving throws while you're conscious.`,
+    note: (c) => `You and friends within ${c.level >= 18 ? 30 : 10} feet add +${atLeast1(c.mod('cha'))} to saving throws while you're conscious (in your saves).`,
   },
   {
     id: 'cleansing_touch', class: 'paladin', name: 'Cleansing Touch', edition: '2014', from: 14, kind: 'uses', recharge: 'long', page: 'PHB 2014 p. 85',
@@ -207,7 +207,7 @@ export const FEATURES = [
   // ---------- Rogue ----------
   {
     id: 'sneak_attack', class: 'rogue', name: 'Sneak Attack', from: 1, kind: 'info', page: 'PHB 2014 p. 96; PHB 2024 p. 129',
-    note: (c) => `${Math.ceil(c.level / 2)}d6 extra damage once a turn, with advantage or an ally next to the target (finesse or ranged weapon).${c.edition === '2024' && c.level >= 5 ? ' Cunning Strike: give up dice for an effect.' : ''}`,
+    note: (c) => `${Math.ceil(c.level / 2)}d6 extra damage once a turn, with advantage or an ally next to the target (finesse or ranged weapon): tick Sneak Attack under the attack in Attacks and it's added to the damage (doubled on a critical hit).${c.edition === '2024' && c.level >= 5 ? ' Cunning Strike: give up dice for an effect.' : ''}`,
   },
   {
     id: 'stroke_of_luck', class: 'rogue', name: 'Stroke of Luck', from: 20, kind: 'uses', max: () => 1, recharge: 'short', page: 'PHB 2014 p. 96; PHB 2024 p. 131',
@@ -271,6 +271,12 @@ export const FEATURES = [
     id: 'flash_of_genius', class: 'artificer', name: 'Flash of Genius', from: 7, kind: 'uses', recharge: 'long', page: "Tasha's p. 11",
     max: (c) => atLeast1(c.mod('int')),
     note: (c) => `A reaction: add +${c.mod('int')} to an ability check or saving throw you or a creature near you makes.`,
+  },
+
+  {
+    id: 'spell_storing_item', class: 'artificer', name: 'Spell-Storing Item', from: 11, kind: 'uses', recharge: 'long', page: "Tasha's p. 12",
+    max: (c) => Math.max(2, 2 * c.mod('int')),
+    note: () => 'A 1st- or 2nd-level artificer spell stored in a weapon or focus: whoever holds it can cast it from it, this many times.',
   },
 
   // ---------- Subclasses (subclass-features.js) ----------

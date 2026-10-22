@@ -13,10 +13,12 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { MAX_CLIMBS, MAX_RAISED, MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, blockingWalls, shownTo, placeRevealedTo, canSee, canSeeToken, doorKnown, parseHeight, healthOf, ownToken, speedFromText, hasClimbSpeed } from '@dndapp/shared/map.js';
+import { MAX_CLIMBS, MAX_RAISED, MAX_LIGHTS, MAX_LINKS, MAX_TERRAIN, MAX_WALLS, normalizeMap, normalizePins, blockingWalls, shownTo, placeRevealedTo, canSee, canSeeToken, doorKnown, parseHeight, healthOf, ownToken, speedFromText, hasClimbSpeed, stepTurn } from '@dndapp/shared/map.js';
 import { DESIGN_CELL, designToMap } from '@dndapp/shared/map-design.js';
 import { computeSheet } from '@dndapp/shared/sheet.js';
 import { activeForm, formHasHp, setFormHp } from '@dndapp/shared/wild-shape.js';
+import { companionTokenStats, setCompanionHp } from '@dndapp/shared/companions.js';
+import { attackLogFor } from '@dndapp/shared/attacks.js';
 import { createSight } from './sight.js';
 import { mapEvents } from './events.js';
 import { diffJson, applyJson } from '../sheets/store.js';
@@ -275,6 +277,16 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         }
         return sheetOf.get(t.id);
       };
+      // A companion kept on its player's sheet: the entry (its name, stat block and hit points are the sheet's).
+      const companionOf = (t) => {
+        if (t.kind !== 'companion' || !t.companion || t.user_id == null || !sheets) return null;
+        const found = sheets.get(map.campaign_id, t.user_id);
+        return found?.version ? found.sheet.companions.find((c) => c.id === t.companion) ?? null : null;
+      };
+      const fromSheet = (t) => {
+        const c = companionOf(t);
+        return c ? { name: c.name, stats: companionTokenStats(c), hp: { current: c.hp.current, max: c.hp.max }, hp_sheet: true } : {};
+      };
       // How far it walks in a turn: what the DM set, else the player's sheet, else the stat block.
       const moveSpeed = (t) => {
         if (t.speed != null) return t.speed;
@@ -323,7 +335,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
       const out = {
         ...map,
         // The picture's file name stays on the server; `picture` is its key.
-        tokens: map.tokens.map(({ art: _art, ...t }) => ({ ...t, ...nameOf(t), ...hpOf(t), picture: picture({ ...t, art: _art }), move_speed: moveSpeed(t), tall: tallOf(t), climber: climberOf(t) })),
+        tokens: map.tokens.map(({ art: _art, ...t }) => ({ ...t, ...nameOf(t), ...hpOf(t), ...fromSheet(t), picture: picture({ ...t, art: _art }), move_speed: moveSpeed(t), tall: tallOf(t), climber: climberOf(t) })),
         links: links.map(({ target: m, ...l }) => ({ ...l, to_name: m?.name ?? null })),
         places: places.map(({ target: m, ...p }) => ({ ...p, to_name: m?.name ?? null })),
       };
@@ -362,6 +374,8 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
           .map(({ id, x1, y1, x2, y2, open, locked }) => ({ id, x1, y1, x2, y2, open, locked })),
         wall_draft: { status: '', error: '', notes: '', step: '', parts: 0, parts_done: 0, started_at: '', effort: '', finished_at: '', found: null },
         fog: { ...map.fog, explored: seen.explored },
+        // Attacks made on the map: only ones where they can see someone in it, an enemy's AC only if the DM shows it.
+        attacks: attackLogFor(map.attacks, { dm: false, visible, own: new Set(map.tokens.filter((t) => ownToken(t, userId)).map((t) => t.id)), showAc: settings.attacks.show_ac }),
         // Areas of effect: their own, and ones whose point of origin they can see.
         templates: map.templates.filter((t) => t.user_id === userId || canSee(map, seen.polygons, t.x, t.y)),
         // The turn order holds only the tokens they can see; on an unseen token's turn, `turn` is null and `turn_unseen` says so.
@@ -436,13 +450,27 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
     sheetChanged(campaignId, userId) {
       const { sheet, version } = sheets.get(campaignId, userId);
       const values = version ? computeSheet(sheet, store.getSettings(campaignId)).values : {};
-      const shown = JSON.stringify([sheets.activeNumber?.(campaignId, userId) ?? 1, sheet.name, sheet.height, sheet.hp.current, values.hp_max ?? null, values.speed ?? null, sheet.wild_shape?.active ?? null]);
+      // Companions kept on the sheet show its name, stat block and hit points on their tokens.
+      const companions = (sheet.companions ?? []).map((c) => [c.id, c.name, c.hp, c.form]);
+      const shown = JSON.stringify([sheets.activeNumber?.(campaignId, userId) ?? 1, sheet.name, sheet.height, sheet.hp.current, values.hp_max ?? null, values.speed ?? null, sheet.wild_shape?.active ?? null, companions]);
       const key = `${campaignId}:${userId}`;
       if (sheetShown.get(key) === shown) return;
       sheetShown.set(key, shown);
+      const kept = new Set((sheet.companions ?? []).map((c) => c.id));
+      const mine = (t) => t.kind === 'companion' && t.companion && t.user_id === userId;
       for (const r of db.prepare('SELECT * FROM maps WHERE campaign_id = ?').all(campaignId)) {
         const map = fromRow(r);
-        if (!map.removed && map.tokens.some((t) => t.kind === 'pc' && t.user_id === userId)) events.emit('update', map);
+        if (map.removed) continue;
+        // A companion dismissed on the sheet leaves the map too.
+        if (version && map.tokens.some((t) => mine(t) && !kept.has(t.companion))) {
+          maps.change(campaignId, map.id, (m) => {
+            const gone = new Set(m.tokens.filter((t) => mine(t) && !kept.has(t.companion)).map((t) => t.id));
+            if (m.combat?.turn && gone.has(m.combat.turn)) Object.assign(m.combat, stepTurn(m.combat, 1));
+            m.tokens = m.tokens.filter((t) => !gone.has(t.id));
+          }, { by: userId, reason: 'companion dismissed' });
+          continue;
+        }
+        if (map.tokens.some((t) => (t.kind === 'pc' || mine(t)) && t.user_id === userId)) events.emit('update', map);
       }
     },
 
@@ -465,6 +493,15 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         return sheets.save(campaignId, userId, res.sheet, { by, reason });
       }
       return sheets.save(campaignId, userId, { ...sheet, hp: { ...sheet.hp, current } }, { by, reason: 'hit points changed on the map' });
+    },
+
+    /** Hit points changed on the token of a companion kept on a player's sheet: they go on the sheet. */
+    setCompanionHp(campaignId, userId, companionId, current, { by }) {
+      const { sheet, version } = sheets.get(campaignId, userId);
+      if (!version) return null;
+      const res = setCompanionHp(sheet, companionId, current);
+      if (!res.companion) return null;
+      return sheets.save(campaignId, userId, res.sheet, { by, reason: `${res.companion.name}'s hit points changed on the map (${res.companion.hp.current} of ${res.companion.hp.max})` });
     },
 
     /** Forget where everyone has been on a map, and tell everyone looking at it. */

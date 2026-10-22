@@ -21,12 +21,14 @@ import { registerCharacters } from './routes/characters.js';
 import { registerTable } from './routes/table.js';
 import { registerMaps } from './routes/maps.js';
 import { registerCombat } from './routes/combat.js';
+import { registerAttacks } from './routes/attacks.js';
 import { registerCreatures } from './routes/creatures.js';
 import { registerItems } from './routes/items.js';
 import { registerMerchants } from './routes/merchants.js';
 import { registerMapCreator } from './routes/map-creator.js';
 import { LABEL_FONT_FILES } from './maps/fonts.js';
 import { registerRests } from './routes/rests.js';
+import { registerCompanions } from './routes/companions.js';
 import { registerWiki } from './routes/wiki.js';
 
 /**
@@ -92,6 +94,7 @@ const CONTENT_TYPES = {
 const WEB_MODULES = {
   '/shared/sheet.js': '@dndapp/shared/sheet.js',
   '/shared/wild-shape.js': '@dndapp/shared/wild-shape.js',
+  '/shared/companions.js': '@dndapp/shared/companions.js',
   '/shared/class-features.js': '@dndapp/shared/class-features.js',
   '/shared/subclass-features.js': '@dndapp/shared/subclass-features.js',
   '/shared/subclass-features-books.js': '@dndapp/shared/subclass-features-books.js',
@@ -99,6 +102,8 @@ const WEB_MODULES = {
   '/shared/citations.js': '@dndapp/shared/citations.js',
   '/shared/dice.js': '@dndapp/shared/dice.js',
   '/shared/rolls.js': '@dndapp/shared/rolls.js',
+  '/shared/attack-extras.js': '@dndapp/shared/attack-extras.js',
+  '/shared/class-traits.js': '@dndapp/shared/class-traits.js',
   '/shared/gear.js': '@dndapp/shared/gear.js',
   '/shared/item-names.js': '@dndapp/shared/item-names.js',
   '/shared/point-buy.js': '@dndapp/shared/point-buy.js',
@@ -427,11 +432,13 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   registerTable(app, r);
   registerMaps(app, r);
   registerCombat(app, r);
+  registerAttacks(app, r);
   registerCreatures(app, r);
   registerItems(app, r);
   registerMerchants(app, r);
   registerMapCreator(app, r);
   registerRests(app, r);
+  registerCompanions(app, r);
   registerWiki(app, r);
 
   serveWebPage(app, config.webDir);
