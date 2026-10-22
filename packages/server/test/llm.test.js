@@ -218,3 +218,28 @@ test('a structured call can run at another effort than its task (the DM\'s pick 
   await cc.structured({ task: 'walls', purpose: 'map:walls', system: 's', prompt: 'p', schema: Schema });
   assert.equal(queryFn.calls[1].options.effort, config.llm.tasks.walls.effort, 'none picked: the task\'s');
 });
+
+test("claude-code: starts without non-essential traffic (it took ~2.3 s of every start) and runs an agent at the effort it's given", async () => {
+  const { usage } = usageFor();
+  const queryFn = fakeQuery([result({ result: 'Hi' })]);
+  const cc = createClaudeCodeProvider({ config, usage, queryFn });
+  await cc.agent({ task: 'qa', purpose: 'qa', system: 's', prompt: 'q', tools: [echoTool], limits: { maxToolCalls: 3, maxCostUsd: 0.5 }, effort: 'low' });
+  const { options } = queryFn.calls[0];
+  assert.equal(options.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, '1');
+  assert.equal(options.effort, 'low');
+  assert.equal(options.model, config.llm.tasks.qa.model, 'the same model, only the effort changes');
+
+  const loud = fakeQuery([result({ result: 'Hi' })]);
+  await createClaudeCodeProvider({ config: { ...config, llm: { ...config.llm, quietStart: false } }, usage, queryFn: loud })
+    .agent({ task: 'qa', purpose: 'qa', system: 's', prompt: 'q', tools: [echoTool], limits: { maxToolCalls: 3, maxCostUsd: 0.5 } });
+  assert.equal(loud.calls[0].options.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC);
+  assert.equal(loud.calls[0].options.effort, config.llm.tasks.qa.effort);
+});
+
+test("api: an agent run at the effort it's given", async () => {
+  const { usage } = usageFor();
+  const client = createFakeAnthropic([fakeMessage([{ type: 'text', text: 'Hi' }])]);
+  await createApiProvider({ config, usage, client }).agent({ task: 'qa', purpose: 'qa', system: 's', prompt: 'q', tools: [echoTool], limits: { maxToolCalls: 3, maxCostUsd: 0.5 }, effort: 'low' });
+  assert.equal(client.requests[0].output_config.effort, 'low');
+  assert.equal(client.requests[0].model, config.llm.tasks.qa.model);
+});

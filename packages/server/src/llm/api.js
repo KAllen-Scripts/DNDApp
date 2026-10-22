@@ -128,7 +128,7 @@ export function createApiProvider({ config, usage, client = new Anthropic() }) {
      * Manual tool loop with caps on tool calls and cost. When a cap is hit the
      * model is told to answer with what it has and tools are switched off.
      */
-    async agent({ task, purpose, system, prompt, tools, limits, campaignId, userId, onText, onTool, onTurn }) {
+    async agent({ task, purpose, system, prompt, tools, limits, campaignId, userId, onText, onTool, onTurn, effort }) {
       const byName = new Map(tools.map((t) => [t.name, t]));
       const toolDefs = tools.map((t) => ({
         name: t.name,
@@ -153,7 +153,7 @@ export function createApiProvider({ config, usage, client = new Anthropic() }) {
             max_tokens: 32000,
             cache_control: { type: 'ephemeral' },
           },
-          { task, purpose, campaignId, userId, onText },
+          { task, purpose, campaignId, userId, onText, effort },
         );
         costUsd += cost;
 

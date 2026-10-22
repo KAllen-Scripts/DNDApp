@@ -219,6 +219,7 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
   background: var(--cite); font-size: 0.85em; font-variant-numeric: tabular-nums;
 }
 .cite.static { cursor: default; }
+.answer-quick { margin: 0.5rem 0 0; }
 .evidence { margin-top: 0.75rem; border-top: 1px solid var(--border); padding-top: 0.6rem; display: grid; gap: 0.5rem; }
 .evidence h3 { margin: 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 .evidence figure { margin: 0; }

@@ -4,6 +4,7 @@ Written alongside the code in the first Claude project ("Interactive map for DND
 
 | File | What it is | State |
 |---|---|---|
+| [ask-speed.md](ask-speed.md) | Why Ask was slow and what was done: the quick way, the campaign's edition only, Claude Code's quiet start, timings in the log (Kenny, 2026-10-21) | Built; a faster model for the quick way waits on Kenny |
 | [mobile-ui.md](mobile-ui.md) | The phone layout: how it works, and the order the pages are converted in (Kenny, 2026-10-14) | All 6 stages built; not yet tried on a real phone |
 | [notes-only-sessions.md](notes-only-sessions.md) | Kenny's design for sessions built from notes, with no transcript; private notes | Designed, not built. One open question (private notes hidden from the DM too?) |
 | [dm-screen-ideas.md](dm-screen-ideas.md) | 16 DM screen ideas, layouts, questions | On hold (Kenny, 2026-10-07). Several have since been built another way (initiative, Archivist tab, handouts, shared rolls, creatures) |

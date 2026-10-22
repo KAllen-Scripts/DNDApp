@@ -5,7 +5,8 @@
  *   structured({ task, purpose, system, prompt, schema, attachments?, campaignId, userId, effort? }) -> parsed object
  *     (effort: one call at another effort than the task's, e.g. the DM's pick for AI walls)
  *   research({ task, purpose, system, prompt, campaignId, userId }) -> string (web search and fetch only)
- *   agent({ task, purpose, system, prompt, tools, limits, ... })        -> { answer, costUsd, toolCalls }
+ *   agent({ task, purpose, system, prompt, tools, limits, effort?, ... }) -> { answer, costUsd, toolCalls }
+ *     (effort: this run at another effort than the task's, e.g. Ask's quick way)
  *
  * Agent tools are { name, description, schema (zod object), run(input) -> string }.
  * Attachments are { type: 'image' | 'document', media_type, data (base64) },
