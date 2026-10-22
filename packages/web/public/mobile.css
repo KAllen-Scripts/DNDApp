@@ -69,7 +69,12 @@
 :root[data-phone] #app-view > .topbar .tab-icon { display: block; font-size: 1.3rem; line-height: 1.1; }
 :root[data-phone] #app-view > .topbar .tabs button > [data-label] { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 :root[data-phone] #app-view > .topbar .tabs button > [data-label]::after { content: none; }
-:root[data-phone] #app-view > .topbar > button { flex: 1 1 30%; padding: 0.5rem 0.4rem; font-size: 0.85rem; justify-content: center; }
+:root[data-phone] #app-view > .topbar > button,
+:root[data-phone] #app-view > .topbar .account-menu-list > button { flex: 1 1 30%; padding: 0.5rem 0.4rem; font-size: 0.85rem; justify-content: center; text-align: center; border: 1px solid var(--border); border-radius: 8px; }
+/* The account menu's buttons are tiles in the sheet like the rest; its own button isn't needed. */
+:root[data-phone] #app-view > .topbar :is(.account-menu, .account-menu-list) { display: contents; }
+:root[data-phone] #account-menu-open { display: none; }
+:root[data-phone] #app-view > .topbar .bar-label { display: inline; }
 :root[data-phone] #app-view > .topbar .dice-open span { display: inline; }
 :root[data-phone] .dice-result { bottom: calc(0.75rem + env(safe-area-inset-bottom)); }
 

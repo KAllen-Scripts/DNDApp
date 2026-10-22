@@ -10,7 +10,7 @@
  * shared/subclass-features.js and shared/race-features.js; sheet.js owns the sheet and passes in what this needs. Every maximum can be typed over: the DM has the
  * last word.
  */
-import { h } from './api.js';
+import { h, setChildren } from './api.js';
 import { CLASSES, classKey } from './shared/sheet.js';
 import {
   RECHARGE_NAMES, SLOT_COST, MAX_CUSTOM, arcaneRecovery, featureRows, healsForm, newCustomFeature, pointsToSlot, regainPactSlots,
@@ -73,7 +73,7 @@ export function classFeaturesBox({ state, changed, render, heal, wildShape }) {
     const own = list.filter((r) => !r.subclass && !r.race);
     const sub = list.filter((r) => r.subclass);
     const race = list.filter((r) => r.race);
-    el.replaceChildren(
+    setChildren(el,
       h('h3', {}, 'Class features'),
       own.length
         ? h('div', { class: 'cf-rows' }, own.map((r) => rowView(r, multi)))

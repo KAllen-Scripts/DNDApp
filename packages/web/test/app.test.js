@@ -283,6 +283,43 @@ test('tabs: one panel at a time; Sheet and Map make the page wide', async () => 
   });
 });
 
+test('the site is The Party Ledger: the login page and the browser tab say so, with the campaign once in', async () => {
+  await withPage({}, async (page) => {
+    assert.equal(page.document.title, 'The Party Ledger');
+    assert.equal(page.text('#login-form h1'), 'The Party Ledger');
+    assert.doesNotMatch(page.document.documentElement.outerHTML, /Campaign Memory/i);
+    page.type('#login-form [name=name]', 'Sam');
+    page.type('#login-form [name=password]', PASSWORD);
+    page.submit('#login-form');
+    await page.settle();
+    assert.equal(page.document.title, 'Test Campaign · The Party Ledger');
+  });
+});
+
+test('top bar: settings, Look, change password and log out are in the account menu, which opens and closes', async () => {
+  await withPage({ page: (t) => ({ as: t.sam }) }, async (page) => {
+    const menu = page.$('#account-menu');
+    const button = page.$('#account-menu-open');
+    assert.equal(page.text('#account-name'), 'Sam');
+    for (const sel of ['.look-open', '.change-password', '.logout', '#settings-open']) assert.ok(menu.querySelector(sel), `${sel} is in the menu`);
+    assert.ok(!menu.classList.contains('open'));
+    assert.equal(button.getAttribute('aria-expanded'), 'false');
+    page.click(button);
+    assert.ok(menu.classList.contains('open'));
+    assert.equal(button.getAttribute('aria-expanded'), 'true');
+    // A click elsewhere closes it; so does Escape; so does choosing something in it.
+    page.click('#tab-ask');
+    assert.ok(!menu.classList.contains('open'));
+    page.click(button);
+    menu.dispatchEvent(new page.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    assert.ok(!menu.classList.contains('open'));
+    page.click(button);
+    page.click('#app-view .look-open');
+    assert.ok(!menu.classList.contains('open'));
+    assert.ok(page.$('#look-dialog').open, 'Look still opens from it');
+  });
+});
+
 // ---------- asking ----------
 
 const ANSWER = 'Brother Hal is the **innkeeper** [S1 00:00:40]. He warned you about the cult [S1 00:00:40-00:01:30] and maybe [S9].';

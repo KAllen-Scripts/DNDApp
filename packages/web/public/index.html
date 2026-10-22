@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Campaign Memory</title>
+  <title>The Party Ledger</title>
+  <meta name="application-name" content="The Party Ledger">
+  <meta name="apple-mobile-web-app-title" content="The Party Ledger">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="themes.css">
@@ -17,7 +19,7 @@
   <main id="login-view" class="login" hidden>
     <form id="login-form" class="card login-card" autocomplete="on">
       <img src="icon.svg" alt="" class="login-icon">
-      <h1>Campaign Memory</h1>
+      <h1>The Party Ledger</h1>
       <p class="muted">Log in with the name and password you were given.</p>
       <label>Name
         <input name="name" autocomplete="username" required autofocus>
@@ -124,13 +126,19 @@
         <button role="tab" data-tab="archivist" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">☰</span><span data-label="Archivist">Archivist</span></button>
         <button role="tab" data-tab="wiki" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">❦</span><span data-label="Wiki">Wiki</span></button>
       </nav>
-      <button id="tab-popout" class="ghost" title="Open this page in its own window (to keep it open beside another, or on another screen)">Pop out</button>
-      <button id="dice-open" class="ghost dice-open" title="Roll dice">Dice</button>
-      <button id="rest-open" class="ghost rest-open" title="Call a short or long rest for the party" hidden>Rest</button>
-      <button id="settings-open" class="ghost" title="Campaign settings: weight limits" hidden>Settings</button>
-      <button class="ghost look-open" title="Themes and layouts">Look</button>
-      <button class="ghost change-password">Change password</button>
-      <button class="ghost logout">Log out</button>
+      <!-- Compact tools beside the tabs; the rarer ones (settings, look, password, log out) are in the account menu, so the bar stays on one row. -->
+      <button id="tab-popout" class="ghost bar-tool" title="Open this page in its own window (to keep it open beside another, or on another screen)"><span class="bar-icon" aria-hidden="true">⧉</span><span class="bar-label">Pop out</span></button>
+      <button id="dice-open" class="ghost dice-open bar-tool" title="Roll dice">Dice</button>
+      <button id="rest-open" class="ghost rest-open bar-tool" title="Call a short or long rest for the party" hidden><span class="bar-icon" aria-hidden="true">☾</span><span class="bar-label">Rest</span></button>
+      <div class="account-menu">
+        <button type="button" id="account-menu-open" class="ghost bar-tool" title="Settings, look, password, log out" aria-haspopup="true" aria-expanded="false" aria-controls="account-menu"><span class="bar-icon" aria-hidden="true">⚙</span><span id="account-name" class="bar-label">Account</span><span class="bar-caret" aria-hidden="true">▾</span></button>
+        <div id="account-menu" class="account-menu-list">
+          <button id="settings-open" class="ghost" title="Campaign settings: weight limits, travel" hidden>Campaign settings</button>
+          <button class="ghost look-open" title="Themes and layouts">Look</button>
+          <button class="ghost change-password">Change password</button>
+          <button class="ghost logout">Log out</button>
+        </div>
+      </div>
     </header>
     <dialog id="rest-dialog" class="map-dialog"></dialog>
     <dialog id="settings-dialog" class="map-dialog"></dialog>

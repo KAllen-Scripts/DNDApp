@@ -131,6 +131,15 @@ export function readBase64(file) {
 }
 
 /** Build an element: h('button', { class: 'ghost', onclick }, 'Text', child, ...) */
+/** What h() and setChildren() put in: null, undefined and false are left out (the DOM would print them as "null"...). */
+const shown = (children) => children.flat(Infinity).filter((c) => c != null && c !== false);
+
+/** el.replaceChildren(...children), leaving out null, undefined and false like h() does. */
+export function setChildren(el, ...children) {
+  el.replaceChildren(...shown(children));
+  return el;
+}
+
 export function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -139,7 +148,7 @@ export function h(tag, attrs = {}, ...children) {
     else if (k in el && k !== 'list') el[k] = v;
     else el.setAttribute(k, v === true ? '' : v);
   }
-  el.append(...children.flat(Infinity).filter((c) => c != null && c !== false));
+  el.append(...shown(children));
   return el;
 }
 

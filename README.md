@@ -1,6 +1,6 @@
 # DNDApp
 
-Campaign memory for a D&D group. Players log in on a web page with a name and password, and take private notes during a session; afterwards the DM uploads the transcript. An AI "archivist" reads both and maintains its own knowledge base of everything in the campaign (people, places, debts, quests, secrets) and of who knows what. Players ask questions on the web page and get answers with citations back to the session and timestamp, limited to what their character should know. Each player also keeps their character sheet there.
+**The Party Ledger** (https://thepartyledger.fyi): campaign memory for a D&D group. Players log in on a web page with a name and password, and take private notes during a session; afterwards the DM uploads the transcript. An AI "archivist" reads both and maintains its own knowledge base of everything in the campaign (people, places, debts, quests, secrets) and of who knows what. Players ask questions on the web page and get answers with citations back to the session and timestamp, limited to what their character should know. Each player also keeps their character sheet there.
 
 The design is in [SPEC.md](SPEC.md). Project status, change log and next steps are in [HANDOFF.md](HANDOFF.md).
 
@@ -41,7 +41,7 @@ The admin login is only for managing the server. It gets an admin screen instead
 - **Sessions** (on each campaign card): past uploads with date, title, how many player notes match their date, attendance and processing status (refreshing while it runs; Retry on failure), plus dates that have player notes but no transcript yet. Upload a transcript with its session number and the date it was played (pre-filled: next number, newest date with waiting notes). After choosing the file, link each transcript name to an account (guessed where possible); the links are saved before processing so the AI knows who was there.
 - **Campaigns:** each shown as its own colour-coded card; create (names must be unique) and delete campaigns; add accounts to them as player (with a character name) or DM; change roles (e.g. make someone the DM); remove people from a campaign (their account and notes are kept).
 
-**Must change password at next login** (like Active Directory): ticked by default when you add an account, offered when you set a password, and switchable per account ("Require new password" / "Don't require"). While it's on, that person's login can only choose a new password or log out; the server refuses everything else. They give the password you set plus a new one twice; after that their other devices are logged out. Anyone can also change their own password from "Change password" in the header.
+**Must change password at next login** (like Active Directory): ticked by default when you add an account, offered when you set a password, and switchable per account ("Require new password" / "Don't require"). While it's on, that person's login can only choose a new password or log out; the server refuses everything else. They give the password you set plus a new one twice; after that their other devices are logged out. Anyone can also change their own password from "Change password" in the account menu (top right).
 
 There's no sign-up: you create every account and tell each person their name and password. Names are what people log in with, so each must be unique (case doesn't matter). Passwords need at least 6 characters and are stored hashed.
 
@@ -80,7 +80,7 @@ The Hit dice box on a player's sheet has a row per die size (a Fighter 3 / Wizar
 
 Players have an **Inventory** tab: look an item up by name (PHB weapons and armour straight from the tables, anything else from the books or the AI, never the DM's own items) or add one by hand, then equip it. Equipped weapons show in Attacks with their to-hit and damage worked out; equipped armour and a shield set the AC; weight, charges, attunement and magic items' effects on the sheet are tracked there too. The DM's Items tab shows what each player has **equipped** (with their AC, weight carried and attunements), not the rest of their sheet.
 
-The DM's **Settings** button holds the campaign's settings: the **Rules edition** (2014 or 2024: rests, Ask's rules answers and lookups in the books follow it; the character sheet itself always uses the 2014 rules for now) and **Weight limits** (carrying capacity, variant encumbrance, or ignore).
+The DM's **Campaign settings** (in the account menu under their name, top right) holds the campaign's settings: the **Rules edition** (2014 or 2024: rests, Ask's rules answers and lookups in the books follow it; the character sheet itself always uses the 2014 rules for now) and **Weight limits** (carrying capacity, variant encumbrance, or ignore).
 
 ### Dice
 

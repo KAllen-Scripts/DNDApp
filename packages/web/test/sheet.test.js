@@ -1037,6 +1037,34 @@ test('sheet: Review sheet shows the rules checks and the AI\'s findings above th
   });
 });
 
+// The review's empty "Against the rules" heading and list went into the box as null, printed "nullnull".
+test('regression: a Sheet review with nothing against the rules shows no "null" in its box', async () => {
+  const llm = createFakeLLM({
+    qaScript: [[
+      { tool: 'submit_review', input: { summary: 'Looks fine.', findings: [{ severity: 'check', area: 'Skills', message: 'Only four skills.' }] } },
+      { answer: 'Done.' },
+    ]],
+  });
+  await withPage(sheetPage({ setup: { llm } }), async (page) => {
+    page.click('[data-tab=sheet]');
+    page.click('#sheet-review');
+    await page.waitFor(() => page.$('#sheet-review-result h3'), { what: 'the review' });
+    const text = page.el('#sheet-review-result').textContent;
+    assert.match(text, /Worth checking/);
+    assert.doesNotMatch(text, /null|undefined/);
+  });
+});
+
+// With no subclass or race features, those two sections went into the box as null, printed "nullnull".
+test('regression: Class features with no subclass or race rows shows no "null"', async () => {
+  await withPage(sheetPage(), async (page) => {
+    page.click('[data-tab=sheet]');
+    const text = page.el('#sheet .class-features').textContent;
+    assert.match(text, /Nothing to track for your class/);
+    assert.doesNotMatch(text, /null|undefined/);
+  });
+});
+
 test('inventory: Add by hand asks the kind first and opens the fields for it; armour made by hand sets the AC, a potion is drunk', async () => {
   await withPage(sheetPage({
     before: async (t) => {
