@@ -855,8 +855,10 @@ test('inventory: items looked up and added, weapons equipped (two daggers), one 
 
       // Equipped weapons show in Attacks, worked out, with to hit and damage rolls (versatile: both hands too).
       const attacks = page.$$('#sheet .gear-attack');
-      assert.deepEqual(attacks.map((a) => a.querySelector('.gear-name').textContent), ['Dagger ×2', 'Longsword']);
-      assert.deepEqual(attacks.map((a) => a.querySelector('.gear-num').textContent), ['+4', '+3']);
+      // Two daggers: an off-hand attack too, without the Dexterity modifier on its damage.
+      assert.deepEqual(attacks.map((a) => a.querySelector('.gear-name').textContent), ['Dagger ×2', 'Longsword', 'Dagger (off-hand)']);
+      assert.deepEqual(attacks.map((a) => a.querySelector('.gear-num').textContent), ['+4', '+3', '+4']);
+      assert.deepEqual(attacks.map((a) => a.querySelector('.gear-dmg').textContent), ['1d4+2 piercing', '1d8+1 slashing', '1d4 piercing']);
       page.click(byLabel(page, 'Roll Longsword to hit'));
       await page.settle();
       const rolls = () => page.requests.filter((r) => r.path.endsWith('/roll')).map((r) => r.body);

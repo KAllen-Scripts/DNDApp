@@ -28,6 +28,8 @@ import { subclassNames } from './shared/subclass-features.js';
 import { featureRows } from './shared/class-features.js';
 import { MORE_RACES } from './shared/race-features.js';
 import { traitsList } from './sheet-traits.js';
+import { offhandWeapon } from './shared/attack-extras.js';
+import { withD20Rule } from './shared/feats.js';
 import { attackPlan, combatBar, extrasLine, inventoryMastery, rollAttackPlan, rollDamagePlan, spellPlan } from './sheet-attacks.js';
 import { itemNames } from './shared/item-names.js';
 import { GEAR_KINDS, effectText, gearCard } from './gear-card.js';
@@ -356,7 +358,8 @@ function rollButton(content, get, cls = '') {
   const b = h('button', { type: 'button', class: `roll-name ${cls}`, title: 'Click to roll (Shift: advantage, Alt: disadvantage)' }, content);
   b.addEventListener('click', (e) => {
     const r = get();
-    roll(r.notation, { label: r.label, mode: rollModeFromEvent(e), then: r.then, initiative: r.initiative, disadvantage: r.disadvantage, advantage: r.advantage });
+    // A halfling's Luck: a 1 on the d20 is rolled again (state.calc.d20, shared/feats.js).
+    roll(withD20Rule(r.notation, state.calc.d20), { label: r.label, mode: rollModeFromEvent(e), then: r.then, initiative: r.initiative, disadvantage: r.disadvantage, advantage: r.advantage });
   });
   return b;
 }
@@ -820,7 +823,7 @@ const deathSaves = () =>
     h('div', { class: 'ds' },
       ['successes', 'failures'].map((kind) => h('div', { class: `ds-row ds-${kind}` }, h('span', {}, cap(kind)), pips(`death_saves.${kind}`, cap(kind), 3))),
     ),
-    h('button', { type: 'button', class: 'ghost ds-roll', onclick: (e) => roll('1d20', { label: 'Death save', mode: rollModeFromEvent(e) }) }, 'Roll a death save'),
+    h('button', { type: 'button', class: 'ghost ds-roll', onclick: (e) => roll(withD20Rule('1d20', state.calc.d20), { label: 'Death save', mode: rollModeFromEvent(e) }) }, 'Roll a death save'),
   );
 
 const combat = () => h('div', { class: 'combat' }, vitals(), hp(), h('div', { class: 'pair' }, hitDice(), deathSaves()));
@@ -833,7 +836,8 @@ function attacks() {
     names.replaceChildren(...['Unarmed strike', ...new Set(state.sheet.inventory.filter((g) => g.weapon).map((g) => g.name))].map((n) => h('option', { value: n })));
     list.replaceChildren(
       ...(state.sheet.attacks.length || equippedWeapons().length ? [h('div', { class: 'tr th' }, lbl('Name'), lbl('To hit / DC'), lbl('Damage / type'), h('span'), h('span'), h('span'))] : []),
-      ...equippedWeapons().map(gearAttackRow),
+      ...equippedWeapons().map((g) => gearAttackRow(g)),
+      ...(offhandWeapon(state.sheet, editionNow()) ? [gearAttackRow(offhandWeapon(state.sheet, editionNow()), { offhand: true })] : []),
       ...state.sheet.attacks.map((_, i) => attackRow(i, draw)),
       addButton('Add an attack', () => { state.sheet.attacks.push(newAttack()); draw(); changed(); }),
     );
@@ -956,11 +960,11 @@ function attackRow(i, draw) {
 const equippedWeapons = () => state.sheet.inventory.filter((g) => g.equipped && g.weapon);
 
 /** An equipped weapon from the inventory, as an attack: to hit, damage (and with both hands, if versatile). */
-function gearAttackRow(g) {
-  const title = g.name;
-  const key = `gear:${g.id}`;
+function gearAttackRow(g, { offhand = false } = {}) {
+  const title = offhand ? `${g.name} (off-hand)` : g.name;
+  const key = `${offhand ? 'offhand' : 'gear'}:${g.id}`;
   const attack = () => ({ name: g.name, kind: 'attack', ability: g.weapon.ability, proficient: g.proficient, magic: g.magic, bonus: '', save: '', dc: '', damage: g.weapon.damage });
-  const plan = (two = false) => attackPlan(state, attack(), { key, weapon: { ...g.weapon, name: g.name }, two });
+  const plan = (two = false) => attackPlan(state, attack(), { key, weapon: { ...g.weapon, name: g.name }, two, offhand });
   const r = gearRolls(g, state.calc);
   const hit = h('button', { type: 'button', class: 'icon-roll', title: 'Roll to hit (Shift: advantage, Alt: disadvantage)', 'aria-label': `Roll ${title} to hit` });
   hit.innerHTML = D20_ICON;
@@ -977,19 +981,19 @@ function gearAttackRow(g) {
   const paint = () => {
     const p = plan();
     num.textContent = formatBonus(p.bonus);
-    const base = gearRolls(g, state.calc);
+    const base = offhand ? { ...p, damage: p.parts.length ? p.parts[0].replace(/\s.*$/, '') : p.damage } : gearRolls(g, state.calc);
     dmg.textContent = base.damage ? `${base.damage}${base.type ? ` ${base.type}` : ''}` : base.flat != null ? `${base.flat}${base.type ? ` ${base.type}` : ''}` : '–';
   };
   paint();
   state.renders.push(paint);
   return h('div', { class: 'tr gear-attack', title: 'From your Inventory: change it there' },
-    h('span', { class: 'gear-name' }, title, g.equipped > 1 ? h('span', { class: 'muted small' }, ` ×${g.equipped}`) : null, g.proficient ? null : h('span', { class: 'muted small' }, ' (not proficient)')),
+    h('span', { class: 'gear-name' }, title, g.equipped > 1 && !offhand ? h('span', { class: 'muted small' }, ` ×${g.equipped}`) : null, g.proficient ? null : h('span', { class: 'muted small' }, ' (not proficient)')),
     num,
     dmg,
     hit,
-    r.damage2 ? h('span', { class: 'gear-dmg-pair' }, damage(false), damage(true)) : damage(false),
+    r.damage2 && !offhand ? h('span', { class: 'gear-dmg-pair' }, damage(false), damage(true)) : damage(false),
     h('span'),
-    extrasLine(attackCtx(), { key, name: g.name, plan: () => plan(), onPick: paint }),
+    extrasLine(attackCtx(), { key, name: title, plan: () => plan(), onPick: paint }),
   );
 }
 

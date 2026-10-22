@@ -642,6 +642,28 @@ function masteryOf(sheet, calc, info, { mod, ability, edition, damage, type }) {
   return { property, name: p.name, text: p.text, line, ability, graze: property === 'graze' ? Math.max(0, mod) : null, dc: property === 'topple' ? 8 + mod + pb : null };
 }
 
+/**
+ * The weapon for a two-weapon fighting off-hand attack, when the character
+ * has two equipped melee weapons that allow one (two daggers count): both
+ * Light, or with Dual Wielder any without Two-Handed (2024: a Light one first;
+ * with Dual Wielder, the other just needs to be one-handed). The inventory
+ * line for the off hand (the last one that fits), or null.
+ */
+export function offhandWeapon(sheet, edition = '2014') {
+  const ed = edition === '2024' ? '2024' : '2014';
+  const dual = featsOf(sheet, { edition: ed }).some((f) => f.id === 'feat_dual_wielder');
+  const props = (g) => g.weapon?.properties ?? [];
+  const melee = (sheet?.inventory ?? []).filter((g) => g.equipped && g.weapon && !props(g).includes('ammunition') && !props(g).includes('two-handed') && !(masteryKey(g.name) && RANGED.has(masteryKey(g.name))));
+  const hands = melee.flatMap((g) => Array.from({ length: Math.min(2, Math.max(1, Number(g.equipped) || 1)) }, () => g));
+  if (hands.length < 2) return null;
+  const light = hands.filter((g) => props(g).includes('light'));
+  if (ed === '2014') return dual ? hands.at(-1) : light.length >= 2 ? light.at(-1) : null;
+  if (!light.length) return null;
+  const other = hands.filter((g, i) => i !== hands.indexOf(light[0]));
+  const fits = other.filter((g) => dual || props(g).includes('light'));
+  return fits.at(-1) ?? null;
+}
+
 /** A weapon's mastery for showing in the Inventory: { property, name, text, chosen, can } or null without one. */
 export function weaponMastery(sheet, name, edition = '2014') {
   const key = masteryKey(name);
@@ -698,7 +720,7 @@ export function planSpell(sheet, calc, spell, { edition = '2014', slot = spell.l
   const more = chosen.filter((x) => x.dice).map((x) => x.dice).join('+') || null;
   const damage = r.damage ? addToRoll(r.damage, flat, more) : r.damage;
   const notes = chosen.filter((x) => x.note && !x.auto).map((x) => `${x.name}: ${x.note}`);
-  return { ...r, damage, crit: r.kind === 'attack' ? doubled(damage) : null, crit_on: 20, extras, notes, parts: [r.damage && `${r.damage}${r.type ? ` ${r.type}` : ''}`, ...chosen.map((x) => `${x.name} ${x.detail}`)].filter(Boolean) };
+  return { ...r, hit: r.kind === 'attack' ? hitNotation(sheet, k, r.bonus, calc.values?.spell_ability) : r.hit, damage, crit: r.kind === 'attack' ? doubled(damage) : null, crit_on: 20, extras, notes, parts: [r.damage && `${r.damage}${r.type ? ` ${r.type}` : ''}`, ...chosen.map((x) => `${x.name} ${x.detail}`)].filter(Boolean) };
 }
 
 /**
