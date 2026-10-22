@@ -1074,3 +1074,40 @@ test('inventory: Add by hand asks the kind first and opens the fields for it; ar
     assert.equal(sheet.inventory.find((g) => g.name === 'Mithral coat').armor.base, 14);
   });
 });
+
+test('class features on the sheet: Sneak Attack ticked under a weapon adds its dice; Weapon Mastery picked in the Inventory shows on the attack; Thieves\' Cant is in Features & traits, once', async () => {
+  const { addToInventory } = await import('@dndapp/shared/gear.js');
+  const before = async (t) => {
+    t.store.setSettings(t.campaign.id, { edition: '2024' });
+    const inventory = addToInventory([], { name: 'Rapier' }, 1);
+    inventory[0].equipped = 1;
+    inventory[0].proficient = true;
+    await t.request('PUT', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token, body: { sheet: { ...emptySheet(), classes: [{ name: 'Rogue', subclass: '', level: 5 }], abilities: { ...emptySheet().abilities, dex: 16 }, inventory, features: 'Expertise: Stealth and thieves’ tools.' }, version: 0 } });
+  };
+  await withPage(sheetPage({ before }), async (page) => {
+    page.click('[data-tab=sheet]');
+    await page.waitFor(() => page.$('#sheet [aria-label="Sneak Attack: Rapier"]'), { what: 'the Sneak Attack tick box' });
+    page.click(byLabel(page, 'Sneak Attack: Rapier'));
+    page.click(byLabel(page, 'Roll Rapier damage'));
+    await page.settle();
+    const rolls = () => page.requests.filter((r) => r.path.endsWith('/roll')).map((r) => r.body);
+    assert.equal(rolls().at(-1).notation, '1d8+3d6+3');
+    // Once a turn: it's unticked after the damage is rolled.
+    assert.equal(byLabel(page, 'Sneak Attack: Rapier').checked, false);
+
+    // Weapon Mastery: two weapons for a 2024 rogue, chosen from the Inventory.
+    assert.match(page.text('#sheet .combat-bar'), /Weapon Mastery 0 of 2/);
+    page.click('[data-tab=inventory]');
+    page.click(page.el('#inventory [aria-label="Weapon mastery: Rapier"]'));
+    page.click('[data-tab=sheet]');
+    assert.match(page.text('#sheet .combat-bar'), /Rapier \(Vex\)/);
+    assert.match(page.text('#sheet .atk-mastery'), /Mastery: Vex/);
+
+    // Features & traits lists the rogue's text features; Expertise is already written, so it isn't listed again.
+    const traits = page.$$('#sheet .auto-traits li').map((li) => li.querySelector('strong').textContent);
+    assert.ok(traits.includes("Thieves' Cant"));
+    assert.ok(!traits.includes('Expertise'));
+    // The player's own text is left as it was.
+    assert.equal(page.$$('#sheet textarea').find((x) => x.getAttribute('aria-label') === 'Features & traits').value, 'Expertise: Stealth and thieves\u2019 tools.');
+  });
+});
