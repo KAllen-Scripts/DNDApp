@@ -25,15 +25,15 @@ const FROM_NAMES = { spell: 'spell', feature: 'feature', item: 'item' };
 /** The dice of an action's damage ("2d4+2 piercing" → "2d4+2"), or ''. */
 const dice = (a) => /^\s*(\d+d\d+(?:\s*[+-]\s*\d+)?)/i.exec(a.damage ?? '')?.[1].replace(/\s+/g, '') ?? '';
 
+/** The creature names the SRD offers, fetched once per campaign. */
+const srdNames = new Map();
+
 /**
  * @param {object} ctx
  * @param {object} ctx.state  the sheet's state (sheet, calc, settings, edition, campaignId, guarded, renders)
  * @param {() => void} ctx.changed  the sheet changed: save soon
  * @param {() => Promise<void>} ctx.flush  save now (before the server needs the companion)
  */
-/** The creature names the SRD offers, fetched once per campaign. */
-const srdNames = new Map();
-
 export function companionsBox({ state, changed, flush }) {
   const el = h('section', { class: 'sh-box companions' });
   const base = () => `/campaigns/${state.campaignId}`;
@@ -74,6 +74,12 @@ export function companionsBox({ state, changed, flush }) {
       if (!Number.isFinite(n)) return (hp.value = String(c.hp.current));
       c.hp.current = Math.min(c.hp.max, n);
       hp.value = String(c.hp.current);
+      // A summon from an item vanishes at 0 hit points (the server takes its token off the map when the sheet saves).
+      if (c.vanishes && c.hp.current <= 0) {
+        list().splice(list().indexOf(c), 1);
+        changed();
+        return say(`${c.name} dropped to 0 hit points and vanished.`);
+      }
       changed();
       if (c.hp.current <= 0) say(`${c.name} is at 0 hit points.${c.expires === 'dawn' || c.from.kind === 'item' ? ' A summon like this one vanishes: Dismiss it.' : ''}`);
     });
