@@ -93,7 +93,8 @@ export function registerAttacks(app, r) {
     const token = actorOf(request, a, map, view, request.params.tid);
     const { list, sheet } = actionsOf(a.cid, token);
     const tid = typeof request.query?.target === 'string' ? request.query.target : '';
-    const target = tid ? (a.role === 'dm' ? map.tokens : view.tokens).find((t) => t.id === tid) ?? null : null;
+    const seen = tid ? (a.role === 'dm' ? map.tokens : view.tokens).find((t) => t.id === tid) : null;
+    const target = seen ? map.tokens.find((t) => t.id === seen.id) : null;
     const gap = target ? tokenGap(map, token, target) : null;
     const edition = await editions.of(a.cid);
     const riders = {};
@@ -243,7 +244,8 @@ export function registerAttacks(app, r) {
     } else if (body.target) {
       const target = (dm ? map.tokens : view.tokens).find((t) => t.id === body.target);
       if (!target) throw new NotFoundError('No such target');
-      targets = [target];
+      // The whole token (a player's copy has no stat block, which its AC and saves come from).
+      targets = [map.tokens.find((t) => t.id === target.id)];
     } else {
       throw new BadRequestError(action.area ? `Place ${action.name}'s area on the map first.` : 'Pick who to attack.');
     }

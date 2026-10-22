@@ -88,7 +88,7 @@ test('a player attacks an enemy they can see: to hit against its AC, damage on i
     assert.equal(miss.targets[0].amount, 0);
 
     // Not someone else's token, nor a hidden one; and Alex (who can see the map) sees the cards but not the hidden.
-    assert.equal((await attack({ attacker: goblin.id, action: 'stat:0', target: thorin.id }, t.sam.token)).statusCode, 404);
+    assert.equal((await attack({ attacker: goblin.id, action: 'stat:0', target: thorin.id }, t.sam.token)).statusCode, 403);
     assert.equal((await attack({ attacker: thorin.id, action: rapier.id, target: lurker.id }, t.sam.token)).statusCode, 404);
     assert.equal((await t.request('GET', base, { as: t.alex.token })).json().attacks.length, 2);
 
