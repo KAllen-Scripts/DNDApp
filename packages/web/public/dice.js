@@ -477,6 +477,11 @@ function showResult({ label, result, then }) {
   state.hideTimer = setTimeout(() => !card.matches(':hover, :focus-within') && hideResult(), 12000);
 }
 
+/** Close the roll's result card (an attack's card says it all). */
+export function hideRollResult() {
+  hideResult();
+}
+
 function hideResult() {
   clearTimeout(state.hideTimer);
   $('#dice-result').hidden = true;

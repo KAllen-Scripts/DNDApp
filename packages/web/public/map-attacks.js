@@ -10,7 +10,7 @@ import { ownToken } from './shared/map.js';
 import { campaignSettings } from './campaign-settings.js';
 import { base, report, state, status } from './map-state.js';
 import { onMap, renderMeasureTools, renderPinTool, renderRuler, renderTokens, setTool } from './map.js';
-import { nextD20Mode, showRolls } from './dice.js';
+import { hideRollResult, nextD20Mode, showRolls } from './dice.js';
 
 const $ = (sel) => document.querySelector(sel);
 const ABBR = { str: 'Str', dex: 'Dex', con: 'Con', int: 'Int', wis: 'Wis', cha: 'Cha' };
@@ -205,7 +205,10 @@ async function send(body) {
   // The dice: to hit and damage; for an area, the damage (the saves are on the card).
   const rolls = res.rolls.filter((r) => !/: (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) save$/.test(r.label)).slice(0, 4);
   await showRolls(rolls);
-  if (res.attack) showCard(res.attack);
+  if (!res.attack) return;
+  // The card says it all (the dice stay in the tray's list).
+  hideRollResult();
+  showCard(res.attack);
 }
 
 const seenIds = new Map(); // map id -> attack ids already shown (or there when the map was first seen)

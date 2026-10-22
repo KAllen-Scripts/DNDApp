@@ -1775,5 +1775,6 @@ button.busy:disabled { opacity: 1; }
 .attack-sit.disadvantage { color: var(--error); }
 .attack-log-list { display: grid; gap: 0.4rem; max-height: 60vh; overflow-y: auto; }
 @media (max-width: 640px) {
-  .map-attack-cards { left: 0.25rem; right: 0.25rem; width: auto; bottom: 0.25rem; }
+  /* On a phone the picked token's bar floats at the bottom: the cards go to the top. */
+  .map-attack-cards { left: 0.25rem; right: 3rem; width: auto; top: 0.25rem; bottom: auto; flex-direction: column; }
 }
