@@ -23,6 +23,8 @@ import { roll, rollModeFromEvent, modeButtons, D20_ICON } from './dice.js';
 import { wildShapeBox, wildShapeBanner } from './sheet-wild-shape.js';
 import { classFeaturesBox } from './sheet-class-features.js';
 import { companionsBox } from './sheet-companions.js';
+import { itemActionsBox } from './sheet-item-actions.js';
+import { actionSummary, knownItem } from './shared/item-actions.js';
 import { subclassNames } from './shared/subclass-features.js';
 import { featureRows } from './shared/class-features.js';
 import { MORE_RACES } from './shared/race-features.js';
@@ -1163,6 +1165,9 @@ function gearRow(g) {
       h('div', { class: 'flags' }, tick('Needs attunement', g.attunement, (on) => { g.attunement = on; gearChanged(); })),
     ),
     effectsEditor(g),
+    g.actions?.length ? h('div', { class: 'gear-actions-list' },
+      h('span', { class: 'lbl' }, 'What it can do (Use it under Item actions)'),
+      h('ul', {}, g.actions.map((a) => h('li', {}, h('strong', {}, a.name), ` ${actionSummary(a)}`, a.source === 'ai' ? h('span', { class: 'tag ai-tag' }, 'AI: check it') : null)))) : null,
     labelled('Description', field(`${p()}.text`, { label: 'Item description', kind: 'longtext', rows: 5 }), 'wide'),
     g.source ? h('p', { class: 'muted small' }, `Source: ${g.source}`) : null);
   });
@@ -1491,17 +1496,44 @@ const classFeatures = () => classFeaturesBox({ state, changed, render, heal: use
 /** Companions (sheet-companions.js): familiars, pets, mounts, summons, with their stat blocks; on the map with Put on the map. */
 const companions = () => companionsBox({ state, changed, flush });
 
+/** Item actions (sheet-item-actions.js): Bag of Tricks, a wand's Fireball… with Use (the server spends, rolls and does it). */
+const itemActions = () => itemActionsBox({ state, use: useItem });
+
+/** Use an item: the server checks and spends its charges, rolls (the dice show it) and does it; the sheet comes back. */
+async function useItem(g, a, extra = 0) {
+  await flush();
+  const path = `${base()}/sheet/gear/use`;
+  const body = { id: g.id, action: a.id, extra };
+  const done = (res) => {
+    useSheet(res.sheet, res.version);
+    announce();
+    status(res.message || `${g.name}: ${a.name}.`);
+  };
+  const rolls = a.kind !== 'other' && (a.table.length || /d/i.test(a.count) || a.damage || a.heal || a.kind === 'attack' || a.crumble);
+  if (!rolls) {
+    try {
+      done(await state.guarded(() => api('POST', path, body)));
+    } catch (err) {
+      alert(err.message);
+    }
+    return;
+  }
+  const label = a.kind === 'summon' ? `${g.name}: ${a.name}` : `${g.name}: ${a.spell || a.name}`;
+  const damage = a.kind === 'attack' && /^\s*\d+d\d+/i.test(a.damage) ? { label: `${g.name}: ${a.name} damage`, notation: /^\s*(\d+d\d+(?:\s*[+-]\s*\d+)?)/i.exec(a.damage)[1].replace(/\s+/g, '') } : null;
+  await roll('', { label, path, body, onServer: done, then: damage });
+}
+
 const pages = () => [section('Character details', details()), section('Spells', spells())];
 
 const LAYOUTS = {
   // The official 2014 sheet: three columns, then details and spells.
   classic: () => [
-    row('classic', col(core(), passive(), proficiencies()), col(combat(), attacks(), classFeatures(), companions(), equipment()), col(traits(), features())),
+    row('classic', col(core(), passive(), proficiencies()), col(combat(), attacks(), itemActions(), classFeatures(), companions(), equipment()), col(traits(), features())),
     ...pages(),
   ],
   // What you need in a fight across the top.
   combat: () => [
-    row('combat', col(combat()), col(attacks(), classFeatures(), companions()), col(equipment())),
+    row('combat', col(combat()), col(attacks(), itemActions(), classFeatures(), companions()), col(equipment())),
     row('stats', col(core(), passive(), proficiencies()), col(traits(), features())),
     ...pages(),
   ],
@@ -1511,7 +1543,7 @@ const LAYOUTS = {
     row('abilities',
       col(proficiency(), inspiration(), pointBuyBox(), ...['str', 'dex', 'con'].map((a) => abilityGroup(a)), skillNotes(), passive(), proficiencies()),
       col(...['int', 'wis', 'cha'].map((a) => abilityGroup(a))),
-      col(attacks(), classFeatures(), companions(), features()),
+      col(attacks(), itemActions(), classFeatures(), companions(), features()),
       col(traits(), equipment()),
     ),
     ...pages(),
@@ -1525,7 +1557,7 @@ const LAYOUTS = {
       col(proficiency(), inspiration(), saves(), passive(), proficiencies()),
       col(skills()),
       col(tabbed([
-        ['actions', 'Actions', () => [attacks(), classFeatures(), companions()]],
+        ['actions', 'Actions', () => [attacks(), itemActions(), classFeatures(), companions()]],
         ['spells', 'Spells', spells],
         ['inventory', 'Inventory', equipment],
         ['features', 'Features & traits', features],
@@ -1535,7 +1567,7 @@ const LAYOUTS = {
   ],
   // Everything in one scrolling column.
   single: () => [
-    row('single', col(core(), passive(), combat(), attacks(), classFeatures(), companions(), equipment(), proficiencies(), traits(), features())),
+    row('single', col(core(), passive(), combat(), attacks(), itemActions(), classFeatures(), companions(), equipment(), proficiencies(), traits(), features())),
     ...pages(),
   ],
 };
@@ -2038,7 +2070,9 @@ export function initSheetActions() {
     if (!name) return;
     const kind = kindPick.value || 'other';
     closePreview();
-    const g = addGear({ name, ...kindFields(kind) });
+    // An item the app knows the rules for (Bag of Tricks, Wand of Fireballs…) comes with its actions and charges.
+    const known = knownItem(name, state.settings?.edition || state.edition || '2014');
+    const g = addGear({ name, ...kindFields(kind), ...(known && { actions: known.actions, ...(known.charges && { charges: { ...known.charges, used: 0 } }) }) });
     $('#gear-name').value = '';
     reopen(g);
     gearStatus(`Added ${g.name}. Fill in its details${kind === 'armor' ? ': equip it to set your AC' : kind === 'weapon' ? ': equip it to attack with it' : ''}.`);

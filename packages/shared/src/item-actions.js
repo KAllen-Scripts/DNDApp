@@ -264,3 +264,15 @@ export function damageWithExtra(action, extra = 0) {
   if (!m || !e || !extra || e[2] !== m[2]) return action.damage;
   return `${Number(m[1]) + Number(e[1]) * extra}d${m[2]}${m[3]}`;
 }
+
+/** What an action does, in a few words: "1 charge: a creature from a d8 table", "Fireball, DC 15 Dex, 8d6 fire (+1d6 a charge)". */
+export function actionSummary(a) {
+  const cost = a.cost ? `${a.cost} charge${a.cost === 1 ? '' : 's'}` : a.consumes ? 'used up' : '';
+  let what = '';
+  if (a.kind === 'summon') what = a.table.length ? `${a.illusion ? 'an illusion of ' : ''}a creature from a ${a.roll || 'd'} table` : `${a.count !== '1' ? `${a.count} × ` : ''}${a.creature || 'a creature'}`;
+  else if (a.kind === 'spell') what = [a.spell || a.name, a.dc ? `DC ${a.dc}${a.save ? ` ${a.save[0].toUpperCase()}${a.save.slice(1)}` : ''}` : '', a.damage ? `${a.damage}${a.extra ? ` (+${a.extra} a ${a.consumes ? 'bead' : 'charge'} more)` : ''}` : ''].filter(Boolean).join(', ');
+  else if (a.kind === 'attack') what = [a.bonus != null ? `${a.bonus < 0 ? '' : '+'}${a.bonus} to hit` : '', a.damage].filter(Boolean).join(', ');
+  else if (a.kind === 'heal') what = `heals ${a.heal}`;
+  else what = a.dc ? `DC ${a.dc}${a.save ? ` ${a.save[0].toUpperCase()}${a.save.slice(1)}` : ''} save` : '';
+  return [cost, what, a.until && a.kind === 'summon' ? a.until : ''].filter(Boolean).join(' · ');
+}
