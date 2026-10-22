@@ -150,9 +150,10 @@ export const CHOICE_GROUPS = {
   prey: "Hunter's Prey",
 };
 
-/** Things going on right now that change attacks: raging, a creature marked with Hunter's Mark, one hexed, a Hexblade's Curse. */
+/** Things going on right now that change attacks or the sheet: raging, Bladesong (AC and speed), a creature marked with Hunter's Mark, one hexed. */
 export const ACTIVE = {
   rage: 'Raging',
+  bladesong: 'Bladesong',
   hunters_mark: "Hunter's Mark",
   hex: 'Hex',
 };
@@ -361,7 +362,17 @@ function weaponExtras(k, info, base, res) {
     const d = L.ranger >= 11 ? '2d8' : '2d6';
     add({ id: 'dreadful_strike', name: 'Dreadful Strike', dice: d, type: 'psychic', once: true, spend: { feature: 'dread_ambusher' }, detail: `${d} psychic`, note: 'Once a turn; spends a use.' });
   }
-  if (ed === '2024' && sub.ranger === 'fey_wanderer' && L.ranger >= 3) {
+  if (ed === '2014' && sub.ranger === 'gloom_stalker' && L.ranger >= 3) {
+    add({ id: 'dread_ambusher', name: 'Dread Ambusher', dice: '1d8', detail: '1d8', note: 'The extra attack on your first turn of a fight.' });
+  }
+  if (sub.ranger === 'monster_slayer' && L.ranger >= 3) {
+    add({ id: 'slayers_prey', name: "Slayer's Prey", dice: '1d6', once: true, detail: '1d6', note: 'Your first hit each turn on the creature you marked.' });
+  }
+  if (sub.ranger === 'horizon_walker' && L.ranger >= 3) {
+    const d = L.ranger >= 11 ? '2d8' : '1d8';
+    add({ id: 'planar_warrior', name: 'Planar Warrior', dice: d, type: 'force', once: true, detail: `${d} force`, note: 'A bonus action first; the whole hit becomes force damage.' });
+  }
+  if (sub.ranger === 'fey_wanderer' && L.ranger >= 3) {
     const d = L.ranger >= 11 ? '1d6' : '1d4';
     add({ id: 'dreadful_strikes', name: 'Dreadful Strikes', dice: d, type: 'psychic', once: true, on: true, detail: `${d} psychic`, note: 'Once a turn (once per creature each turn).' });
   }
@@ -371,9 +382,15 @@ function weaponExtras(k, info, base, res) {
     const d = `1d${step([[3, 8], [10, 10], [18, 12]], L.fighter)}`;
     add({ id: 'superiority', name: 'Superiority die', dice: d, spend: { feature: 'superiority_dice' }, detail: d, note: 'A damage manoeuvre (Trip, Pushing, Menacing, Disarming, Precision is to hit...): spends a superiority die.' });
   }
-  if (ed === '2024' && sub.fighter === 'psi_warrior' && L.fighter >= 3 && left(sheet, 'psionic_energy', ed, values) > 0) {
+  const psiRow = ed === '2024' ? 'psionic_energy' : 'psionic_energy_2014';
+  if (sub.fighter === 'psi_warrior' && L.fighter >= 3 && left(sheet, psiRow, ed, values) > 0) {
     const d = `1d${step([[3, 6], [5, 8], [11, 10], [17, 12]], L.fighter)}`;
-    add({ id: 'psionic_strike', name: 'Psionic Strike', dice: d, flat: k.mod('int'), type: 'force', once: true, spend: { feature: 'psionic_energy' }, detail: `${d}${plus(k.mod('int'))} force`, note: 'Once a turn, a target within 30 feet; spends a Psionic Energy die.' });
+    add({ id: 'psionic_strike', name: 'Psionic Strike', dice: d, flat: k.mod('int'), type: 'force', once: true, spend: { feature: psiRow }, detail: `${d}${plus(k.mod('int'))} force`, note: 'Once a turn, a target within 30 feet; spends a Psionic Energy die.' });
+  }
+  // Rune Knight: Giant's Might (while it's on, once a turn).
+  if (sub.fighter === 'rune_knight' && L.fighter >= 3) {
+    const d = `1d${step([[3, 6], [10, 8], [18, 10]], L.fighter)}`;
+    add({ id: 'giants_might', name: "Giant's Might", dice: d, once: true, detail: d, note: 'While Giant\'s Might is on, once a turn.' });
   }
 
   // Cleric: Divine Strike (2014 domains at 8th; 2024 Blessed Strikes at 7th). Druid 2024: Primal Strike.
@@ -443,6 +460,13 @@ export function planAttack(sheet, calc, a, { edition = '2014', weapon = null, tw
     const die = MONK_DIE(k);
     const now = /^1d(\d+)$/.exec(dice ?? '')?.[1];
     if (!dice || /^\d+$/.test(dice) || (now && Number(now) < die)) att.damage = `1d${die} ${type || 'bludgeoning'}`;
+  }
+  // Dazzling Footwork (2024 College of Dance): unarmed strikes with Dexterity and the Bardic Inspiration die, with no armour or shield.
+  if (info.unarmed && k.ed === '2024' && k.sub.bard === 'dance' && k.levels.bard >= 3 && !k.armor && att.kind !== 'save') {
+    if (['str', 'dex', 'finesse'].includes(att.ability)) att.ability = 'finesse';
+    const die = step([[1, 6], [5, 8], [10, 10], [15, 12]], k.levels.bard);
+    const now = /^1d(\d+)$/.exec(splitDamage(att.damage).dice ?? '')?.[1];
+    if (!now || Number(now) < die) att.damage = `1d${die} ${splitDamage(att.damage).type || 'bludgeoning'}`;
   }
   // Unarmed Fighting: 1d6, or 1d8 with no weapons or shield.
   if (info.unarmed && k.has('unarmed_fighting') && att.kind !== 'save') {

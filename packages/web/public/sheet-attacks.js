@@ -15,7 +15,7 @@ import { roll } from './dice.js';
 import {
   ACTIVE, MASTERY_PROPERTIES, WEAPON_MASTERY, masteryChoices, masteryLimit, normalizeCombat, planAttack, planSpell, spendForAttack, weaponMastery, weaponName,
 } from './shared/attack-extras.js';
-import { featureRow } from './shared/class-features.js';
+import { featureRow, restText } from './shared/class-features.js';
 import { rollDisadvantage } from './shared/sheet.js';
 
 const editionOf = (state) => state.settings?.edition || state.edition || '2014';
@@ -163,6 +163,7 @@ export function combatBar(ctx) {
     const toggles = [];
     const show = {
       rage: has(/barbarian/),
+      bladesong: (state.sheet.classes ?? []).some((c) => /wizard/i.test(c.name) && /blade\s*sing/i.test(c.subclass ?? '')) || combat.on.bladesong,
       hunters_mark: has(/ranger/) || combat.on.hunters_mark || (state.sheet.spells ?? []).some((s) => /hunter'?s mark/i.test(s.name)),
       hex: has(/warlock/) || combat.on.hex || (state.sheet.spells ?? []).some((s) => /^hex$/i.test(s.name)),
     };
@@ -171,14 +172,15 @@ export function combatBar(ctx) {
       const box = h('input', { type: 'checkbox', checked: !!combat.on[id], 'aria-label': name });
       box.addEventListener('change', () => {
         const c = combatOf(state);
-        if (box.checked && id === 'rage') {
-          const row = featureRow(state.sheet, 'rage', { edition: ed, values: state.calc.values });
+        // Starting a rage or a Bladesong spends a use.
+        if (box.checked && (id === 'rage' || id === 'bladesong')) {
+          const row = featureRow(state.sheet, id, { edition: ed, values: state.calc.values });
           if (row && row.max != null) {
             if (!row.left) {
               box.checked = false;
-              return alert(`You have no Rage left. ${ed === '2024' ? 'A short rest gives one back, a long rest all.' : 'A long rest gives them back.'}`);
+              return alert(`You have no ${row.name} left. ${restText(row.recharge)}`);
             }
-            state.sheet.class_features.spent.rage = row.spent + 1;
+            state.sheet.class_features.spent[id] = row.spent + 1;
           }
         }
         if (box.checked) c.on[id] = true;
@@ -186,7 +188,7 @@ export function combatBar(ctx) {
         changed();
         render();
       });
-      toggles.push(h('label', { class: `atk-chip${combat.on[id] ? ' on' : ''}`, title: id === 'rage' ? 'Ticking it spends a Rage use; damage on Strength attacks goes up while it\'s on' : 'Adds its damage to your attacks (tick it under an attack when it\'s against another creature)' }, box, ` ${name}`));
+      toggles.push(h('label', { class: `atk-chip${combat.on[id] ? ' on' : ''}`, title: id === 'rage' ? 'Ticking it spends a Rage use; damage on Strength attacks goes up while it\'s on' : id === 'bladesong' ? 'Ticking it spends a Bladesong use; your AC and speed go up while it\'s on' : 'Adds its damage to your attacks (tick it under an attack when it\'s against another creature)' }, box, ` ${name}`));
     }
     const parts = [];
     if (toggles.length) parts.push(h('div', { class: 'combat-on' }, h('span', { class: 'lbl' }, 'Now'), ...toggles));

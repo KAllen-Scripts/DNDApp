@@ -565,7 +565,10 @@ export function computeSheet(sheet, { weight = 'capacity', edition = '2014' } = 
     set(`skill.${k}`, mod(ability) + (mult ? mult * pb : unskilled(ability)));
   }
   set('passive_perception', 10 + values['skill.perception']);
-  set('initiative', mod('dex') + unskilled('dex') + sum('initiative'));
+  // Initiative: Rakish Audacity (Xanathar's swashbuckler 3: + Cha), Dread Ambusher (gloom stalker 3: + Wis).
+  const initiativeMore = (subOf('rogue') === 'swashbuckler' && levelIn('rogue') >= 3 ? mod('cha') : 0)
+    + (subOf('ranger') === 'gloom_stalker' && levelIn('ranger') >= 3 ? mod('wis') : 0);
+  set('initiative', mod('dex') + unskilled('dex') + initiativeMore + sum('initiative'));
 
   // AC from the armour and shield equipped in the inventory, else unarmoured (monk and barbarian
   // Unarmored Defense, Draconic Resilience), plus magic items (a Ring of Protection; Bracers of Defense
@@ -576,17 +579,23 @@ export function computeSheet(sheet, { weight = 'capacity', edition = '2014' } = 
   const ac = [worn?.armor ? worn.ac : 10 + mod('dex') + shieldAc];
   if (levelIn('monk') && !worn) ac.push(10 + mod('dex') + mod('wis'));
   if (levelIn('barbarian') && !worn?.armor) ac.push(10 + mod('dex') + mod('con') + shieldAc);
+  // Draconic Resilience: 13 + Dex (2014), 10 + Dex + Cha (2024). Dazzling Footwork (2024 Dance bard): 10 + Dex + Cha, no shield.
   const draconic = subOf('sorcerer') === 'draconic' && levelIn('sorcerer') >= (ed === '2024' ? 3 : 1);
-  if (draconic && !worn?.armor) ac.push(13 + mod('dex') + shieldAc);
+  if (draconic && !worn?.armor) ac.push((ed === '2024' ? 10 + mod('cha') : 13) + mod('dex') + shieldAc);
+  if (ed === '2024' && subOf('bard') === 'dance' && levelIn('bard') >= 3 && !worn) ac.push(10 + mod('dex') + mod('cha'));
   const defense = combat.choices.includes('defense') && worn?.armor ? 1 : 0;
-  set('ac', Math.max(...ac) + defense + sum('ac') + (worn ? 0 : sum('ac_unarmored')));
+  // Bladesong (Tasha's bladesinger, while it's on, no medium or heavy armour or shield): + Int to AC (at least 1), +10 feet.
+  const bladesong = combat.on.bladesong && subOf('wizard') === 'bladesinging' && !worn?.shield && !['medium', 'heavy'].includes(worn?.armor?.armor.type) ? Math.max(1, mod('int')) : 0;
+  set('ac', Math.max(...ac) + defense + bladesong + sum('ac') + (worn ? 0 : sum('ac_unarmored')));
 
   // Speed: race, Unarmored Movement (monk 2: no armour or shield), Fast Movement (barbarian 5) and Roving
   // (2024 ranger 6) out of heavy armour, magic items, then heavy armour without the Strength for it (−10 ft) and weight.
   const monk = levelIn('monk');
   const monkSpeed = worn ? 0 : monk >= 18 ? 30 : monk >= 14 ? 25 : monk >= 10 ? 20 : monk >= 6 ? 15 : monk >= 2 ? 10 : 0;
   const heavy = worn?.armor?.armor.type === 'heavy';
-  const fast = (levelIn('barbarian') >= 5 && !heavy ? 10 : 0) + (ed === '2024' && levelIn('ranger') >= 6 && !heavy ? 10 : 0);
+  // Superior Mobility (Xanathar's scout 9): +10 feet. Bladesong: +10 feet.
+  const fast = (levelIn('barbarian') >= 5 && !heavy ? 10 : 0) + (ed === '2024' && levelIn('ranger') >= 6 && !heavy ? 10 : 0)
+    + (subOf('rogue') === 'scout' && levelIn('rogue') >= 9 ? 10 : 0) + (bladesong ? 10 : 0);
   const tooHeavy = worn?.armor && worn.armor.armor.strength > scores.str ? worn.armor : null;
   const load = encumbrance(carriedWeight(sheet.inventory, sheet.coins), scores.str, weight, { bigger: POWERFUL_BUILD.test(sheet.race ?? '') });
   let speed = raceSpeed(sheet.race, ed) + monkSpeed + fast + sum('speed') - (tooHeavy ? 10 : 0);

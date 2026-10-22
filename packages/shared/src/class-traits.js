@@ -9,7 +9,9 @@
  *            (attack-extras.js), and listed in Features & traits;
  *   choice:  the player picks it in Features & traits (a fighting style...);
  *   text:    listed in Features & traits, named with a short summary.
- * Features & traits shows every one that isn't a Class features row
+ * An entry with `id` is (also) a row of the Class features box, so it's
+ * shown there and not in Features & traits (Sneak Attack is a row there and
+ * a roll on attacks). Features & traits shows every one that isn't
  * (traitRows), leaving out any the player already wrote down. The audit
  * (docs/notes/class-features-audit.md) is made from this list
  * (scripts/class-features-audit.js).
@@ -112,7 +114,7 @@ const T = [
 
   // ---------- Monk ----------
   ['monk', '', 1, 'Unarmored Defense', 'number', 'With no armour or shield: AC 10 + Dexterity + Wisdom. In your AC.'],
-  ['monk', '', 1, 'Martial Arts', 'roll', (c) => `Unarmed strikes and monk weapons use the better of Strength and Dexterity and at least a d${c.edition === E24 ? step([[1, 6], [5, 8], [11, 10], [17, 12]], c.level) : step([[1, 4], [5, 6], [11, 8], [17, 10]], c.level)} (no armour or shield); an unarmed strike as a bonus action. In your attacks.`],
+  ['monk', '', 1, 'Martial Arts', 'roll', (c) => `Unarmed strikes and monk weapons use the better of Strength and Dexterity and at least a d${c.edition === E24 ? step([[1, 6], [5, 8], [11, 10], [17, 12]], c.level) : step([[1, 4], [5, 6], [11, 8], [17, 10]], c.level)} (no armour or shield); an unarmed strike as a bonus action. In your attacks.`, 'martial_arts'],
   ['monk', '', 2, (c) => (c.edition === E24 ? "Monk's Focus" : 'Ki'), 'tracked', '', 'ki'],
   ['monk', '', 2, 'Unarmored Movement', 'number', (c) => `+${step([[2, 10], [6, 15], [10, 20], [14, 25], [18, 30]], c.level)} feet of speed with no armour or shield. In your speed.${c.level >= 9 ? ' You can run along walls and across liquids on your turn.' : ''}`],
   ['monk', E24, 2, 'Uncanny Metabolism', 'tracked', '', 'uncanny_metabolism'],
@@ -153,7 +155,7 @@ const T = [
   ['paladin', '', 3, 'Channel Divinity', 'tracked', '', 'channel_divinity_paladin'],
   ['paladin', '', 5, 'Extra Attack', 'text', 'Attack twice when you take the Attack action.'],
   ['paladin', E24, 5, 'Faithful Steed', 'tracked', '', 'faithful_steed'],
-  ['paladin', '', 6, 'Aura of Protection', 'number', (c) => `You and friends within ${c.level >= 18 ? 30 : 10} feet add +${Math.max(1, c.mod('cha'))} to saving throws. In your saves.`],
+  ['paladin', '', 6, 'Aura of Protection', 'number', (c) => `You and friends within ${c.level >= 18 ? 30 : 10} feet add +${Math.max(1, c.mod('cha'))} to saving throws. In your saves.`, 'aura_of_protection'],
   ['paladin', E24, 9, 'Abjure Foes', 'text', (c) => `Channel Divinity: up to ${Math.max(1, c.mod('cha'))} creatures within 60 feet make a Wisdom save or are frightened for 1 minute.`],
   ['paladin', '', 10, 'Aura of Courage', 'text', (c) => `You and friends within ${c.level >= 18 ? 30 : 10} feet can't be frightened while you're conscious.`],
   ['paladin', E14, 11, 'Improved Divine Smite', 'roll', 'Every melee weapon hit deals 1d8 radiant damage more. In your damage.'],
@@ -190,7 +192,7 @@ const T = [
 
   // ---------- Rogue ----------
   ['rogue', '', 1, 'Expertise', 'text', (c) => `Double proficiency in ${c.level >= 6 ? 'four' : 'two'} skills${c.edition === E14 ? ' (or thieves\' tools)' : ''}: mark them Expertise under Skills.`],
-  ['rogue', '', 1, 'Sneak Attack', 'roll', (c) => `${Math.ceil(c.level / 2)}d6 more damage once a turn with a finesse or ranged weapon, with advantage or an ally next to the target. Tick it on the attack.`],
+  ['rogue', '', 1, 'Sneak Attack', 'roll', (c) => `${Math.ceil(c.level / 2)}d6 more damage once a turn with a finesse or ranged weapon, with advantage or an ally next to the target. Tick it on the attack.`, 'sneak_attack'],
   ['rogue', '', 1, "Thieves' Cant", 'text', (c) => `The secret mix of dialect, jargon and code of thieves: hide messages in ordinary talk, and read their secret signs${c.edition === E24 ? '; you also know one more language' : ''}.`],
   ['rogue', E24, 1, 'Weapon Mastery', 'roll', 'Mastery properties of 2 kinds of weapons with Finesse or Light (daggers and shortbows, say); change one after a long rest. Pick them in Attacks or the Inventory.'],
   ['rogue', '', 2, 'Cunning Action', 'text', 'Dash, Disengage or Hide as a bonus action.'],
@@ -250,7 +252,7 @@ const T = [
   ['artificer', '', 6, 'Tool Expertise', 'text', 'Double proficiency with any tool you\'re proficient with.'],
   ['artificer', '', 7, 'Flash of Genius', 'tracked', '', 'flash_of_genius'],
   ['artificer', '', 10, 'Magic Item Adept', 'number', 'Attune to four magic items (five at 14th, six at 18th: in your Inventory); common and uncommon items cost less to make.'],
-  ['artificer', '', 11, 'Spell-Storing Item', 'text', (c) => `Store a 1st- or 2nd-level artificer spell in a weapon or focus: it can be cast from it ${Math.max(2, 2 * c.mod('int'))} times.`],
+  ['artificer', '', 11, 'Spell-Storing Item', 'tracked', '', 'spell_storing_item'],
   ['artificer', '', 14, 'Magic Item Savant', 'text', 'Ignore class, race, spell and level requirements on magic items.'],
   ['artificer', '', 20, 'Soul of Artifice', 'number', '+1 to all saving throws for each magic item you\'re attuned to (in your saves); end an infusion to drop to 1 hit point instead of 0.'],
 ];
@@ -325,7 +327,8 @@ export function traitRows(sheet, { edition = '2014', values = null } = {}) {
   };
   for (const t of CLASS_TRAITS) {
     const level = levels[t.class];
-    if (!level || level < t.from || (t.edition && t.edition !== ed) || t.how === 'tracked') continue;
+    // A Class features row (Rage, Sneak Attack...) shows there, not here.
+    if (!level || level < t.from || (t.edition && t.edition !== ed) || t.id) continue;
     const c = { level, edition: ed, pb, mod, race: String(sheet?.race ?? '') };
     push({ name: typeof t.name === 'function' ? t.name(c) : t.name, text: typeof t.text === 'function' ? t.text(c) : t.text, how: t.how, class: t.class, race: null, from: t.from });
   }
