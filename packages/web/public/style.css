@@ -818,7 +818,7 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
   .dice-open span { display: none; }
   .dice-panel { top: auto; bottom: 0; right: 0; left: 0; width: auto; max-height: 80vh; border-radius: 16px 16px 0 0; padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
 }
-@media print { .dice-open, .dice-panel, .dice-stage, .dice-result { display: none !important; } }
+@media print { .dice-open, .dice-panel, .dice-stage, .dice-result, .sheet-characters { display: none !important; } }
 
 /* ---------- character sheet ---------- */
 #app-view.wide { --page-width: 1280px; }
@@ -828,6 +828,19 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 .sheet-bar button { padding: 0.35rem 0.8rem; font-size: 0.9rem; }
 .sheet-bar .sheet-modes { display: flex; align-items: center; gap: 0.35rem; }
 .sheet-bar .dice-modes button { padding: 0.25rem 0.55rem; font-size: 0.8rem; }
+/* The player's characters (sheet-characters.js): who they play now, and the list. */
+.sheet-characters { margin: 0.5rem 0; padding: 0.4rem 0.6rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.chars-strip { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.chars-now { flex: 1; min-width: 10rem; overflow-wrap: anywhere; }
+.chars-list ul { list-style: none; margin: 0.5rem 0; padding: 0; display: grid; gap: 0.3rem; }
+.chars-row { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; padding: 0.3rem 0.4rem; border-radius: 6px; }
+.chars-row.playing { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.chars-name { flex: 1; min-width: 8rem; overflow-wrap: anywhere; }
+.chars-badge { font-size: 0.8rem; font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid currentColor; opacity: 0.85; }
+.chars-name-form { display: flex; gap: 0.35rem; flex-wrap: wrap; flex: 1; }
+.chars-name-form input { flex: 1; min-width: 8rem; }
+.chars-row button.danger { color: var(--error); }
+.chars-message { margin: 0.3rem 0 0; }
 .sheet-review { margin: 0.5rem 0; }
 .sheet-review header { display: flex; align-items: center; gap: 0.5rem; }
 .sheet-review header h3 { margin: 0; flex: 1; font-size: 1rem; }

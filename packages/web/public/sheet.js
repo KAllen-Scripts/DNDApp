@@ -29,6 +29,7 @@ import { actionSummary, knownItem } from './shared/item-actions.js';
 import { subclassNames } from './shared/subclass-features.js';
 import { featureRows } from './shared/class-features.js';
 import { MORE_RACES } from './shared/race-features.js';
+import { loadCharacters, refreshCharacters, nameTyped } from './sheet-characters.js';
 import { traitsList } from './sheet-traits.js';
 import { attackPlan, combatBar, extrasLine, inventoryMastery, rollAttackPlan, rollDamagePlan, spellPlan } from './sheet-attacks.js';
 import { itemNames } from './shared/item-names.js';
@@ -50,6 +51,7 @@ const state = {
   guarded: (fn) => fn(),
   sheet: null,
   version: 0,
+  number: 1, // which of the player's characters this is (the active one; sheet-characters.js switches)
   savedSheet: null, // the sheet as the server has it (attacks it already had with weapons not carried may stay)
   calc: null,
   settings: { weight: 'capacity' }, // the campaign's (campaign-settings.js)
@@ -82,10 +84,23 @@ export async function loadSheet({ campaignId, userId, guarded }) {
   Object.assign(state, { campaignId, userId, guarded, dirty: false, unusedDescription: '', itemPicturesLoading: null });
   const review = $('#sheet-review-result');
   if (review) review.hidden = true;
-  const [{ sheet, version, edition }, pictures] = await Promise.all([api('GET', `${base()}/sheet`), api('GET', `${base()}/character/pictures`)]);
+  const [{ sheet, version, edition, number }, pictures] = await Promise.all([api('GET', `${base()}/sheet`), api('GET', `${base()}/character/pictures`)]);
   state.pictures = pictures;
   state.edition = edition ?? '2014';
-  useSheet(sheet, version);
+  useSheet(sheet, version, number);
+  await loadCharacters({ campaignId, guarded, onSheet: showCharacter, beforeSwitch: flush });
+}
+
+/** Another of the player's characters is now the active one: show its sheet and pictures. */
+async function showCharacter(res) {
+  if (res.edition) state.edition = res.edition;
+  clearTimeout(state.timer);
+  state.dirty = false;
+  const review = $('#sheet-review-result');
+  if (review) review.hidden = true;
+  state.pictures = (await state.guarded(() => api('GET', `${base()}/character/pictures`)).catch(() => null)) ?? { token: null, picture: null };
+  useSheet(res.sheet, res.version, res.number);
+  announce();
 }
 
 // The same sheet can be open in two windows (the map page and a popped-out sheet): each tells the others
@@ -93,14 +108,18 @@ export async function loadSheet({ campaignId, userId, guarded }) {
 const channel = (() => {
   try { return window.BroadcastChannel ? new window.BroadcastChannel('dndapp.sheet') : null; } catch { return null; }
 })();
-const announce = () => channel?.postMessage({ campaignId: String(state.campaignId), userId: String(state.userId), version: state.version });
+const announce = () => channel?.postMessage({ campaignId: String(state.campaignId), userId: String(state.userId), version: state.version, number: state.number });
 channel?.addEventListener('message', async (e) => {
-  const { campaignId, userId, version } = e.data ?? {};
-  const newer = () => campaignId === String(state.campaignId) && userId === String(state.userId) && version > state.version;
+  const { campaignId, userId, version, number } = e.data ?? {};
+  // Newer: a later save, or another character made active there.
+  const newer = () => campaignId === String(state.campaignId) && userId === String(state.userId) && (version > state.version || (number != null && number !== state.number));
   // With changes waiting here, saving them meets the newer version and asks which to keep.
   if (!newer() || state.dirty || state.saving) return;
   const res = await state.guarded(() => api('GET', `${base()}/sheet`)).catch(() => null);
-  if (res && newer() && !state.dirty && !state.saving) useSheet(res.sheet, res.version);
+  if (!res || !newer() || state.dirty || state.saving) return;
+  const switched = res.number !== state.number;
+  useSheet(res.sheet, res.version, res.number);
+  if (switched) refreshCharacters();
 });
 
 /** The campaign's settings changed (or a campaign was entered): work the sheet out again. */
@@ -109,10 +128,11 @@ export function setSheetSettings(settings) {
   if (state.sheet && $('#sheet').childElementCount) render();
 }
 
-function useSheet(sheet, version) {
+function useSheet(sheet, version, number = state.number) {
   state.sheet = normalizeSheet(sheet);
   state.savedSheet = structuredClone(state.sheet);
   state.version = version;
+  state.number = number ?? 1;
   render();
   status(version ? 'Saved' : 'Not saved yet: fill something in to start');
 }
@@ -126,6 +146,7 @@ function status(text, error = false) {
 /** Something changed: update automatic values now, save soon. */
 function changed() {
   refresh();
+  nameTyped(state.number, state.sheet.name);
   state.dirty = true;
   status('Saving soon…');
   clearTimeout(state.timer);
@@ -143,14 +164,19 @@ async function save() {
   status('Saving…');
   try {
     const sent = structuredClone(state.sheet);
-    const res = await state.guarded(() => api('PUT', `${base()}/sheet`, { sheet: sent, version: state.version }));
+    const res = await state.guarded(() => api('PUT', `${base()}/sheet`, { sheet: sent, version: state.version, character: state.number }));
     if (!res) return; // logged out: the login screen is showing
     state.version = res.version;
     state.savedSheet = sent;
     announce();
     status(state.dirty ? 'Saving soon…' : 'Saved');
   } catch (err) {
-    if (err.status === 409 && err.data?.current) {
+    if (err.status === 409 && err.data?.switched && err.data.current) {
+      // Another character was made active elsewhere: show that one (what was typed here belonged to the other).
+      useSheet(err.data.current.sheet, err.data.current.version, err.data.current.number);
+      refreshCharacters();
+      status(`Not saved: ${err.data.error} This is now the sheet of the character you play.`, true);
+    } else if (err.status === 409 && err.data?.current) {
       const keepMine = confirm(
         'This sheet was changed in another tab or on another device since you opened it.\n\n' +
           'OK: keep what is on this screen (replaces the other version).\nCancel: load the other version (your recent changes here are dropped).',
@@ -159,7 +185,7 @@ async function save() {
         state.version = err.data.current.version;
         state.dirty = true;
       } else {
-        useSheet(err.data.current.sheet, err.data.current.version);
+        useSheet(err.data.current.sheet, err.data.current.version, err.data.current.number);
       }
     } else {
       state.dirty = true;
@@ -183,7 +209,7 @@ export async function reloadSheet() {
   if (!state.campaignId || state.dirty || state.saving) return;
   const res = await state.guarded(() => api('GET', `${base()}/sheet`)).catch(() => null);
   if (!res || state.dirty || state.saving) return;
-  useSheet(res.sheet, res.version);
+  useSheet(res.sheet, res.version, res.number);
   announce();
 }
 
@@ -729,7 +755,7 @@ async function spendHitDie(die) {
     path: `${base()}/sheet/hit-dice`,
     body: { die },
     onServer: (res) => {
-      useSheet(res.sheet, res.version);
+      useSheet(res.sheet, res.version, res.number);
       announce();
       status(`Spent a d${die} hit die: ${res.healed ? `regained ${res.healed} hit point${res.healed === 1 ? '' : 's'}` : 'no hit points regained'}.`);
     },
@@ -747,7 +773,7 @@ async function useFeature(row, extra = {}) {
   const path = `${base()}/sheet/features/use`;
   const body = { id: row.id, ...extra };
   const done = (res) => {
-    useSheet(res.sheet, res.version);
+    useSheet(res.sheet, res.version, res.number);
     announce();
     if (res.rolled_numbers) status(`${row.name}: ${res.rolled_numbers.join(', ')}. They're kept in the box until you use them.`);
     else status(`${row.name}: ${res.healed ? `regained ${res.healed} hit point${res.healed === 1 ? '' : 's'}` : 'no hit points regained'}.`);
@@ -769,7 +795,7 @@ async function takeShortRest() {
     const spentBefore = { ...state.sheet.class_features.spent };
     const res = await state.guarded(() => api('POST', `${base()}/sheet/short-rest`));
     if (!res) return;
-    useSheet(res.sheet, res.version);
+    useSheet(res.sheet, res.version, res.number);
     announce();
     // Name what came back: Pact Magic slots, and class features with fewer spent than before.
     const features = featureRows(state.sheet, { edition: state.settings?.edition || state.edition, values: state.calc.values })
@@ -788,13 +814,26 @@ async function takeShortRest() {
  * version is loaded unless something here is waiting to be saved (saving it
  * then meets the newer version and asks which to keep).
  */
-export async function sheetHeard({ version }) {
-  if (!state.sheet || state.dirty || state.saving || version <= state.version) return;
+export async function sheetHeard({ version, number }) {
+  // Another of the player's characters made active elsewhere: show it whatever its version.
+  const other = (n) => n != null && n !== state.number;
+  if (!state.sheet || state.dirty || state.saving || (version <= state.version && !other(number))) return;
   const res = await state.guarded(() => api('GET', `${base()}/sheet`)).catch(() => null);
-  if (!res || state.dirty || state.saving || res.version <= state.version) return;
+  if (!res || state.dirty || state.saving || (res.version <= state.version && !other(res.number))) return;
+  if (other(res.number)) {
+    const pictures = await state.guarded(() => api('GET', `${base()}/character/pictures`)).catch(() => null);
+    // This page may have switched itself meanwhile (its own Make active), or the player started typing.
+    if (state.dirty || state.saving || !other(res.number)) return;
+    state.pictures = pictures ?? state.pictures;
+    useSheet(res.sheet, res.version, res.number);
+    refreshCharacters();
+    status(`You now play ${res.sheet.name || 'another character'} (changed on another device).`);
+    announce();
+    return;
+  }
   // Keep what the status line says (a rest's or a purchase's note may be there).
   const note = $('#sheet-status').textContent;
-  useSheet(res.sheet, res.version);
+  useSheet(res.sheet, res.version, res.number);
   if (note) status(note);
   announce();
 }
@@ -811,7 +850,7 @@ export async function restCalled(rest) {
   if (!res || state.dirty) return;
   // The sheet may already be loaded (the live `sheet` news can come first).
   if (res.version > state.version) {
-    useSheet(res.sheet, res.version);
+    useSheet(res.sheet, res.version, res.number);
     announce();
   }
   status(rest.kind === 'long' ? 'The DM called a long rest: your sheet is updated.' : 'The DM called a short rest: spend hit dice to heal.');
@@ -1263,7 +1302,7 @@ async function drink(g) {
     path: `${base()}/sheet/gear/drink`,
     body: { id: g.id },
     onServer: (res) => {
-      useSheet(res.sheet, res.version);
+      useSheet(res.sheet, res.version, res.number);
       announce();
       gearStatus(`Drank ${g.name}: ${res.healed ? `regained ${res.healed} hit point${res.healed === 1 ? '' : 's'}` : 'no hit points regained'}.`);
     },
@@ -1455,7 +1494,7 @@ const replaceAppearance = () =>
 /** The server described the picture and saved the sheet: show that sheet, or the description it didn't use. */
 function described(res) {
   if (res.sheet) {
-    useSheet(res.sheet.sheet, res.sheet.version);
+    useSheet(res.sheet.sheet, res.sheet.version, res.sheet.number);
     announce();
   }
   state.unusedDescription = !res.applied && res.description?.appearance ? res.description.appearance : '';
@@ -2058,7 +2097,7 @@ export function initSheetActions() {
       const data = await readBase64(file);
       const res = await state.guarded(() => api('POST', `${base()}/sheet/import`, { filename: file.name, data, version: state.version }));
       if (!res) return;
-      useSheet(res.sheet, res.version);
+      useSheet(res.sheet, res.version, res.number);
       announce();
       const own = Object.keys(res.sheet.overrides).length;
       status(`Loaded ${file.name}. Check it over${own ? `: ${own} value${own === 1 ? '' : 's'} from your sheet differ from the automatic ones and are marked ↺` : ''}.`);

@@ -317,6 +317,11 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         const current = l.sheet.hp.current ?? max;
         return { hp: current == null && max == null ? null : { current, max }, hp_sheet: true };
       };
+      // A player character's token is named after the character its player plays now (they can have several).
+      const nameOf = (t) => {
+        const name = t.kind === 'pc' ? linked(t)?.sheet.name.trim() : '';
+        return name ? { name } : {};
+      };
       // Where each link leads: the target map's name, or null if it's gone.
       const target = (to) => {
         const r = row(map.campaign_id, to);
@@ -330,7 +335,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
       const out = {
         ...map,
         // The picture's file name stays on the server; `picture` is its key.
-        tokens: map.tokens.map(({ art: _art, ...t }) => ({ ...t, ...hpOf(t), ...fromSheet(t), picture: picture({ ...t, art: _art }), move_speed: moveSpeed(t), tall: tallOf(t), climber: climberOf(t) })),
+        tokens: map.tokens.map(({ art: _art, ...t }) => ({ ...t, ...nameOf(t), ...hpOf(t), ...fromSheet(t), picture: picture({ ...t, art: _art }), move_speed: moveSpeed(t), tall: tallOf(t), climber: climberOf(t) })),
         links: links.map(({ target: m, ...l }) => ({ ...l, to_name: m?.name ?? null })),
         places: places.map(({ target: m, ...p }) => ({ ...p, to_name: m?.name ?? null })),
       };
@@ -438,15 +443,16 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
 
     /**
      * A player's sheet was saved: maps with their character's token are sent
-     * again, since the token shows the sheet's hit points and speed (only
-     * when one of those changed, not on every keystroke's save).
+     * again, since the token shows the sheet's name, hit points and speed,
+     * and the character they play now (only when one of those changed, not
+     * on every keystroke's save).
      */
     sheetChanged(campaignId, userId) {
       const { sheet, version } = sheets.get(campaignId, userId);
       const values = version ? computeSheet(sheet, store.getSettings(campaignId)).values : {};
       // Companions kept on the sheet show its name, stat block and hit points on their tokens.
       const companions = (sheet.companions ?? []).map((c) => [c.id, c.name, c.hp, c.form]);
-      const shown = JSON.stringify([sheet.hp.current, values.hp_max ?? null, values.speed ?? null, sheet.wild_shape?.active ?? null, companions]);
+      const shown = JSON.stringify([sheets.activeNumber?.(campaignId, userId) ?? 1, sheet.name, sheet.height, sheet.hp.current, values.hp_max ?? null, values.speed ?? null, sheet.wild_shape?.active ?? null, companions]);
       const key = `${campaignId}:${userId}`;
       if (sheetShown.get(key) === shown) return;
       sheetShown.set(key, shown);
