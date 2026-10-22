@@ -27,6 +27,7 @@ import { registerMerchants } from './routes/merchants.js';
 import { registerMapCreator } from './routes/map-creator.js';
 import { LABEL_FONT_FILES } from './maps/fonts.js';
 import { registerRests } from './routes/rests.js';
+import { registerCompanions } from './routes/companions.js';
 import { registerWiki } from './routes/wiki.js';
 
 /**
@@ -92,6 +93,7 @@ const CONTENT_TYPES = {
 const WEB_MODULES = {
   '/shared/sheet.js': '@dndapp/shared/sheet.js',
   '/shared/wild-shape.js': '@dndapp/shared/wild-shape.js',
+  '/shared/companions.js': '@dndapp/shared/companions.js',
   '/shared/class-features.js': '@dndapp/shared/class-features.js',
   '/shared/subclass-features.js': '@dndapp/shared/subclass-features.js',
   '/shared/subclass-features-books.js': '@dndapp/shared/subclass-features-books.js',
@@ -431,6 +433,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   registerMerchants(app, r);
   registerMapCreator(app, r);
   registerRests(app, r);
+  registerCompanions(app, r);
   registerWiki(app, r);
 
   serveWebPage(app, config.webDir);

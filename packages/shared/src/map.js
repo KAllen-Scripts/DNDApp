@@ -128,6 +128,9 @@ export function normalizeToken(t = {}, map) {
     art: kind !== 'pc' ? normalizeTokenArt(t.art) : null,
     // The DM's merchant this token stands for (players open its shop from the token); null for none.
     merchant: !PLAYER_KINDS.includes(kind) && /^[a-f0-9]{10}$/.test(String(t.merchant ?? '')) ? String(t.merchant) : null,
+    // A companion kept on its player's character sheet (the entry's id): the token shows the sheet's name, stat block
+    // and hit points, and a change to its hit points goes on the sheet (companions.js). null: a companion of this map only.
+    companion: kind === 'companion' && /^[\w-]{1,64}$/.test(String(t.companion ?? '')) ? String(t.companion) : null,
     // The token it follows (the world, owner 2026-10-18: characters travel together or apart): it walks behind
     // that one and goes where it goes, until it's moved on its own; null for none.
     follows: isTokenId(t.follows) && String(t.follows) !== String(t.id) ? String(t.follows) : null,

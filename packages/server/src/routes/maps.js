@@ -1324,10 +1324,16 @@ export function registerMaps(app, r) {
       for (let i = 1; i < route.length; i++) if (wallBetween(map, route[i - 1], route[i])) throw new BadRequestError("There's a wall in the way.");
     }
     // A player character with a saved sheet has the sheet's hit points: a change goes on the sheet (current only).
-    if (body.hp !== undefined && token.hp_sheet && (body.user_id === undefined || body.user_id === token.user_id)) {
+    if (body.hp !== undefined && token.kind === 'pc' && token.hp_sheet && (body.user_id === undefined || body.user_id === token.user_id)) {
       const { hp } = body;
       delete body.hp;
       if (hp?.current != null) maps.setSheetHp(a.cid, token.user_id, hp.current, { by: request.user.id });
+    }
+    // A companion kept on its player's sheet: its hit points are the sheet's (current only; the maximum is its stat block's).
+    if (body.hp !== undefined && token.kind === 'companion' && token.companion && token.hp_sheet) {
+      const { hp } = body;
+      delete body.hp;
+      if (hp?.current != null) maps.setCompanionHp(a.cid, token.user_id, token.companion, hp.current, { by: request.user.id });
     }
     const changed = Object.keys(body).length
       ? maps.change(a.cid, map.id, (m) => {
