@@ -270,4 +270,8 @@
 
 /* The DM's wiki: the list of pages, or one page with a way back to the list. */
 :root[data-phone] .wiki-panel.wiki-reading .wiki-side { display: none; }
+/* The front page's cards are the list on a phone. */
+:root[data-phone] .wiki-list { display: none; }
+:root[data-phone] .wiki-panel { align-content: start; }
+:root[data-phone] .wiki-side { overflow: visible; }
 :root[data-phone] .wiki-back { display: inline-block; justify-self: start; margin-bottom: 0.4rem; }
