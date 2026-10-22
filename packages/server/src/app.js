@@ -21,6 +21,7 @@ import { registerCharacters } from './routes/characters.js';
 import { registerTable } from './routes/table.js';
 import { registerMaps } from './routes/maps.js';
 import { registerCombat } from './routes/combat.js';
+import { registerAttacks } from './routes/attacks.js';
 import { registerCreatures } from './routes/creatures.js';
 import { registerItems } from './routes/items.js';
 import { registerMerchants } from './routes/merchants.js';
@@ -428,6 +429,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   registerTable(app, r);
   registerMaps(app, r);
   registerCombat(app, r);
+  registerAttacks(app, r);
   registerCreatures(app, r);
   registerItems(app, r);
   registerMerchants(app, r);

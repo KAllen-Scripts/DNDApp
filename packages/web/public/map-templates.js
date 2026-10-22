@@ -7,6 +7,7 @@ import { LoggedOut, api, h } from './api.js';
 import { TEMPLATE_COLOR, TEMPLATE_SHAPES, TEMPLATE_SHAPE_NAMES, snapTemplatePoint, spellArea, templateShape, tokensInTemplate } from './shared/map.js';
 import { base, report, state, status } from './map-state.js';
 import { field } from './map-dm.js';
+import { castAt } from './map-attacks.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -79,12 +80,14 @@ export async function placeTemplate(e) {
     renderTemplates();
     return renderTokens();
   }
-  const { shape, x, y, angle, size, width, label, color } = draftTemplate(place);
+  const { shape, x, y, angle, size, width, label, color, attack } = draftTemplate(place);
   state.templateDraft = null;
   renderMeasureTools();
   const res = await templateRequest('POST', '', { shape, x, y, angle, size, width, label, color });
   if (res) selectTemplate(res.template.id);
   else render();
+  // An area spell from the attack picker: cast it on whoever the template caught.
+  if (res && attack) castAt(attack, res.template.id);
 }
 
 export function templateMove(e) {
