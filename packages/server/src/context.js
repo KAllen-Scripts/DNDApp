@@ -52,7 +52,8 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   // The DM's wiki: beside the knowledge base, not in it. Ask reads it, filtered to the asker.
   const wiki = createWiki({ db, archive, store, search });
   // A changed sheet reaches the archivist once the player stops editing for a while.
-  const sheets = createSheets({ db, archive, store, onSave: (cid) => jobs.scheduleUpdates(cid) });
+  // Making another character active (or renaming the active one) changes who the player plays.
+  const sheets = createSheets({ db, archive, store, onSave: (cid) => jobs.scheduleUpdates(cid), onSwitch: (cid, uid, sheet) => auth.setCharacterName(cid, uid, sheet.name) });
   const pictures = createPictures({ db, archive, store });
   const maps = createMaps({ db, archive, store, pictures, sheets });
   // A character's token shows the sheet's hit points: maps with it are sent again when the sheet changes.

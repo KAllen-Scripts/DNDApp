@@ -104,16 +104,24 @@ CREATE TABLE IF NOT EXISTS corrections (
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Each player's character sheet in a campaign. Private to that player. The
--- archive keeps every change (character-sheets/<user id>.jsonl).
+-- Each player's characters in a campaign, one sheet each. Private to that player. A player can have
+-- several; one is active (the one they play: maps, rests, merchants, the DM's Items tab and Q&A use it).
+-- Deleting one only hides it (the archive keeps everything). The archive keeps every change
+-- (character-sheets/<user id>.jsonl for number 1, <user id>-<n>.jsonl for the others) and which is
+-- active (character-sheets/<user id>.characters.jsonl). Schema v20 (one sheet per player before).
 CREATE TABLE IF NOT EXISTS character_sheets (
   campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  number       INTEGER NOT NULL DEFAULT 1, -- the player's character number in this campaign: 1, 2, ...
   data         TEXT NOT NULL,     -- JSON; see packages/shared/src/sheet.js
   version      INTEGER NOT NULL,  -- goes up by one with each save
   updated_at   TEXT NOT NULL,
-  PRIMARY KEY (campaign_id, user_id)
+  active       INTEGER NOT NULL DEFAULT 1, -- 1 for the one the player plays now
+  activated_at TEXT,              -- when it was last made active (the archivist hears about switches)
+  deleted_at   TEXT,              -- the player deleted it (hidden; the archive keeps it)
+  PRIMARY KEY (campaign_id, user_id, number)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS character_sheets_active ON character_sheets (campaign_id, user_id) WHERE active = 1;
 
 -- Maps the DM imported (image + grid, scale, tokens), one JSON document each.
 -- Seen by players only once shown. The archive keeps the image as uploaded and
@@ -150,13 +158,14 @@ CREATE TABLE IF NOT EXISTS map_explored (
   PRIMARY KEY (map_id, user_id)
 );
 
--- A player's token and full picture of their character (files in the archive under characters/<user id>/).
+-- A player's token and full picture of each of their characters (files in the archive under characters/<user id>/).
 CREATE TABLE IF NOT EXISTS character_pictures (
   campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   user_id     INTEGER NOT NULL REFERENCES users(id),
+  number      INTEGER NOT NULL DEFAULT 1, -- which of their characters (character_sheets.number); schema v20
   data        TEXT NOT NULL,      -- JSON { token, picture }; see normalizePictures in src/characters/pictures.js
   updated_at  TEXT NOT NULL,
-  PRIMARY KEY (campaign_id, user_id)
+  PRIMARY KEY (campaign_id, user_id, number)
 );
 
 -- Handouts the DM gives players (a picture and/or text), to everyone or chosen

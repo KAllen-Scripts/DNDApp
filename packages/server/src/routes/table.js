@@ -191,10 +191,10 @@ export function registerTable(app, r) {
       if (!current()) return sse.end();
       sse.send('settings', settings);
     };
-    const onSheet = ({ campaign_id, user_id, version }) => {
+    const onSheet = ({ campaign_id, user_id, version, number }) => {
       if (campaign_id !== cid || user_id !== request.user.id) return;
       if (!current()) return sse.end();
-      sse.send('sheet', { version });
+      sse.send('sheet', { version, number });
     };
     rolls.events.on('roll', onRoll);
     store.events.on('settings', onSettings);

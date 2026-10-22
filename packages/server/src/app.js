@@ -332,7 +332,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
 
   app.setErrorHandler((err, request, reply) => {
     // Saving a sheet that changed elsewhere: send the current one so the page can reload it.
-    if (err instanceof SheetConflictError) return reply.status(409).send({ error: err.message, current: err.current });
+    if (err instanceof SheetConflictError) return reply.status(409).send({ error: err.message, current: err.current, ...(err.switched && { switched: true }) });
     const status =
       err instanceof AuthError ? err.status
       : err instanceof NotFoundError ? 404
