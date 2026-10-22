@@ -14,6 +14,8 @@
 import { WEAPONS, activeEffects, armorClass, attunementLimit, carriedWeight, encumbrance, normalizeInventory } from './gear.js';
 import { normalizeWildShape } from './wild-shape.js';
 import { normalizeClassFeatures, restClassFeatures } from './class-features.js';
+import { normalizeCombat } from './attack-extras.js';
+import { subclassOf } from './subclass-features.js';
 import { normalizeCompanions } from './companions.js';
 
 export { WEAPONS };
@@ -143,10 +145,15 @@ export function classKey(name) {
   return word && CLASSES[word] ? word : null;
 }
 
-/** Normal walking speed for a race name (PHB races; 30 ft. if unknown). */
-export function raceSpeed(race) {
+/**
+ * Normal walking speed for a race name (30 ft. if unknown). 2014 rules: wood
+ * elves 35, dwarves, halflings and gnomes 25. 2024 rules: wood elves and
+ * goliaths 35, the rest 30.
+ */
+export function raceSpeed(race, edition = '2014') {
   const r = String(race ?? '').toLowerCase();
   if (/wood\s*elf/.test(r)) return 35;
+  if (edition === '2024') return /goliath/.test(r) ? 35 : 30;
   if (/dwarf|halfling|gnome/.test(r)) return 25;
   return 30;
 }
@@ -197,6 +204,7 @@ export function emptySheet({ name = '', player_name = '' } = {}) {
     wild_shape: { forms: [], active: null }, // druids: Wild Shape forms (wild-shape.js)
     companions: [], // familiars, pets, mounts, summons and animal companions, each with its stat block (companions.js)
     class_features: { spent: {}, max: {}, custom: [], rolled: {} }, // Rage, Ki, Wild Shape uses... and the player's own rows (class-features.js)
+    combat: normalizeCombat(), // weapons with mastery, fighting styles and other choices, raging / Hunter's Mark / Hex now (attack-extras.js)
     point_buy: normalizePointBuy(), // the point buy calculator (point-buy.js): off until the player turns it on
     overrides: {},
   };
@@ -336,6 +344,7 @@ export function normalizeSheet(input = {}) {
   out.wild_shape = normalizeWildShape(s.wild_shape);
   out.companions = normalizeCompanions(s.companions);
   out.class_features = normalizeClassFeatures(s.class_features);
+  out.combat = normalizeCombat(s.combat);
   // Sheets from before the class features box kept Wild Shape uses spent with the forms.
   const oldUses = int(s.wild_shape?.uses_spent, { min: 0, max: 20, fallback: 0 });
   if (oldUses && s.class_features?.spent?.wild_shape == null) out.class_features.spent.wild_shape = oldUses;
@@ -412,8 +421,10 @@ export function spendHitDie(sheet, die, total) {
  * spent one at a time, with spendHitDie.)
  */
 export function shortRest(sheet, { edition = '2014' } = {}) {
-  const out = restClassFeatures(sheet, 'short', edition, computeSheet(sheet).values);
+  const out = restClassFeatures(sheet, 'short', edition, computeSheet(sheet, { edition }).values);
   out.spellcasting.pact_used = 0;
+  // An hour's rest: a rage (a minute), Hunter's Mark and Hex (an hour, concentration) are over.
+  if (out.combat) out.combat.on = {};
   return out;
 }
 
@@ -426,9 +437,10 @@ export function shortRest(sheet, { edition = '2014' } = {}) {
  * @returns {{ sheet, rested: boolean, regained: { hp, hit_dice } }}
  */
 export function longRest(sheet, { edition = '2014' } = {}) {
-  const { values } = computeSheet(sheet);
+  const { values } = computeSheet(sheet, { edition });
   if (edition !== '2024' && sheet.hp.current != null && sheet.hp.current <= 0) return { sheet, rested: false, regained: { hp: 0, hit_dice: 0 } };
   const out = restClassFeatures(sheet, 'long', edition, values);
+  if (out.combat) out.combat.on = {};
   const before = out.hp.current ?? values.hp_max ?? 0;
   if (values.hp_max != null) out.hp.current = values.hp_max;
   out.hp.temp = null;
@@ -489,9 +501,14 @@ const POWERFUL_BUILD = /goliath|firbolg|bugbear|loxodon|centaur|\borc\b/i;
 
 /**
  * Everything worked out from the sheet. opts.weight is the campaign's weight
- * rule (settings.js: 'capacity', 'variant' or 'ignore').
+ * rule (settings.js: 'capacity', 'variant' or 'ignore'); opts.edition the
+ * rules it plays by ('2014' when not given). Class features that are numbers
+ * are in: Unarmored Defense, Fast Movement, Aura of Protection, Jack of All
+ * Trades, Remarkable Athlete, Diamond Soul, Primal Champion, the Defense
+ * fighting style... (docs/notes/class-features-audit.md has the list).
  */
-export function computeSheet(sheet, { weight = 'capacity' } = {}) {
+export function computeSheet(sheet, { weight = 'capacity', edition = '2014' } = {}) {
+  const ed = edition === '2024' ? '2024' : '2014';
   const overrides = sheet.overrides ?? {};
   const auto = {};
   const values = {};
@@ -502,6 +519,9 @@ export function computeSheet(sheet, { weight = 'capacity' } = {}) {
   };
   const classes = classList(sheet);
   const levelIn = (key) => classes.filter((c) => c.key === key).reduce((sum, c) => sum + c.level, 0);
+  // The subclass key a class's typed subclass matches ("Champion" → champion), or null.
+  const subOf = (key) => classes.filter((c) => c.key === key).map((c) => subclassOf(key, c.subclass)?.key).find(Boolean) ?? null;
+  const combat = normalizeCombat(sheet.combat);
   const level = Math.min(20, Math.max(1, classes.reduce((sum, c) => sum + c.level, 0)));
 
   const pb = set('proficiency_bonus', 2 + Math.floor((level - 1) / 4));
@@ -509,48 +529,79 @@ export function computeSheet(sheet, { weight = 'capacity' } = {}) {
   const effects = activeEffects(sheet.inventory);
   const sum = (target) => effects.filter((e) => e.target === target).reduce((n, e) => n + e.value, 0);
   const scores = {};
+  // Capstones that raise scores past 20: Primal Champion (barbarian 20: Str and Con +4, to 24, 2024: 25), Body and Mind (2024 monk 20: Dex and Wis +4, to 25).
+  const capstone = { str: 0, con: 0, dex: 0, wis: 0 };
+  if (levelIn('barbarian') >= 20) capstone.str = capstone.con = 4;
+  if (ed === '2024' && levelIn('monk') >= 20) capstone.dex = capstone.wis = 4;
+  const capMax = ed === '2024' ? 25 : 24;
   for (const a of ABILITIES) {
-    const own = Number(sheet.abilities?.[a] ?? 10);
+    const typed = Number(sheet.abilities?.[a] ?? 10);
+    const own = capstone[a] ? Math.max(typed, Math.min(capMax, typed + capstone[a])) : typed;
     const setTo = Math.max(own, ...effects.filter((e) => e.target === `score.${a}`).map((e) => e.value));
     scores[a] = Math.min(30, setTo + sum(`bonus.${a}`));
     set(`mod.${a}`, abilityMod(scores[a]));
   }
   const mod = (a) => values[`mod.${a}`];
 
-  // Saving throw proficiencies come from your first class.
+  // Saving throw proficiencies come from your first class, and Diamond Soul / Disciplined Survivor (monk 14: all),
+  // Slippery Mind (rogue 15: Wisdom; 2024 Wisdom and Charisma). Aura of Protection (paladin 6): + Charisma (at least +1).
   const first = classes[0]?.rules;
+  const allSaves = levelIn('monk') >= 14;
+  const slippery = levelIn('rogue') >= 15 ? (ed === '2024' ? ['wis', 'cha'] : ['wis']) : [];
+  const aura = levelIn('paladin') >= 6 ? Math.max(1, mod('cha')) : 0;
+  // Soul of Artifice (artificer 20): +1 to saves for each magic item attuned.
+  const soul = levelIn('artificer') >= 20 ? (sheet.inventory ?? []).filter((g) => g.attuned).length : 0;
   for (const a of ABILITIES) {
-    const prof = set(`save_prof.${a}`, !!first?.saves.includes(a));
-    set(`save.${a}`, mod(a) + (prof ? pb : 0) + sum('saves') + sum(`save.${a}`));
+    const prof = set(`save_prof.${a}`, !!first?.saves.includes(a) || allSaves || slippery.includes(a));
+    set(`save.${a}`, mod(a) + (prof ? pb : 0) + aura + soul + sum('saves') + sum(`save.${a}`));
   }
 
   // Bards from 2nd level add half their proficiency bonus to checks they aren't proficient in.
+  // Remarkable Athlete (2014 Champion 7): half, rounded up, to Strength, Dexterity and Constitution checks.
   const jack = set('jack_of_all_trades', levelIn('bard') >= 2);
   const half = jack ? Math.floor(pb / 2) : 0;
+  const athlete = ed === '2014' && subOf('fighter') === 'champion' && levelIn('fighter') >= 7 ? Math.ceil(pb / 2) : 0;
+  const unskilled = (ability) => Math.max(half, ['str', 'dex', 'con'].includes(ability) ? athlete : 0);
   for (const [k, { ability }] of Object.entries(SKILLS)) {
     const p = sheet.skills?.[k];
     const mult = p === 'expertise' ? 2 : p === 'proficient' ? 1 : 0;
-    set(`skill.${k}`, mod(ability) + (mult ? mult * pb : half));
+    set(`skill.${k}`, mod(ability) + (mult ? mult * pb : unskilled(ability)));
   }
   set('passive_perception', 10 + values['skill.perception']);
-  set('initiative', mod('dex') + half + sum('initiative'));
+  // Initiative: Rakish Audacity (Xanathar's swashbuckler 3: + Cha), Dread Ambusher (gloom stalker 3: + Wis).
+  const initiativeMore = (subOf('rogue') === 'swashbuckler' && levelIn('rogue') >= 3 ? mod('cha') : 0)
+    + (subOf('ranger') === 'gloom_stalker' && levelIn('ranger') >= 3 ? mod('wis') : 0);
+  set('initiative', mod('dex') + unskilled('dex') + initiativeMore + sum('initiative'));
 
   // AC from the armour and shield equipped in the inventory, else unarmoured (monk and barbarian
-  // Unarmored Defense), plus magic items (a Ring of Protection; Bracers of Defense only with neither).
+  // Unarmored Defense, Draconic Resilience), plus magic items (a Ring of Protection; Bracers of Defense
+  // only with neither) and the Defense fighting style (+1 in armour).
   // Features that change AC some other way are typed in by the player.
   const worn = armorClass(sheet.inventory, mod('dex'));
   const shieldAc = worn?.shield ? worn.shield.armor.base + worn.shield.magic : 0;
   const ac = [worn?.armor ? worn.ac : 10 + mod('dex') + shieldAc];
   if (levelIn('monk') && !worn) ac.push(10 + mod('dex') + mod('wis'));
   if (levelIn('barbarian') && !worn?.armor) ac.push(10 + mod('dex') + mod('con') + shieldAc);
-  set('ac', Math.max(...ac) + sum('ac') + (worn ? 0 : sum('ac_unarmored')));
+  // Draconic Resilience: 13 + Dex (2014), 10 + Dex + Cha (2024). Dazzling Footwork (2024 Dance bard): 10 + Dex + Cha, no shield.
+  const draconic = subOf('sorcerer') === 'draconic' && levelIn('sorcerer') >= (ed === '2024' ? 3 : 1);
+  if (draconic && !worn?.armor) ac.push((ed === '2024' ? 10 + mod('cha') : 13) + mod('dex') + shieldAc);
+  if (ed === '2024' && subOf('bard') === 'dance' && levelIn('bard') >= 3 && !worn) ac.push(10 + mod('dex') + mod('cha'));
+  const defense = combat.choices.includes('defense') && worn?.armor ? 1 : 0;
+  // Bladesong (Tasha's bladesinger, while it's on, no medium or heavy armour or shield): + Int to AC (at least 1), +10 feet.
+  const bladesong = combat.on.bladesong && subOf('wizard') === 'bladesinging' && !worn?.shield && !['medium', 'heavy'].includes(worn?.armor?.armor.type) ? Math.max(1, mod('int')) : 0;
+  set('ac', Math.max(...ac) + defense + bladesong + sum('ac') + (worn ? 0 : sum('ac_unarmored')));
 
-  // Speed: race and monk, magic items, then heavy armour without the Strength for it (−10 ft) and weight.
+  // Speed: race, Unarmored Movement (monk 2: no armour or shield), Fast Movement (barbarian 5) and Roving
+  // (2024 ranger 6) out of heavy armour, magic items, then heavy armour without the Strength for it (−10 ft) and weight.
   const monk = levelIn('monk');
-  const monkSpeed = monk >= 18 ? 30 : monk >= 14 ? 25 : monk >= 10 ? 20 : monk >= 6 ? 15 : monk >= 2 ? 10 : 0;
+  const monkSpeed = worn ? 0 : monk >= 18 ? 30 : monk >= 14 ? 25 : monk >= 10 ? 20 : monk >= 6 ? 15 : monk >= 2 ? 10 : 0;
+  const heavy = worn?.armor?.armor.type === 'heavy';
+  // Superior Mobility (Xanathar's scout 9): +10 feet. Bladesong: +10 feet.
+  const fast = (levelIn('barbarian') >= 5 && !heavy ? 10 : 0) + (ed === '2024' && levelIn('ranger') >= 6 && !heavy ? 10 : 0)
+    + (subOf('rogue') === 'scout' && levelIn('rogue') >= 9 ? 10 : 0) + (bladesong ? 10 : 0);
   const tooHeavy = worn?.armor && worn.armor.armor.strength > scores.str ? worn.armor : null;
   const load = encumbrance(carriedWeight(sheet.inventory, sheet.coins), scores.str, weight, { bigger: POWERFUL_BUILD.test(sheet.race ?? '') });
-  let speed = raceSpeed(sheet.race) + monkSpeed + sum('speed') - (tooHeavy ? 10 : 0);
+  let speed = raceSpeed(sheet.race, ed) + monkSpeed + fast + sum('speed') - (tooHeavy ? 10 : 0);
   if (load) speed = load.speed == null ? 5 : speed + load.speed;
   set('speed', Math.max(0, speed));
 
@@ -560,8 +611,9 @@ export function computeSheet(sheet, { weight = 'capacity' } = {}) {
   if (noisy) disadvantage.push({ why: noisy.name, skills: ['stealth'], abilities: [] });
   if (load?.disadvantage) disadvantage.push({ why: load.level === 'over' ? 'over your carrying capacity' : 'heavily encumbered', skills: [], abilities: ['str', 'dex', 'con'] });
 
-  // HP: max hit die at 1st level, then the fixed average per level; Constitution each level.
-  const hillDwarf = /hill\s*dwarf/i.test(sheet.race ?? '') ? 1 : 0;
+  // HP: max hit die at 1st level, then the fixed average per level; Constitution each level; Dwarven
+  // Toughness (2014 hill dwarves, 2024 all dwarves) and Draconic Resilience: 1 more each level.
+  const hillDwarf = (ed === '2024' ? /dwarf/i.test(sheet.race ?? '') && !/duergar/i.test(sheet.race ?? '') : /hill\s*dwarf/i.test(sheet.race ?? '')) ? 1 : 0;
   let hp = 0;
   let firstLevel = true;
   const dice = new Map();
@@ -573,6 +625,7 @@ export function computeSheet(sheet, { weight = 'capacity' } = {}) {
       firstLevel = false;
     }
   }
+  if (draconic) hp += levelIn('sorcerer');
   set('hp_max', classes.length ? hp : null);
   set('hit_dice', [...dice].sort((x, y) => y[0] - x[0]).map(([die, n]) => `${n}d${die}`).join(' + '));
 
@@ -589,7 +642,16 @@ export function computeSheet(sheet, { weight = 'capacity' } = {}) {
   set('pact_slots', pactSlots);
   set('pact_level', pactLevel);
 
-  return { auto, values, overridden: new Set(Object.keys(overrides).filter((k) => k in auto)), level, casters, scores, effects, load, tooHeavy, disadvantage };
+  // Rolls made with advantage from class features: Feral Instinct (barbarian 7) and 2024's Remarkable
+  // Athlete (Champion 3: initiative and Athletics) and Assassin (initiative).
+  const advantage = [];
+  if (levelIn('barbarian') >= 7) advantage.push({ why: 'Feral Instinct', skills: [], abilities: [], initiative: true });
+  if (ed === '2024' && subOf('fighter') === 'champion' && levelIn('fighter') >= 3) advantage.push({ why: 'Remarkable Athlete', skills: ['athletics'], abilities: [], initiative: true });
+  if (ed === '2024' && subOf('rogue') === 'assassin' && levelIn('rogue') >= 3) advantage.push({ why: 'Assassinate', skills: [], abilities: [], initiative: true });
+  // Reliable Talent (rogue 11; 2024 rogue 7): a d20 of 9 or lower counts as 10 on a check you're proficient in.
+  const reliable = levelIn('rogue') >= (ed === '2024' ? 7 : 11);
+
+  return { auto, values, overridden: new Set(Object.keys(overrides).filter((k) => k in auto)), level, casters, scores, effects, load, tooHeavy, disadvantage, advantage, reliable, edition: ed };
 }
 
 /**
@@ -599,4 +661,21 @@ export function computeSheet(sheet, { weight = 'capacity' } = {}) {
 export function rollDisadvantage(calc, { ability = '', skill = '' } = {}) {
   const hit = (calc?.disadvantage ?? []).find((d) => d.skills.includes(skill) || d.abilities.includes(ability));
   return hit ? hit.why : '';
+}
+
+/** Why a roll has advantage from the sheet's class features ('' if it doesn't): pass the skill, or initiative: true. */
+export function rollAdvantage(calc, { ability = '', skill = '', initiative = false } = {}) {
+  const hit = (calc?.advantage ?? []).find((d) => (initiative && d.initiative) || (skill && d.skills.includes(skill)) || (ability && d.abilities.includes(ability)));
+  return hit ? hit.why : '';
+}
+
+/**
+ * The d20 for a skill check: "1d20min10" with Reliable Talent when the
+ * character is proficient in the skill, else "1d20". Add the bonus with
+ * d20Plus's rule: checkNotation(calc, sheet, 'stealth', 7) → "1d20min10+7" for a proficient rogue of 11th level.
+ */
+export function checkNotation(calc, sheet, skill, bonus) {
+  const die = calc?.reliable && sheet?.skills?.[skill] ? '1d20min10' : '1d20';
+  const n = Number(bonus) || 0;
+  return n ? `${die}${n > 0 ? '+' : ''}${n}` : die;
 }

@@ -15,6 +15,12 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-22 | A rogue's Sneak Attack was only a note in Class features; nothing added its dice to an attack. | `shared/test/attack-extras.test.js`: regression: Sneak Attack can be applied to an attack from the sheet (it was only a note in Class features) |
+| 2026-10-22 | Thieves' Cant (and the other class features with no uses) appeared nowhere on the sheet. | `shared/test/class-traits.test.js`: regression: Thieves' Cant is listed in Features & traits for a rogue (it was nowhere on the sheet) |
+| 2026-10-22 | A monk's Unarmored Movement was added to their speed even in armour or with a shield. | `shared/test/sheet.test.js`: regression: a monk's Unarmored Movement only applies with no armour and no shield |
+| 2026-10-22 | Under the 2024 rules dwarves, halflings and gnomes still had the 2014 speed of 25 ft (2024 gives 30). | `shared/test/sheet.test.js`: regression: under the 2024 rules dwarves, halflings and gnomes have 30 ft speed (it was 25) |
+| 2026-10-22 | A paladin's Aura of Protection wasn't added to their own saving throws. | `shared/test/sheet.test.js`: regression: a paladin's Aura of Protection adds Charisma to their own saves from 6th level |
+| 2026-10-22 | Draconic Resilience's AC and hit points weren't applied (its note said to add the hit points by hand), and the 2024 AC (10+Dex+Cha) was missing. | `shared/test/sheet.test.js`: regression: Draconic Resilience sets AC and adds hit points (13+Dex in 2014, 10+Dex+Cha in 2024) |
 | 2026-10-21 | The owner never found players' companions (PR #58): the map's Companion button was the only way in, and in full screen it hid behind More. Companions now live on the sheet too. | `web/test/companions.test.js`: regression: the map's Companion button is one of the main map tools, not hidden behind More in full screen |
 | 2026-10-21 | Ask's book search ignored the campaign's edition (the spell and creature lookups didn't), so answers quoted and compared the 2014 and 2024 books. | `server/test/ask-speed.test.js`: regression: Ask's search_books looks in the campaign's edition's books first (it mixed both editions), and in all of them when those have nothing |
 | 2026-10-21 | The Inventory's add box always suggested weapons and armour, whatever kind of item was picked (the kind picker only worked for Add by hand). | `web/test/sheet.test.js`: regression: the Inventory suggests names of the kind picked, not always weapons |
