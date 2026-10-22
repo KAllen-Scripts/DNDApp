@@ -169,3 +169,21 @@ test('wiki AI: the DM changing an AI section in the editor makes it the DM\'s; s
     await t.cleanup();
   }
 });
+
+test('regression: proposals made in one run are listed in the order the AI gave them (they shared a millisecond and were sorted by their random ids)', async () => {
+  const titles = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel'];
+  const llm = createFakeLLM({
+    wiki: ({ prompt }) => ({ changes: titles.map((title) => change({ action: 'new_page', new_page: { title, kind: 'lore', aliases: [], parent_title: null, sections: [{ heading: '', text: `${title}.`, sources: [idIn(prompt, 'The mill')] }] } })) }),
+  });
+  const t = await setup({ llm });
+  try {
+    const cid = t.campaign.id;
+    await t.kb.create(cid, 'test', { kind: 'place', title: 'The mill', body: 'North of Brindle.' });
+    assert.equal((await t.request('POST', `/campaigns/${cid}/wiki/proposals/run`, { body: {} })).statusCode, 200);
+    await t.jobs.idle();
+    const { proposals } = (await t.request('GET', `/campaigns/${cid}/wiki/proposals`)).json();
+    assert.deepEqual(proposals.map((p) => p.title), titles);
+  } finally {
+    await t.cleanup();
+  }
+});
