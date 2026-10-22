@@ -841,6 +841,26 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 .chars-name-form input { flex: 1; min-width: 8rem; }
 .chars-row button.danger { color: var(--error); }
 .chars-message { margin: 0.3rem 0 0; }
+/* Help making a character (sheet-help.js): above the sheet, folded away unless the sheet has no class. */
+.sh-help { margin: 0.5rem 0; padding: 0.4rem 0.7rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.sh-help > summary { cursor: pointer; font-weight: 600; }
+.help-parts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 0.6rem 1rem; }
+.help-part { min-width: 0; }
+.help-part h4 { margin: 0.4rem 0 0.3rem; }
+.help-line { display: grid; grid-template-columns: 8.5rem 1fr; gap: 0.2rem 0.5rem; margin: 0.25rem 0; font-size: 0.88rem; overflow-wrap: anywhere; }
+.help-label { font-weight: 600; color: var(--muted); }
+.help-line ul, .help-line ol { margin: 0.1rem 0 0.3rem; padding-left: 1.2rem; }
+.help-chips { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.2rem; }
+.help-chip { font-size: 0.82rem; padding: 0.15rem 0.55rem; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: inherit; cursor: pointer; }
+.help-chip.on { background: color-mix(in srgb, var(--accent) 18%, transparent); border-color: var(--accent); }
+.help-chip:disabled { opacity: 0.6; cursor: default; }
+.help-count { margin-left: 0.3rem; font-size: 0.8rem; color: var(--muted); }
+.help-count.done { color: var(--accent); }
+.help-levels li.now { font-weight: 600; }
+.help-levels li.next { color: var(--muted); }
+.help-more summary { cursor: pointer; font-size: 0.85rem; color: var(--muted); }
+@media (max-width: 480px) { .help-line { grid-template-columns: 1fr; } }
+@media print { .sh-help { display: none !important; } }
 /* The Background box (sheet-background.js) and the DM's own backgrounds (campaign-backgrounds.js). */
 .bg-box { display: grid; gap: 0.3rem; min-width: 0; }
 .bg-applied { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.5rem; overflow-wrap: anywhere; }

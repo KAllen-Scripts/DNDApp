@@ -103,6 +103,7 @@ const WEB_MODULES = {
   '/shared/item-names.js': '@dndapp/shared/item-names.js',
   '/shared/point-buy.js': '@dndapp/shared/point-buy.js',
   '/shared/backgrounds.js': '@dndapp/shared/backgrounds.js',
+  '/shared/creation-help.js': '@dndapp/shared/creation-help.js',
   '/shared/settings.js': '@dndapp/shared/settings.js',
   '/shared/map.js': '@dndapp/shared/map.js',
   '/shared/map-design.js': '@dndapp/shared/map-design.js',
