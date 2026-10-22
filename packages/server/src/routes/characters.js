@@ -187,7 +187,7 @@ export function registerCharacters(app, r) {
     const f = found.fields;
     const stats = itemStats({ name: f.name || name, kind: f.kind, text: f.text });
     return {
-      item: { name: f.name || name, kind: stats.kind, qty: 1, attunement: !!f.attunement, weight: f.weight ?? stats.weight, text: f.text, weapon: stats.weapon, armor: stats.armor, magic: stats.magic, charges: stats.charges, effects: stats.effects, heal: stats.heal, source: f.source?.from || (found.from === 'ai' ? "the AI's memory: check it" : '') },
+      item: { name: f.name || name, kind: stats.kind, qty: 1, rarity: f.rarity || '', attunement: !!f.attunement, weight: f.weight ?? stats.weight, text: f.text, weapon: stats.weapon, armor: stats.armor, magic: stats.magic, charges: stats.charges, effects: stats.effects, heal: stats.heal, source: f.source?.from || (found.from === 'ai' ? "the AI's memory: check it" : '') },
       from: found.from,
     };
   });
