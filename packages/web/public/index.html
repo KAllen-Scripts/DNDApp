@@ -234,14 +234,15 @@
 
     <!-- A player's inventory (sheet.js): items carried, looked up by name, equipped. Part of the sheet. -->
     <section id="tab-inventory" class="panel sheet-panel" hidden>
-      <form id="gear-add" class="creatures-bar">
-        <input id="gear-name" type="search" list="dl-gear" placeholder="Add an item: Longsword, Chain mail, +1 Dagger, Bag of Holding…" aria-label="Item to add" autocomplete="off">
+      <form id="gear-add" class="creatures-bar gear-add">
+        <select id="gear-kind" aria-label="Kind of item" title="What kind of item: the names suggested are of this kind, and Add by hand makes one"></select>
+        <input id="gear-name" type="search" list="dl-gear" placeholder="Name: Longsword, Bag of Holding, Potion of Healing…" aria-label="Item to add" autocomplete="off">
         <datalist id="dl-gear"></datalist>
-        <button type="submit" class="primary">Look up and add</button>
-        <select id="gear-kind" aria-label="Kind of item to add by hand"></select>
+        <button type="submit" class="primary" title="Look it up and see its card (stats, rarity, description) before adding it">Look up</button>
         <button type="button" id="gear-own" class="ghost" title="Add an item of the kind chosen by hand, without looking it up">Add by hand</button>
         <span id="gear-status" class="muted small" role="status"></span>
       </form>
+      <div id="gear-preview" class="gear-preview" hidden></div>
       <div id="inventory" class="inventory"></div>
     </section>
 
