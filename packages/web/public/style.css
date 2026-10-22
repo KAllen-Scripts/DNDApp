@@ -486,7 +486,7 @@ button.wiki-link.missing { color: var(--muted); text-decoration-style: dashed; }
 }
 @media (max-width: 720px) {
   .wiki-panel { grid-template-columns: 1fr; }
-  .wiki-side { position: static; max-height: none; }
+  .wiki-side { position: static; max-height: none; overflow: visible; }
   .wiki-infobox { grid-template-columns: 1fr; }
   .wiki-infobox-picture img { max-height: 15rem; }
   .wiki-figure.place-right, .wiki-figure.place-left { float: none; width: auto; margin: 0.6rem 0; }
