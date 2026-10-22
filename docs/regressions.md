@@ -15,6 +15,12 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-22 | A rogue's Sneak Attack was only a note in Class features; nothing added its dice to an attack. | `shared/test/attack-extras.test.js`: regression: Sneak Attack can be applied to an attack from the sheet (it was only a note in Class features) |
+| 2026-10-22 | Thieves' Cant (and the other class features with no uses) appeared nowhere on the sheet. | `shared/test/class-traits.test.js`: regression: Thieves' Cant is listed in Features & traits for a rogue (it was nowhere on the sheet) |
+| 2026-10-22 | A monk's Unarmored Movement was added to their speed even in armour or with a shield. | `shared/test/sheet.test.js`: regression: a monk's Unarmored Movement only applies with no armour and no shield |
+| 2026-10-22 | Under the 2024 rules dwarves, halflings and gnomes still had the 2014 speed of 25 ft (2024 gives 30). | `shared/test/sheet.test.js`: regression: under the 2024 rules dwarves, halflings and gnomes have 30 ft speed (it was 25) |
+| 2026-10-22 | A paladin's Aura of Protection wasn't added to their own saving throws. | `shared/test/sheet.test.js`: regression: a paladin's Aura of Protection adds Charisma to their own saves from 6th level |
+| 2026-10-22 | Draconic Resilience's AC and hit points weren't applied (its note said to add the hit points by hand), and the 2024 AC (10+Dex+Cha) was missing. | `shared/test/sheet.test.js`: regression: Draconic Resilience sets AC and adds hit points (13+Dex in 2014, 10+Dex+Cha in 2024) |
 | 2026-10-21 | Drawing a made map's picture at 140 px a square takes seconds; on the server's own thread that froze rolls and live updates meanwhile. | `server/test/creator.test.js`: regression: drawing a made map's picture happens off the server's thread, so it keeps answering meanwhile |
 | 2026-10-21 | Once props were drawn from pictures, the server took 10 s to draw a tavern (45 s at the new 140 px a square): each picture's shadow was a canvas shadow blurred at full size. | `shared/test/map-art.test.js`: regression: a prop picture's shadow is made once, small, and reused; the map's canvas never blurs a shadow for it |
 | 2026-10-21 | The DM's travel dialog filled in a journey's hours as 4.9, which the Hours box (whole numbers only) refused, so Set off did nothing (found in a real browser before merging). | `web/test/world.test.js`: the DM's travel dialog can be sent when the trip's hours aren't whole (the Hours box refused 4.9) |

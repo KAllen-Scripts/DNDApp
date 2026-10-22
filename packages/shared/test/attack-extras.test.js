@@ -90,9 +90,9 @@ test('Divine Smite spends a slot for 2d8 more per level (5d8 at most in 2014), +
   const pal = { classes: [{ name: 'Paladin', level: 9 }], abilities: { str: 16, cha: 14 } };
   const { sheet, calc, plan } = armed(pal, 'Longsword');
   const smite = plan({ picks: { divine_smite: 3, smite_fiend: true } });
-  assert.equal(smite.damage, '1d8+5d8+3');
+  assert.equal(smite.damage, '6d8+3');
   assert.deepEqual(smite.spends, [{ slot: 3, name: 'Divine Smite' }]);
-  assert.equal(plan({ picks: { divine_smite: 1 } }).damage, '1d8+2d8+3');
+  assert.equal(plan({ picks: { divine_smite: 1 } }).damage, '3d8+3');
   const after = spendForAttack(sheet, smite.spends, { values: calc.values });
   assert.equal(after.spellcasting.slots_used[3], 1);
   // Not on a ranged weapon.
@@ -148,7 +148,7 @@ test('spells get Agonizing Blast, Potent Spellcasting, Empowered Evocation and D
   assert.equal(eb.crit, '2d10+4');
   const evoker = normalizeSheet({ classes: [{ name: 'Wizard', subclass: 'Evocation', level: 10 }], abilities: { int: 18 }, spells: [{ name: 'Fireball', level: 3, school: 'Evocation', attack: 'save', save: 'dex', damage: '8d6 fire' }] });
   assert.equal(planSpell(evoker, computeSheet(evoker), evoker.spells[0]).damage, '8d6+4');
-  const life = normalizeSheet({ classes: [{ name: 'Cleric', subclass: 'Life', level: 3 }], abilities: { wis: 16 }, spells: [{ name: 'Cure Wounds', level: 1, damage: '1d8 healing', damage_mod: true }] });
+  const life = normalizeSheet({ classes: [{ name: 'Cleric', subclass: 'Life', level: 3 }], abilities: { wis: 16 }, spells: [{ name: 'Cure Wounds', level: 1, attack: '', damage: '1d8 healing', damage_mod: true }] });
   assert.equal(planSpell(life, computeSheet(life), life.spells[0], { slot: 2 }).damage, '1d8+7');
 });
 
