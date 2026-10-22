@@ -30,6 +30,7 @@ import { classLevels, featureRow } from './class-features.js';
 import { subclassOf } from './subclass-features.js';
 import { racesOf } from './race-features.js';
 import { formatTerms, parseRoll } from './dice.js';
+import { d20Rule, featsOf } from './feats.js';
 
 const step = (table, level) => table.reduce((v, [from, n]) => (level >= from ? n : v), table[0][1]);
 const plus = (n) => (n < 0 ? `−${-n}` : `+${n}`);
@@ -198,8 +199,10 @@ function context(sheet, calc, edition) {
   for (const [cls, typed] of Object.entries(subclasses)) sub[cls] = subclassOf(cls, typed)?.key ?? null;
   const combat = normalizeCombat(sheet?.combat);
   const values = calc?.values ?? {};
+  const feats = new Set(featsOf(sheet, { edition }).map((f) => f.id));
   return {
     ed: edition === '2024' ? '2024' : '2014',
+    feat: (id) => feats.has(id),
     levels: new Proxy(levels, { get: (t, p) => t[p] ?? 0 }),
     sub,
     combat,
@@ -424,7 +427,29 @@ function weaponExtras(k, info, base, res) {
   if (k.has('thrown_weapon') && info.thrown) {
     add({ id: 'thrown_weapon', name: 'Thrown', flat: 2, detail: '+2', note: 'When you throw it.' });
   }
+
+  // Feats (feats.js): Great Weapon Master and Sharpshooter's −5/+10 (2014), 2024 Great Weapon Master's + proficiency bonus.
+  const proficient = base?.proficient !== false;
+  if (k.feat('feat_great_weapon_master') && info.heavy && !info.ranged && proficient && ed === '2014') {
+    add({ id: 'great_weapon_master', name: 'Great Weapon Master', hit: -5, flat: 10, detail: '−5 to hit, +10', note: 'Before you roll: −5 to hit for +10 damage.' });
+  }
+  if (k.feat('feat_great_weapon_master') && info.heavy && ed === '2024') {
+    add({ id: 'great_weapon_master', name: 'Great Weapon Master', flat: k.pb, on: true, detail: plus(k.pb), note: 'With the Attack action on your turn.' });
+  }
+  if (k.feat('feat_sharpshooter') && info.ranged && proficient && ed === '2014') {
+    add({ id: 'sharpshooter', name: 'Sharpshooter', hit: -5, flat: 10, detail: '−5 to hit, +10', note: 'Before you roll: −5 to hit for +10 damage.' });
+  }
   return out;
+}
+
+/**
+ * The d20 for this character's attack: halfling Luck rerolls a 1 ('ro1'),
+ * Elven Accuracy rolls three with advantage on Dexterity, Intelligence,
+ * Wisdom or Charisma attacks ('ea'). "1d20ro1ea+7".
+ */
+function hitNotation(sheet, k, bonus, ability) {
+  const rule = `${d20Rule(sheet)}${k.feat('feat_elven_accuracy') && ['dex', 'int', 'wis', 'cha'].includes(ability) ? 'ea' : ''}`;
+  return `1d20${rule}${bonus ? `${bonus > 0 ? '+' : ''}${bonus}` : ''}`;
 }
 
 /**
@@ -439,6 +464,9 @@ function weaponExtras(k, info, base, res) {
  * @param {object} [opts.weapon] the inventory line's weapon ({ name, damage, ability, category, properties }) when it's from the inventory
  * @param {boolean} [opts.two] a versatile weapon used with both hands
  * @param {object} [opts.picks] extras picked for this attack: { sneak_attack: true, divine_smite: 2 (a slot level, or 'free') ... }
+ * @param {boolean} [opts.riders] leave every extra out of the rolls (the map adds them as riders, attack-riders.js)
+ * @param {boolean} [opts.offhand] the off-hand attack of two-weapon fighting: no ability modifier on the damage
+ *   unless it's negative or with the Two-Weapon Fighting style
  * @returns {{ kind, hit, bonus, autoBonus, dc, save, damage, flat, crit, crit_on, type, parts, extras, mastery, notes, spends, ability }}
  *   damage: notation to roll on a hit (null: flat is the damage, a number);
  *   crit: notation on a critical hit, which is a natural crit_on or higher;
@@ -446,7 +474,7 @@ function weaponExtras(k, info, base, res) {
  *   mastery: the weapon's mastery property when the character has it, with its numbers;
  *   notes: lines to show with the result; spends: what rolling the damage uses up.
  */
-export function planAttack(sheet, calc, a, { edition = '2014', weapon = null, two = false, picks = {} } = {}) {
+export function planAttack(sheet, calc, a, { edition = '2014', weapon = null, two = false, picks = {}, riders = false, offhand = false } = {}) {
   const k = context(sheet, calc, edition);
   const info = attackInfo(a, weapon, two);
   const att = { ...a };
@@ -477,6 +505,10 @@ export function planAttack(sheet, calc, a, { edition = '2014', weapon = null, tw
   }
 
   const r = attackRolls(att, calc);
+  // The off-hand attack: no positive modifier on its damage, unless with the Two-Weapon Fighting style.
+  const offMod = offhand && !k.has('two_weapon') ? Math.max(0, abilityModifier(att.ability, calc.values)) : 0;
+  if (offMod && r.damage) r.damage = addToRoll(r.damage, -offMod);
+  else if (offMod && r.flat != null) r.flat -= offMod;
   const ability = att.ability === 'finesse' ? ((calc.values['mod.str'] ?? 0) >= (calc.values['mod.dex'] ?? 0) ? 'str' : 'dex') : att.ability === 'spell' ? calc.values.spell_ability : att.ability;
   const mod = abilityModifier(att.ability, calc.values);
   const base = { kind: r.kind, hit: r.hit, bonus: r.bonus, autoBonus: r.autoBonus, dc: r.dc, autoDc: r.autoDc, save: r.save, type: r.type, ability };
@@ -504,7 +536,12 @@ export function planAttack(sheet, calc, a, { edition = '2014', weapon = null, tw
     smite.spend = choice.value === 'free' ? { feature: 'paladins_smite' } : { slot: choice.value };
     smite.picked = choice.value;
   }
-  const chosen = extras.filter((x) => x.on);
+  const chosen = riders ? [] : extras.filter((x) => x.on);
+  // Extras that change the roll to hit (Great Weapon Master and Sharpshooter's −5).
+  bonus += chosen.reduce((n, x) => n + (x.hit || 0), 0);
+  if (offhand) notes.push(k.ed === '2024' && info.key && WEAPON_MASTERY[info.key] === 'nick' && normalizeCombat(sheet?.combat).masteries.includes(info.key)
+    ? 'Off-hand attack: with Nick, part of the Attack action (not your bonus action).'
+    : `Off-hand attack: a bonus action${offMod ? ', without your modifier on the damage' : ''}.`);
 
   // Damage: the weapon's, then each extra's dice and numbers.
   const flat = chosen.reduce((n, x) => n + (x.flat || 0), 0);
@@ -547,7 +584,7 @@ export function planAttack(sheet, calc, a, { edition = '2014', weapon = null, tw
   const spends = chosen.filter((x) => x.spend).map((x) => ({ ...x.spend, name: x.name }));
   return {
     ...base,
-    hit: bonus ? `1d20${bonus > 0 ? '+' : ''}${bonus}` : '1d20',
+    hit: hitNotation(sheet, k, bonus, ability),
     bonus,
     damage,
     flat: damage ? null : flatTotal,

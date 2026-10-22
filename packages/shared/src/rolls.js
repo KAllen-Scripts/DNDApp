@@ -36,7 +36,7 @@ export function addToRoll(notation, n = 0, moreDice = null) {
     for (const t of /d/i.test(text) ? parseRoll(text).terms : [{ sign: 1, value: Number(text) || 0 }]) {
       if (t.value !== undefined) constant += t.sign * t.value;
       else {
-        const same = terms.find((x) => x.sides === t.sides && x.sign === t.sign && x.min === t.min && x.reroll === t.reroll);
+        const same = terms.find((x) => x.sides === t.sides && x.sign === t.sign && x.min === t.min && x.reroll === t.reroll && x.elven === t.elven);
         if (same) same.count += t.count;
         else terms.push({ ...t });
       }
