@@ -282,10 +282,13 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET / POST | `/campaigns/:cid/handouts` | Handouts given to you (DM: all) `{can_edit, handouts}` / give one (DM) `{title, text?, to: "everyone" \| [user ids], picture?: {filename, data (base64)}}` (text or a picture) |
 | PATCH / DELETE | `/campaigns/:cid/handouts/:hid` | Change one (DM) `{title?, text?, to?}` / take it back (DM; kept in the archive) |
 | GET | `/campaigns/:cid/handouts/:hid/image` | A handout's picture (only for those it was given to, and the DM) |
-| GET / POST | `/campaigns/:cid/wiki` | The DM's wiki pages and the campaign's players `{pages, players}` / make a page `{title, aliases?, kind?, parent?, tags?, available?: "dm" \| "all" \| [user ids], sections?: [{heading, text, available?}]}` (DM only) |
+| GET / POST | `/campaigns/:cid/wiki` | The DM's wiki pages and the campaign's players `{pages, players}` / make a page `{title, aliases?, kind?, parent?, tags?, available?: "dm" \| "all" \| [user ids], sections?: [{heading, text, available?}], picture?, banner?, gallery?, facts?}` (DM only) |
 | GET / PUT / DELETE | `/campaigns/:cid/wiki/:pid` | A page with `mentioned_in` and `unknown_names` (`?as=<user id>`: what that player may see, or `null`) / save it `{version, …}` (409 if someone saved first) / delete it (kept in the archive) (DM only) |
 | GET | `/campaigns/:cid/wiki/:pid/history` (`/:version`) | Every version of a page / one version (DM only) |
 | POST | `/campaigns/:cid/wiki/:pid/restore` | Bring an earlier version back as a new one `{version}` (DM only) |
+| GET / POST | `/campaigns/:cid/wiki/pictures` | The wiki's pictures and everything else with a picture `{pictures, sources}` / add one `{filename, data}` or copy one `{from: {kind, id}}` (DM only) |
+| GET | `/campaigns/:cid/wiki/pictures/:id` | A wiki picture, smaller (`?size=thumb`); the DM gets any, a player only one in a part of a page available to them (404 otherwise) |
+| GET | `/campaigns/:cid/wiki/picture-sources/:kind/:id` | A small copy of a creature's, item's, map's… picture for the chooser (DM only) |
 | GET | `/campaigns/:cid/wiki/proposals` | The AI's proposed changes waiting for the DM, each with what's on the page now, and its last run `{proposals, ai_run}` (DM only) |
 | POST | `/campaigns/:cid/wiki/proposals/run` | Have the AI read what the archivist changed now (DM only) |
 | POST | `/campaigns/:cid/wiki/proposals/:id/approve` | Approve one, optionally edited `{title?, kind?, page_available?, sections?: [{heading?, text?, available?}], players?}` (DM only; an edited section becomes the DM's) |
