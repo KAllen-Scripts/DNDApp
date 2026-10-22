@@ -745,7 +745,7 @@ function factsEditor(facts, kindInput) {
       list,
       h('div', { class: 'wiki-edit-foot' }, h('button', { type: 'button', class: 'ghost', onclick: () => add({ label: '', value: '' }) }, '+ Add a fact'), usual),
     ),
-    value: () => rows.map((r) => ({ label: r.label.value.trim(), value: r.value.value.trim(), available: r.picker.value() })).filter((f) => f.label || f.value),
+    value: () => rows.map((r) => ({ label: r.label.value.trim(), value: r.value.value.trim(), available: r.picker.value() })).filter((f) => f.value), // a fact left empty (the usual ones not filled in) isn't kept
   };
 }
 
