@@ -55,12 +55,19 @@ export async function withPage(opts, fn) {
  */
 export function shownMissing(document) {
   const bad = /(^|[^\w-])(null|undefined|NaN)(?![\w-])/;
-  const texts = [document.body.textContent];
+  // Error messages are left out: they can quote the server or the AI word for word.
+  const body = document.body.cloneNode(true);
+  for (const el of body.querySelectorAll('.error, [role=alert]')) el.remove();
+  const texts = [body.textContent];
   for (const el of document.querySelectorAll('input, textarea, select')) texts.push(el.value ?? '', el.placeholder ?? '');
   for (const el of document.querySelectorAll('[title], [aria-label], [placeholder]')) texts.push(el.getAttribute('title') ?? '', el.getAttribute('aria-label') ?? '', el.getAttribute('placeholder') ?? '');
   for (const text of texts) {
     const m = bad.exec(text);
-    if (m) return text.slice(Math.max(0, m.index - 40), m.index + m[0].length + 40).replace(/\s+/g, ' ').trim();
+    if (!m) continue;
+    // Say where: the innermost element holding it.
+    const holder = [...body.querySelectorAll('*')].filter((el) => bad.test(el.textContent)).at(-1);
+    const where = holder ? ` in <${holder.tagName.toLowerCase()}${holder.id ? ` id="${holder.id}"` : ''}${holder.className && typeof holder.className === 'string' ? ` class="${holder.className}"` : ''}>` : '';
+    return `${text.slice(Math.max(0, m.index - 40), m.index + m[0].length + 40).replace(/\s+/g, ' ').trim()}${where}`;
   }
   return null;
 }

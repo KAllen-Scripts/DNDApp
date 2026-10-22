@@ -1041,12 +1041,13 @@ test('sheet: Review sheet shows the rules checks and the AI\'s findings above th
 test('regression: a Sheet review with nothing against the rules shows no "null" in its box', async () => {
   const llm = createFakeLLM({
     qaScript: [[
-      { tool: 'submit_review', input: { summary: 'Looks fine.', findings: [{ severity: 'check', area: 'Skills', message: 'Only four skills.' }] } },
+      { tool: 'submit_review', input: { summary: 'Looks fine.', findings: [{ severity: 'check', area: 'Skills', message: 'Only four skills.', source: '' }] } },
       { answer: 'Done.' },
     ]],
   });
   await withPage(sheetPage({ setup: { llm } }), async (page) => {
     page.click('[data-tab=sheet]');
+    page.type(byLabel(page, 'Class'), 'Rogue');
     page.click('#sheet-review');
     await page.waitFor(() => page.$('#sheet-review-result h3'), { what: 'the review' });
     const text = page.el('#sheet-review-result').textContent;
