@@ -21,6 +21,7 @@ import { registerCharacters } from './routes/characters.js';
 import { registerTable } from './routes/table.js';
 import { registerMaps } from './routes/maps.js';
 import { registerCombat } from './routes/combat.js';
+import { registerAttacks } from './routes/attacks.js';
 import { registerCreatures } from './routes/creatures.js';
 import { registerItems } from './routes/items.js';
 import { registerMerchants } from './routes/merchants.js';
@@ -312,7 +313,7 @@ export function exposureWarnings({ host, publicUrl }) {
 
 const trustProxySetting = (v) => (v === 'true' ? true : v === 'false' || v === 'off' || v === '' ? false : v);
 
-export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, sheetReview, editions, spells, forms, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, handouts, wiki, wikiAI, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, mapStamps, designDrafter, archive, config, random = (sides) => crypto.randomInt(1, sides + 1), logger = true }) {
+export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, sheetReview, editions, spells, forms, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, handouts, wiki, wikiAI, wikiPictures, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, mapStamps, designDrafter, archive, config, random = (sides) => crypto.randomInt(1, sides + 1), logger = true }) {
   const app = Fastify({
     logger,
     bodyLimit: SMALL_BODY,
@@ -423,13 +424,14 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
     !db.prepare('SELECT 1 FROM attendance WHERE session_id = ?').get(sessionId);
 
   // The routes, by part of the app (routes/). Each takes what it needs from r and adds what later ones use.
-  const r = { db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, sheetReview, editions, spells, forms, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, handouts, wiki, wikiAI, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, mapStamps, designDrafter, archive, config, random, upload, requireAdmin, access, openLiveStream, forViewer, attended, openSse, publicMessage, DATE };
+  const r = { db, store, auth, jobs, pipeline, qa, kb, search, sheets, sheetImport, sheetReview, editions, spells, forms, maps, mapReader, statBlocks, creatureFinder, pictures, pictureDescriber, handouts, wiki, wikiAI, wikiPictures, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, mapStamps, designDrafter, archive, config, random, upload, requireAdmin, access, openLiveStream, forViewer, attended, openSse, publicMessage, DATE };
   registerAccounts(app, r);
   registerCampaign(app, r);
   registerCharacters(app, r);
   registerTable(app, r);
   registerMaps(app, r);
   registerCombat(app, r);
+  registerAttacks(app, r);
   registerCreatures(app, r);
   registerItems(app, r);
   registerMerchants(app, r);

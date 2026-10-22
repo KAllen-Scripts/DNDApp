@@ -140,7 +140,7 @@ For running a fight, the DM has:
 - **Height**: raised areas (roofs, castle wall-walks, cliffs) and how tall tokens are; players see over them only where the line from their eyes clears the edges.
 - **Difficult terrain** (costs double), **other pictures** of the same map (night, after a fire) and **links** between maps (stairs, a trapdoor) that take a token through.
 
-Everyone can **Measure** distances, place **spell templates** (sphere, cone, line, cube; from their own spells too) that show who they catch, **ping** a spot or **sketch** a line (gone after a few seconds), and plan a move round corners with waypoints (Space or W while dragging; in a fight it shows movement used against speed).
+Everyone can **Measure** distances, place **spell templates** (sphere, cone, line, cube; from their own spells too) that show who they catch, **attack** a picked enemy or cast an area spell (the server rolls, applies damage and saves, and shows a card), **ping** a spot or **sketch** a line (gone after a few seconds), and plan a move round corners with waypoints (Space or W while dragging; in a fight it shows movement used against speed).
 
 ### The DM's Creatures tab
 
@@ -216,7 +216,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | POST | `/logout` | Ends this login |
 | GET | `/me` | Your account and campaigns (each with its `settings`) |
 | GET | `/campaigns/:cid` | Campaign, your role and character, and its `settings` |
-| PATCH | `/campaigns/:cid/settings` | Change the campaign's settings (DM) `{weight?: capacity \| variant \| ignore, edition?: 2014 \| 2024 \| null, travel?: {time?: clock \| skip \| none, roads?, terrain?, vehicles?, marches?, encounters?}}` (`null`: not chosen, follow `REST_RULES` or the books' Player's Handbook; travel switches change one at a time) → the settings; sent live as `settings` |
+| PATCH | `/campaigns/:cid/settings` | Change the campaign's settings (DM) `{weight?: capacity \| variant \| ignore, edition?: 2014 \| 2024 \| null, travel?: {time?: clock \| skip \| none, roads?, terrain?, vehicles?, marches?, encounters?}, attacks?: {on?, damage?: auto \| dm, show_ac?}}` (`null`: not chosen, follow `REST_RULES` or the books' Player's Handbook; travel switches change one at a time) → the settings; sent live as `settings` |
 | GET | `/campaigns/:cid/members` | List members (DM) |
 | GET / POST | `/admin/users` | List accounts (with campaigns, logins, status) / create `{name, password}` (admin) |
 | PUT | `/admin/users/:uid/campaigns` | Set exactly which campaigns an account can access `{campaigns: [{campaign_id, role, character_name?}]}` (admin). `POST /admin/users` takes the same optional `campaigns` |
@@ -250,7 +250,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/jobs` | Recent jobs (processing, corrections, rebuilds) |
 | GET | `/campaigns/:cid/jobs/events` | Live job progress (SSE) |
 | POST | `/campaigns/:cid/rebuild` | Rebuild everything from the archive (DM) |
-| POST | `/campaigns/:cid/ask` | Ask a question (SSE stream) `{question, conversationId?}` |
+| POST | `/campaigns/:cid/ask` | Ask a question (SSE stream) `{question, conversationId?, mode?}` (`mode`: `auto` (default), `quick` or `thorough`, SPEC §5.3) |
 | GET | `/campaigns/:cid/conversations[/:id]` | Your chats (pinned first, then most recent) |
 | PATCH | `/campaigns/:cid/conversations/:id` | `{ pinned?, title? }`: pin/unpin or rename one of your chats |
 | DELETE | `/campaigns/:cid/conversations/:id` | Delete one of your chats (its questions and answers are erased; it still counts toward the hourly limit) |
@@ -282,10 +282,13 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET / POST | `/campaigns/:cid/handouts` | Handouts given to you (DM: all) `{can_edit, handouts}` / give one (DM) `{title, text?, to: "everyone" \| [user ids], picture?: {filename, data (base64)}}` (text or a picture) |
 | PATCH / DELETE | `/campaigns/:cid/handouts/:hid` | Change one (DM) `{title?, text?, to?}` / take it back (DM; kept in the archive) |
 | GET | `/campaigns/:cid/handouts/:hid/image` | A handout's picture (only for those it was given to, and the DM) |
-| GET / POST | `/campaigns/:cid/wiki` | The DM's wiki pages and the campaign's players `{pages, players}` / make a page `{title, aliases?, kind?, parent?, tags?, available?: "dm" \| "all" \| [user ids], sections?: [{heading, text, available?}]}` (DM only) |
+| GET / POST | `/campaigns/:cid/wiki` | The DM's wiki pages and the campaign's players `{pages, players}` / make a page `{title, aliases?, kind?, parent?, tags?, available?: "dm" \| "all" \| [user ids], sections?: [{heading, text, available?}], picture?, banner?, gallery?, facts?}` (DM only) |
 | GET / PUT / DELETE | `/campaigns/:cid/wiki/:pid` | A page with `mentioned_in` and `unknown_names` (`?as=<user id>`: what that player may see, or `null`) / save it `{version, …}` (409 if someone saved first) / delete it (kept in the archive) (DM only) |
 | GET | `/campaigns/:cid/wiki/:pid/history` (`/:version`) | Every version of a page / one version (DM only) |
 | POST | `/campaigns/:cid/wiki/:pid/restore` | Bring an earlier version back as a new one `{version}` (DM only) |
+| GET / POST | `/campaigns/:cid/wiki/pictures` | The wiki's pictures and everything else with a picture `{pictures, sources}` / add one `{filename, data}` or copy one `{from: {kind, id}}` (DM only) |
+| GET | `/campaigns/:cid/wiki/pictures/:id` | A wiki picture, smaller (`?size=thumb`); the DM gets any, a player only one in a part of a page available to them (404 otherwise) |
+| GET | `/campaigns/:cid/wiki/picture-sources/:kind/:id` | A small copy of a creature's, item's, map's… picture for the chooser (DM only) |
 | GET | `/campaigns/:cid/wiki/proposals` | The AI's proposed changes waiting for the DM, each with what's on the page now, and its last run `{proposals, ai_run}` (DM only) |
 | POST | `/campaigns/:cid/wiki/proposals/run` | Have the AI read what the archivist changed now (DM only) |
 | POST | `/campaigns/:cid/wiki/proposals/:id/approve` | Approve one, optionally edited `{title?, kind?, page_available?, sections?: [{heading?, text?, available?}], players?}` (DM only; an edited section becomes the DM's) |
@@ -359,13 +362,16 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | POST | `/campaigns/:cid/merchants/:mid/buy` | Buy (players) `{line, qty?}`: the coins come off your sheet (with change), the item goes into its inventory, the stock goes down → `{shop, sheet_version, bought}`; 400 if closed, sold out or you can't afford it |
 | POST | `/campaigns/:cid/creatures/find` | Have the AI find a creature on the web, official or not, with a picture (DM) `{query}`. 202 with the creature as `finding: {status: pending}`; it fills in (or `failed`, with `error`) in the background. 429 past `MAP_AI_PER_HOUR` |
 | POST | `/campaigns/:cid/maps/:mid/combat` | The fight on a map `{action: start \| end \| next \| prev \| add \| remove \| roll \| set, ids?, id?, init?}` (entries count `moved` this turn) → `{map, rolls: [{id, name, d20, mod, total}]}`. DM: everything (`start` with `ids` or every token; NPCs and enemies roll at once; `roll` without `id` rolls every NPC not rolled yet). A player: `roll` (once) or `set` for their own token, and `next` on their own turn |
+| GET | `/campaigns/:cid/maps/:mid/tokens/:tid/actions?target=` | What a token can attack or cast with (its owner or the DM): `{attacker, target, gap, unit, actions: [{id, name, kind: attack \| save \| auto \| heal, bonus?, dc?, save?, damage, area?, level?, situation}], riders, slots}` |
+| POST | `/campaigns/:cid/maps/:mid/attack` | Attack or cast from the map `{attacker, action, target? \| template?, mode?: normal \| advantage \| disadvantage, slot?, use_slot?, riders?, two_hands?}`: the server rolls, applies damage and saves (or leaves them for the DM's OK) → `{map, attack, rolls}`. Players only with their own tokens; off when Campaign settings say so |
+| POST | `/campaigns/:cid/maps/:mid/attacks/:aid` | The DM settles an attack `{do: apply \| half \| skip \| undo, target?}` → `{map, attack}` |
 | POST | `/campaigns/:cid/maps/:mid/templates` | Place an area of effect (anyone who can see the map) `{shape: circle \| cone \| line \| cube, x, y, angle?, size, width?, label?, color?}` (size and width in the map's unit) |
 | PATCH / DELETE | `/campaigns/:cid/maps/:mid/templates/:tid` | Move, turn, resize or relabel a template / remove it (whoever placed it, or the DM) |
 | GET / POST | `/campaigns/:cid/maps/:mid/pins` | Your own pins on the map `{pins}` / add one `{x, y, label?, color?}` |
 | PATCH / DELETE | `/campaigns/:cid/maps/:mid/pins/:pid` | Move or relabel one of your pins / remove it |
 | GET | `/campaigns/:cid/usage` | AI usage this month by step and provider, plus average answer times (DM) |
 
-`/ask` streams these events: `conversation`, `turn`, `tool` (what it's searching), `text` (answer tokens), `done` (`answer`, `evidence` (the transcript lines behind each citation), cost, `durationMs`), and `error`. On each new `turn`, replace any text you've displayed rather than appending to it.
+`/ask` streams these events: `conversation`, `turn`, `tool` (what it's searching), `text` (answer tokens), `done` (`answer`, `evidence` (the transcript lines behind each citation), cost, `durationMs`, `path`: `quick` for a general D&D lookup answered the quick way, else `full`), and `error`. On each new `turn`, replace any text you've displayed rather than appending to it.
 
 ## Tests
 

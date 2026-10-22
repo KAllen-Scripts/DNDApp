@@ -34,6 +34,9 @@ const srdNames = new Map();
  * @param {() => void} ctx.changed  the sheet changed: save soon
  * @param {() => Promise<void>} ctx.flush  save now (before the server needs the companion)
  */
+/** The creature names the SRD offers, fetched once per campaign. */
+const srdNames = new Map();
+
 export function companionsBox({ state, changed, flush }) {
   const el = h('section', { class: 'sh-box companions' });
   const base = () => `/campaigns/${state.campaignId}`;
