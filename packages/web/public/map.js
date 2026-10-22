@@ -17,6 +17,7 @@ import { openCreator } from './map-creator.js';
 import { chooseTokenPicture, fillStats, forgetPlayers, importMap, newMapDialog, recordDialog, removeToken, removeTokenPicture, saveCreature, settingsDialog, statsDialog, tokenDialog } from './map-dm.js';
 import { renderCombat } from './map-combat.js';
 import { companionDialog, companionRolls, dismissCompanion, myCompanion } from './map-companions.js';
+import { attackControls, attackLog, pickTarget, seeAttacks, stopTargeting } from './map-attacks.js';
 import { initMapFull } from './map-full.js';
 import { groupsDialog, mapOptions, placeEnd, placeMove, placeStart, renderPlaces, shownNote } from './map-places.js';
 import { clockDialog, journeyText, onClock, renderClock, renderRoads, renderRoutes, roadMode, roads, travelControls as journeyControls, travelPicked } from './map-travel.js';
@@ -134,6 +135,7 @@ export function onGone(id) {
 
 /** Put a map on screen (or the empty message). */
 export async function show(map) {
+  stopTargeting();
   state.current = map;
   state.bouncedFrom = null;
   state.selected = null;
@@ -231,6 +233,7 @@ export function render() {
   renderVariantPicker();
   $('#map-stage').hidden = !map;
   for (const b of document.querySelectorAll('.map-needs-map')) b.disabled = !map;
+  if (map) seeAttacks(map);
   if (!map) {
     $('#map-image').removeAttribute('src');
     $('#map-tokens').replaceChildren();
@@ -941,7 +944,7 @@ export function renderTokens() {
       const health = t.hp ? healthOf(t.hp) : t.health;
       const picture = tokenPicture(t);
       const el = h('div', {
-        class: `token token-${t.kind}${picture ? ' has-picture' : ''}${canMove(t) ? ' movable' : ''}${t.user_id === state.userId ? ' mine' : ''}${state.selected === t.id ? ' selected' : ''}${dragging ? ' dragging' : ''}${t.hidden ? ' hidden-token' : ''}${health === 'down' ? ' down' : ''}${state.caught.has(t.id) ? ' caught' : ''}${map.combat?.turn === t.id ? ' turn' : ''}${isUnder(map, t) ? ' under' : ''}${pins ? ' token-pin' : ''}${t.follows ? ' following' : ''}`,
+        class: `token token-${t.kind}${picture ? ' has-picture' : ''}${canMove(t) ? ' movable' : ''}${t.user_id === state.userId ? ' mine' : ''}${state.selected === t.id ? ' selected' : ''}${dragging ? ' dragging' : ''}${t.hidden ? ' hidden-token' : ''}${health === 'down' ? ' down' : ''}${state.caught.has(t.id) ? ' caught' : ''}${state.targeting && state.targeting.attacker !== t.id ? ' targetable' : ''}${map.combat?.turn === t.id ? ' turn' : ''}${isUnder(map, t) ? ' under' : ''}${pins ? ' token-pin' : ''}${t.follows ? ' following' : ''}`,
         title: [t.name, t.merchant ? 'Merchant: pick to shop' : TOKEN_KIND_NAMES[t.kind], hpText(t), ...t.conditions, t.journey ? journeyText(t.journey) : ''].filter(Boolean).join(' · '),
         role: 'button',
         tabindex: '0',
@@ -1321,6 +1324,7 @@ export function renderSelection() {
       ...journeyControls(token),
       h('span', { class: 'spacer' }),
       editable && !state.canEdit ? h('span', { class: 'muted small' }, 'Drag to move') : null,
+      ...attackControls(token),
       token.merchant ? h('button', { class: 'primary', title: 'See what this merchant sells, and buy', onclick: () => openShop(token.merchant) }, 'Shop') : null,
       token.kind === 'companion' && token.stats && (state.canEdit || myCompanion(token)) ? h('button', { class: 'primary', title: 'Roll its attacks and checks from its stat block', onclick: () => companionRolls(token) }, 'Roll') : null,
       (state.canEdit || myCompanion(token)) && token.stats ? h('button', { class: 'ghost', onclick: () => statsDialog(token) }, 'Stat block') : null,
@@ -1893,6 +1897,11 @@ function viewUp(e) {
 // ---------- moving tokens ----------
 
 function tokenDown(e, token) {
+  // Picking who to attack: a tap on a token is the target.
+  if (state.targeting) {
+    e.stopPropagation();
+    return pickTarget(token);
+  }
   if (state.measuring || state.templateDraft || state.drawing || e.altKey) return; // the map view measures, aims, sketches or pings from here
   e.stopPropagation();
   if (!canMove(token)) return select(token.id);
@@ -2135,6 +2144,7 @@ export function initMapActions() {
   });
   document.addEventListener('keydown', (e) => {
     if ((e.key === ' ' || e.key === 'w' || e.key === 'W') && state.drag && addWaypoint()) e.preventDefault();
+    if (e.key === 'Escape' && state.targeting) stopTargeting();
     if (e.key === 'Escape' && state.curveBend) {
       state.curveBend = null;
       renderWalls();
@@ -2293,6 +2303,7 @@ export function initMapActions() {
     }
     templateDialog().catch(report);
   });
+  $('#map-attacks-log').addEventListener('click', attackLog);
   $('#map-combat-open').addEventListener('click', () => {
     state.combatOpen = !state.combatOpen;
     renderCombat();

@@ -812,7 +812,39 @@ export function normalizeMap(input = {}) {
   for (const t of out.tokens) if (t.follows && !seen.has(t.follows)) t.follows = null;
   out.templates = normalizeTemplates(m.templates, image);
   out.combat = normalizeCombat(m.combat, out.tokens);
+  out.attacks = normalizeAttackLog(m.attacks);
   return out;
+}
+
+/** How many attacks a map keeps in its log (attacks from the map, shared/attacks.js). */
+export const MAX_ATTACK_LOG = 30;
+export const ATTACK_STATUSES = ['done', 'pending', 'undone'];
+
+/** Plain data, kept small: strings cut short, lists capped, nothing deeper than a few levels. */
+function smallJson(v, depth = 0) {
+  if (v == null || typeof v === 'boolean') return v ?? null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'string') return v.slice(0, 300);
+  if (depth > 5) return null;
+  if (Array.isArray(v)) return v.slice(0, 40).map((x) => smallJson(x, depth + 1));
+  if (typeof v === 'object') return Object.fromEntries(Object.entries(v).slice(0, 40).map(([k, x]) => [k.slice(0, 40), smallJson(x, depth + 1)]));
+  return null;
+}
+
+/**
+ * A map's attack log (attacks and area spells made from the map; the server writes it, routes/attacks.js):
+ * newest last, at most MAX_ATTACK_LOG. Each: { id, at, by, status: done | pending (damage waits for the DM)
+ * | undone, attacker: { id, name, kind }, action: { name, kind, ... }, template, targets: [...] }.
+ */
+export function normalizeAttackLog(list) {
+  const out = [];
+  for (const e of Array.isArray(list) ? list : []) {
+    if (!e || typeof e !== 'object' || !isTokenId(e.id) || !Array.isArray(e.targets) || !e.attacker) continue;
+    const c = smallJson(e);
+    c.status = pick(e.status, ATTACK_STATUSES, 'done');
+    out.push(c);
+  }
+  return out.slice(-MAX_ATTACK_LOG);
 }
 
 /**

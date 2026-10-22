@@ -561,6 +561,34 @@ export function planAttack(sheet, calc, a, { edition = '2014', weapon = null, tw
   };
 }
 
+/**
+ * The extras for one of the map's actions (shared/attacks.js sheetActions:
+ * { id, source: weapon | attack | spell | form, kind, name, ability,
+ * finesse, ranged, damage: [{ dice, type }] }): the same list planAttack and
+ * planSpell work from, so the map and the sheet offer the same things.
+ * attack-riders.js turns these into the map's riders. [] for a save, a
+ * Wild Shape form or a creature's action.
+ */
+export function actionExtras(sheet, values, action, { edition = '2014' } = {}) {
+  if (!sheet || !action || action.kind !== 'attack') return [];
+  const calc = { values: values ?? {} };
+  if (action.source === 'spell') {
+    const id = String(action.id ?? '').replace(/^spell:/, '');
+    const spell = (sheet.spells ?? []).find((sp) => sp.id === id);
+    return spell ? planSpell(sheet, calc, spell, { edition }).extras : [];
+  }
+  if (!['weapon', 'attack'].includes(action.source)) return [];
+  const k = context(sheet, calc, edition);
+  const a = { name: action.name, ability: action.finesse ? 'finesse' : action.ability };
+  const info = attackInfo(a, null, false);
+  if (!info.weaponAttack && action.source === 'weapon') info.weaponAttack = true;
+  info.ranged = info.ranged || !!action.ranged;
+  info.finesse = info.finesse || !!action.finesse;
+  info.melee = info.weaponAttack && !info.ranged;
+  const ability = action.ability || (info.finesse ? ((k.mod('str') >= k.mod('dex')) ? 'str' : 'dex') : 'str');
+  return weaponExtras(k, info, a, { ability });
+}
+
 /** The mastery an attack's weapon has for this character (2024, chosen), with its numbers: { property, name, text, line }; null if none. */
 function masteryOf(sheet, calc, info, { mod, ability, edition, damage, type }) {
   if (edition !== '2024' || !info.key || !masteryLimit(sheet, edition)) return null;

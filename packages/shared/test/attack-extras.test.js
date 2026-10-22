@@ -171,3 +171,20 @@ test('regression: Sneak Attack can be applied to an attack from the sheet (it wa
   const r = armed({ classes: [{ name: 'Rogue', level: 3 }], abilities: { dex: 14 } }, 'Dagger').plan({ picks: { sneak_attack: true } });
   assert.equal(r.damage, '1d4+2d6+2');
 });
+
+test('the map\'s riders come from the same extras: Divine Smite (not ticked), Rage (ticked while raging), Hunter\'s Mark, Hex on a spell attack', async () => {
+  const { attackRiders } = await import('../src/attack-riders.js');
+  const { sheetActions } = await import('../src/attacks.js');
+  const riders = (fields, weapon, ed = '2014') => {
+    const { sheet, calc } = armed(fields, weapon, ed);
+    const action = sheetActions(sheet, calc).find((x) => x.name === weapon);
+    return attackRiders(sheet, calc.values, action, { edition: ed }).map((r) => [r.id, r.dice, r.suggest('normal', false)]);
+  };
+  assert.deepEqual(riders({ classes: [{ name: 'Paladin', level: 5 }], abilities: { str: 16 } }, 'Longsword'), [['divine_smite', '2d8', false]]);
+  assert.deepEqual(riders({ classes: [{ name: 'Barbarian', level: 9 }], abilities: { str: 16 }, combat: { on: { rage: true } } }, 'Greataxe'), [['rage', '3', true]]);
+  assert.deepEqual(riders({ classes: [{ name: 'Ranger', level: 2 }], abilities: { dex: 16 }, combat: { on: { hunters_mark: true } } }, 'Longbow'), [['hunters_mark', '1d6', true]]);
+  const lock = normalizeSheet({ classes: [{ name: 'Warlock', level: 5 }], abilities: { cha: 18 }, combat: { choices: ['agonizing_blast'], on: { hex: true } }, spells: [{ name: 'Eldritch Blast', level: 0, attack: 'attack', damage: '1d10 force' }] });
+  const calc = computeSheet(lock);
+  const eb = sheetActions(lock, calc).find((x) => x.name === 'Eldritch Blast');
+  assert.deepEqual(attackRiders(lock, calc.values, eb).map((r) => [r.id, r.dice, r.suggest('normal', false)]), [['agonizing_blast', '4', true], ['hex', '1d6', true]]);
+});
