@@ -119,6 +119,7 @@ const SNIPPET_CHARS = 400;
 
 export function createBooks({ dir, log = console }) {
   let loading = null;
+  let loaded = false;
   /**
    * @type {{ title: string, file: string, lines: { text: string, page: number }[],
    *   pages: { lines: string[], norm: string, headings: string, squashed: string[], short: Set<string> }[], offset: number, year: number | null, empty: number,
@@ -210,12 +211,60 @@ export function createBooks({ dir, log = console }) {
         }
       }
       index();
+      loaded = true;
     })();
     return loading;
   }
 
+  /** Pages matching the terms in the books `only` keeps (all by default); see search() below. */
+  async function searchShelf(terms, { book = null, limit = 8, edition = null, only = null } = {}) {
+    await load();
+    const found = book ? findBook(book) : null;
+    if (found?.error) return found;
+    const shelf = (found ? [found] : edition ? books.filter((b) => bookEdition(b) === edition) : books).filter((b) => !only || only(b));
+    const wanted = [...new Set(terms.map(normText).filter((t) => t.trim().length >= 2))].slice(0, MAX_TERMS);
+    if (!wanted.length || !shelf.length) return [];
+    const all = shelf.flatMap((b) => b.pages.map((p, i) => ({ b, p, i })));
+    // Match at the start of a word, so "opportunity attack" also finds "opportunity attacks";
+    // short terms only as whole words, so "AC" doesn't find "action".
+    const needles = wanted.map((t) => (t.trim().length <= SHORT_TERM ? t : t.slice(0, -1)));
+    const flat = wanted.map((t) => squash(t));
+    const counts = all.map(({ p }) =>
+      needles.map((n, t) => occurrences(p.norm, n) || (flat[t].length >= 5 && (p.short.has(flat[t]) || p.squashed.some((h) => h.includes(flat[t])))) | 0),
+    );
+    const idf = needles.map((_, t) => Math.log(1 + all.length / (counts.filter((c) => c[t]).length || 1)));
+    const scored = all
+      .map((x, k) => {
+        let score = 0;
+        let matched = 0;
+        counts[k].forEach((c, t) => {
+          if (!c) return;
+          matched++;
+          // A heading that is the term ("HEX") counts most, one that contains it ("HEX AND CURSE") less.
+          const heading = x.p.squashed.includes(flat[t]) || (flat[t].length >= 5 && x.p.short.has(flat[t]))
+            ? 3
+            : x.p.headings.includes(wanted[t]) || (flat[t].length >= 5 && x.p.squashed.some((h) => h.includes(flat[t])))
+              ? 1
+              : 0;
+          score += idf[t] * (1 + Math.log(c) + heading);
+        });
+        return { ...x, score: score * matched, hit: counts[k].findIndex(Boolean) };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+    return scored.map(({ b, p, i, hit }) => ({
+      book: b.title,
+      page: i + 1 + b.offset,
+      snippet: snippet(p.lines, needles.slice(hit).concat(needles.slice(0, hit))),
+    }));
+  }
+
   return {
     load,
+
+    /** Whether the books are being read right now (it takes a while after a restart; index.js starts it). */
+    loading: () => !!loading && !loaded,
 
     /** Spell headings found in the books (for suggestions). */
     async spellNames() {
@@ -251,50 +300,18 @@ export function createBooks({ dir, log = console }) {
      * Pages matching any of the terms (words or short phrases), best first.
      * Rarer terms count for more, pages matching several terms rank higher,
      * and a term in a heading counts double. `edition` ('2014' or '2024')
-     * searches only that edition's books.
+     * searches only that edition's books. `prefer` ('2014' or '2024') leaves
+     * out the other edition's books (books of no known edition stay in),
+     * and searches them all only when that finds nothing (Ask, 2026-10-21).
      * @returns {Promise<{ book: string, page: number, snippet: string }[]>}
      */
-    async search(terms, { book = null, limit = 8, edition = null } = {}) {
+    async search(terms, { book = null, limit = 8, edition = null, prefer = null } = {}) {
       await load();
-      const found = book ? findBook(book) : null;
-      if (found?.error) return found;
-      const shelf = found ? [found] : edition ? books.filter((b) => bookEdition(b) === edition) : books;
-      const wanted = [...new Set(terms.map(normText).filter((t) => t.trim().length >= 2))].slice(0, MAX_TERMS);
-      if (!wanted.length || !shelf.length) return [];
-      const all = shelf.flatMap((b) => b.pages.map((p, i) => ({ b, p, i })));
-      // Match at the start of a word, so "opportunity attack" also finds "opportunity attacks";
-      // short terms only as whole words, so "AC" doesn't find "action".
-      const needles = wanted.map((t) => (t.trim().length <= SHORT_TERM ? t : t.slice(0, -1)));
-      const flat = wanted.map((t) => squash(t));
-      const counts = all.map(({ p }) =>
-        needles.map((n, t) => occurrences(p.norm, n) || (flat[t].length >= 5 && (p.short.has(flat[t]) || p.squashed.some((h) => h.includes(flat[t])))) | 0),
-      );
-      const idf = needles.map((_, t) => Math.log(1 + all.length / (counts.filter((c) => c[t]).length || 1)));
-      const scored = all
-        .map((x, k) => {
-          let score = 0;
-          let matched = 0;
-          counts[k].forEach((c, t) => {
-            if (!c) return;
-            matched++;
-            // A heading that is the term ("HEX") counts most, one that contains it ("HEX AND CURSE") less.
-            const heading = x.p.squashed.includes(flat[t]) || (flat[t].length >= 5 && x.p.short.has(flat[t]))
-              ? 3
-              : x.p.headings.includes(wanted[t]) || (flat[t].length >= 5 && x.p.squashed.some((h) => h.includes(flat[t])))
-                ? 1
-                : 0;
-            score += idf[t] * (1 + Math.log(c) + heading);
-          });
-          return { ...x, score: score * matched, hit: counts[k].findIndex(Boolean) };
-        })
-        .filter((x) => x.score > 0)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, limit);
-      return scored.map(({ b, p, i, hit }) => ({
-        book: b.title,
-        page: i + 1 + b.offset,
-        snippet: snippet(p.lines, needles.slice(hit).concat(needles.slice(0, hit))),
-      }));
+      if (prefer && !book && !edition) {
+        const own = await searchShelf(terms, { limit, only: (b) => !bookEdition(b) || bookEdition(b) === prefer });
+        return own.length ? own : searchShelf(terms, { limit });
+      }
+      return searchShelf(terms, { book, limit, edition });
     },
 
     /**

@@ -312,18 +312,27 @@ export function registerCampaign(app, r) {
   app.post('/campaigns/:cid/ask', async (request, reply) => {
     const { cid } = access(request);
     const body = z
-      .object({ question: z.string().min(1).max(2000), conversationId: z.number().int().optional() })
+      .object({
+        question: z.string().min(1).max(2000),
+        conversationId: z.number().int().optional(),
+        // auto: qa/route.js picks quick or full; thorough: the asker pressed "Look it up properly".
+        mode: z.enum(['auto', 'quick', 'thorough']).optional(),
+      })
       .parse(request.body);
     const sse = openSse(request, reply);
     try {
-      await qa.ask({
+      const { timing } = await qa.ask({
         campaignId: cid,
         userId: request.user.id,
         question: body.question,
         conversationId: body.conversationId,
+        mode: body.mode,
         emit: (e) => sse.send(e.type, e),
       });
+      // Where the time went, in data/server.log (docs/notes/ask-speed.md). No question text: it can be private.
+      request.log.info({ ask: timing }, `Ask answered (${timing.path}) in ${timing.total_ms} ms`);
     } catch (err) {
+      if (err.timing) request.log.info({ ask: err.timing }, `Ask failed (${err.timing.path}) after ${err.timing.total_ms} ms`);
       request.log.warn(err);
       sse.send('error', { error: publicMessage(err) });
     } finally {
