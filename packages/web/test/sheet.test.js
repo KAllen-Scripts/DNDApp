@@ -1066,6 +1066,9 @@ test('regression: Class features with no subclass or race rows shows no "null"',
     const text = page.el('#sheet .class-features').textContent;
     assert.match(text, /Nothing to track for your class/);
     assert.doesNotMatch(text, /null|undefined/);
+  });
+});
+
 test('regression: the Inventory suggests names of the kind picked, not always weapons', async () => {
   await withPage(sheetPage(), async (page) => {
     page.click('[data-tab=inventory]');
