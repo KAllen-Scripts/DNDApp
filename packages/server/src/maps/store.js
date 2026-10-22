@@ -501,7 +501,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
       if (!version) return null;
       const res = setCompanionHp(sheet, companionId, current);
       if (!res.companion) return null;
-      return sheets.save(campaignId, userId, res.sheet, { by, reason: `${res.companion.name}'s hit points changed on the map (${res.companion.hp.current} of ${res.companion.hp.max})` });
+      return sheets.save(campaignId, userId, res.sheet, { by, reason: res.gone ? `${res.companion.name} dropped to 0 hit points on the map and vanished` : `${res.companion.name}'s hit points changed on the map (${res.companion.hp.current} of ${res.companion.hp.max})` });
     },
 
     /** Forget where everyone has been on a map, and tell everyone looking at it. */

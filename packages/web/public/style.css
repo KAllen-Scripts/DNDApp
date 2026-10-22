@@ -1963,6 +1963,18 @@ button.busy:disabled { opacity: 1; }
 .companion-add-row input[type=text] { flex: 1 1 10rem; min-width: 0; }
 .companion-add [hidden] { display: none; }
 .companion-note { margin: 0.3rem 0; }
+
+/* Item actions (sheet-item-actions.js) */
+.item-actions .item-action-group { display: grid; gap: 0.3rem; padding: 0.4rem 0; border-top: 1px solid var(--border); }
+.item-actions .item-action-group:first-of-type { border-top: 0; }
+.item-actions .item-action-head { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; }
+.item-actions .item-action { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; justify-content: space-between; }
+.item-actions .item-action-text { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: baseline; min-width: 0; flex: 1 1 12rem; }
+.item-actions .item-action-name { font-weight: 600; }
+.item-actions .item-action-problem { color: var(--error); }
+.item-actions .item-action-buttons { display: flex; gap: 0.35rem; align-items: center; }
+.ai-tag { color: var(--accent); border-color: var(--accent); }
+.gear-actions-list ul { margin: 0.2rem 0 0; padding-left: 1.1rem; }
 /* ---------- attacks from the map (map-attacks.js) ---------- */
 .token.targetable { cursor: crosshair; box-shadow: 0 0 0 0.1em #e8743b; }
 .map-targeting {

@@ -17,7 +17,7 @@ import { MAX_PICTURE_BYTES } from '../images.js';
 import { newTokenId } from '../maps/store.js';
 
 export function registerMerchants(app, r) {
-  const { access, archive, db, items, maps, merchants, sheets, tokenArt, viewableMap } = r;
+  const { access, archive, db, editions, items, maps, merchants, sheets, tokenArt, viewableMap } = r;
 
   const MERCHANT = z.object({
     name: z.string().trim().min(1).max(80),
@@ -245,6 +245,7 @@ export function registerMerchants(app, r) {
     const a = shopFor(request);
     if (a.role === 'dm') throw new AuthError("The DM doesn't buy: players buy for their characters.", 403);
     const { line: lid, qty } = z.object({ line: z.string(), qty: z.number().int().min(1).max(100).default(1) }).parse(request.body ?? {});
+    const edition = await editions.of(a.cid);
     const m = a.merchant;
     if (!m.open) throw new BadRequestError(`${m.name} isn't selling right now.`);
     const line = lineOf(m, lid);
@@ -256,7 +257,7 @@ export function registerMerchants(app, r) {
     if (!purse) throw new BadRequestError(`You can't afford that: it costs ${formatPrice(cost)} and you have ${formatPrice(totalCp(current.sheet.coins))}.`);
     // Both changes happen together (no waiting in between), so two buyers can't take the last one.
     const who = db.prepare('SELECT u.name, m.character_name FROM users u LEFT JOIN memberships m ON m.user_id = u.id AND m.campaign_id = ? WHERE u.id = ?').get(a.cid, a.userId);
-    const saved = sheets.save(a.cid, a.userId, { ...current.sheet, coins: purse, inventory: addToInventory(current.sheet.inventory, x, qty, { classKey: classKey(current.sheet.classes.find((c) => c.name.trim())?.name) }) }, {
+    const saved = sheets.save(a.cid, a.userId, { ...current.sheet, coins: purse, inventory: addToInventory(current.sheet.inventory, x, qty, { classKey: classKey(current.sheet.classes.find((c) => c.name.trim())?.name), edition }) }, {
       by: a.userId, reason: `bought ${qty > 1 ? `${qty} × ` : ''}${x.name} from ${m.name} for ${formatPrice(cost)}`,
     });
     const sale = { at: new Date().toISOString(), user_id: a.userId, who: current.sheet.name || who?.character_name || who?.name || '', item: x.id, name: x.name, qty, paid: cost };

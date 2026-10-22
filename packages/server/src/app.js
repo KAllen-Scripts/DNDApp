@@ -29,6 +29,7 @@ import { registerMapCreator } from './routes/map-creator.js';
 import { LABEL_FONT_FILES } from './maps/fonts.js';
 import { registerRests } from './routes/rests.js';
 import { registerCompanions } from './routes/companions.js';
+import { registerItemActions } from './routes/item-actions.js';
 import { registerWiki } from './routes/wiki.js';
 
 /**
@@ -105,6 +106,7 @@ const WEB_MODULES = {
   '/shared/attack-extras.js': '@dndapp/shared/attack-extras.js',
   '/shared/class-traits.js': '@dndapp/shared/class-traits.js',
   '/shared/gear.js': '@dndapp/shared/gear.js',
+  '/shared/item-actions.js': '@dndapp/shared/item-actions.js',
   '/shared/item-names.js': '@dndapp/shared/item-names.js',
   '/shared/point-buy.js': '@dndapp/shared/point-buy.js',
   '/shared/settings.js': '@dndapp/shared/settings.js',
@@ -438,6 +440,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   registerMapCreator(app, r);
   registerRests(app, r);
   registerCompanions(app, r);
+  registerItemActions(app, r);
   registerWiki(app, r);
 
   serveWebPage(app, config.webDir);
