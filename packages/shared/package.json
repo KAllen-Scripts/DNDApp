@@ -14,6 +14,8 @@
     "./race-features.js": "./src/race-features.js",
     "./dice.js": "./src/dice.js",
     "./rolls.js": "./src/rolls.js",
+    "./attack-extras.js": "./src/attack-extras.js",
+    "./class-traits.js": "./src/class-traits.js",
     "./attacks.js": "./src/attacks.js",
     "./attack-riders.js": "./src/attack-riders.js",
     "./gear.js": "./src/gear.js",

@@ -212,3 +212,35 @@ test('rests: a short rest gives back Pact Magic; a long rest gives back everythi
   assert.equal(longRest(down).sheet, down);
   assert.equal(longRest(down, { edition: '2024' }).sheet.hp.current, max);
 });
+
+test('regression: a monk\'s Unarmored Movement only applies with no armour and no shield', async () => {
+  const { addToInventory } = await import('../src/gear.js');
+  const monk = sheetWith({ classes: [{ name: 'Monk', level: 6 }], race: 'Human' });
+  assert.equal(computeSheet(monk).values.speed, 45);
+  monk.inventory = addToInventory([], { name: 'Shield' }, 1);
+  monk.inventory[0].equipped = 1;
+  assert.equal(computeSheet(monk).values.speed, 30);
+});
+
+test('regression: under the 2024 rules dwarves, halflings and gnomes have 30 ft speed (it was 25)', () => {
+  for (const race of ['Dwarf', 'Halfling', 'Gnome']) {
+    assert.equal(computeSheet(sheetWith({ race }), { edition: '2024' }).values.speed, 30, race);
+    assert.equal(computeSheet(sheetWith({ race }), { edition: '2014' }).values.speed, 25, race);
+  }
+});
+
+test('regression: a paladin\'s Aura of Protection adds Charisma to their own saves from 6th level', () => {
+  const pal = (level) => computeSheet(sheetWith({ classes: [{ name: 'Paladin', level }], abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 16 } })).values;
+  assert.equal(pal(5)['save.dex'], 0);
+  assert.equal(pal(6)['save.dex'], 3);
+});
+
+test('regression: Draconic Resilience sets AC and adds hit points (13+Dex in 2014, 10+Dex+Cha in 2024)', () => {
+  const s = sheetWith({ classes: [{ name: 'Sorcerer', subclass: 'Draconic Bloodline', level: 3 }], abilities: { str: 10, dex: 14, con: 10, int: 10, wis: 10, cha: 16 } });
+  const plain = sheetWith({ classes: [{ name: 'Sorcerer', level: 3 }], abilities: s.abilities });
+  assert.equal(computeSheet(s).values.ac, 15);
+  assert.equal(computeSheet(s, { edition: '2024' }).values.ac, 15);
+  assert.equal(computeSheet(s).values.hp_max, computeSheet(plain).values.hp_max + 3);
+  s.abilities.cha = 18;
+  assert.equal(computeSheet(s, { edition: '2024' }).values.ac, 16);
+});

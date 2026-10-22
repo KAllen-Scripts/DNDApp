@@ -217,3 +217,37 @@ test('damage can wait for the DM: Apply, Half or Skip', async () => {
     await t.cleanup();
   }
 });
+
+test('Divine Smite from the map: offered unticked, its slot spent on a hit, refused with no slots left', async () => {
+  const { t, dice, base, add, sheet, sheetOf, attack } = await table();
+  try {
+    const LONGSWORD = { name: 'Longsword', qty: 1, equipped: 1, proficient: true, kind: 'weapon', weapon: { damage: '1d8 slashing', ability: 'str', category: 'martial', properties: ['versatile'] } };
+    await sheet(t.sam, { classes: [{ name: 'Paladin', subclass: '', level: 2 }], abilities: { str: 16, dex: 10, con: 12, int: 10, wis: 10, cha: 14 }, inventory: [LONGSWORD] });
+    const thorin = await add({ kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 52.5, y: 52.5 });
+    const goblin = await add({ kind: 'enemy', name: 'Goblin', x: 87.5, y: 52.5, hp: { current: 30, max: 30 }, stats: { text: GOBLIN } });
+    const acts = (await t.request('GET', `${base}/tokens/${thorin.id}/actions?target=${goblin.id}`, { as: t.sam.token })).json();
+    const sword = acts.actions.find((x) => x.name === 'Longsword');
+    assert.deepEqual(acts.riders[sword.id].map((x) => [x.id, x.dice, x.checked]), [['divine_smite', '2d8', false]]);
+    // A hit: d20 15 + 5; 1d8 4 + 3, smite 2d8 = 5 + 6.
+    dice.next(15, 4, 5, 6);
+    const hit = await attack({ attacker: thorin.id, action: sword.id, target: goblin.id, riders: ['divine_smite'] }, t.sam.token);
+    assert.equal(hit.statusCode, 200, hit.body);
+    assert.equal(hit.json().attack.targets[0].amount, 18);
+    assert.equal((await sheetOf(t.sam)).spellcasting.slots_used[1], 1);
+    // A miss spends nothing.
+    dice.next(1);
+    await attack({ attacker: thorin.id, action: sword.id, target: goblin.id, riders: ['divine_smite'] }, t.sam.token);
+    assert.equal((await sheetOf(t.sam)).spellcasting.slots_used[1], 1);
+    // The second slot on the next hit; then, with none left, Divine Smite isn't offered and isn't added.
+    dice.next(15, 4, 5, 6);
+    await attack({ attacker: thorin.id, action: sword.id, target: goblin.id, riders: ['divine_smite'] }, t.sam.token);
+    assert.equal((await sheetOf(t.sam)).spellcasting.slots_used[1], 2);
+    const after = (await t.request('GET', `${base}/tokens/${thorin.id}/actions?target=${goblin.id}`, { as: t.sam.token })).json();
+    assert.equal(after.riders[sword.id], undefined);
+    dice.next(15, 4);
+    const none = await attack({ attacker: thorin.id, action: sword.id, target: goblin.id, riders: ['divine_smite'] }, t.sam.token);
+    assert.deepEqual(none.json().attack.targets[0].rolled.map((r) => r.notation), ['1d8+3']);
+  } finally {
+    await t.cleanup();
+  }
+});

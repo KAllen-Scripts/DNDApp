@@ -223,7 +223,7 @@ export function registerCharacters(app, r) {
       players: members.map((m) => {
         const { sheet, version } = sheets.get(a.cid, m.id);
         if (!version) return { user_id: m.id, name: m.name, character: m.character_name ?? '', ac: null, gear: [], features: [], wild_shape: null };
-        const calc = computeSheet(sheet, store.getSettings(a.cid));
+        const calc = computeSheet(sheet, { ...store.getSettings(a.cid), edition });
         return {
           user_id: m.id,
           name: m.name,
