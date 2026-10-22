@@ -38,6 +38,8 @@
  *     rests.jsonl                      short and long rests the DM called, append-only
  *     wiki/<id>/changes.jsonl          the whole page of the DM's wiki after each save, append-only
  *     wiki/proposals.jsonl             what the AI proposed for the wiki, the whole proposal after each change (append-only)
+ *     wiki/pictures/<id>.<ext>         a picture for the wiki, as uploaded (or copied from a creature, item, map, handout or token)
+ *     wiki/pictures/pictures.jsonl     one line per wiki picture: its id, file, size and where it came from (append-only)
  *     sessions/0001/
  *       transcript.txt                 byte-for-byte as uploaded, read-only
  *       meta.json                      number, title, played_on, sha256
@@ -257,6 +259,20 @@ export function createArchive(root) {
 
     /** Every saved version of a wiki page, oldest first. */
     readWikiChanges: (slug, id) => readLines(path.join(campaignDir(slug), 'wiki', mapDir(id), 'changes.jsonl')),
+
+    /** Keep a picture for the wiki exactly as uploaded, or as copied from elsewhere in the app (never replaced). */
+    saveWikiPicture(slug, file, buf) {
+      const dest = path.join(campaignDir(slug), 'wiki', 'pictures', path.basename(file));
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, buf, { flag: 'wx' });
+    },
+
+    wikiPicturePath: (slug, file) => path.join(campaignDir(slug), 'wiki', 'pictures', path.basename(file)),
+
+    /** The wiki's pictures: one line per picture when it's added. */
+    appendWikiPicture: (slug, entry) => appendLine(path.join(campaignDir(slug), 'wiki', 'pictures', 'pictures.jsonl'), entry),
+
+    readWikiPictures: (slug) => readLines(path.join(campaignDir(slug), 'wiki', 'pictures', 'pictures.jsonl')),
 
     /** Keep a token's picture (the DM's, for an NPC or enemy) exactly as uploaded (never replaced). */
     saveTokenImage(slug, mapId, file, buf) {

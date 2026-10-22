@@ -18,7 +18,7 @@ import { renderRecord } from '../kb/store.js';
 import { preparedTranscript } from '../pipeline/prepare.js';
 import { fitWhole } from '../fit.js';
 import { creatureKey } from '../creatures.js';
-import { unlink } from '@dndapp/shared/wiki.js';
+import { unlink, unpicture } from '@dndapp/shared/wiki.js';
 
 const SessionRange = {
   from_session: z.number().int().nullable().describe('Only from this session number, or null'),
@@ -135,7 +135,7 @@ function availableText(a, names) {
 function renderWikiSection(page, section, { forDm, names }) {
   const head = `--- Wiki: ${page.title}${section.heading ? ` › ${section.heading}` : ''}${page.kind ? ` (${page.kind})` : ''}`;
   const also = page.aliases.length ? `\nAlso called: ${page.aliases.join(', ')}` : '';
-  let text = unlink(section.text);
+  let text = unpicture(unlink(section.text));
   let who = '';
   if (forDm) {
     who = `\nAvailable to: ${section.available === 'all' ? `as the page (${availableText(page.available, names)})` : availableText(section.available, names)}`;
@@ -246,8 +246,14 @@ export function createTools({ db, store, kb, search, books, wiki = null, config,
     }
     return pages;
   };
+  // A page's facts (its "at a glance" box) read as a section of their own, first. A player's page is already filtered.
+  const factsSection = (page) => {
+    if (!page.facts?.length) return [];
+    const line = (f) => `${f.label}${f.label && f.value ? ': ' : ''}${f.value}${viewer.seesAll && f.available !== 'all' ? ` [available to ${availableText(f.available, wikiNames)}]` : ''}`;
+    return [{ page, section: { id: 'facts', heading: 'At a glance', text: page.facts.map(line).join('\n'), available: 'all' } }];
+  };
   const wikiSections = (pages) =>
-    pages.flatMap((page) => page.sections.filter((s) => s.text.trim()).map((section) => ({ page, section })));
+    pages.flatMap((page) => [...factsSection(page), ...page.sections.filter((s) => s.text.trim()).map((section) => ({ page, section }))]);
   const renderWiki = (x) => renderWikiSection(x.page, x.section, { forDm: viewer.seesAll, names: wikiNames });
   const wikiText = (list, empty) =>
     list.length

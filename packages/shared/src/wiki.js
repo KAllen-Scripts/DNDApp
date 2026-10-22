@@ -104,3 +104,69 @@ export const unlink = (text) => String(text ?? '').replace(LINK_RE, (_, name, sh
 
 /** Lower case with spaces squeezed, for matching page titles and aliases. */
 export const wikiKey = (s) => String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+// ---------- pictures ----------
+
+/**
+ * A picture in a section's text: ![caption](picture:<id>), where the id is
+ * one of the wiki's pictures (src/wiki-pictures.js). After the caption, "|"
+ * and a place says where it goes: ![The mill at dusk|right](picture:…).
+ * A picture inside a `:::dm` or `:::for` block, or in a section only some
+ * players get, goes only where the text around it goes.
+ */
+export const PICTURE_RE = /!\[([^\]\n]*)\]\(picture:([a-f0-9]{10})\)/g;
+export const PICTURE_PLACES = ['left', 'right', 'wide', 'small'];
+export const isPictureId = (id) => /^[a-f0-9]{10}$/.test(String(id ?? ''));
+
+/** A picture's alt text as { caption, place } ("Mill|right" -> { caption: 'Mill', place: 'right' }). */
+export function pictureAlt(alt) {
+  const m = /^(.*)\|\s*(left|right|wide|small)\s*$/i.exec(String(alt ?? ''));
+  return m ? { caption: m[1].trim(), place: m[2].toLowerCase() } : { caption: String(alt ?? '').trim(), place: '' };
+}
+
+/** The picture ids a text shows (no duplicates). */
+export function wikiPictures(text) {
+  return [...new Set([...String(text ?? '').matchAll(PICTURE_RE)].map((m) => m[2]))];
+}
+
+/** A text with its pictures as words (for the AI and for search): "[picture: The mill at dusk]". */
+export const unpicture = (text) => String(text ?? '').replace(PICTURE_RE, (_, alt) => {
+  const { caption } = pictureAlt(alt);
+  return caption ? `[picture: ${caption}]` : '[picture]';
+});
+
+/** Every picture a page uses: its main picture, banner, gallery and the pictures in its text. */
+export function pagePictureIds(page) {
+  const ids = new Set();
+  for (const p of [page?.picture, page?.banner, ...(page?.gallery ?? [])]) if (p?.id) ids.add(p.id);
+  for (const s of page?.sections ?? []) for (const id of wikiPictures(s.text)) ids.add(id);
+  return [...ids];
+}
+
+// ---------- kinds ----------
+
+/**
+ * Kinds are free text; these families give a page its icon, colour and the
+ * usual "at a glance" facts (an infobox), like World Anvil's and Kanka's
+ * article templates. Anything else is "other".
+ */
+export const KIND_FAMILIES = {
+  person: { label: 'People', icon: '☺', words: ['npc', 'pc', 'character', 'person', 'people', 'villain', 'ally', 'hero', 'noble', 'merchant'], facts: ['Race', 'Role', 'Where they are', 'Allegiance', 'Status'] },
+  place: { label: 'Places', icon: '⌂', words: ['place', 'location', 'city', 'town', 'village', 'region', 'country', 'kingdom', 'dungeon', 'tavern', 'inn', 'building', 'landmark', 'realm', 'plane'], facts: ['Type', 'Region', 'Ruler', 'Population'] },
+  faction: { label: 'Factions', icon: '⚑', words: ['faction', 'organisation', 'organization', 'guild', 'cult', 'order', 'house', 'family', 'clan', 'church'], facts: ['Leader', 'Base', 'Goals', 'Allies', 'Enemies'] },
+  item: { label: 'Items', icon: '⚱', words: ['item', 'artifact', 'artefact', 'weapon', 'relic', 'treasure', 'object'], facts: ['Type', 'Rarity', 'Owner', 'Where it is'] },
+  creature: { label: 'Creatures', icon: '☠', words: ['creature', 'monster', 'beast', 'race', 'species'], facts: ['Type', 'Habitat', 'Danger'] },
+  quest: { label: 'Quests', icon: '✦', words: ['quest', 'mission', 'job', 'plot', 'hook', 'mystery', 'clue'], facts: ['Given by', 'Status', 'Reward'] },
+  session: { label: 'Sessions', icon: '☾', words: ['session', 'recap', 'log', 'adventure'], facts: ['Played on', 'Where', 'Who was there'] },
+  lore: { label: 'Lore', icon: '❧', words: ['lore', 'history', 'legend', 'myth', 'religion', 'deity', 'god', 'magic', 'event', 'era'], facts: ['When', 'Related to'] },
+  other: { label: 'Other', icon: '❦', words: [], facts: [] },
+};
+
+/** The family of a page's kind ("Tavern" -> 'place'). */
+export function kindFamily(kind) {
+  const k = wikiKey(kind);
+  if (!k) return 'other';
+  for (const [family, f] of Object.entries(KIND_FAMILIES)) if (f.words.includes(k) || f.words.includes(k.replace(/s$/, ''))) return family;
+  for (const [family, f] of Object.entries(KIND_FAMILIES)) if (f.words.some((w) => k.split(/[\s/-]+/).includes(w))) return family;
+  return 'other';
+}
