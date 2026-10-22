@@ -15,6 +15,8 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-21 | The Sheet review showed "nullnull" when nothing was against the rules (empty parts were put into the page as null). | `web/test/sheet.test.js`: regression: a Sheet review with nothing against the rules shows no "null" in its box |
+| 2026-10-21 | The Class features box showed "nullnull" when there were no subclass or race features. | `web/test/sheet.test.js`: regression: Class features with no subclass or race rows shows no "null" |
 | 2026-10-21 | Drawing a made map's picture at 140 px a square takes seconds; on the server's own thread that froze rolls and live updates meanwhile. | `server/test/creator.test.js`: regression: drawing a made map's picture happens off the server's thread, so it keeps answering meanwhile |
 | 2026-10-21 | Once props were drawn from pictures, the server took 10 s to draw a tavern (45 s at the new 140 px a square): each picture's shadow was a canvas shadow blurred at full size. | `shared/test/map-art.test.js`: regression: a prop picture's shadow is made once, small, and reused; the map's canvas never blurs a shadow for it |
 | 2026-10-21 | The DM's travel dialog filled in a journey's hours as 4.9, which the Hours box (whole numbers only) refused, so Set off did nothing (found in a real browser before merging). | `web/test/world.test.js`: the DM's travel dialog can be sent when the trip's hours aren't whole (the Hours box refused 4.9) |

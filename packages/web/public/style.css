@@ -786,6 +786,7 @@ input.num, .sheet .num { text-align: center; }
 .sh-box { container-type: inline-size; display: flex; flex-direction: column; min-width: 0; padding: var(--pad); }
 .sh-box > textarea { flex: 1 1 auto; }
 .sh-box > .md-editor { flex: 1 1 auto; grid-template-rows: 1fr auto; }
+.sh-box > .md-editor > .md-preview { max-height: none; }
 .sheet .md-preview { font-size: 0.92rem; line-height: 1.45; }
 
 /* Rows of columns (the layouts in themes.css set how many). A column stretches
