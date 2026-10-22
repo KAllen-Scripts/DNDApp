@@ -34,7 +34,7 @@ test('gear: magic names and what an item does, from the tables or its descriptio
   const blade = itemStats({ name: 'Sun Blade', kind: 'weapon', text: 'Martial melee weapon (finesse, versatile). 2d6 radiant damage.' });
   assert.deepEqual(blade.weapon, { damage: '2d6 radiant', ability: 'finesse', category: 'martial', properties: ['finesse', 'versatile'] });
   assert.equal(itemStats({ name: 'Elven Mail', kind: 'armor', text: 'Medium armour. AC 14 + Dex modifier (max 2).' }).armor.type, 'medium');
-  assert.deepEqual(itemStats({ name: 'Bag of Holding', kind: 'magic', text: 'A bag.' }), { kind: 'magic', weapon: null, armor: null, magic: 0, weight: null, charges: null, effects: [], heal: '' });
+  assert.deepEqual(itemStats({ name: 'Bag of Holding', kind: 'magic', text: 'A bag.' }), { kind: 'magic', weapon: null, armor: null, magic: 0, weight: null, charges: null, effects: [], heal: '', actions: [] });
 });
 
 test('gear: class proficiency from the PHB, unknown classes left to the player', () => {
