@@ -28,6 +28,7 @@ import { registerMapCreator } from './routes/map-creator.js';
 import { LABEL_FONT_FILES } from './maps/fonts.js';
 import { registerRests } from './routes/rests.js';
 import { registerCompanions } from './routes/companions.js';
+import { registerItemActions } from './routes/item-actions.js';
 import { registerWiki } from './routes/wiki.js';
 
 /**
@@ -435,6 +436,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   registerMapCreator(app, r);
   registerRests(app, r);
   registerCompanions(app, r);
+  registerItemActions(app, r);
   registerWiki(app, r);
 
   serveWebPage(app, config.webDir);

@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { MAX_CLOCK } from '@dndapp/shared/settings.js';
 import { MAP_KINDS, PACES, TRAVEL_BY, MAX_ENCOUNTER_LINES, MAX_ROADS, ROAD_KINDS, journeyAt, CLIMB_KINDS, CONDITIONS, EFFORTS, FOG_MAP, FOG_OPS, MAX_COMPANIONS, MAX_FOG_SHAPES, MAX_CLIMBS, MAX_LIGHTS, MAX_LINKS, MAX_PINS, MAX_PLACES, MAX_PLACE_POINTS, placeProblem, shownTo, arrivalSpots, characterMap, followGroup, followLoop, nearPlace, parentOf, trailFollowers, MAX_RAISED, MAX_TERRAIN, MAX_HEIGHT_FT, MAX_TOKENS, MAX_VARIANTS, MAX_WALLS, PERSON_KIND, PLAYER_KINDS, arcThrough, circlePoints, SCALE_PER, TOKEN_KINDS, TOKEN_SIZES, UNITS, WALL_KINDS, canSee, distanceToWall, doorReach, nearLink, ownToken, pathCost, snapToken, stepTurn, tokenPx, walkLevels, wallBetween } from '@dndapp/shared/map.js';
+import { expireAtDawn, passedDawn } from '@dndapp/shared/companions.js';
 import sharp from 'sharp';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
@@ -18,7 +19,7 @@ import { onTheWay, planJourney } from '../maps/travel.js';
 import { isUvtt, readUvtt, toUvtt, uvttImage, uvttContents } from '../maps/uvtt.js';
 
 export function registerMaps(app, r) {
-  const { access, archive, auth, config, kb, mapReader, maps, merchants, openLiveStream, publicMessage, statBlocks, store, upload } = r;
+  const { access, archive, auth, config, db, kb, mapReader, maps, merchants, openLiveStream, publicMessage, sheets, statBlocks, store, upload } = r;
 
   // ---------- maps (the DM imports them; players see shown maps and move their own token) ----------
 
@@ -86,6 +87,18 @@ export function registerMaps(app, r) {
       }, { by, reason: 'clock' });
     }
     for (const m of merchants?.clockMoved(cid, now) ?? []) notes.push({ kind: 'restock', at: now, text: `${m.name} restocked.` });
+    // Dawn came: summons that last until the next dawn (2024 Bag of Tricks) go from their sheets, and so from the maps.
+    if (passedDawn(before.clock, settings.clock)) {
+      const players = db.prepare("SELECT user_id FROM memberships WHERE campaign_id = ? AND role = 'player'").all(cid);
+      for (const { user_id } of players) {
+        const current = sheets.get(cid, user_id);
+        if (!current.version) continue;
+        const { sheet, gone } = expireAtDawn(current.sheet);
+        if (!gone.length) continue;
+        sheets.save(cid, user_id, sheet, { by, reason: `dawn: ${gone.join(', ')} vanished` });
+        notes.push({ kind: 'dawn', at: now, text: `Dawn: ${gone.join(', ')} vanished (${current.sheet.name || 'a player'}'s).` });
+      }
+    }
     return { clock: settings.clock, notes };
   }
 

@@ -34,6 +34,8 @@ export function registerCharacters(app, r) {
     recent.push(Date.now());
     sheetAiCalls.set(userId, recent);
   };
+  // Item actions (routes/item-actions.js) look up the creatures they summon under the same limit.
+  r.sheetAiAllowed = sheetAiAllowed;
 
   /**
    * Sheets (and character pictures) belong to the players in the campaign: not the admin login, which only
