@@ -21,8 +21,22 @@ export function openDb(file) {
   db.pragma('foreign_keys = ON');
   migrateBeforeSchema(db);
   db.exec(fs.readFileSync(path.join(here, 'schema.sql'), 'utf8'));
+  addMissingColumns(db);
   db.pragma(`user_version = ${SCHEMA_VERSION}`);
   return db;
+}
+
+/**
+ * Columns added to existing tables since, checked on every start whatever the
+ * schema version (so parallel changes don't fight over the version number).
+ */
+function addMissingColumns(db) {
+  const add = (table, column, definition) => {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  };
+  // 2026-10-21: which way Ask answered ('quick' or 'full', qa/route.js).
+  add('qa_log', 'path', 'TEXT');
 }
 
 /**
