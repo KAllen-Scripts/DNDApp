@@ -193,7 +193,10 @@ export function registerCharacters(app, r) {
     // What it lets you do: the rules the app knows by name, else the description's wording, else what the AI read (marked: check it).
     const known = knownItem(f.name || name, edition);
     const actions = known || stats.actions.length || !f.actions?.length ? stats.actions : f.actions;
-    const charges = stats.charges ?? (f.uses?.max ? { ...f.uses, used: 0 } : null);
+    // Charges: the description's wording, with what comes back and when filled in from the AI's reading if it doesn't say.
+    const charges = stats.charges
+      ? { ...stats.charges, recharge: stats.charges.recharge || f.uses?.recharge || '', when: stats.charges.when || f.uses?.when || '' }
+      : f.uses?.max ? { ...f.uses, used: 0 } : null;
     return {
       item: { name: f.name || name, kind: stats.kind, qty: 1, rarity: f.rarity || '', attunement: !!f.attunement, weight: f.weight ?? stats.weight, text: f.text, weapon: stats.weapon, armor: stats.armor, magic: stats.magic, charges, effects: stats.effects, heal: stats.heal, actions, source: f.source?.from || (found.from === 'ai' ? "the AI's memory: check it" : '') },
       from: found.from,

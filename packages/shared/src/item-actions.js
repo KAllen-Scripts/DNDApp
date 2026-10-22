@@ -222,7 +222,7 @@ export function knownItem(name, edition = '2014') {
 
 // ---------- reading actions from a description ----------
 
-const SPELL_RE = /(?:expend|use|spend)\s+(\d+|one|two|three)\s+(?:or more\s+)?(?:of\s+its\s+)?charges?\s+to\s+cast\s+(?:the\s+)?([a-z][a-z' -]{2,40}?)\s+spell(?:\s*\((?:save\s+)?DC\s*(\d{1,2})[^)]*\))?/gi;
+const SPELL_RE = /(?:expend|use|spend)\s+(\d+|one|two|three)\s+(?:or more\s+)?(?:of\s+its\s+)?charges?\s+to\s+cast\s+(?:the\s+)?(?!one\b|any\b|following\b|a\s+spell\b)([a-z][a-z' -]{2,40}?)\s+spell(?:\s*\((?:save\s+)?DC\s*(\d{1,2})[^)]*\))?/gi;
 const WORDS = { one: 1, two: 2, three: 3 };
 
 /**
