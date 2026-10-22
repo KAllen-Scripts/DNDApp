@@ -638,7 +638,23 @@ $('#ask-form textarea').addEventListener('keydown', (e) => {
   }
 });
 
-async function ask(question) {
+/**
+ * Under a quick answer (a general D&D lookup, answered fast from what the AI
+ * knows): a button to ask again the thorough way, with the books and records.
+ */
+function quickNote(question) {
+  const button = h('button', { type: 'button', class: 'link small' }, 'Look it up properly');
+  const note = h('p', { class: 'muted small answer-quick' }, 'Quick answer. ', button);
+  button.addEventListener('click', () => {
+    if (state.asking) return;
+    note.remove();
+    ask(question, 'thorough');
+  });
+  return note;
+}
+
+/** @param {'auto' | 'thorough'} [mode]  thorough: the asker pressed "Look it up properly" */
+async function ask(question, mode = 'auto') {
   state.asking = true;
   const button = $('#ask-form button');
   button.disabled = true;
@@ -657,7 +673,7 @@ async function ask(question) {
   };
   try {
     await guarded(() =>
-      stream(`${base()}/ask`, { question, ...(state.conversationId && { conversationId: state.conversationId }) }, (event, data) => {
+      stream(`${base()}/ask`, { question, ...(mode !== 'auto' && { mode }), ...(state.conversationId && { conversationId: state.conversationId }) }, (event, data) => {
         if (event === 'conversation') state.conversationId = data.conversationId;
         else if (event === 'turn') {
           // A new model turn: text so far was thinking aloud, so replace it.
@@ -673,6 +689,7 @@ async function ask(question) {
           body.innerHTML = renderAnswer(data.answer, data.evidence);
           const ev = renderEvidence(data.evidence);
           if (ev) a.append(ev);
+          if (data.path === 'quick') a.append(quickNote(question));
         } else if (event === 'error') {
           throw new Error(data.error);
         }

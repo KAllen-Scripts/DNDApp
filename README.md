@@ -250,7 +250,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/jobs` | Recent jobs (processing, corrections, rebuilds) |
 | GET | `/campaigns/:cid/jobs/events` | Live job progress (SSE) |
 | POST | `/campaigns/:cid/rebuild` | Rebuild everything from the archive (DM) |
-| POST | `/campaigns/:cid/ask` | Ask a question (SSE stream) `{question, conversationId?}` |
+| POST | `/campaigns/:cid/ask` | Ask a question (SSE stream) `{question, conversationId?, mode?}` (`mode`: `auto` (default), `quick` or `thorough`, SPEC §5.3) |
 | GET | `/campaigns/:cid/conversations[/:id]` | Your chats (pinned first, then most recent) |
 | PATCH | `/campaigns/:cid/conversations/:id` | `{ pinned?, title? }`: pin/unpin or rename one of your chats |
 | DELETE | `/campaigns/:cid/conversations/:id` | Delete one of your chats (its questions and answers are erased; it still counts toward the hourly limit) |
@@ -368,7 +368,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | PATCH / DELETE | `/campaigns/:cid/maps/:mid/pins/:pid` | Move or relabel one of your pins / remove it |
 | GET | `/campaigns/:cid/usage` | AI usage this month by step and provider, plus average answer times (DM) |
 
-`/ask` streams these events: `conversation`, `turn`, `tool` (what it's searching), `text` (answer tokens), `done` (`answer`, `evidence` (the transcript lines behind each citation), cost, `durationMs`), and `error`. On each new `turn`, replace any text you've displayed rather than appending to it.
+`/ask` streams these events: `conversation`, `turn`, `tool` (what it's searching), `text` (answer tokens), `done` (`answer`, `evidence` (the transcript lines behind each citation), cost, `durationMs`, `path`: `quick` for a general D&D lookup answered the quick way, else `full`), and `error`. On each new `turn`, replace any text you've displayed rather than appending to it.
 
 ## Tests
 

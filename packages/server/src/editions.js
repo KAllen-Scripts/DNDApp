@@ -21,6 +21,20 @@ export function createEditions({ store, books = null, config }) {
     fallback,
     /** The DM's choice, or null if they haven't made one. */
     chosen: (campaignId) => (campaignId ? store.getSettings(campaignId).edition : null),
+    /**
+     * The edition when it's known for sure: the DM's choice, REST_RULES, or
+     * the group's one Player's Handbook; else null (Ask's book search then
+     * looks in every book).
+     */
+    async known(campaignId) {
+      const chosen = campaignId && store.getSettings(campaignId).edition;
+      if (chosen) return chosen;
+      if (config.sheets?.restRules) return config.sheets.restRules;
+      if (!books) return null;
+      await books.load();
+      const editions = handbookEditions(books.status().books);
+      return editions.length === 1 && editions[0] ? editions[0] : null;
+    },
     /** The edition a campaign plays by. */
     async of(campaignId) {
       return (campaignId && store.getSettings(campaignId).edition) || fallback();
