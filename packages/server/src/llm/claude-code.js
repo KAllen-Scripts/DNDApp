@@ -14,11 +14,14 @@ import { LLMError, LIMIT_REACHED, toOutputSchema, userContent } from './common.j
 
 const SERVER = 'dnd';
 
-/** Claude Code's environment, minus API credentials so it uses the subscription login. */
-function subscriptionEnv() {
+/**
+ * Claude Code's environment, minus API credentials so it uses the subscription login.
+ * `quiet`: no telemetry, error reports or update checks, which took ~2.3 s of every start (docs/notes/ask-speed.md).
+ */
+export function subscriptionEnv({ quiet = true } = {}) {
   const { ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ...env } = process.env;
   // Claude Code cuts an MCP tool result past 25,000 tokens by default; the tools size their own replies (fit.js).
-  return { ...env, CLAUDE_AGENT_SDK_CLIENT_APP: 'dndapp/0.1', MAX_MCP_OUTPUT_TOKENS: '100000' };
+  return { ...env, CLAUDE_AGENT_SDK_CLIENT_APP: 'dndapp/0.1', MAX_MCP_OUTPUT_TOKENS: '100000', ...(quiet && { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' }) };
 }
 
 /** One user message as the SDK's streaming input. */
@@ -75,7 +78,7 @@ export function createClaudeCodeProvider({ config, usage, queryFn = query }) {
         skills: [],
         persistSession: false,
         permissionMode: 'dontAsk',
-        env: subscriptionEnv(),
+        env: subscriptionEnv({ quiet: config.llm.quietStart !== false }),
         maxTurns: 3,
         ...options,
       },
@@ -133,7 +136,7 @@ export function createClaudeCodeProvider({ config, usage, queryFn = query }) {
       return result.result.trim();
     },
 
-    async agent({ task, purpose, system, prompt, tools, limits, campaignId, userId, onText, onTool, onTurn }) {
+    async agent({ task, purpose, system, prompt, tools, limits, campaignId, userId, onText, onTool, onTurn, effort }) {
       const state = { toolCalls: 0 };
       let turn = 0;
       const server = createSdkMcpServer({
@@ -144,6 +147,7 @@ export function createClaudeCodeProvider({ config, usage, queryFn = query }) {
 
       const result = await run({
         task,
+        effort,
         purpose,
         system,
         prompt,

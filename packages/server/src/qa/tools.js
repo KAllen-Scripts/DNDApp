@@ -144,11 +144,14 @@ function renderWikiSection(page, section, { forDm, names }) {
   return `${head}${also}${who}\n${text.trim() || '(empty)'}`;
 }
 
-/** The book tools' handlers (search_books, read_book, book_contents), clipped like other tool results. */
-function bookHandlers(books, clip, maxChars) {
+/**
+ * The book tools' handlers (search_books, read_book, book_contents), clipped like other tool results.
+ * `edition`: the campaign's ('2014' or '2024'), when known: search_books looks in its books first.
+ */
+function bookHandlers(books, clip, maxChars, edition = null) {
   return {
     search_books: async ({ terms, book }) => {
-      const hits = await books.search(terms, { book });
+      const hits = await books.search(terms, { book, prefer: edition });
       if (hits.error) return hits.error;
       return clip(
         hits.map((h) => `--- (${h.book} p. ${h.page})\n${h.snippet}`).join('\n\n') ||
@@ -190,8 +193,9 @@ export function bookTools(books, { maxChars = 10_000 } = {}) {
  * @param {{ userId: number, seesAll: boolean }} opts.viewer  who is asking
  * @param {object[]} [opts.dmCreatures]  the DM's saved creatures; pass them only when the DM is asking
  * @param {object} [opts.books]  the group's rulebooks; the book tools are added only if there are any
+ * @param {'2014' | '2024' | null} [opts.bookEdition]  the campaign's edition when known: search_books prefers its books
  */
-export function createTools({ db, store, kb, search, books, wiki = null, config, campaignId, viewer, dmCreatures = [] }) {
+export function createTools({ db, store, kb, search, books, wiki = null, config, campaignId, viewer, dmCreatures = [], bookEdition = null }) {
   const maxChars = config.qa.maxToolResultTokens * 4;
   const clip = (s, max = maxChars) => (s.length > max ? `${s.slice(0, max)}\n…(truncated)` : s);
   const ownNotesOnly = { userId: viewer.userId, seesAll: false };
@@ -309,7 +313,7 @@ export function createTools({ db, store, kb, search, books, wiki = null, config,
       const found = names.map((n) => dmCreatures.find((c) => creatureKey(c.name) === creatureKey(n)) ?? `--- ${n}: not one of the DM's creatures.`);
       return clip(found.map((c) => (typeof c === 'string' ? c : renderCreature(c))).join('\n\n'));
     },
-    ...bookHandlers(books, clip, maxChars),
+    ...bookHandlers(books, clip, maxChars, bookEdition),
   };
 
   const defs = { ...DEFS, ...(hasWiki ? WIKI_DEFS : {}), ...(books?.status().books.length ? BOOK_DEFS : {}), ...(dmCreatures.length ? CREATURE_DEFS : {}) };
@@ -334,16 +338,19 @@ export function createTools({ db, store, kb, search, books, wiki = null, config,
 
     /**
      * Search on the question before calling the model, so it can often answer
-     * in one turn. Free and fast (local search only).
+     * in one turn. Free and fast (local search only). A quick question
+     * (qa/route.js) passes a smaller budget and only the records and wiki.
+     * @param {{ tokens?: number, only?: ('kb' | 'chunk' | 'note' | 'wiki')[] }} [opts]
      */
-    async preSearch(question) {
-      const budget = config.qa.preSearchTokens * 4;
+    async preSearch(question, { tokens = config.qa.preSearchTokens, only = null } = {}) {
+      const budget = tokens * 4;
       if (budget <= 0) return '';
+      const want = (kind) => !only || only.includes(kind);
       const [kbHits, chunkHits, noteHits, wikiPages] = await Promise.all([
-        search.search(campaignId, question, { kinds: ['kb'], viewer, limit: 4 }),
-        search.search(campaignId, question, { kinds: ['chunk'], viewer, limit: 3 }),
-        search.search(campaignId, question, { kinds: ['note'], viewer: ownNotesOnly, limit: 3 }),
-        hasWiki ? wikiPagesFor(question, 3) : [],
+        want('kb') ? search.search(campaignId, question, { kinds: ['kb'], viewer, limit: 4 }) : [],
+        want('chunk') ? search.search(campaignId, question, { kinds: ['chunk'], viewer, limit: 3 }) : [],
+        want('note') ? search.search(campaignId, question, { kinds: ['note'], viewer: ownNotesOnly, limit: 3 }) : [],
+        hasWiki && want('wiki') ? wikiPagesFor(question, 3) : [],
       ]);
       // Best of each kind first, then the next best of each, and so on; each piece whole, never cut short.
       const lists = [

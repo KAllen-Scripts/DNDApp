@@ -422,6 +422,7 @@ CREATE TABLE IF NOT EXISTS qa_log (
   cost_usd         REAL NOT NULL DEFAULT 0,
   duration_ms      INTEGER,   -- question received -> answer finished
   first_text_ms    INTEGER,   -- question received -> first answer text streamed
+  path             TEXT,      -- 'quick' (a general D&D lookup) or 'full' (qa/route.js); null before 2026-10-21
   status           TEXT NOT NULL DEFAULT 'ok',
   created_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
