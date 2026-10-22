@@ -6,7 +6,7 @@
  * /shared/rolls.js to build the rolls it asks the server for, and the tests
  * check the rules here.
  */
-import { parseRoll } from './dice.js';
+import { formatTerms, parseRoll } from './dice.js';
 
 const DAMAGE_START = /^\s*((?:[+-]?\s*(?:\d*\s*d\s*(?:\d+|%)|\d+)\s*)+)/i;
 
@@ -36,7 +36,7 @@ export function addToRoll(notation, n = 0, moreDice = null) {
     for (const t of /d/i.test(text) ? parseRoll(text).terms : [{ sign: 1, value: Number(text) || 0 }]) {
       if (t.value !== undefined) constant += t.sign * t.value;
       else {
-        const same = terms.find((x) => x.sides === t.sides && x.sign === t.sign);
+        const same = terms.find((x) => x.sides === t.sides && x.sign === t.sign && x.min === t.min && x.reroll === t.reroll);
         if (same) same.count += t.count;
         else terms.push({ ...t });
       }
@@ -45,7 +45,7 @@ export function addToRoll(notation, n = 0, moreDice = null) {
   read(notation);
   if (moreDice) read(moreDice);
   if (!terms.length) return null;
-  const dice = terms.map((t, i) => `${t.sign < 0 ? '-' : i ? '+' : ''}${t.count}d${t.sides}`).join('');
+  const dice = formatTerms(terms);
   return constant ? `${dice}${constant > 0 ? '+' : ''}${constant}` : dice;
 }
 
@@ -123,7 +123,7 @@ export function spellRolls(spell, { values, level }, slot = spell.level) {
 }
 
 /** One die size up, for a versatile weapon used with two hands: "1d8 slashing" → "1d10 slashing". */
-const biggerDie = (damage) => String(damage ?? '').replace(/d(4|6|8|10)\b/, (_, n) => `d${{ 4: 6, 6: 8, 8: 10, 10: 12 }[n]}`);
+export const biggerDie = (damage) => String(damage ?? '').replace(/d(4|6|8|10)\b/, (_, n) => `d${{ 4: 6, 6: 8, 8: 10, 10: 12 }[n]}`);
 
 /**
  * An equipped weapon's rolls (an inventory line, gear.js): as an attack with
