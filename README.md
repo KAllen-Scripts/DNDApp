@@ -140,7 +140,7 @@ For running a fight, the DM has:
 - **Height**: raised areas (roofs, castle wall-walks, cliffs) and how tall tokens are; players see over them only where the line from their eyes clears the edges.
 - **Difficult terrain** (costs double), **other pictures** of the same map (night, after a fire) and **links** between maps (stairs, a trapdoor) that take a token through.
 
-Everyone can **Measure** distances, place **spell templates** (sphere, cone, line, cube; from their own spells too) that show who they catch, **ping** a spot or **sketch** a line (gone after a few seconds), and plan a move round corners with waypoints (Space or W while dragging; in a fight it shows movement used against speed).
+Everyone can **Measure** distances, place **spell templates** (sphere, cone, line, cube; from their own spells too) that show who they catch, **attack** a picked enemy or cast an area spell (the server rolls, applies damage and saves, and shows a card), **ping** a spot or **sketch** a line (gone after a few seconds), and plan a move round corners with waypoints (Space or W while dragging; in a fight it shows movement used against speed).
 
 ### The DM's Creatures tab
 
@@ -216,7 +216,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | POST | `/logout` | Ends this login |
 | GET | `/me` | Your account and campaigns (each with its `settings`) |
 | GET | `/campaigns/:cid` | Campaign, your role and character, and its `settings` |
-| PATCH | `/campaigns/:cid/settings` | Change the campaign's settings (DM) `{weight?: capacity \| variant \| ignore, edition?: 2014 \| 2024 \| null, travel?: {time?: clock \| skip \| none, roads?, terrain?, vehicles?, marches?, encounters?}}` (`null`: not chosen, follow `REST_RULES` or the books' Player's Handbook; travel switches change one at a time) → the settings; sent live as `settings` |
+| PATCH | `/campaigns/:cid/settings` | Change the campaign's settings (DM) `{weight?: capacity \| variant \| ignore, edition?: 2014 \| 2024 \| null, travel?: {time?: clock \| skip \| none, roads?, terrain?, vehicles?, marches?, encounters?}, attacks?: {on?, damage?: auto \| dm, show_ac?}}` (`null`: not chosen, follow `REST_RULES` or the books' Player's Handbook; travel switches change one at a time) → the settings; sent live as `settings` |
 | GET | `/campaigns/:cid/members` | List members (DM) |
 | GET / POST | `/admin/users` | List accounts (with campaigns, logins, status) / create `{name, password}` (admin) |
 | PUT | `/admin/users/:uid/campaigns` | Set exactly which campaigns an account can access `{campaigns: [{campaign_id, role, character_name?}]}` (admin). `POST /admin/users` takes the same optional `campaigns` |
@@ -365,6 +365,9 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | POST | `/campaigns/:cid/merchants/:mid/buy` | Buy (players) `{line, qty?}`: the coins come off your sheet (with change), the item goes into its inventory, the stock goes down → `{shop, sheet_version, bought}`; 400 if closed, sold out or you can't afford it |
 | POST | `/campaigns/:cid/creatures/find` | Have the AI find a creature on the web, official or not, with a picture (DM) `{query}`. 202 with the creature as `finding: {status: pending}`; it fills in (or `failed`, with `error`) in the background. 429 past `MAP_AI_PER_HOUR` |
 | POST | `/campaigns/:cid/maps/:mid/combat` | The fight on a map `{action: start \| end \| next \| prev \| add \| remove \| roll \| set, ids?, id?, init?}` (entries count `moved` this turn) → `{map, rolls: [{id, name, d20, mod, total}]}`. DM: everything (`start` with `ids` or every token; NPCs and enemies roll at once; `roll` without `id` rolls every NPC not rolled yet). A player: `roll` (once) or `set` for their own token, and `next` on their own turn |
+| GET | `/campaigns/:cid/maps/:mid/tokens/:tid/actions?target=` | What a token can attack or cast with (its owner or the DM): `{attacker, target, gap, unit, actions: [{id, name, kind: attack \| save \| auto \| heal, bonus?, dc?, save?, damage, area?, level?, situation}], riders, slots}` |
+| POST | `/campaigns/:cid/maps/:mid/attack` | Attack or cast from the map `{attacker, action, target? \| template?, mode?: normal \| advantage \| disadvantage, slot?, use_slot?, riders?, two_hands?}`: the server rolls, applies damage and saves (or leaves them for the DM's OK) → `{map, attack, rolls}`. Players only with their own tokens; off when Campaign settings say so |
+| POST | `/campaigns/:cid/maps/:mid/attacks/:aid` | The DM settles an attack `{do: apply \| half \| skip \| undo, target?}` → `{map, attack}` |
 | POST | `/campaigns/:cid/maps/:mid/templates` | Place an area of effect (anyone who can see the map) `{shape: circle \| cone \| line \| cube, x, y, angle?, size, width?, label?, color?}` (size and width in the map's unit) |
 | PATCH / DELETE | `/campaigns/:cid/maps/:mid/templates/:tid` | Move, turn, resize or relabel a template / remove it (whoever placed it, or the DM) |
 | GET / POST | `/campaigns/:cid/maps/:mid/pins` | Your own pins on the map `{pins}` / add one `{x, y, label?, color?}` |

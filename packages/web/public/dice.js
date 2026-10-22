@@ -205,6 +205,33 @@ export async function roll(notation, { label = '', mode = null, then = null, ini
   if (!threeD || !state.shown3d) celebrate(result);
 }
 
+/**
+ * Show dice the server already rolled for something else (an attack from the
+ * map: the d20 to hit, then the damage), one after another, as if rolled here.
+ */
+export async function showRolls(list) {
+  for (const { label, result } of list ?? []) {
+    if (!result?.terms) continue;
+    const id = ++state.seq;
+    const entry = { label, result, at: new Date(), mine: true, visibility: share() };
+    state.history.unshift(entry);
+    state.history.length = Math.min(state.history.length, 50);
+    drawHistory();
+    const threeD = animated() && diceCount(result) <= MAX_3D_DICE;
+    if (threeD) await animate(result, id);
+    if (id !== state.seq) return;
+    showResult(entry);
+    if (!threeD || !state.shown3d) celebrate(result);
+  }
+}
+
+/** The tray's Normal / Advantage / Disadvantage for the next d20; `used` puts it back to Normal after it's been used. */
+export const nextD20Mode = ({ used = false } = {}) => {
+  const mode = state.nextMode;
+  if (used && mode !== 'normal') setNextMode('normal');
+  return mode;
+};
+
 // ---------- 3D ----------
 
 const boxes = new Map(); // roller → its loaded dice (a promise)
@@ -448,6 +475,11 @@ function showResult({ label, result, then }) {
   card.hidden = false;
   clearTimeout(state.hideTimer);
   state.hideTimer = setTimeout(() => !card.matches(':hover, :focus-within') && hideResult(), 12000);
+}
+
+/** Close the roll's result card (an attack's card says it all). */
+export function hideRollResult() {
+  hideResult();
 }
 
 function hideResult() {

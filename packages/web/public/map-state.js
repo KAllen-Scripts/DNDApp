@@ -46,7 +46,9 @@ export const state = {
   tokenPictures: new Map(), // `${user id}:${picture key}` -> URL of a player's token picture, or null while loading
   measuring: false, // the Measure tool: dragging on the map measures
   ruler: null, // the line being (or last) measured: { pointer, a, b, done }
-  templateDraft: null, // a template about to be placed: { shape, size, width, label, color }
+  templateDraft: null, // a template about to be placed: { shape, size, width, label, color, attack? (an area spell to cast there) }
+  targeting: null, // picking who to attack: { attacker (token id), action, opts } (map-attacks.js)
+  lastAttacker: null, // the token last attacked with, the attack picker's first choice next time
   templatePlace: null, // the template being placed: { pointer, a, b }
   selectedTemplate: null, // template id
   selectedRaised: null, // raised area id (the DM's, to check or change its height, shape or bridge)

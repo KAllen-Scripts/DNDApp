@@ -315,6 +315,7 @@
         <button id="map-ping" data-tool="ping" class="phone-main ghost map-main map-needs-map" aria-pressed="false" title="Click the map to point everyone at a spot (Alt+click works any time)">Ping</button>
         <button id="map-draw" data-tool="draw" class="phone-main ghost map-main map-needs-map" aria-pressed="false" title="Sketch on the map for everyone to see; it fades after a while">Draw</button>
         <button id="map-template" data-tool="template" class="ghost map-main map-needs-map" aria-pressed="false" title="Place a spell's area (a sphere, cone, line or cube) and see who it catches">Template</button>
+        <button id="map-attacks-log" data-tool="attacks" class="ghost map-needs-map" title="Attacks and spells made on this map: who hit whom, damage and saves" hidden>Attack log</button>
         <button id="map-combat-open" data-tool="initiative" class="phone-main ghost map-main map-needs-map" aria-pressed="false" title="The turn order in a fight">Initiative</button>
         <button id="map-add-companion" data-tool="companion" class="ghost player-only map-needs-map" title="Put a companion, familiar or summon of yours on the map: you move it and roll for it">Companion</button>
         <select id="map-beside" aria-label="Beside the map" title="Show your sheet, chats, notes or handouts beside the map">
@@ -421,6 +422,9 @@
         <button type="button" id="map-north" class="map-north" title="The map is turned: tap for north up" aria-label="Turn the map north up" hidden><span aria-hidden="true">N</span></button>
         <div id="map-measure" class="map-measure" hidden></div>
         <div id="map-combat" class="map-combat" hidden></div>
+        <!-- Attacks from the map: picking a target, and the result cards (map-attacks.js). -->
+        <div id="map-targeting" class="map-targeting" role="status" hidden></div>
+        <div id="map-attack-cards" class="map-attack-cards" aria-live="polite"></div>
         <!-- The AI drafting walls: working, done or failed (DM only). -->
         <div id="map-ai-note" class="map-ai-note" role="status" aria-live="polite" hidden></div>
       </div>
