@@ -421,7 +421,7 @@ button.wiki-link.missing { color: var(--muted); text-decoration-style: dashed; }
 .wiki-slot { display: grid; gap: 0.35rem; align-content: start; padding: 0.5rem; border-radius: 8px; background: var(--surface-2); border: 1px dashed transparent; min-width: 0; }
 .wiki-slot.dropping, .wiki-edit-gallery.dropping, .wiki-drop.dropping, .wiki-edit-section textarea.dropping { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
 .wiki-slot-thumb { display: grid; place-items: center; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 6px; background: var(--surface); }
-.wiki-slot.banner .wiki-slot-thumb { aspect-ratio: 3 / 1; }
+.wiki-slot-banner .wiki-slot-thumb { aspect-ratio: 3 / 1; }
 .wiki-slot-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .wiki-slot-empty { color: var(--muted); font-size: 0.85rem; }
 .wiki-slot-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
@@ -488,6 +488,7 @@ button.wiki-link.missing { color: var(--muted); text-decoration-style: dashed; }
   .wiki-panel { grid-template-columns: 1fr; }
   .wiki-side { position: static; max-height: none; }
   .wiki-infobox { grid-template-columns: 1fr; }
+  .wiki-infobox-picture img { max-height: 15rem; }
   .wiki-figure.place-right, .wiki-figure.place-left { float: none; width: auto; margin: 0.6rem 0; }
   .wiki-fact-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; }
   .wiki-fact-row .wiki-picker { grid-column: 1 / -1; grid-row: 2; }

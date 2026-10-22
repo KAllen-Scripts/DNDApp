@@ -627,7 +627,7 @@ function insertAt(area, snippet) {
  */
 function pictureSlot(label, current, { banner = false } = {}) {
   let pic = current ? { ...current } : null;
-  const el = h('div', { class: `wiki-slot${banner ? ' banner' : ''}` });
+  const el = h('div', { class: `wiki-slot${banner ? ' wiki-slot-banner' : ''}` });
   let caption;
   let picker;
   let focus;
@@ -637,7 +637,7 @@ function pictureSlot(label, current, { banner = false } = {}) {
     focus = banner ? h('input', { type: 'range', min: 0, max: 100, value: String(pic?.focus ?? 50), 'aria-label': 'Banner position' }) : null;
     const thumb = pic ? pictureImg(pic.id, { size: 'thumb', alt: '', style: banner ? `object-position: 50% ${pic.focus ?? 50}%` : null }) : h('span', { class: 'wiki-slot-empty' }, 'No picture');
     focus?.addEventListener('input', () => { thumb.style.objectPosition = `50% ${focus.value}%`; });
-    el.replaceChildren(
+    el.replaceChildren(...[
       h('div', { class: 'wiki-slot-head' }, h('strong', { class: 'small' }, label)),
       h('div', { class: 'wiki-slot-thumb' }, thumb),
       h('div', { class: 'wiki-slot-actions' },
@@ -652,7 +652,7 @@ function pictureSlot(label, current, { banner = false } = {}) {
       pic ? caption : null,
       pic && banner ? h('label', { class: 'small' }, 'Show from top to bottom ', focus) : null,
       pic ? h('label', { class: 'small' }, 'Available to ', picker.el) : null,
-    );
+    ].filter(Boolean));
   };
   draw();
   dropTarget(el, async (files) => {
