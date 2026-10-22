@@ -10,7 +10,7 @@
  * stat block is worked out from the character. The rules are in
  * shared/companions.js; sheet.js owns the sheet and passes in what this needs.
  */
-import { api, h } from './api.js';
+import { api, h, setChildren } from './api.js';
 import { ABILITIES, ABILITY_NAMES, formatBonus } from './shared/sheet.js';
 import { d20Plus } from './shared/dice.js';
 import { speedText } from './shared/wild-shape.js';
@@ -57,7 +57,7 @@ export function companionsBox({ state, changed, flush }) {
 
   function draw() {
     const cs = list();
-    el.replaceChildren(
+    setChildren(el,
       h('h3', {}, 'Companions'),
       cs.length ? h('div', { class: 'companion-list' }, cs.map(card)) : h('p', { class: 'muted small' }, 'Familiars, pets, mounts, summons and animal companions. Each keeps its stat block and hit points here, and goes on the map with you.'),
       note ? h('p', { class: 'small companion-note', role: 'status' }, note) : null,

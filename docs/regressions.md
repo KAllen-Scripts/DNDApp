@@ -15,6 +15,7 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-22 | The new Companions box on the sheet showed "null" under its text when it had no note to show (found by the page tests' null check when the companions work was merged). | `web/test/sheet.test.js`: regression: the Companions box with no companions shows no "null" |
 | 2026-10-21 | The Sheet review showed "nullnull" when nothing was against the rules (empty parts were put into the page as null). | `web/test/sheet.test.js`: regression: a Sheet review with nothing against the rules shows no "null" in its box |
 | 2026-10-21 | The Class features box showed "nullnull" when there were no subclass or race features. | `web/test/sheet.test.js`: regression: Class features with no subclass or race rows shows no "null" |
 | 2026-10-21 | The owner never found players' companions (PR #58): the map's Companion button was the only way in, and in full screen it hid behind More. Companions now live on the sheet too. | `web/test/companions.test.js`: regression: the map's Companion button is one of the main map tools, not hidden behind More in full screen |
