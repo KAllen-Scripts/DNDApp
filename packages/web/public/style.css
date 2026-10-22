@@ -1633,6 +1633,26 @@ button.busy:disabled { opacity: 1; }
 
 /* Inventory: weight and attunement above the list; charges and magic item effects on a row. */
 .gear-top { margin: 0.4rem 0; }
+/* The Inventory's add form: kind, name, Look up, Add by hand; the item's card under it before it's added. */
+.gear-add { flex-wrap: wrap; align-items: center; }
+.gear-add #gear-kind { flex: none; }
+.gear-add #gear-name { flex: 1 1 16rem; min-width: 10rem; max-width: 30rem; }
+.gear-add #gear-status { flex-basis: 100%; }
+.gear-add #gear-status:empty { display: none; }
+.gear-preview { margin: 0.4rem 0 0.8rem; }
+.gear-preview[hidden] { display: none; }
+.gear-card { border: 1px solid var(--accent); border-radius: 10px; padding: 0.7rem 0.9rem; background: var(--surface); max-width: 46rem; }
+.gear-card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.6rem; }
+.gear-card-head h3 { margin: 0; font-size: 1.1rem; }
+.gear-card-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.gear-card-facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.15rem 0.8rem; margin: 0.5rem 0; font-size: 0.9rem; }
+.gear-card-facts dt { color: var(--muted); }
+.gear-card-facts dd { margin: 0; }
+.gear-card-text { font-size: 0.9rem; max-height: 22rem; overflow: auto; }
+.gear-card-text table { border-collapse: collapse; }
+.gear-card-text :is(th, td) { border: 1px solid var(--border); padding: 0.15rem 0.4rem; }
+.gear-card-actions { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
+.gear-card-actions .spacer { flex: 1; }
 .gear-summary { margin: 0; display: flex; flex-wrap: wrap; gap: 0.2rem 0.6rem; }
 .gear-warn, .sheet-warn { margin: 0.2rem 0; color: var(--error); }
 .sheet-warn { grid-column: 1 / -1; }
