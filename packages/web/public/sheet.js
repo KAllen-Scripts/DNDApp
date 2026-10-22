@@ -23,6 +23,7 @@ import { POINT_BUY, POINT_COST, changePointBuy, pointBuy, stepPointBuy } from '.
 import { roll, rollModeFromEvent, modeButtons, D20_ICON } from './dice.js';
 import { wildShapeBox, wildShapeBanner } from './sheet-wild-shape.js';
 import { classFeaturesBox } from './sheet-class-features.js';
+import { companionsBox } from './sheet-companions.js';
 import { subclassNames } from './shared/subclass-features.js';
 import { featureRows } from './shared/class-features.js';
 import { MORE_RACES } from './shared/race-features.js';
@@ -1522,17 +1523,20 @@ async function removePicture(kind, draw) {
  */
 const classFeatures = () => classFeaturesBox({ state, changed, render, heal: useFeature, wildShape: () => wildShapeBox({ state, changed, render }) });
 
+/** Companions (sheet-companions.js): familiars, pets, mounts, summons, with their stat blocks; on the map with Put on the map. */
+const companions = () => companionsBox({ state, changed, flush });
+
 const pages = () => [section('Character details', details()), section('Spells', spells())];
 
 const LAYOUTS = {
   // The official 2014 sheet: three columns, then details and spells.
   classic: () => [
-    row('classic', col(core(), passive(), proficiencies()), col(combat(), attacks(), classFeatures(), equipment()), col(traits(), features())),
+    row('classic', col(core(), passive(), proficiencies()), col(combat(), attacks(), classFeatures(), companions(), equipment()), col(traits(), features())),
     ...pages(),
   ],
   // What you need in a fight across the top.
   combat: () => [
-    row('combat', col(combat()), col(attacks(), classFeatures()), col(equipment())),
+    row('combat', col(combat()), col(attacks(), classFeatures(), companions()), col(equipment())),
     row('stats', col(core(), passive(), proficiencies()), col(traits(), features())),
     ...pages(),
   ],
@@ -1542,7 +1546,7 @@ const LAYOUTS = {
     row('abilities',
       col(proficiency(), inspiration(), pointBuyBox(), ...['str', 'dex', 'con'].map((a) => abilityGroup(a)), skillNotes(), passive(), proficiencies()),
       col(...['int', 'wis', 'cha'].map((a) => abilityGroup(a))),
-      col(attacks(), classFeatures(), features()),
+      col(attacks(), classFeatures(), companions(), features()),
       col(traits(), equipment()),
     ),
     ...pages(),
@@ -1556,7 +1560,7 @@ const LAYOUTS = {
       col(proficiency(), inspiration(), saves(), passive(), proficiencies()),
       col(skills()),
       col(tabbed([
-        ['actions', 'Actions', () => [attacks(), classFeatures()]],
+        ['actions', 'Actions', () => [attacks(), classFeatures(), companions()]],
         ['spells', 'Spells', spells],
         ['inventory', 'Inventory', equipment],
         ['features', 'Features & traits', features],
@@ -1566,7 +1570,7 @@ const LAYOUTS = {
   ],
   // Everything in one scrolling column.
   single: () => [
-    row('single', col(core(), passive(), combat(), attacks(), classFeatures(), equipment(), proficiencies(), traits(), features())),
+    row('single', col(core(), passive(), combat(), attacks(), classFeatures(), companions(), equipment(), proficiencies(), traits(), features())),
     ...pages(),
   ],
 };

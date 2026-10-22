@@ -1,7 +1,7 @@
 /**
  * Character sheet rules (D&D 5e, 2014 Player's Handbook).
  *
- * Plain JS (it imports only gear.js, the inventory rules, wild-shape.js and class-features.js): the server uses it, and the web page loads the
+ * Plain JS (it imports only gear.js, the inventory rules, wild-shape.js, companions.js and class-features.js): the server uses it, and the web page loads the
  * same file from /shared/sheet.js so automatic values update as the player
  * types. The server stays the authority on what is saved.
  *
@@ -16,6 +16,7 @@ import { normalizeWildShape } from './wild-shape.js';
 import { normalizeClassFeatures, restClassFeatures } from './class-features.js';
 import { normalizeCombat } from './attack-extras.js';
 import { subclassOf } from './subclass-features.js';
+import { normalizeCompanions } from './companions.js';
 
 export { WEAPONS };
 
@@ -201,6 +202,7 @@ export function emptySheet({ name = '', player_name = '' } = {}) {
     spellcasting: { class: '', slots_used: {}, pact_used: 0 },
     spells: [],
     wild_shape: { forms: [], active: null }, // druids: Wild Shape forms (wild-shape.js)
+    companions: [], // familiars, pets, mounts, summons and animal companions, each with its stat block (companions.js)
     class_features: { spent: {}, max: {}, custom: [], rolled: {} }, // Rage, Ki, Wild Shape uses... and the player's own rows (class-features.js)
     combat: normalizeCombat(), // weapons with mastery, fighting styles and other choices, raging / Hunter's Mark / Hex now (attack-extras.js)
     point_buy: normalizePointBuy(), // the point buy calculator (point-buy.js): off until the player turns it on
@@ -340,6 +342,7 @@ export function normalizeSheet(input = {}) {
   out.point_buy = normalizePointBuy(s.point_buy);
   out.spells = (Array.isArray(s.spells) ? s.spells : []).slice(0, 400).map(normalizeSpell).filter((sp) => sp.name);
   out.wild_shape = normalizeWildShape(s.wild_shape);
+  out.companions = normalizeCompanions(s.companions);
   out.class_features = normalizeClassFeatures(s.class_features);
   out.combat = normalizeCombat(s.combat);
   // Sheets from before the class features box kept Wild Shape uses spent with the forms.
