@@ -5,8 +5,10 @@
  * (sheet.js). The PHB weapon and armour tables (SRD) give the numbers for
  * mundane gear by name; anything else is read from the item's description.
  *
- * Plain JS with no imports, like sheet.js: the server and the page use it.
+ * Plain JS, like sheet.js: the server and the page use it. What an item lets you
+ * do (summon, cast, attack, heal) is in item-actions.js.
  */
+import { itemActions, knownItem, normalizeActions } from './item-actions.js';
 
 /** Weapons: damage, the ability it uses (finesse = the better of Str and Dex), simple or martial, properties. */
 const WEAPON_ROWS = [
@@ -158,12 +160,15 @@ const DAMAGE_TYPES = 'acid|bludgeoning|cold|fire|force|lightning|necrotic|pierci
  * its description: { kind, weapon: { damage, ability, category, properties }
  * | null, armor: { base, type } | null, magic }.
  */
-export function itemStats({ name = '', kind = '', text = '', stats = null } = {}) {
+export function itemStats({ name = '', kind = '', text = '', stats = null, edition = '2014' } = {}) {
+  // What it lets you do (Bag of Tricks' summons, a wand's spell): the rules the app knows by name, else the description.
+  const known = knownItem(name, edition);
+  const actions = known?.actions ?? itemActions({ name, text, edition });
   // What the DM set on one of their items wins over what the tables and the description say.
-  if (stats) return { kind: stats.weapon ? 'weapon' : stats.armor ? 'armor' : kind || 'other', weapon: stats.weapon, armor: stats.armor, magic: stats.magic, weight: readStats({ name }).weight ?? null, charges: stats.charges, effects: stats.effects, heal: stats.heal };
+  if (stats) return { kind: stats.weapon ? 'weapon' : stats.armor ? 'armor' : kind || 'other', weapon: stats.weapon, armor: stats.armor, magic: stats.magic, weight: readStats({ name }).weight ?? null, charges: stats.charges ?? known?.charges ?? null, effects: stats.effects, heal: stats.heal, actions };
   const read = readStats({ name, kind, text });
   const potion = read.kind === 'potion' || /\bpotion\b/i.test(name);
-  return { ...read, heal: potion ? itemHeal(name, text) : '' };
+  return { ...read, charges: read.charges ?? (known?.charges ? { ...known.charges, used: 0 } : null), heal: potion ? itemHeal(name, text) : '', actions };
 }
 
 function readStats({ name = '', kind = '', text = '' } = {}) {
@@ -297,6 +302,8 @@ export function normalizeGear(g = {}) {
       .slice(0, MAX_EFFECTS),
     // What drinking it heals (a potion): dice or a number; '' if nothing.
     heal: cleanHeal(g.heal),
+    // What you can do with it (item-actions.js): summon, cast, attack, heal, from the item's rules, its description or the AI.
+    actions: normalizeActions(g.actions),
     weight: g.weight == null || g.weight === '' || !Number.isFinite(Number(g.weight)) ? null : Math.max(0, Number(g.weight)),
     text: str(g.text, 8000),
     source: str(g.source, 200),
@@ -394,15 +401,15 @@ export function armorClass(inventory, dexMod) {
  * with what the item does when equipped (itemStats), Proficient ticked if
  * the character's class (`classKey`, e.g. "fighter") is.
  */
-export function addToInventory(inventory, { id = null, name, kind = 'other', text = '', weight = null, attunement = false, stats = null }, qty = 1, { classKey = null, attuneMax = 3 } = {}) {
+export function addToInventory(inventory, { id = null, name, kind = 'other', text = '', weight = null, attunement = false, stats = null, actions = null, rarity = '' }, qty = 1, { classKey = null, attuneMax = 3, edition = '2014' } = {}) {
   const list = (inventory ?? []).map((g) => ({ ...g }));
   const same = list.find((g) => (id != null && g.item_id === id) || g.name.toLowerCase() === String(name).toLowerCase());
   if (same) {
     same.qty += qty;
     return normalizeInventory(list, { attuneMax });
   }
-  const st = itemStats({ name, kind, text, stats });
-  const line = { item_id: id, name, kind: st.kind === 'other' ? kind : st.kind, qty, text, weight: weight ?? st.weight, attunement, weapon: st.weapon, armor: st.armor, magic: st.magic, charges: st.charges, effects: st.effects, heal: st.heal };
+  const st = itemStats({ name, kind, text, stats, edition });
+  const line = { item_id: id, name, kind: st.kind === 'other' ? kind : st.kind, qty, text, rarity, weight: weight ?? st.weight, attunement, weapon: st.weapon, armor: st.armor, magic: st.magic, charges: st.charges, effects: st.effects, heal: st.heal, actions: actions?.length ? actions : st.actions };
   line.proficient = classProficient(classKey, line) ?? true;
   list.push(line);
   return normalizeInventory(list, { attuneMax });
