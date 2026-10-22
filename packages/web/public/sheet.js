@@ -11,7 +11,7 @@
  */
 import { api, fileUrl, h, storage, note } from './api.js';
 import {
-  ABILITIES, ABILITY_NAMES, SKILLS, CLASSES, RACES, BACKGROUNDS, ALIGNMENTS, SCHOOLS,
+  ABILITIES, ABILITY_NAMES, SKILLS, CLASSES, RACES, ALIGNMENTS, SCHOOLS,
   WEAPONS, classKey, computeSheet, coerceDerived, formatBonus, newAttack, normalizeSheet, normalizeSpell, hitDice as hitDiceOf, rollDisadvantage,
 } from './shared/sheet.js';
 import { d20Plus } from './shared/dice.js';
@@ -26,6 +26,7 @@ import { subclassNames } from './shared/subclass-features.js';
 import { featureRows } from './shared/class-features.js';
 import { MORE_RACES } from './shared/race-features.js';
 import { loadCharacters, refreshCharacters, nameTyped } from './sheet-characters.js';
+import { backgroundBox, backgroundNames, forgetApplied } from './sheet-background.js';
 import { itemNames } from './shared/item-names.js';
 import { GEAR_KINDS, effectText, gearCard } from './gear-card.js';
 
@@ -76,6 +77,7 @@ export async function loadSheet({ campaignId, userId, guarded }) {
   state.pictureUrls.clear();
   state.itemPictures.clear();
   Object.assign(state, { campaignId, userId, guarded, dirty: false, unusedDescription: '', itemPicturesLoading: null });
+  forgetApplied();
   const review = $('#sheet-review-result');
   if (review) review.hidden = true;
   const [{ sheet, version, edition, number }, pictures] = await Promise.all([api('GET', `${base()}/sheet`), api('GET', `${base()}/character/pictures`)]);
@@ -123,6 +125,8 @@ export function setSheetSettings(settings) {
 }
 
 function useSheet(sheet, version, number = state.number) {
+  // Another character (or campaign): the Background box's Undo was for the last one.
+  if ((number ?? 1) !== state.number || !state.sheet) forgetApplied();
   state.sheet = normalizeSheet(sheet);
   state.savedSheet = structuredClone(state.sheet);
   state.version = version;
@@ -437,7 +441,7 @@ function infoBox() {
   return h('section', { class: 'sh-box info-box' },
     classes,
     h('div', { class: 'info-grid' },
-      labelled('Background', field('background', { label: 'Background', list: 'dl-backgrounds' })),
+      labelled('Background', backgroundBox({ state, input: field('background', { label: 'Background', list: 'dl-backgrounds' }), changed, redraw: render })),
       labelled('Race', field('race', { label: 'Race', list: 'dl-races' })),
       labelled('Alignment', field('alignment', { label: 'Alignment', list: 'dl-alignments' })),
       labelled('Player name', field('player_name', { label: 'Player name' })),
@@ -1627,7 +1631,7 @@ function render() {
     datalist('dl-races', [...RACES, ...MORE_RACES]),
     datalist('dl-classes', Object.values(CLASSES).map((c) => c.name)),
     ...Object.keys(CLASSES).map((key) => datalist(`dl-subclasses-${key}`, subclassNames(key, state.settings?.edition || state.edition || '2014'))),
-    datalist('dl-backgrounds', BACKGROUNDS),
+    datalist('dl-backgrounds', backgroundNames(state)),
     datalist('dl-alignments', ALIGNMENTS),
     datalist('dl-schools', SCHOOLS),
     header(),

@@ -6,6 +6,7 @@
 import { api, h } from './api.js';
 import { EDITIONS, TRAVEL_PARTS, TRAVEL_TIME, WEIGHT_RULES, normalizeSettings } from './shared/settings.js';
 import { setSheetSettings } from './sheet.js';
+import { backgroundsSection } from './campaign-backgrounds.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -41,11 +42,14 @@ function openDialog() {
   const save = async (patch, done) => {
     try {
       const saved = await state.guarded(() => api('PATCH', `/campaigns/${state.campaignId}/settings`, patch));
-      if (!saved) return;
+      if (!saved) return false;
       settingsHeard(saved);
       result.textContent = done;
+      backgrounds.draw();
+      return true;
     } catch (err) {
       result.textContent = `Couldn't save that: ${err.message}`;
+      return false;
     }
   };
   const help = h('p', { class: 'muted small' }, WEIGHT_HELP[state.settings.weight]);
@@ -73,6 +77,8 @@ function openDialog() {
     box.addEventListener('change', () => save({ travel: { [k]: box.checked } }, 'Saved. Journeys follow it from now on.'));
     return h('label', { class: 'check' }, box, ` ${label}`);
   });
+  // The DM's own backgrounds (campaign-backgrounds.js): every player's sheet suggests them.
+  const backgrounds = backgroundsSection({ list: () => state.settings.backgrounds, save: (list, done) => save({ backgrounds: list }, done) });
   dialog.replaceChildren(
     h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => e.preventDefault() },
       h('h2', {}, 'Campaign settings'),
@@ -84,6 +90,7 @@ function openDialog() {
       h('label', { class: 'fld' }, h('span', {}, 'Travel time'), time),
       ...parts,
       h('p', { class: 'muted small' }, 'Switch off whatever your table would rather skip. Journeys already on the road keep going as they set off.'),
+      backgrounds.el,
       result,
       h('div', { class: 'map-dialog-actions' }, h('span', { class: 'spacer' }), h('button', { type: 'button', class: 'primary', onclick: () => dialog.close() }, 'Done')),
     ),

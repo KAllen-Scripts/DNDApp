@@ -16,6 +16,7 @@
     "./gear.js": "./src/gear.js",
     "./item-names.js": "./src/item-names.js",
     "./point-buy.js": "./src/point-buy.js",
+    "./backgrounds.js": "./src/backgrounds.js",
     "./map.js": "./src/map.js",
     "./map-design.js": "./src/map-design.js",
     "./map-paint.js": "./src/map-paint.js",

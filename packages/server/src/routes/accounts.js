@@ -2,6 +2,7 @@
  * Logging in, your own account, and the admin screen (accounts, campaigns, who is in which).
  * The admin login is for managing the server; to play, the admin makes a separate player account.
  */
+import { MAX_CUSTOM_BACKGROUNDS } from '@dndapp/shared/backgrounds.js';
 import { z } from 'zod';
 import { BadRequestError, NotFoundError, sessionDateFor } from '../store.js';
 import { EDITIONS, TRAVEL_PARTS, TRAVEL_TIME, WEIGHT_RULES } from '@dndapp/shared/settings.js';
@@ -51,7 +52,8 @@ export function registerAccounts(app, r) {
   /**
    * Change the campaign's settings (DM): { weight?: 'capacity' | 'variant' | 'ignore',
    * edition?: '2014' | '2024' | null (null: not chosen, follow the books), travel?: { time?, roads?, terrain?,
-   * vehicles?, marches?, encounters? } (shared/settings.js; the rest stay as they were) }. Everyone in it hears `settings` live.
+   * vehicles?, marches?, encounters? } (shared/settings.js; the rest stay as they were), backgrounds?: the DM's own
+   * backgrounds, the whole list (shared/backgrounds.js) }. Everyone in it hears `settings` live.
    */
   app.patch('/campaigns/:cid/settings', async (request) => {
     const a = access(request, { dm: true });
@@ -59,6 +61,8 @@ export function registerAccounts(app, r) {
       weight: z.enum(Object.keys(WEIGHT_RULES)).optional(),
       edition: z.enum(Object.keys(EDITIONS)).nullable().optional(),
       travel: z.object({ time: z.enum(Object.keys(TRAVEL_TIME)), ...Object.fromEntries(Object.keys(TRAVEL_PARTS).map((k) => [k, z.boolean()])) }).partial().strict().optional(),
+      // The DM's own backgrounds, the whole list (shared/backgrounds.js cleans each one).
+      backgrounds: z.array(z.record(z.string(), z.unknown())).max(MAX_CUSTOM_BACKGROUNDS).optional(),
     }).strict().parse(request.body ?? {});
     // Travel switches change one at a time.
     if (body.travel) body.travel = { ...store.getSettings(a.cid).travel, ...body.travel };

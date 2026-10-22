@@ -841,6 +841,21 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 .chars-name-form input { flex: 1; min-width: 8rem; }
 .chars-row button.danger { color: var(--error); }
 .chars-message { margin: 0.3rem 0 0; }
+/* The Background box (sheet-background.js) and the DM's own backgrounds (campaign-backgrounds.js). */
+.bg-box { display: grid; gap: 0.3rem; min-width: 0; }
+.bg-applied { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.5rem; overflow-wrap: anywhere; }
+.bg-gives summary { cursor: pointer; font-size: 0.85rem; color: var(--muted); }
+.bg-gives dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.6rem; margin: 0.3rem 0; font-size: 0.85rem; }
+.bg-gives dt { font-weight: 600; }
+.bg-gives dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 480px) { .bg-gives dl { grid-template-columns: 1fr; } .bg-gives dd { margin-bottom: 0.3rem; } }
+.bg-custom { margin-top: 0.8rem; }
+.bg-list { list-style: none; padding: 0; margin: 0.4rem 0; display: grid; gap: 0.3rem; }
+.bg-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem; }
+.bg-list li .muted { flex: 1; min-width: 8rem; }
+.bg-form { display: grid; gap: 0.5rem; padding: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius); }
+.bg-checks { display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.3rem 0.6rem; margin: 0; }
+.bg-checks label.check { flex: 0 1 11rem; }
 .sheet-review { margin: 0.5rem 0; }
 .sheet-review header { display: flex; align-items: center; gap: 0.5rem; }
 .sheet-review header h3 { margin: 0; flex: 1; font-size: 1rem; }
