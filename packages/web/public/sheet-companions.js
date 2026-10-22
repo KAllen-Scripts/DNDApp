@@ -49,7 +49,7 @@ export function companionsBox({ state, changed, flush }) {
   const say = (text) => { note = text; drawn = null; paint(); };
 
   const loadWhere = () => state.guarded(() => api('GET', `${base()}/sheet/companions/where`))
-    .then((res) => { if (res) { where = res.where ?? {}; drawn = null; paint(); } })
+    .then((res) => { if (res && el.isConnected) { where = res.where ?? {}; drawn = null; paint(); } })
     .catch(() => {});
 
   function draw() {
@@ -194,6 +194,7 @@ export function companionsBox({ state, changed, flush }) {
       if (s?.creatures?.length && !s.creatures.includes(creature.value)) creature.value = '';
     };
     state.guarded(() => api('GET', `${base()}/forms`)).then((forms) => {
+      if (!from.isConnected) return;
       srd = (forms ?? []).map((f) => f.name);
       fill();
     }).catch(() => {});

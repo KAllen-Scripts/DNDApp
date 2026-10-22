@@ -87,3 +87,33 @@ test("companions: a Battle Smith's Steel Defender is worked out from the sheet, 
     assert.equal(t.sheets.get(t.campaign.id, t.sam.id).sheet.companions[0].form.name, 'Steel Defender');
   });
 });
+
+test("companions: the map's Companion button lists the sheet's companions to put on this map", async () => {
+  await withPage({
+    setup: { llm: createFakeLLM({ structured: async () => mapReading() }) },
+    before: async (t) => {
+      const form = (await (await t.request('GET', `/campaigns/${t.campaign.id}/forms/lookup?name=Mastiff`, { as: t.sam.token })).json());
+      t.sheets.save(t.campaign.id, t.sam.id, { ...emptySheet({ name: 'Thorin' }), companions: [{ id: 'dog-1', name: 'Biscuit', kind: 'pet', form }] });
+      const map = await importMap(t, { patch: { shown: true, grid: { size: 35, x: 0, y: 0 } } });
+      await addToken(t, map, { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 52, y: 52 });
+      return { map };
+    },
+    page: (t) => ({ as: t.sam, storage: NO_3D }),
+  }, async (page, t, { map }) => {
+    page.click('[data-tab=map]');
+    await page.waitFor(() => !page.$('#map-add-companion').disabled, { what: 'the map' });
+    page.click('#map-add-companion');
+    await page.waitFor(() => /From your sheet/.test(page.text('#map-dialog')), { what: "the sheet's companions" });
+    page.click([...page.$('#map-dialog').querySelectorAll('button')].find((b) => b.textContent === 'Put on the map'));
+    await page.waitFor(() => t.maps.get(t.campaign.id, map.id).tokens.some((x) => x.companion === 'dog-1'), { what: 'Biscuit on the map' });
+    await page.waitFor(() => page.$('#map-tokens .token[aria-label="Biscuit"]'), { what: "Biscuit's token" });
+  });
+});
+
+test("regression: the map's Companion button is one of the main map tools, not hidden behind More in full screen", async () => {
+  await withPage({ page: (t) => ({ as: t.sam, storage: NO_3D }) }, async (page) => {
+    const button = page.$('#map-add-companion');
+    assert.ok(button.classList.contains('map-main'), 'full screen shows only .map-main tools until More');
+    assert.ok(button.classList.contains('player-only'));
+  });
+});

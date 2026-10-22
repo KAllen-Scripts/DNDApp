@@ -43,6 +43,7 @@ export function companionDialog() {
   // The companions kept on your character sheet come first: they go on this map tied to the sheet (hit points and all).
   const fromSheet = h('div', { class: 'companion-sheet-list' });
   state.guarded(() => api('GET', `/campaigns/${state.campaignId}/sheet`)).then((res) => {
+    if (!fromSheet.isConnected) return; // closed meanwhile
     const list = res?.sheet?.companions ?? [];
     fromSheet.replaceChildren(...(list.length ? [
       h('h3', {}, 'From your sheet'),
