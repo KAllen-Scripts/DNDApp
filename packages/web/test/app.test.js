@@ -371,6 +371,33 @@ test('ask: Shift+Enter is a new line, not a question; an empty question is ignor
   });
 });
 
+test('a quick answer offers "Look it up properly", which asks again the thorough way in the same chat', async () => {
+  const llm = createFakeLLM({ qaScript: [[{ answer: '**Bag of Tricks.** Pull out a fuzzy ball.' }], [{ answer: 'The thorough answer.' }], [{ answer: 'Brother Hal.' }]] });
+  await withPage({ setup: { llm }, page: (t) => ({ as: t.sam }) }, async (page) => {
+    page.type('#ask-form textarea', "What's that dnd item that is a bag you can pull summons out of?");
+    page.submit('#ask-form');
+    await page.settle();
+    assert.match(page.text('#thread .a'), /Quick answer\. Look it up properly/);
+    const button = [...page.$$('#thread .answer-quick button')].find((b) => b.textContent === 'Look it up properly');
+    page.click(button);
+    await page.settle();
+    const asks = page.requests.filter((r) => r.path.endsWith('/ask'));
+    assert.equal(asks.length, 2);
+    assert.equal(asks[0].body.mode, undefined);
+    assert.equal(asks[1].body.mode, 'thorough');
+    assert.equal(asks[1].body.question, asks[0].body.question);
+    assert.ok(asks[1].body.conversationId);
+    assert.equal(page.$$('#thread .answer-quick').length, 0, 'the thorough answer has no button, and the first one went');
+    assert.match(page.$$('#thread .a')[1].textContent, /The thorough answer/);
+
+    // A campaign question is answered the full way: no button.
+    page.type('#ask-form textarea', 'Who is the innkeeper?');
+    page.submit('#ask-form');
+    await page.settle();
+    assert.equal(page.$$('#thread .answer-quick').length, 0);
+  });
+});
+
 // ---------- chats ----------
 
 test('chats: follow-ups stay in the chat; chats can be found, opened, pinned, renamed and deleted', async () => {

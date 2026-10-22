@@ -18,7 +18,7 @@ const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
  * Bump this whenever chunking, prompts, schemas or the memory design change.
  * Every generated output is tagged with it so we know which approach made it.
  */
-export const PIPELINE_VERSION = 26;
+export const PIPELINE_VERSION = 27;
 
 const DEFAULT_MODEL = env.MODEL || 'claude-opus-5-5';
 
@@ -56,10 +56,15 @@ export const config = {
   llm: {
     // 'claude-code' (your Claude subscription, via Claude Code on this machine) or 'api' (ANTHROPIC_API_KEY).
     provider: env.LLM_PROVIDER || 'claude-code',
+    // Claude Code only: start each run without its telemetry, error reports and update checks
+    // (CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC). Measured 2026-10-21: ~2.9 s -> ~0.65 s to start
+    // (docs/notes/ask-speed.md). CLAUDE_CODE_QUIET_START=off to turn it off.
+    quietStart: env.CLAUDE_CODE_QUIET_START !== 'off',
     // Per-task model + effort. All tasks use the same model unless overridden.
     tasks: {
       archivist: { model: env.MODEL_ARCHIVIST || DEFAULT_MODEL, effort: env.EFFORT_ARCHIVIST || 'high' },
       qa: { model: env.MODEL_QA || DEFAULT_MODEL, effort: env.EFFORT_QA || 'medium' },
+      // (Ask's quick way, for general D&D lookups, runs the same model at qa.quickEffort.)
       // Character sheets: reading an uploaded sheet, and tidying a spell from a book.
       import: { model: env.MODEL_IMPORT || DEFAULT_MODEL, effort: env.EFFORT_IMPORT || 'medium' },
       spells: { model: env.MODEL_SPELLS || DEFAULT_MODEL, effort: env.EFFORT_SPELLS || 'low' },
@@ -128,6 +133,11 @@ export const config = {
 
   qa: {
     maxToolCalls: num(env.QA_MAX_TOOL_CALLS, 12),
+    // The quick way (qa/route.js: a general D&D lookup, nothing about the campaign): same model, lower
+    // effort, fewer lookups, and only the records and wiki searched beforehand (owner, 2026-10-21: "Ask is way too slow").
+    quickEffort: env.EFFORT_QA_QUICK || 'low',
+    quickMaxToolCalls: num(env.QA_QUICK_MAX_TOOL_CALLS, 4),
+    quickPreSearchTokens: num(env.QA_QUICK_PRESEARCH_TOKENS, 1500),
     // Replies are whole records, chunks and lines up to this size; the first always comes whole (fit.js).
     maxToolResultTokens: num(env.QA_MAX_TOOL_RESULT_TOKENS, 5000),
     // Search results included with the question before the model is called (0 to disable). Whole pieces, as above.
