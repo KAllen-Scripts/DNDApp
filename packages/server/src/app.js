@@ -102,6 +102,8 @@ const WEB_MODULES = {
   '/shared/citations.js': '@dndapp/shared/citations.js',
   '/shared/dice.js': '@dndapp/shared/dice.js',
   '/shared/rolls.js': '@dndapp/shared/rolls.js',
+  '/shared/attack-extras.js': '@dndapp/shared/attack-extras.js',
+  '/shared/class-traits.js': '@dndapp/shared/class-traits.js',
   '/shared/gear.js': '@dndapp/shared/gear.js',
   '/shared/item-names.js': '@dndapp/shared/item-names.js',
   '/shared/point-buy.js': '@dndapp/shared/point-buy.js',

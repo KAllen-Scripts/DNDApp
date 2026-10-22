@@ -12,7 +12,7 @@
  * with reduced motion or with the dice switched off, the result just appears.
  */
 import { api, h, storage } from './api.js';
-import { parseRoll } from './shared/dice.js';
+import { formatTerms, parseRoll } from './shared/dice.js';
 import { createFx, banner, shake, chime } from './dice-fx.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -174,12 +174,27 @@ export const rollModeFromEvent = (e) => (e?.shiftKey ? 'advantage' : e?.altKey ?
  * answers, before the dice land (spending a hit die: the sheet's new hit points).
  * disadvantage: why the sheet says this d20 has disadvantage (heavy armour on
  * Stealth): it's rolled with disadvantage, or normally if it also had advantage.
+ * advantage: why a class feature gives it advantage (Feral Instinct on
+ * initiative), the same way round.
+ *
+ * then can also carry (from shared/attack-extras.js planAttack): crit (the
+ * damage on a critical hit, instead of doubling then.notation's dice),
+ * crit_on (the lowest natural roll that's a critical hit: 19 for a Champion),
+ * notes (lines shown with the result: a weapon mastery's effect, "Sneak
+ * Attack: once a turn") and onRoll() (called when its damage is rolled: spends
+ * the slot of a smite, unticks Sneak Attack).
  */
-export async function roll(notation, { label = '', mode = null, then = null, initiative = false, path = null, body = {}, onServer = null, disadvantage = '' } = {}) {
+export async function roll(notation, { label = '', mode = null, then = null, initiative = false, path = null, body = {}, onServer = null, disadvantage = '', advantage = '' } = {}) {
   if (!state.campaignId) return;
-  if (disadvantage) {
+  if (disadvantage && advantage) {
+    mode = 'normal';
+    label = `${label} (advantage: ${advantage}; disadvantage: ${disadvantage})`;
+  } else if (disadvantage) {
     mode = (mode ?? state.nextMode) === 'advantage' ? 'normal' : 'disadvantage';
     label = `${label} (disadvantage: ${disadvantage})`;
+  } else if (advantage) {
+    mode = (mode ?? state.nextMode) === 'disadvantage' ? 'normal' : 'advantage';
+    label = `${label} (advantage: ${advantage})`;
   }
   const id = ++state.seq;
   let result;
@@ -431,16 +446,16 @@ function breakdown(result) {
   return result.terms.map((t, i) => {
     const sign = t.sign < 0 ? ' − ' : i ? ' + ' : '';
     if (t.value !== undefined) return [sign, String(t.value)];
-    const dice = t.dice.map((d, j) => [j ? ', ' : '', d.kept ? String(d.value) : h('s', { title: 'Not kept' }, String(d.value))]);
+    const dice = t.dice.map((d, j) => [j ? ', ' : '', !d.kept ? h('s', { title: 'Not kept' }, String(d.value)) : d.counts ? h('span', { title: `Counts as ${d.counts}` }, `${d.value}→${d.counts}`) : String(d.value)]);
     return [sign, `${t.dice.filter((d) => d.kept).length}d${t.sides} (`, dice, ')'];
   });
 }
 
-/** Double the dice for a critical hit: "1d8+2" → "2d8+2". */
+/** Double the dice for a critical hit: "1d8+2" → "2d8+2" (a die's min or reroll stays with it). */
 function critical(notation) {
   try {
     const { terms } = parseRoll(notation);
-    return terms.map((t, i) => (t.sign < 0 ? '-' : i ? '+' : '') + (t.value !== undefined ? t.value : `${t.count * 2}d${t.sides}`)).join('');
+    return formatTerms(terms.map((t) => (t.value !== undefined ? t : { ...t, count: t.count * 2 })));
   } catch {
     return null;
   }
@@ -448,13 +463,20 @@ function critical(notation) {
 
 function showResult({ label, result, then }) {
   const card = $('#dice-result');
-  const nat = result.natural === 20 ? 'crit' : result.natural === 1 ? 'fumble' : '';
+  const critOn = then?.crit_on ?? 20;
+  const nat = result.natural != null && result.natural >= critOn ? 'crit' : result.natural === 1 ? 'fumble' : '';
   const follow = [];
   if (then) {
-    follow.push(h('button', { type: 'button', class: 'ghost', onclick: () => roll(then.notation, { label: then.label }) }, `Damage (${then.notation})`));
-    const crit = result.natural === 20 && critical(then.notation);
-    if (crit) follow.push(h('button', { type: 'button', class: 'primary', onclick: () => roll(crit, { label: `${then.label} (critical)` }) }, `Critical damage (${crit})`));
+    const damage = (notation, critLabel) => () => {
+      then.onRoll?.();
+      roll(notation, { label: critLabel ? `${then.label} (critical)` : then.label });
+    };
+    if (then.notation) follow.push(h('button', { type: 'button', class: 'ghost', onclick: damage(then.notation, false) }, `Damage (${then.notation})`));
+    const isCrit = result.natural != null && result.natural >= (then.crit_on ?? 20);
+    const crit = isCrit && (then.crit ?? critical(then.notation));
+    if (crit) follow.push(h('button', { type: 'button', class: 'primary', onclick: damage(crit, true) }, `Critical damage (${crit})`));
   }
+  const notes = then?.notes?.length ? h('ul', { class: 'dr-notes small' }, then.notes.map((n) => h('li', {}, n))) : null;
   card.className = `dice-result ${nat}`;
   card.replaceChildren(
     h('div', { class: 'dr-head' },
@@ -465,11 +487,12 @@ function showResult({ label, result, then }) {
     h('div', { class: 'dr-body' },
       h('span', { class: 'dr-total' }, String(result.total)),
       h('span', { class: 'dr-detail' },
-        nat && h('strong', { class: 'dr-nat' }, nat === 'crit' ? 'Natural 20!' : 'Natural 1'),
+        nat && h('strong', { class: 'dr-nat' }, nat === 'crit' ? (result.natural === 20 ? 'Natural 20!' : `Natural ${result.natural}: a critical hit!`) : 'Natural 1'),
         h('span', {}, breakdown(result)),
       ),
     ),
     ...(follow.length ? [h('div', { class: 'dr-actions' }, follow)] : []),
+    ...(notes ? [notes] : []),
     ...(result.initiative?.length ? [h('p', { class: 'dr-note small' }, `In the turn order on ${[...new Set(result.initiative.map((j) => j.map))].join(', ')}.`)] : []),
   );
   card.hidden = false;

@@ -964,6 +964,18 @@ input.num, .sheet .num { text-align: center; }
 .spell-rolls select { width: auto; height: auto; padding: 0.1rem 0.25rem; font-size: 0.8rem; }
 /* Equipped weapons from the Inventory, shown in Attacks: worked out, not typed. */
 .attacks .gear-attack { padding: 0.15rem 0; border-bottom: 1px dashed var(--border); }
+/* What class features add to an attack (sheet-attacks.js): extras to tick, what's in already, the weapon's mastery. */
+.attacks .atk-extras { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; padding: 0.15rem 0 0.3rem; }
+.atk-extras select { height: auto; min-height: 0; padding: 0.1rem 0.3rem; font-size: 0.8rem; width: auto; }
+.atk-chip { display: inline-flex; align-items: center; gap: 0.2rem; padding: 0.05rem 0.45rem; border: 1px solid var(--border); border-radius: 999px; cursor: pointer; white-space: nowrap; }
+.atk-chip.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.atk-chip input { margin: 0; }
+.atk-mastery, .atk-total, .atk-auto { flex-basis: 100%; }
+.combat-bar { display: grid; gap: 0.35rem; margin-bottom: 0.4rem; }
+.combat-bar .combat-on { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.5rem; }
+.combat-bar .mastery-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: 0.15rem 0.6rem; }
+.gear-mastery { flex-basis: 100%; }
+.dr-notes { margin: 0.5rem 0 0; padding-left: 1.1rem; }
 .gear-attack .gear-name { font-weight: 600; overflow-wrap: anywhere; }
 .gear-attack .gear-dmg-pair { display: inline-flex; gap: 0.25rem; }
 /* A typed attack with a weapon not in the Inventory: doesn't roll, says why and offers to add the weapon. */
@@ -1928,6 +1940,13 @@ button.busy:disabled { opacity: 1; }
 .map-clock-now { font-size: 1.3rem; font-weight: 700; margin: 0.25rem 0 0.5rem; }
 .map-road { margin: 0.25rem 0; padding-left: 1.2rem; }
 
+/* Features & traits from the class and race (sheet-traits.js), above the player's own text. */
+.auto-traits-list { margin-bottom: 0.4rem; }
+.auto-traits-list summary { cursor: pointer; font-weight: 600; }
+.auto-traits-list ul { margin: 0.3rem 0; padding-left: 1.1rem; display: grid; gap: 0.15rem; }
+.auto-choices { display: grid; gap: 0.25rem; margin: 0.3rem 0; }
+.auto-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.6rem; }
+.auto-choice select { width: auto; height: auto; min-height: 0; padding: 0.1rem 0.3rem; }
 /* The sheet's Companions box (sheet-companions.js). */
 .companions .companion-list { display: grid; gap: 0.5rem; }
 .companion { border: 1px solid var(--border); border-radius: 8px; padding: 0.4rem 0.6rem; }
