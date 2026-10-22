@@ -546,9 +546,11 @@ export function computeSheet(sheet, { weight = 'capacity', edition = '2014' } = 
   const allSaves = levelIn('monk') >= 14;
   const slippery = levelIn('rogue') >= 15 ? (ed === '2024' ? ['wis', 'cha'] : ['wis']) : [];
   const aura = levelIn('paladin') >= 6 ? Math.max(1, mod('cha')) : 0;
+  // Soul of Artifice (artificer 20): +1 to saves for each magic item attuned.
+  const soul = levelIn('artificer') >= 20 ? (sheet.inventory ?? []).filter((g) => g.attuned).length : 0;
   for (const a of ABILITIES) {
     const prof = set(`save_prof.${a}`, !!first?.saves.includes(a) || allSaves || slippery.includes(a));
-    set(`save.${a}`, mod(a) + (prof ? pb : 0) + aura + sum('saves') + sum(`save.${a}`));
+    set(`save.${a}`, mod(a) + (prof ? pb : 0) + aura + soul + sum('saves') + sum(`save.${a}`));
   }
 
   // Bards from 2nd level add half their proficiency bonus to checks they aren't proficient in.

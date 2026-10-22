@@ -1745,3 +1745,11 @@ button.busy:disabled { opacity: 1; }
 .map-clock:disabled { opacity: 1; cursor: default; }
 .map-clock-now { font-size: 1.3rem; font-weight: 700; margin: 0.25rem 0 0.5rem; }
 .map-road { margin: 0.25rem 0; padding-left: 1.2rem; }
+
+/* Features & traits from the class and race (sheet-traits.js), above the player's own text. */
+.auto-traits-list { margin-bottom: 0.4rem; }
+.auto-traits-list summary { cursor: pointer; font-weight: 600; }
+.auto-traits-list ul { margin: 0.3rem 0; padding-left: 1.1rem; display: grid; gap: 0.15rem; }
+.auto-choices { display: grid; gap: 0.25rem; margin: 0.3rem 0; }
+.auto-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.6rem; }
+.auto-choice select { width: auto; height: auto; min-height: 0; padding: 0.1rem 0.3rem; }

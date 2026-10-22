@@ -26,6 +26,7 @@ import { classFeaturesBox } from './sheet-class-features.js';
 import { subclassNames } from './shared/subclass-features.js';
 import { featureRows } from './shared/class-features.js';
 import { MORE_RACES } from './shared/race-features.js';
+import { traitsList } from './sheet-traits.js';
 import { attackPlan, combatBar, extrasLine, inventoryMastery, rollAttackPlan, rollDamagePlan, spellPlan } from './sheet-attacks.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -1305,7 +1306,8 @@ const text = (key, title, rows, cls = '') => box(title, cls, field(key, { label:
 
 const TRAITS = { personality: 'Personality traits', ideals: 'Ideals', bonds: 'Bonds', flaws: 'Flaws' };
 const traits = () => h('div', { class: 'traits' }, Object.entries(TRAITS).map(([k, title]) => text(k, title, 3)));
-const features = () => text('features', 'Features & traits', 12);
+// Features & traits: what the class and race give (sheet-traits.js) above the player's own text.
+const features = () => box('Features & traits', '', traitsList({ state, changed, render }), field('features', { label: 'Features & traits', kind: 'longtext', rows: 12 }));
 const proficiencies = () => text('proficiencies_languages', 'Other proficiencies & languages', 5);
 
 function details() {
