@@ -269,6 +269,8 @@ export function normalizeGear(g = {}) {
     proficient: !!g.proficient,
     attuned: !!g.attuned,
     attunement: !!g.attunement,
+    // How rare a magic item is ("uncommon"); '' for mundane gear or when nobody said.
+    rarity: str(g.rarity, 20).trim().toLowerCase(),
     magic: int(g.magic, { min: -5, max: 5, fallback: 0 }),
     weapon: w ? {
       damage: str(w.damage, 60),

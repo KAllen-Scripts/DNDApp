@@ -16,7 +16,7 @@ import {
 } from './shared/sheet.js';
 import { d20Plus } from './shared/dice.js';
 import { attackRolls, gearRolls, spellRolls } from './shared/rolls.js';
-import { EFFECT_TARGETS, GEAR_NAMES, MAX_EFFECTS, attackWeapon, attunementLimit, carriedWeight, classProficient, inventoryGroups, itemStats, newUnownedWeaponAttacks, normalizeGear, normalizeInventory, ownsWeapon } from './shared/gear.js';
+import { EFFECT_TARGETS, MAX_EFFECTS, attackWeapon, attunementLimit, carriedWeight, classProficient, inventoryGroups, itemStats, newUnownedWeaponAttacks, normalizeGear, normalizeInventory, ownsWeapon } from './shared/gear.js';
 import { WEIGHT_RULES } from './shared/settings.js';
 import { markdownEditor } from './markdown.js';
 import { POINT_BUY, POINT_COST, changePointBuy, pointBuy, stepPointBuy } from './shared/point-buy.js';
@@ -26,6 +26,8 @@ import { classFeaturesBox } from './sheet-class-features.js';
 import { subclassNames } from './shared/subclass-features.js';
 import { featureRows } from './shared/class-features.js';
 import { MORE_RACES } from './shared/race-features.js';
+import { itemNames } from './shared/item-names.js';
+import { GEAR_KINDS, effectText, gearCard } from './gear-card.js';
 
 const $ = (sel) => document.querySelector(sel);
 const LEVEL_NAMES = ['Cantrips', '1st level', '2nd level', '3rd level', '4th level', '5th level', '6th level', '7th level', '8th level', '9th level'];
@@ -963,7 +965,6 @@ function gearAttackRow(g) {
 
 // ---------- the Inventory tab (players): items carried, looked up by name, equipped ----------
 
-const GEAR_KINDS = { weapon: 'Weapon', armor: 'Armour', gear: 'Gear', tool: 'Tool', potion: 'Potion', scroll: 'Scroll', magic: 'Magic item', other: 'Other' };
 const firstClassKey = () => classKey(state.sheet.classes.find((c) => c.name.trim())?.name);
 /** How many items this character can be attuned to (3; artificers more). */
 const attuneLimit = () => attunementLimit(state.sheet.classes.filter((c) => classKey(c.name) === 'artificer').reduce((n, c) => n + (Number(c.level) || 0), 0));
@@ -990,6 +991,42 @@ function addGear(item) {
   state.sheet.inventory.push(g);
   gearChanged();
   return g;
+}
+
+let previewing = 0;
+const closePreview = () => {
+  previewing += 1;
+  const box = $('#gear-preview');
+  if (box) { box.hidden = true; box.replaceChildren(); }
+};
+
+/** Look an item up and show its card under the add form, with Add and Cancel: nothing goes in the inventory until Add. */
+async function previewGear(name) {
+  if (!name || !state.sheet) return;
+  const box = $('#gear-preview');
+  const ask = ++previewing;
+  gearStatus(`Looking up ${name}…`);
+  try {
+    const res = await state.guarded(() => api('GET', `${base()}/gear/lookup?name=${encodeURIComponent(name)}`));
+    if (!res || ask !== previewing) return;
+    const item = normalizeGear(res.item);
+    const have = state.sheet.inventory.filter((g) => g.name.toLowerCase() === item.name.toLowerCase()).reduce((n, g) => n + g.qty, 0);
+    const from = res.from === 'ai' ? "From the AI's memory: check it against the book." : res.from === 'book' ? `From ${item.source}.` : res.from === 'srd' ? "From the Player's Handbook tables." : '';
+    const add = h('button', { type: 'button', class: 'primary', onclick: () => {
+      closePreview();
+      const g = addGear(res.item);
+      $('#gear-name').value = '';
+      gearStatus(`Added ${g.name}${res.from === 'ai' ? " (from the AI's memory: check it)" : res.from === 'book' ? ` (${g.source})` : ''}.`);
+    } }, `Add ${item.name}`);
+    const cancel = h('button', { type: 'button', class: 'ghost', onclick: () => { closePreview(); gearStatus(''); } }, 'Cancel');
+    box.replaceChildren(gearCard(item, { actions: [cancel, add], note: [from, have ? `You have ${have} already.` : ''].filter(Boolean).join(' ') }));
+    box.hidden = false;
+    gearStatus('');
+    add.focus({ preventScroll: true });
+  } catch (err) {
+    if (ask !== previewing) return;
+    gearStatus(err.status === 404 ? `${err.message}` : `Couldn't look up ${name}: ${err.message}`, true);
+  }
 }
 
 function inventoryTab() {
@@ -1139,6 +1176,7 @@ function gearRow(g) {
       gearPicture(g),
       h('strong', { class: 'gear-title' }, g.name),
       h('span', { class: 'tag' }, g.armor?.type === 'shield' ? 'Shield' : GEAR_KINDS[g.kind] ?? 'Other'),
+      g.rarity ? h('span', { class: 'tag rarity' }, cap(g.rarity)) : null,
       labelled('Qty', qty, 'inline'),
       equip,
       g.weapon || g.armor ? tick('Proficient', g.proficient, (on) => { g.proficient = on; gearChanged(); }, 'Are you proficient with it? Ticked for you when your class is; change it if not.') : null,
@@ -1194,14 +1232,6 @@ async function drink(g) {
       gearStatus(`Drank ${g.name}: ${res.healed ? `regained ${res.healed} hit point${res.healed === 1 ? '' : 's'}` : 'no hit points regained'}.`);
     },
   });
-}
-
-/** "+1 AC", "Strength becomes 19". */
-function effectText(e) {
-  if (e.target.startsWith('score.')) return `${ABILITY_NAMES[e.target.slice(6)]} ${e.value}`;
-  if (e.target.startsWith('bonus.')) return `${ABILITY_NAMES[e.target.slice(6)]} ${formatBonus(e.value)}`;
-  if (e.target === 'speed') return `speed ${formatBonus(e.value)} ft`;
-  return `${formatBonus(e.value)} ${EFFECT_TARGETS[e.target].replace(/^All s/, 's').replace(/^AC \(no armour or shield\)/, 'AC without armour or shield')}`;
 }
 
 /** What a magic item does to the sheet while equipped (and attuned): read from its description, changeable here. */
@@ -1983,31 +2013,31 @@ export function initSheetActions() {
 
   $('#sheet-review').addEventListener('click', reviewSheet);
 
-  // The Inventory tab's add form: weapons and armour from the PHB tables at once, anything else from the books or the AI.
-  $('#dl-gear').replaceChildren(...GEAR_NAMES.map((n) => h('option', { value: n })));
-  $('#gear-add').addEventListener('submit', async (e) => {
+  // The Inventory tab's add form: pick a kind (it decides what's suggested), type or pick a name, and Look up
+  // shows the item's card (from the PHB tables at once, else the books or the AI) to Add or Cancel.
+  const kindPick = $('#gear-kind');
+  kindPick.replaceChildren(new Option('Any kind', ''), ...Object.entries(GEAR_KINDS).map(([k, n]) => new Option(n, k)));
+  kindPick.value = '';
+  const suggest = () => $('#dl-gear').replaceChildren(...itemNames(kindPick.value).map((n) => h('option', { value: n })));
+  suggest();
+  kindPick.addEventListener('change', suggest);
+  $('#gear-add').addEventListener('submit', (e) => {
     e.preventDefault();
+    previewGear($('#gear-name').value.trim());
+  });
+  // Picking a suggestion shows its card straight away (typing a name doesn't, until Look up).
+  $('#gear-name').addEventListener('input', (e) => {
     const name = $('#gear-name').value.trim();
-    if (!name || !state.sheet) return;
-    gearStatus(`Looking up ${name}…`);
-    try {
-      const res = await state.guarded(() => api('GET', `${base()}/gear/lookup?name=${encodeURIComponent(name)}`));
-      if (!res) return;
-      const g = addGear(res.item);
-      $('#gear-name').value = '';
-      gearStatus(`Added ${g.name}${res.from === 'ai' ? " (from the AI's memory: check it)" : res.from === 'book' ? ` (${g.source})` : ''}.`);
-    } catch (err) {
-      gearStatus(err.status === 404 ? `${err.message}` : `Couldn't look up ${name}: ${err.message}`, true);
-    }
+    if (e.inputType && e.inputType !== 'insertReplacementText') return;
+    if (name && itemNames(kindPick.value).includes(name)) previewGear(name);
   });
   // By hand: the kind chosen first, so the details open with the fields for it (a weapon's damage, armour's AC, what a potion heals).
-  $('#gear-kind').replaceChildren(...Object.entries(GEAR_KINDS).map(([k, n]) => new Option(n, k)));
-  $('#gear-kind').value = 'other';
   $('#gear-own').addEventListener('click', () => {
     if (!state.sheet) return;
     const name = $('#gear-name').value.trim() || prompt('What is it called?')?.trim();
     if (!name) return;
-    const kind = $('#gear-kind').value;
+    const kind = kindPick.value || 'other';
+    closePreview();
     const g = addGear({ name, ...kindFields(kind) });
     $('#gear-name').value = '';
     reopen(g);

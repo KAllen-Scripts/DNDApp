@@ -795,7 +795,7 @@ phoneMenu($('#admin-view > .topbar'), { label: 'Look, change password, log out',
 phoneMenu($('.chat-actions'), { label: 'This chat: pin, rename, delete, new chat' });
 initSheetActions();
 phoneMenu($('.sheet-bar'), { label: 'Sheet: review, upload, download, print, pop out', keep: '#sheet-status, .sheet-modes' });
-phoneMenu($('#gear-add'), { label: 'More ways to add', keep: '#gear-name, #dl-gear, button[type=submit], #gear-status' });
+phoneMenu($('#gear-add'), { label: 'More ways to add', keep: '#gear-kind, #gear-name, #dl-gear, button[type=submit], #gear-status' });
 initSheetPlace({ onChange: () => showTab(currentTab), currentTab: () => currentTab });
 showTab(currentTab);
 initMapActions();

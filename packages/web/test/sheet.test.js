@@ -819,6 +819,9 @@ test('inventory: items looked up and added, weapons equipped (two daggers), one 
       const add = async (name) => {
         page.el('#gear-name').value = name;
         page.submit('#gear-add');
+        // Its card shows first; Add puts it in the inventory.
+        await page.waitFor(() => page.$('#gear-preview .gear-card'), { what: `${name}'s card` });
+        page.click('#gear-preview .gear-card-actions .primary');
         await page.waitFor(() => /^Added|Couldn|know/.test(page.text('#gear-status')), { what: `${name} to be added` });
       };
       const row = (name) => page.$$('#inventory .gear-row').find((r) => r.querySelector('.gear-title').textContent === name);
@@ -1063,6 +1066,68 @@ test('regression: Class features with no subclass or race rows shows no "null"',
     const text = page.el('#sheet .class-features').textContent;
     assert.match(text, /Nothing to track for your class/);
     assert.doesNotMatch(text, /null|undefined/);
+test('regression: the Inventory suggests names of the kind picked, not always weapons', async () => {
+  await withPage(sheetPage(), async (page) => {
+    page.click('[data-tab=inventory]');
+    const suggested = () => page.$$('#dl-gear option').map((o) => o.value);
+    // Any kind: everything, weapons included.
+    assert.ok(suggested().includes('Longsword'));
+    assert.ok(suggested().includes('Bag of Holding'));
+    page.type('#gear-kind', 'potion');
+    assert.ok(suggested().includes('Potion of Healing'));
+    assert.ok(!suggested().includes('Longsword'), 'no weapons under Potion');
+    page.type('#gear-kind', 'armor');
+    assert.ok(suggested().includes('Chain mail'));
+    assert.ok(!suggested().includes('Dagger'));
+    page.type('#gear-kind', 'magic');
+    assert.ok(suggested().includes('Bag of Tricks (Gray)'));
+    assert.ok(!suggested().includes('Longsword'));
+    page.type('#gear-kind', 'gear');
+    assert.ok(suggested().includes('Backpack'));
+  });
+});
+
+test('inventory: looking an item up shows its card (stats, rarity, attunement, description as Markdown) with Add and Cancel', async () => {
+  const llm = createFakeLLM({
+    structured: async () => ({
+      found: true, name: 'Cloak of Protection', kind: 'magic', rarity: 'uncommon', attunement: true, price: '', weight_lb: 1,
+      description: 'You gain a **+1 bonus to AC and saving throws** while you wear this cloak.\n\n| Worn | Bonus |\n| --- | --- |\n| yes | +1 |',
+    }),
+  });
+  await withPage(sheetPage({ setup: { llm } }), async (page) => {
+    page.click('[data-tab=inventory]');
+    page.type('#gear-kind', 'magic');
+    page.el('#gear-name').value = 'cloak of protection';
+    page.submit('#gear-add');
+    await page.waitFor(() => page.$('#gear-preview .gear-card'), { what: 'the card' });
+    const card = page.$('#gear-preview .gear-card');
+    assert.equal(card.querySelector('h3').textContent, 'Cloak of Protection');
+    assert.deepEqual([...card.querySelectorAll('.gear-card-tags .tag')].map((e) => e.textContent), ['Magic item', 'Uncommon', 'Needs attunement']);
+    assert.match(card.querySelector('.gear-card-facts').textContent, /On your sheet\+1 AC, \+1 saving throws/);
+    assert.match(card.querySelector('.gear-card-facts').textContent, /Weight1 lb/);
+    // The description is rendered, not raw Markdown.
+    assert.ok(card.querySelector('.gear-card-text strong'));
+    assert.ok(card.querySelector('.gear-card-text table'));
+    assert.match(card.textContent, /AI's memory/);
+    assert.equal(page.$$('#inventory .gear-row').length, 0, 'nothing added yet');
+
+    // Cancel: gone, nothing added.
+    page.click([...card.querySelectorAll('button')].find((b) => b.textContent === 'Cancel'));
+    assert.ok(page.$('#gear-preview').hidden);
+    assert.equal(page.$$('#inventory .gear-row').length, 0);
+
+    // Picking a suggestion shows its card at once (a table weapon: no AI call).
+    page.type('#gear-kind', 'weapon');
+    const name = page.el('#gear-name');
+    name.value = 'Rapier';
+    name.dispatchEvent(new page.window.Event('input'));
+    await page.waitFor(() => page.$('#gear-preview .gear-card h3')?.textContent === 'Rapier', { what: "the rapier's card" });
+    assert.match(page.text('#gear-preview .gear-card-facts'), /Damage1d8 piercing/);
+    assert.match(page.text('#gear-preview .gear-card-facts'), /WeaponMartial: finesse/);
+    page.click('#gear-preview .gear-card-actions .primary');
+    await page.waitFor(() => /^Added Rapier/.test(page.text('#gear-status')), { what: 'the rapier added' });
+    assert.ok(page.$('#gear-preview').hidden);
+    assert.deepEqual(page.$$('#inventory .gear-title').map((e) => e.textContent), ['Rapier']);
   });
 });
 
