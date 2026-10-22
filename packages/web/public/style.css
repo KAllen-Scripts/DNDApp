@@ -1753,3 +1753,20 @@ button.busy:disabled { opacity: 1; }
 .map-clock:disabled { opacity: 1; cursor: default; }
 .map-clock-now { font-size: 1.3rem; font-weight: 700; margin: 0.25rem 0 0.5rem; }
 .map-road { margin: 0.25rem 0; padding-left: 1.2rem; }
+
+/* The sheet's Companions box (sheet-companions.js). */
+.companions .companion-list { display: grid; gap: 0.5rem; }
+.companion { border: 1px solid var(--border); border-radius: 8px; padding: 0.4rem 0.6rem; }
+.companion-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.6rem; }
+.companion-head .companion-name { overflow-wrap: anywhere; }
+.companion-head .spacer, .companion-add .spacer { flex: 1; }
+.companion-vitals { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.9rem; margin: 0.3rem 0; }
+.companion-hp-val { display: inline-flex; align-items: baseline; gap: 0.2rem; }
+.companion-hp-val input.num { width: 3.5rem; }
+.companion-where { color: var(--accent); }
+.companion-more > summary { cursor: pointer; font-size: 0.85rem; }
+.companion-add { display: grid; gap: 0.35rem; margin-top: 0.5rem; }
+.companion-add-row { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.companion-add-row input[type=text] { flex: 1 1 10rem; min-width: 0; }
+.companion-add [hidden] { display: none; }
+.companion-note { margin: 0.3rem 0; }

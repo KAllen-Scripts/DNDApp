@@ -40,6 +40,27 @@ export function companionDialog() {
     if (lookUp.checked) fillStats(res.token);
     else status(`${res.token.name} is on the map. Drag it where it should be.`);
   };
+  // The companions kept on your character sheet come first: they go on this map tied to the sheet (hit points and all).
+  const fromSheet = h('div', { class: 'companion-sheet-list' });
+  state.guarded(() => api('GET', `/campaigns/${state.campaignId}/sheet`)).then((res) => {
+    const list = res?.sheet?.companions ?? [];
+    fromSheet.replaceChildren(...(list.length ? [
+      h('h3', {}, 'From your sheet'),
+      ...list.map((c) => {
+        const here = map.tokens.some((t) => t.kind === 'companion' && t.companion === c.id);
+        return h('div', { class: 'map-row companion-roll' },
+          h('strong', {}, c.name), h('span', { class: 'muted small' }, `${c.hp.current} of ${c.hp.max} HP`),
+          h('span', { class: 'spacer' }),
+          h('button', { type: 'button', class: 'primary', disabled: here, onclick: () => state.guarded(async () => {
+            const out = await api('POST', `/campaigns/${state.campaignId}/sheet/companions/${encodeURIComponent(c.id)}/map`, { map_id: map.id });
+            onMap(out.map);
+            if (out.token) select(out.token.id);
+            dialog.close();
+          }).catch(report) }, here ? 'On this map' : 'Put on the map'));
+      }),
+      h('h3', {}, 'Or one for this map only'),
+    ] : [h('p', { class: 'muted small' }, 'Companions you keep (a familiar, a mount, an animal companion) are best added in the Companions box on your sheet: they keep their hit points and follow you between maps.')]));
+  }).catch(() => {});
   dialog.replaceChildren(
     h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => {
       e.preventDefault();
@@ -47,6 +68,7 @@ export function companionDialog() {
       state.guarded(save).then(() => dialog.close()).catch(report);
     } },
       h('h2', {}, 'Add a companion or summon'),
+      fromSheet,
       h('p', { class: 'muted small' }, 'A familiar, an animal companion, a steed or something you conjured. You move it, track its hit points and roll for it.'),
       field('Name', name),
       h('div', { class: 'map-row' }, field('Size', size), field('Max HP', hpMax), field(`Darkvision (${map.scale?.unit ?? 'ft'})`, darkvision)),
@@ -96,7 +118,7 @@ export function companionRolls(token) {
 
 /** Dismiss one of your companions or summons (it leaves the map). */
 export async function dismissCompanion(token) {
-  if (!confirm(`Dismiss ${token.name}? It leaves the map.`)) return;
+  if (!confirm(token.companion ? `Take ${token.name} off the map? It stays on your character sheet.` : `Dismiss ${token.name}? It leaves the map.`)) return;
   try {
     const res = await state.guarded(() => api('DELETE', `${base()}/${state.current.id}/tokens/${token.id}`));
     if (res) onMap(res.map);
