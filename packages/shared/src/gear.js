@@ -401,7 +401,7 @@ export function armorClass(inventory, dexMod) {
  * with what the item does when equipped (itemStats), Proficient ticked if
  * the character's class (`classKey`, e.g. "fighter") is.
  */
-export function addToInventory(inventory, { id = null, name, kind = 'other', text = '', weight = null, attunement = false, stats = null, actions = null, rarity = '' }, qty = 1, { classKey = null, attuneMax = 3, edition = '2014' } = {}) {
+export function addToInventory(inventory, { id = null, name, kind = 'other', text = '', weight = null, attunement = false, stats = null, actions = null, uses = null, rarity = '' }, qty = 1, { classKey = null, attuneMax = 3, edition = '2014' } = {}) {
   const list = (inventory ?? []).map((g) => ({ ...g }));
   const same = list.find((g) => (id != null && g.item_id === id) || g.name.toLowerCase() === String(name).toLowerCase());
   if (same) {
@@ -409,7 +409,9 @@ export function addToInventory(inventory, { id = null, name, kind = 'other', tex
     return normalizeInventory(list, { attuneMax });
   }
   const st = itemStats({ name, kind, text, stats, edition });
-  const line = { item_id: id, name, kind: st.kind === 'other' ? kind : st.kind, qty, text, rarity, weight: weight ?? st.weight, attunement, weapon: st.weapon, armor: st.armor, magic: st.magic, charges: st.charges, effects: st.effects, heal: st.heal, actions: actions?.length ? actions : st.actions };
+  const line = { item_id: id, name, kind: st.kind === 'other' ? kind : st.kind, qty, text, rarity, weight: weight ?? st.weight, attunement, weapon: st.weapon, armor: st.armor, magic: st.magic, charges: st.charges ?? (uses?.max ? { ...uses, used: 0 } : null), effects: st.effects, heal: st.heal,
+    // The rules the app knows for it by name win; then what the DM's item says (the AI's reading); then its description's wording.
+    actions: !knownItem(name, edition) && actions?.length ? actions : st.actions };
   line.proficient = classProficient(classKey, line) ?? true;
   list.push(line);
   return normalizeInventory(list, { attuneMax });

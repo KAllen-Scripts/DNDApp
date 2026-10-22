@@ -44,6 +44,8 @@ export function normalizeItem(x = {}) {
     // What it lets its owner do (summon, cast, attack, heal: shared/item-actions.js), when the AI worked it out on
     // lookup; null: read from the item's rules by name and its description instead. Carried into a buyer's inventory.
     actions: Array.isArray(x.actions) && x.actions.length ? normalizeActions(x.actions) : null,
+    // Its charges as the AI read them on lookup ({ max, recharge, when }), for a buyer's inventory when the description's wording doesn't say.
+    uses: x.uses && Number(x.uses.max) > 0 ? { max: Math.min(999, Math.trunc(Number(x.uses.max))), recharge: str(x.uses.recharge, 20), when: str(x.uses.when, 30) } : null,
     // Only the DM sees these.
     notes: str(x.notes, MAX_ITEM_NOTES),
     art: normalizeArt(x.art),

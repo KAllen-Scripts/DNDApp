@@ -23,6 +23,8 @@ export function registerItems(app, r) {
     notes: z.string().max(MAX_ITEM_NOTES),
     // The numbers for its kind (cleaned by normalizeItemStats); null to read them from the description.
     stats: z.object({}).passthrough().nullable(),
+    // What it lets its owner do (shared/item-actions.js); null to read it from its name and description.
+    actions: z.array(z.object({}).passthrough()).max(8).nullable(),
   });
   const PICTURE_UPLOAD = z.object({ filename: z.string().max(200).default(''), data: z.string().min(1) });
   const pictureBody = { bodyLimit: Math.ceil(MAX_PICTURE_BYTES * 1.4) + 64 * 1024 };

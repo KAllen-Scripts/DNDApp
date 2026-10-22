@@ -4,6 +4,7 @@
  */
 import { SHEET_FORMAT, computeSheet, normalizeSheet } from '@dndapp/shared/sheet.js';
 import { ARMOR, WEAPONS, carriedWeight, itemStats, magicName, newUnownedWeaponAttacks } from '@dndapp/shared/gear.js';
+import { knownItem } from '@dndapp/shared/item-actions.js';
 import { gearRolls } from '@dndapp/shared/rolls.js';
 import { featureRows } from '@dndapp/shared/class-features.js';
 import { activeForm } from '@dndapp/shared/wild-shape.js';
@@ -185,9 +186,14 @@ export function registerCharacters(app, r) {
     const found = await itemFinder.lookup(name, { campaignId: a.cid, userId: request.user.id, own: false, beforeAi: sheetAiAllowed(request.user.id) });
     if (!found) throw new NotFoundError(`Neither the books nor the AI know an item called "${name}". Add it by hand instead.`);
     const f = found.fields;
-    const stats = itemStats({ name: f.name || name, kind: f.kind, text: f.text });
+    const edition = await editions.of(a.cid);
+    const stats = itemStats({ name: f.name || name, kind: f.kind, text: f.text, edition });
+    // What it lets you do: the rules the app knows by name, else the description's wording, else what the AI read (marked: check it).
+    const known = knownItem(f.name || name, edition);
+    const actions = known || stats.actions.length || !f.actions?.length ? stats.actions : f.actions;
+    const charges = stats.charges ?? (f.uses?.max ? { ...f.uses, used: 0 } : null);
     return {
-      item: { name: f.name || name, kind: stats.kind, qty: 1, rarity: f.rarity || '', attunement: !!f.attunement, weight: f.weight ?? stats.weight, text: f.text, weapon: stats.weapon, armor: stats.armor, magic: stats.magic, charges: stats.charges, effects: stats.effects, heal: stats.heal, source: f.source?.from || (found.from === 'ai' ? "the AI's memory: check it" : '') },
+      item: { name: f.name || name, kind: stats.kind, qty: 1, rarity: f.rarity || '', attunement: !!f.attunement, weight: f.weight ?? stats.weight, text: f.text, weapon: stats.weapon, armor: stats.armor, magic: stats.magic, charges, effects: stats.effects, heal: stats.heal, actions, source: f.source?.from || (found.from === 'ai' ? "the AI's memory: check it" : '') },
       from: found.from,
     };
   });
