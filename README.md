@@ -80,7 +80,9 @@ The Hit dice box on a player's sheet has a row per die size (a Fighter 3 / Wizar
 
 Players have an **Inventory** tab: look an item up by name (PHB weapons and armour straight from the tables, anything else from the books or the AI, never the DM's own items) or add one by hand, then equip it. Equipped weapons show in Attacks with their to-hit and damage worked out; equipped armour and a shield set the AC; weight, charges, attunement and magic items' effects on the sheet are tracked there too. The DM's Items tab shows what each player has **equipped** (with their AC, weight carried and attunements), not the rest of their sheet.
 
-The DM's **Settings** button holds the campaign's settings: the **Rules edition** (2014 or 2024: rests, Ask's rules answers and lookups in the books follow it; the character sheet itself always uses the 2014 rules for now) and **Weight limits** (carrying capacity, variant encumbrance, or ignore).
+The DM's **Settings** button holds the campaign's settings: the **Rules edition** (2014 or 2024: rests, Ask's rules answers and lookups in the books follow it; the character sheet itself always uses the 2014 rules for now) and **Weight limits** (carrying capacity, variant encumbrance, or ignore). It also holds **Your own backgrounds**: the DM's own, with their skills, tools, languages, equipment, gold and a feature or origin feat, which every player's sheet then suggests.
+
+On the sheet, the **Background** box suggests the books' backgrounds for the campaign's edition (and the DM's own). Pick one and it fills in the sheet: its skills ticked, its feature or feat in Features & traits, its tools and languages, and equipment and gold only where they're empty. A note says what changed, with Undo.
 
 ### Dice
 
@@ -216,7 +218,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | POST | `/logout` | Ends this login |
 | GET | `/me` | Your account and campaigns (each with its `settings`) |
 | GET | `/campaigns/:cid` | Campaign, your role and character, and its `settings` |
-| PATCH | `/campaigns/:cid/settings` | Change the campaign's settings (DM) `{weight?: capacity \| variant \| ignore, edition?: 2014 \| 2024 \| null, travel?: {time?: clock \| skip \| none, roads?, terrain?, vehicles?, marches?, encounters?}}` (`null`: not chosen, follow `REST_RULES` or the books' Player's Handbook; travel switches change one at a time) → the settings; sent live as `settings` |
+| PATCH | `/campaigns/:cid/settings` | Change the campaign's settings (DM) `{weight?: capacity \| variant \| ignore, edition?: 2014 \| 2024 \| null, travel?: {time?: clock \| skip \| none, roads?, terrain?, vehicles?, marches?, encounters?}, backgrounds?: [{id?, name, skills, tools, languages, equipment, gold, feature: {name, text} \| null, abilities: [3] \| [], feat}] (the whole list, up to 50)}` (`null`: not chosen, follow `REST_RULES` or the books' Player's Handbook; travel switches change one at a time) → the settings; sent live as `settings` |
 | GET | `/campaigns/:cid/members` | List members (DM) |
 | GET / POST | `/admin/users` | List accounts (with campaigns, logins, status) / create `{name, password}` (admin) |
 | PUT | `/admin/users/:uid/campaigns` | Set exactly which campaigns an account can access `{campaigns: [{campaign_id, role, character_name?}]}` (admin). `POST /admin/users` takes the same optional `campaigns` |

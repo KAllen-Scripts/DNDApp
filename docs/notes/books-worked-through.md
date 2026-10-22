@@ -22,3 +22,17 @@ Which books in Kenny's `DND books` folder have been read for the character sheet
 | Monster Manual (2025) | 2026-10-14 | Nothing to add | Nothing to add | Monsters only. |
 
 Not in the folder yet, with subclasses or races the sheet would want: Sword Coast Adventurer's Guide, Eberron: Rising from the Last War, Explorer's Guide to Wildemount (Echo Knight, Chronurgy, Graviturgy), Mythic Odysseys of Theros, Van Richten's Guide to Ravenloft, Strixhaven, Spelljammer, Planescape, Eberron: Forge of the Artificer, Forgotten Realms: Heroes of Faerûn, Astarion's Book of Hungers, Lorwyn: First Light, Arcana Unleashed.
+
+## Backgrounds (the sheet's Background box)
+
+Which books have been read for the backgrounds the sheet suggests and applies (`packages/shared/src/backgrounds.js`, 2026-10-22). Each row there is a short summary (skills, tools, languages, equipment, gold, and the feature's or origin feat's name with a line on what it does), not the book's text.
+
+| Book | Backgrounds | Notes |
+|---|---|---|
+| Player's Handbook (2014) | Done (2026-10-22), from the PDF: all 13, and the variants Spy, Gladiator, Guild Merchant, Knight and Pirate | Personality tables aren't copied. |
+| Player's Handbook (2024) | Done (2026-10-22), from the PDF: all 16, with their three abilities, origin feat, tool, and equipment (option A; option B is 50 GP) | 2024 languages come from the character, not the background. |
+| Bigby Presents: Glory of the Giants | Giant Foundling and Rune Carver, from Claude's knowledge | Not in the staged folder (and the copy noted above is a picture-only scan): check them against the book. |
+| The Book of Many Things | Rewarded and Ruined: skills and origin feat only, from Claude's knowledge | The PDF in the folder only names them; check the tools and equipment against the book. |
+| Xanathar's, Tasha's, Fizban's, the DMGs, Monsters of the Multiverse, Volo's, Tome of Foes, the Monster Manuals | Nothing to add | No backgrounds. |
+
+Not in the folder yet, with backgrounds the sheet would want: Sword Coast Adventurer's Guide, Eberron, Wildemount, Theros, Ravenloft, Strixhaven, Spelljammer, Planescape. Until then the DM can make them as their own backgrounds in Campaign settings.
