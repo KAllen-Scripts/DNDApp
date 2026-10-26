@@ -1604,3 +1604,10 @@ The owner (2026-10-21 feedback, item 2): "some way of managing attacks and such 
 
 - The owner asked for help when making a character, not forced: what a class gives and what to choose. `shared/src/creation-help.js` holds, for 2014 and 2024 (the PHBs, and Tasha's artificer), each class's hit die and hit points, saves, armour, weapon and tool proficiencies, weapon mastery, skills (how many, from which), starting equipment choices, spellcasting basics and features per level, and the PHB races (2014) and species (2024). `web/public/sheet-help.js` is the panel above the sheet: chips tick skills, pick a class, race or background, and a button puts the starting equipment in the Equipment box. It redraws as the sheet is typed in and stays open or shut as the player left it.
 - Tests: shared `creation-help.test.js`, web `creation-help.test.js`.
+
+### 2026-10-26: Tests that failed now and then under load
+- **Wiki proposals' order** was already fixed on main (PR #96), behind both the server's "wiki AI: after each session…" test and the web's "the AI's changes wait in a list…" test failing at random.
+- **Dice after a page closed.** In the page tests, the default Deluxe dice load Three.js and then fail (no WebGL in jsdom), which redraws the dice settings. Under load that landed after the page had closed ("document is not defined", seen in the map companions test). `dice.js` has `rollersLoaded()`, and `test/page.js` waits for it when a page closes.
+- **Bag of Tricks.** `item-actions.test.js` asserted more than 1 hit point, but the weasel (a 1 on the d8) has 1. It now checks the SRD's own hit points; a regression test forces the weasel.
+- Checked by running each test 16–32 times, 8–16 at once, and the web suite twice beside the server suite. The creatures tab's "Add token offers the DM's creatures" failure seen once could not be reproduced (24 runs at 12 at once, and full runs under load); no change for it.
+

@@ -292,6 +292,18 @@ function getBox(key) {
   return boxes.get(key);
 }
 
+/**
+ * Settles once no roller is still loading. The tests' page waits for this when it closes: a roller that
+ * fails to start (Deluxe without WebGL) redraws the settings, and that mustn't happen after the page is gone.
+ */
+export async function rollersLoaded() {
+  for (;;) {
+    const loading = [...boxes.values()];
+    await Promise.allSettled(loading);
+    if ([...boxes.values()].every((p) => loading.includes(p))) return;
+  }
+}
+
 /** Start loading the roller while the tray is open, so the first roll doesn't wait for it. */
 function warmUp() {
   if (animated()) getBox(rollerKey()).catch(() => {});

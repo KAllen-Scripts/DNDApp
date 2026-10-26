@@ -4,7 +4,9 @@
  * the map; Wand of Fireballs spends charges for more damage; the 2024 bag's
  * creature vanishes at 0 hit points and at dawn; what the AI read is marked.
  */
-import { test } from 'node:test';
+import { test, mock } from 'node:test';
+import fs from 'node:fs';
+import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
 import { setup, createFakeLLM, terrain } from './helpers.js';
 import { emptySheet } from '@dndapp/shared/sheet.js';
@@ -42,6 +44,10 @@ const withItems = (t, names, edition = '2014') => {
   t.sheets.save(t.campaign.id, t.sam.id, { ...emptySheet({ name: 'Thorin' }), inventory });
   return t.sheets.get(t.campaign.id, t.sam.id).sheet.inventory;
 };
+/** The SRD's own stat block for a creature (what a summon's form is looked up from). */
+const SRD = JSON.parse(fs.readFileSync(new URL('../src/sheets/srd-beasts.json', import.meta.url), 'utf8')).forms;
+const srdForm = (name) => SRD.find((f) => f.name.toLowerCase() === name.toLowerCase());
+
 const use = (t, body, as) => t.request('POST', `/campaigns/${t.campaign.id}/sheet/gear/use`, { body, as: as ?? t.sam.token });
 
 test('item actions: Bag of Tricks rolls its d8 table on the server; the creature joins the sheet with its stat block and appears on the map next to the character', async () => {
@@ -65,7 +71,9 @@ test('item actions: Bag of Tricks rolls its d8 table on the server; the creature
     const c = out.sheet.companions[0];
     assert.equal(c.name, row.creature);
     assert.equal(c.form.name.toLowerCase(), row.creature.toLowerCase(), 'its stat block (the SRD)');
-    assert.ok(c.form.hp_max > 1);
+    // Its hit points are the SRD's for that creature (a weasel really has 1), not the bare stand-in's.
+    assert.equal(c.form.source, 'srd');
+    assert.equal(c.form.hp_max, srdForm(row.creature).hp_max);
     assert.equal(c.kind, 'summon');
     assert.deepEqual(c.from, { kind: 'item', name: 'Bag of Tricks (Gray)', item_id: bag.id });
     assert.equal(c.vanishes, true);
@@ -88,6 +96,26 @@ test('item actions: Bag of Tricks rolls its d8 table on the server; the creature
     assert.equal(fourth.statusCode, 400);
     assert.match(fourth.json().error, /0 charges left \(they come back at dawn\)/);
   } finally {
+    await t.cleanup();
+  }
+});
+
+// The test above checked "more than 1 hit point", but a 1 on the d8 is a weasel, which has 1: it failed one run in eight.
+test('regression: a Bag of Tricks weasel (1 hit point in the SRD) gets its stat block', async () => {
+  const t = await setup({ llm: createFakeLLM({ structured: () => readOut() }) });
+  const dice = mock.method(crypto, 'randomInt', (min) => min); // every die comes up 1
+  try {
+    await cave(t);
+    const [bag] = withItems(t, ['Bag of Tricks (Gray)']);
+    const out = (await use(t, { id: bag.id, action: 'pull' })).json();
+    assert.equal(out.total, 1);
+    const c = out.sheet.companions[0];
+    assert.equal(c.name, 'Weasel');
+    assert.equal(c.form.source, 'srd');
+    assert.equal(c.form.hp_max, srdForm('Weasel').hp_max);
+    assert.equal(c.form.hp_max, 1);
+  } finally {
+    dice.mock.restore();
     await t.cleanup();
   }
 });
