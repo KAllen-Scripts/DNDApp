@@ -40,10 +40,36 @@ export async function withPage(opts, fn) {
     await fn(page, t, extra);
     // Anything the page threw in an event handler fails the test, even when the screen looked right.
     if (page.errors.length) throw page.errors[0];
+    // Nor may a missing value show up as a word on the page ("nullnull", "undefined gp", "NaN").
+    const words = shownMissing(page.document);
+    if (words) throw new Error(`The page shows "${words}"`);
   } finally {
     await page?.close();
     await t.cleanup();
   }
+}
+
+/**
+ * Text on the page (and in its inputs, titles and labels) where a missing value was printed:
+ * "null", "undefined" or "NaN" as words. Returns the first bit around one, or null.
+ */
+export function shownMissing(document) {
+  const bad = /(^|[^\w-])(null|undefined|NaN)(?![\w-])/;
+  // Error messages are left out: they can quote the server or the AI word for word.
+  const body = document.body.cloneNode(true);
+  for (const el of body.querySelectorAll('.error, [role=alert]')) el.remove();
+  const texts = [body.textContent];
+  for (const el of document.querySelectorAll('input, textarea, select')) texts.push(el.value ?? '', el.placeholder ?? '');
+  for (const el of document.querySelectorAll('[title], [aria-label], [placeholder]')) texts.push(el.getAttribute('title') ?? '', el.getAttribute('aria-label') ?? '', el.getAttribute('placeholder') ?? '');
+  for (const text of texts) {
+    const m = bad.exec(text);
+    if (!m) continue;
+    // Say where: the innermost element holding it.
+    const holder = [...body.querySelectorAll('*')].filter((el) => bad.test(el.textContent)).at(-1);
+    const where = holder ? ` in <${holder.tagName.toLowerCase()}${holder.id ? ` id="${holder.id}"` : ''}${holder.className && typeof holder.className === 'string' ? ` class="${holder.className}"` : ''}>` : '';
+    return `${text.slice(Math.max(0, m.index - 40), m.index + m[0].length + 40).replace(/\s+/g, ' ').trim()}${where}`;
+  }
+  return null;
 }
 
 /** What the fake AI says about any map it reads. */

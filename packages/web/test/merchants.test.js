@@ -180,6 +180,43 @@ test('items and merchants: the DM makes a new item by hand right from the mercha
   });
 });
 
+test('items: a description is shown formatted in the edit dialog (tables, bold); Edit text changes the Markdown', async () => {
+  const TEXT = '| Stone | Property |\n|---|---|\n| **Might** | Strength 26 |\n\nYou can cast *misty step*.';
+  await withPage({
+    before: async (t) => {
+      const dana = await addDm(t);
+      await t.request('POST', `/campaigns/${t.campaign.id}/items`, { as: dana.token, body: { name: 'Gauntlet', kind: 'magic', text: TEXT } });
+      return { dana };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t) => {
+    page.click('[data-tab=items]');
+    await page.waitFor(() => page.text('#items').includes('Gauntlet'), { what: 'the item' });
+    page.click(button(page, '#items .item', 'Edit'));
+    const form = page.$('#item-dialog form');
+    const text = form.querySelector('[name=text]');
+    const preview = form.querySelector('.md-preview');
+    // Formatted, not the raw Markdown.
+    assert.ok(text.hidden && !preview.hidden);
+    assert.equal(preview.querySelector('table td strong').textContent, 'Might');
+    assert.equal(preview.querySelector('em').textContent, 'misty step');
+    assert.doesNotMatch(preview.textContent, /\*\*|\|---/);
+    // Edit text: the Markdown to change; Show formatted (or clicking away) shows it formatted again.
+    page.click(button(page, '#item-dialog', 'Edit text'));
+    assert.ok(!text.hidden && preview.hidden);
+    page.type(text, `${TEXT}\n\n**Attuned:** yes`);
+    page.click(button(page, '#item-dialog', 'Show formatted'));
+    assert.ok(text.hidden && !preview.hidden);
+    assert.match(preview.textContent, /Attuned: yes/);
+    page.click(preview); // clicking the formatted text edits it too
+    assert.ok(!text.hidden);
+    page.submit(form);
+    await page.waitFor(() => !page.$('#item-dialog').open, { what: 'the item saved' });
+    const [x] = (await t.request('GET', `/campaigns/${t.campaign.id}/items`)).json().items;
+    assert.equal(x.text, `${TEXT}\n\n**Attuned:** yes`);
+  });
+});
+
 test("items: the item form's fields follow its kind; numbers the DM changes are saved as theirs", async () => {
   await withPage({
     before: async (t) => ({ dana: await addDm(t) }),
