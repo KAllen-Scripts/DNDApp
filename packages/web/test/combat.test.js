@@ -160,6 +160,50 @@ test('initiative: the DM runs the fight from the panel (start, add, first turn, 
   });
 });
 
+test('initiative: the turn order panel is moved by its header, stays inside the map, is remembered, and goes back with a double-click', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const map = await importMap(t, { patch: SHOWN });
+      await addToken(t, map, { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 52.5, y: 52.5, hp: { current: 9, max: 12 } });
+      await addToken(t, map, { kind: 'enemy', name: 'Morvath the Hollow King', x: 122.5, y: 52.5 });
+      await t.request('POST', `/campaigns/${t.campaign.id}/maps/${map.id}/combat`, { body: { action: 'start' } });
+      return { map, dana: await addDm(t) };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page) => {
+    await openMapTab(page);
+    await page.waitFor(() => page.visible('#map-combat') && order(page).length === 2, { what: 'the fight' });
+    const panel = page.$('#map-combat');
+    // A row: the name (which gives way), the hit points, the initiative box.
+    assert.equal(page.text('#map-combat li[data-id] .hp'), '9/12');
+    assert.ok(!panel.classList.contains('moved'), 'in its corner at first');
+    // The map is 700 x 490; the panel 270 x 200 in the top right.
+    page.setRect('#map-combat', { left: 422, top: 8, width: 270, height: 200 });
+    page.pointer('#map-combat header strong', 'pointerdown', { clientX: 500, clientY: 20 });
+    page.pointer('#map-combat', 'pointermove', { clientX: 300, clientY: 220 });
+    page.pointer('#map-combat', 'pointerup', { clientX: 300, clientY: 220 });
+    assert.ok(panel.classList.contains('moved'));
+    assert.deepEqual([panel.style.left, panel.style.top], ['222px', '208px']);
+    const saved = JSON.parse(page.window.localStorage.getItem('dndapp.turnOrderPlace'));
+    assert.deepEqual([saved.x.toFixed(3), saved.y.toFixed(3)], [(222 / 430).toFixed(3), (208 / 290).toFixed(3)]);
+    // Dragged far off: it stops at the map's edge.
+    page.pointer('#map-combat header strong', 'pointerdown', { clientX: 500, clientY: 20 });
+    page.pointer('#map-combat', 'pointerup', { clientX: -2000, clientY: 3000 });
+    assert.deepEqual([panel.style.left, panel.style.top], ['0px', '290px']);
+    // Closed and opened again, it comes back where it was put.
+    page.click('#map-combat-open');
+    page.click('#map-combat-open');
+    assert.ok(page.visible('#map-combat'));
+    assert.deepEqual([panel.style.left, panel.style.top], ['0px', '290px']);
+    // Buttons in the header aren't handles; a double-click on it puts the panel back in its corner.
+    panel.querySelector('header').dispatchEvent(new page.window.MouseEvent('dblclick', { bubbles: true }));
+    assert.ok(!panel.classList.contains('moved'));
+    assert.equal(panel.style.left, '');
+    assert.equal(page.window.localStorage.getItem('dndapp.turnOrderPlace'), null);
+  });
+});
+
 test('measure: drag on the map to measure (squares on a grid); the line stays until Measure is switched off', async () => {
   await withPage({
     setup: { llm: mapLLM() },

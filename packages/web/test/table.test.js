@@ -202,3 +202,20 @@ test('map: the DM gives an enemy token a picture, for all tokens with its name, 
     assert.equal(t.maps.get(t.campaign.id, map.id).tokens.find((x) => x.id === a.id).art, null);
   });
 });
+
+test('handouts: a handout\'s text is shown formatted (Markdown)', async () => {
+  await withPage({
+    before: async (t) => {
+      const dana = await addDm(t);
+      await t.request('POST', `/campaigns/${t.campaign.id}/handouts`, { as: dana.token, body: { title: 'Letter', text: 'Dear **Thorin**,\n\n- come alone', to: 'everyone' } });
+      return { dana };
+    },
+    page: (t) => ({ as: t.sam }),
+  }, async (page) => {
+    page.click('[data-tab=handouts]');
+    await page.waitFor(() => page.$('#handouts .handout-text'), { what: 'the handout' });
+    const box = page.$('#handouts .handout-text');
+    assert.equal(box.querySelector('strong').textContent, 'Thorin');
+    assert.equal(box.querySelector('li').textContent, 'come alone');
+  });
+});

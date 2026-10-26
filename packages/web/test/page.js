@@ -216,6 +216,23 @@ export async function openPage(t, { as = null, campaign = null, storage = {}, an
 /** Stand-ins for what jsdom doesn't do. */
 function polyfill(window, page) {
   const { HTMLDialogElement, HTMLElement, HTMLFormElement, HTMLCanvasElement, Element } = window;
+  // The DOM prints null, undefined and false put into the page as the words "null", "undefined", "false"
+  // (the "nullnull" under Class features). Any of those going in fails the test, wherever it happens.
+  for (const proto of [window.Element.prototype, window.DocumentFragment.prototype, window.Document.prototype, window.CharacterData.prototype]) {
+    for (const name of ['append', 'prepend', 'replaceChildren', 'before', 'after', 'replaceWith']) {
+      const own = Object.getOwnPropertyDescriptor(proto, name)?.value;
+      if (!own) continue;
+      Object.defineProperty(proto, name, {
+        configurable: true,
+        writable: true,
+        value(...nodes) {
+          const bad = nodes.findIndex((n) => n == null || n === false || n === true);
+          if (bad >= 0) page.errors.push(new Error(`${name}() was given ${nodes[bad]} (argument ${bad + 1}), which shows as the text "${nodes[bad]}" on the page`));
+          return own.apply(this, nodes);
+        },
+      });
+    }
+  }
   Object.assign(HTMLDialogElement.prototype, {
     showModal() { this.setAttribute('open', ''); },
     show() { this.setAttribute('open', ''); },

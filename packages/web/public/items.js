@@ -7,8 +7,8 @@
  * equipped (from their Inventory), so the DM can check it, and their class
  * features' uses left (Rage, Ki, Wild Shape...).
  */
-import { api, fileUrl, h, readBase64, LoggedOut, note } from './api.js';
-import { markdownBox } from './markdown.js';
+import { api, fileUrl, setChildren, h, readBase64, LoggedOut, note } from './api.js';
+import { markdownBox, markdownEditor } from './markdown.js';
 import { formatPrice, splitPrice, COIN_VALUES } from './shared/coins.js';
 import { EFFECT_TARGETS, MAX_EFFECTS, itemStats } from './shared/gear.js';
 
@@ -430,7 +430,7 @@ function statsSection(x, { kind, name, text }) {
         input('Charges back', s.charges?.recharge ?? '', (v) => { if (s.charges) s.charges.recharge = v.replace(/\s+/g, ''); }, { placeholder: '1d6+1, 3 or all' })),
       effects());
     }
-    box.replaceChildren(
+    setChildren(box,
       h('legend', {}, `${ITEM_KIND_NAMES[k]}: what it does on a sheet`),
       h('p', { class: 'muted small' }, dirty || x?.stats ? 'Set by you: these go into a buyer\'s inventory as they are.' : 'Read from the name and description. Change any of them to set them yourself.'),
       ...parts);
@@ -475,7 +475,7 @@ export function itemForm(x = null) {
   const attunement = h('input', { type: 'checkbox', checked: !!x?.attunement });
   const price = priceInputs(x?.price ?? null);
   const weight = h('input', { name: 'weight', type: 'number', min: '0', step: 'any', value: x?.weight ?? '', placeholder: '–' });
-  const text = h('textarea', { name: 'text', rows: 6, maxLength: 8000, placeholder: 'What it is and does: damage and properties, AC, effects. Players see this at a merchant. Markdown is fine.' }, x?.text ?? '');
+  const text = h('textarea', { name: 'text', 'aria-label': 'Description', rows: 6, maxLength: 8000, placeholder: 'What it is and does: damage and properties, AC, effects. Players see this at a merchant. Markdown is fine.' }, x?.text ?? '');
   const notes = h('textarea', { name: 'notes', rows: 2, maxLength: 4000, placeholder: 'Only you see these.' }, x?.notes ?? '');
   const file = h('input', { type: 'file', name: 'picture', accept: 'image/png,image/jpeg,image/webp,image/gif', 'aria-label': 'Picture' });
   const stats = statsSection(x, { kind, name, text });
@@ -488,7 +488,8 @@ export function itemForm(x = null) {
       h('div', { class: 'map-row' }, field('Usual price', price.el), field('Weight (lb)', weight)),
       h('label', { class: 'map-check' }, attunement, ' Needs attunement'),
       stats.el,
-      field('Description', text),
+      // Shown formatted (tables, bold...); click it or "Edit text" to change the Markdown.
+      field('Description', markdownEditor(text).el),
       field('Notes', notes),
       x ? null : field('Picture (optional)', file),
     ],
