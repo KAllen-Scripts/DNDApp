@@ -109,6 +109,8 @@ const WEB_MODULES = {
   '/shared/item-actions.js': '@dndapp/shared/item-actions.js',
   '/shared/item-names.js': '@dndapp/shared/item-names.js',
   '/shared/point-buy.js': '@dndapp/shared/point-buy.js',
+  '/shared/backgrounds.js': '@dndapp/shared/backgrounds.js',
+  '/shared/creation-help.js': '@dndapp/shared/creation-help.js',
   '/shared/settings.js': '@dndapp/shared/settings.js',
   '/shared/map.js': '@dndapp/shared/map.js',
   '/shared/map-design.js': '@dndapp/shared/map-design.js',
@@ -340,7 +342,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
 
   app.setErrorHandler((err, request, reply) => {
     // Saving a sheet that changed elsewhere: send the current one so the page can reload it.
-    if (err instanceof SheetConflictError) return reply.status(409).send({ error: err.message, current: err.current });
+    if (err instanceof SheetConflictError) return reply.status(409).send({ error: err.message, current: err.current, ...(err.switched && { switched: true }) });
     const status =
       err instanceof AuthError ? err.status
       : err instanceof NotFoundError ? 404

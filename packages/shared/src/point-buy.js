@@ -8,9 +8,10 @@
  * - 2014: the race gives them (PHB); a Half-Elf, a Variant Human or a race
  *   the list doesn't know has the player choose some or all of them.
  * - 2024: the background gives +2 and +1, or +1 to three, and the player
- *   chooses where (the background's three abilities, when it's a PHB one).
+ *   chooses where (the background's three abilities, when it's a PHB 2024 one or one of the DM's own).
  */
 import { ABILITIES, ABILITY_NAMES, POINT_BUY_RULES, normalizePointBuy } from './sheet.js';
+import { BOOK_BACKGROUNDS, backgroundAbilities } from './backgrounds.js';
 
 export { POINT_BUY_RULES, normalizePointBuy };
 
@@ -41,13 +42,8 @@ const RACES_2014 = [
   [/tiefling/i, { fixed: { cha: 2, int: 1 } }],
 ];
 
-/** The 2024 Player's Handbook backgrounds and the three abilities each can raise. */
-export const BACKGROUNDS_2024 = {
-  acolyte: ['int', 'wis', 'cha'], artisan: ['str', 'dex', 'int'], charlatan: ['dex', 'con', 'cha'], criminal: ['dex', 'con', 'int'],
-  entertainer: ['str', 'dex', 'cha'], farmer: ['str', 'con', 'wis'], guard: ['str', 'int', 'wis'], guide: ['dex', 'con', 'wis'],
-  hermit: ['con', 'wis', 'cha'], merchant: ['con', 'int', 'cha'], noble: ['str', 'int', 'cha'], sage: ['con', 'int', 'wis'],
-  sailor: ['str', 'dex', 'wis'], scribe: ['dex', 'int', 'wis'], soldier: ['str', 'dex', 'con'], wayfarer: ['dex', 'wis', 'cha'],
-};
+/** The 2024 Player's Handbook backgrounds and the three abilities each can raise (from backgrounds.js). */
+export const BACKGROUNDS_2024 = Object.fromEntries(BOOK_BACKGROUNDS.filter((b) => b.edition === '2024').map((b) => [b.name.toLowerCase(), b.abilities]));
 
 /** A race's 2014 bonuses: { fixed, choose, not, known }. A race not in the list: the player chooses them all. */
 export function raceBonuses2014(race) {
@@ -82,8 +78,8 @@ export function pointBuy(sheet, settings = {}) {
     fixed = race.fixed;
     pick = race.known ? { choose: race.choose, max: 1, not: race.not, allowed: null, known: true } : { choose: null, max: 2, not: [], allowed: null, known: false };
   } else {
-    const bg = BACKGROUNDS_2024[String(sheet.background ?? '').trim().toLowerCase()];
-    pick.allowed = bg ?? null;
+    // A 2024 background's three abilities: the book's, or the DM's own background's (campaign settings).
+    pick.allowed = backgroundAbilities(sheet.background, { custom: settings.backgrounds ?? [] });
   }
   const abilities = {};
   let spent = 0;

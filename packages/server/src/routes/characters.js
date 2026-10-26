@@ -61,15 +61,70 @@ export function registerCharacters(app, r) {
    */
   app.put('/campaigns/:cid/sheet', { bodyLimit: 5 * 1024 * 1024 }, async (request) => {
     const { cid } = sheetOwner(request);
-    const body = z.object({ sheet: z.record(z.string(), z.unknown()), version: z.number().int().min(0) }).parse(request.body);
+    const body = z.object({ sheet: z.record(z.string(), z.unknown()), version: z.number().int().min(0), character: z.number().int().min(1).optional() }).parse(request.body);
+    const current = sheets.get(cid, request.user.id);
+    // The page says which character it has open: if another became active meanwhile, nothing is saved over it.
+    if (body.character != null && body.character !== current.number) throw new SheetConflictError(current, { switched: true });
     // Weapon attacks come from the Inventory: a typed attack can't use a weapon the character doesn't have
     // (one the saved sheet already had stays, so old and uploaded sheets still save).
-    const current = sheets.get(cid, request.user.id);
     if (current.version === body.version) {
       const missing = [...new Set(newUnownedWeaponAttacks(normalizeSheet(body.sheet), current.sheet).map((a) => a.weapon))];
       if (missing.length) throw new BadRequestError(`You don't have ${missing.length > 1 ? `these weapons: ${missing.join(', ')}` : `a ${missing[0]}`} in your Inventory. Add ${missing.length > 1 ? 'them' : 'it'} there (equipped weapons show in Attacks by themselves), or rename or remove the attack.`);
     }
     return sheets.save(cid, request.user.id, body.sheet, { baseVersion: body.version });
+  });
+
+  // ---------- a player's characters (several; one active, the one they play) ----------
+
+  const characterList = (cid, userId) => ({ characters: sheets.list(cid, userId), active: sheets.activeNumber(cid, userId) });
+  const characterNumber = (request) => {
+    const n = Number(request.params.n);
+    if (!Number.isInteger(n) || n < 1) throw new NotFoundError('There is no such character.');
+    return n;
+  };
+  const CHARACTER_NAME = z.string().trim().min(1, 'Give the character a name.').max(100);
+
+  /** Your characters here: { characters: [{ number, name, summary, active, version, updated_at }], active }. Only ever yours. */
+  app.get('/campaigns/:cid/characters', async (request) => {
+    const { cid } = sheetOwner(request);
+    return characterList(cid, request.user.id);
+  });
+
+  /**
+   * A new character: { name, active? (default true) }. A blank sheet with that
+   * name, saved; it becomes the one you play unless active is false (the one
+   * you played is kept). Returns the list and, when it's active, its sheet.
+   */
+  app.post('/campaigns/:cid/characters', async (request, reply) => {
+    const { cid } = sheetOwner(request);
+    const body = z.object({ name: CHARACTER_NAME, active: z.boolean().default(true) }).parse(request.body ?? {});
+    const made = sheets.create(cid, request.user.id, body.name, { active: body.active });
+    reply.status(201);
+    return { ...characterList(cid, request.user.id), number: made.number, ...(made.number === sheets.activeNumber(cid, request.user.id) && { sheet: { ...sheets.get(cid, request.user.id), edition: await editions.of(cid) } }) };
+  });
+
+  /** Play another of your characters: it becomes the active one everywhere. Returns the list and its sheet. */
+  app.post('/campaigns/:cid/characters/:n/active', async (request) => {
+    const { cid } = sheetOwner(request);
+    sheets.setActive(cid, request.user.id, characterNumber(request));
+    return { ...characterList(cid, request.user.id), sheet: { ...sheets.get(cid, request.user.id), edition: await editions.of(cid) } };
+  });
+
+  /** Rename one of your characters: { name }. */
+  app.patch('/campaigns/:cid/characters/:n', async (request) => {
+    const { cid } = sheetOwner(request);
+    const { name } = z.object({ name: CHARACTER_NAME }).parse(request.body ?? {});
+    const n = characterNumber(request);
+    // (Your blank first character, never saved, is saved by renaming it.)
+    const saved = sheets.rename(cid, request.user.id, n, name);
+    return { ...characterList(cid, request.user.id), ...(n === sheets.activeNumber(cid, request.user.id) && { sheet: { ...saved, edition: await editions.of(cid) } }) };
+  });
+
+  /** Delete one of your characters that isn't the active one (the archive keeps it). */
+  app.delete('/campaigns/:cid/characters/:n', async (request) => {
+    const { cid } = sheetOwner(request);
+    sheets.remove(cid, request.user.id, characterNumber(request));
+    return characterList(cid, request.user.id);
   });
 
   /**

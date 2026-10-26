@@ -341,7 +341,7 @@ export function createStore({ db, archive, config }) {
           }
         }
         for (const entry of archive.readAll()) {
-          const { campaign, sessions, members, speakers, settings = null, glossary, corrections, playerNotes, sheets = [], maps = [], characters = [], handouts = [], creatures = [], rests = [], items = [], merchants = [], mapAssets = [], mapStamps = [], wiki = [], wikiProposals = [] } = entry;
+          const { campaign, sessions, members, speakers, settings = null, glossary, corrections, playerNotes, sheets = [], characterLists = [], maps = [], characters = [], handouts = [], creatures = [], rests = [], items = [], merchants = [], mapAssets = [], mapStamps = [], wiki = [], wikiProposals = [] } = entry;
           if (db.prepare('SELECT 1 FROM campaigns WHERE slug = ?').get(campaign.slug)) continue;
           const cid = Number(
             db
@@ -382,11 +382,18 @@ export function createStore({ db, archive, config }) {
             else if (n.edited_at) editN.run(n.text, n.edited_at, n.id, cid);
             else insN.run(n.id, cid, n.user_id, n.session_date, n.written_at, n.text);
           }
-          const insSheet = db.prepare('INSERT INTO character_sheets (campaign_id, user_id, data, version, updated_at) VALUES (?, ?, ?, ?, ?)');
-          for (const { user_id, entries } of sheets) {
-            if (!entries.length || !userExists.get(user_id)) continue;
+          // Each player's characters; the last line of their list says which is active and which they deleted
+          // (a player with no list has only their first character, active).
+          const lists = new Map(characterLists.map(({ user_id, entries }) => [user_id, entries.at(-1)]).filter(([, last]) => last));
+          const insSheet = db.prepare('INSERT INTO character_sheets (campaign_id, user_id, number, data, version, updated_at, active, activated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+          const restoredSheets = sheets.filter(({ user_id, entries }) => entries.length && userExists.get(user_id));
+          for (const { user_id, number = 1, entries } of restoredSheets) {
             const { sheet, version, saved_at } = replaySheet(entries);
-            insSheet.run(cid, user_id, JSON.stringify(sheet), version, saved_at);
+            const list = lists.get(user_id);
+            const numbers = restoredSheets.filter((x) => x.user_id === user_id).map((x) => x.number ?? 1);
+            const deleted = list?.deleted?.find((d) => d.number === number);
+            const activeNo = list && numbers.includes(list.active) ? list.active : Math.min(...numbers);
+            insSheet.run(cid, user_id, number, JSON.stringify(sheet), version, saved_at, number === activeNo ? 1 : 0, number === activeNo ? list?.saved_at ?? null : null, deleted ? deleted.at : null);
           }
           const insMap = db.prepare('INSERT OR IGNORE INTO maps (id, campaign_id, data, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)');
           const insPins = db.prepare('INSERT OR IGNORE INTO map_pins (map_id, user_id, data, updated_at) VALUES (?, ?, ?, ?)');
@@ -399,10 +406,10 @@ export function createStore({ db, archive, config }) {
               if (last) insPins.run(id, user_id, JSON.stringify(normalizePins(last.pins, map.image)), last.saved_at);
             }
           }
-          const insPictures = db.prepare('INSERT INTO character_pictures (campaign_id, user_id, data, updated_at) VALUES (?, ?, ?, ?)');
-          for (const { user_id, entries } of characters) {
+          const insPictures = db.prepare('INSERT INTO character_pictures (campaign_id, user_id, number, data, updated_at) VALUES (?, ?, ?, ?, ?)');
+          for (const { user_id, number = 1, entries } of characters) {
             const last = entries.at(-1);
-            if (last && userExists.get(user_id)) insPictures.run(cid, user_id, JSON.stringify(normalizePictures(last)), last.saved_at);
+            if (last && userExists.get(user_id)) insPictures.run(cid, user_id, number, JSON.stringify(normalizePictures(last)), last.saved_at);
           }
           const insHandout = db.prepare('INSERT OR IGNORE INTO handouts (id, campaign_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)');
           for (const h of handouts.map(normalizeHandout)) insHandout.run(h.id, cid, JSON.stringify(h), h.created_at, h.updated_at);

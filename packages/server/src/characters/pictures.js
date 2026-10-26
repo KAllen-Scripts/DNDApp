@@ -1,5 +1,6 @@
 /**
- * Players' pictures of their characters, one set per player per campaign:
+ * Players' pictures of their characters, one set per character (a player's
+ * active character's set is the one in use):
  *
  *   - a token: the picture that stands for them on maps. Everyone in the
  *     campaign may get it (it's shown on every map their token is on).
@@ -7,8 +8,8 @@
  *     describe it for the Appearance part of the sheet.
  *
  * Source data, archive first: each upload is kept exactly as uploaded under
- * characters/<user id>/, and characters/<user id>/pictures.jsonl gets the
- * whole current record on each change, so restore takes the last line.
+ * characters/<user id>/, and characters/<user id>/pictures.jsonl (pictures-<n>.jsonl for
+ * character n) gets the whole current record on each change, so restore takes the last line.
  * Removing a picture only clears the record; the file stays in the archive.
  */
 import fs from 'node:fs';
@@ -36,18 +37,23 @@ export const pictureKey = (entry) => (entry ? entry.file.replace(/\.[^.]*$/, '')
 export function createPictures({ db, archive, store }) {
   const images = createImageCache(32);
 
+  // Pictures belong to a character: the player's active one (their first if they have none saved yet).
+  const activeNumber = (campaignId, userId) =>
+    db.prepare('SELECT number FROM character_sheets WHERE campaign_id = ? AND user_id = ? AND active = 1 AND deleted_at IS NULL').get(campaignId, userId)?.number ?? 1;
+
   const read = (campaignId, userId) => {
-    const r = db.prepare('SELECT data FROM character_pictures WHERE campaign_id = ? AND user_id = ?').get(campaignId, userId);
+    const r = db.prepare('SELECT data FROM character_pictures WHERE campaign_id = ? AND user_id = ? AND number = ?').get(campaignId, userId, activeNumber(campaignId, userId));
     return normalizePictures(r ? JSON.parse(r.data) : {});
   };
 
   function write(campaignId, userId, record) {
     const saved_at = new Date().toISOString();
-    archive.appendCharacterPictures(store.getCampaign(campaignId).slug, userId, { saved_at, ...record });
+    const number = activeNumber(campaignId, userId);
+    archive.appendCharacterPictures(store.getCampaign(campaignId).slug, userId, { saved_at, ...record }, number);
     db.prepare(
-      `INSERT INTO character_pictures (campaign_id, user_id, data, updated_at) VALUES (?, ?, ?, ?)
-       ON CONFLICT (campaign_id, user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
-    ).run(campaignId, userId, JSON.stringify(record), saved_at);
+      `INSERT INTO character_pictures (campaign_id, user_id, number, data, updated_at) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (campaign_id, user_id, number) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+    ).run(campaignId, userId, number, JSON.stringify(record), saved_at);
     return record;
   }
 

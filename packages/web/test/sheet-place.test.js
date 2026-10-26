@@ -142,7 +142,7 @@ test('sheet in two windows: each says when it saved, and the other shows the new
     page.click('[data-tab=sheet]');
     page.type(byLabel(page, 'Character name'), 'Thorin');
     await saved(page);
-    assert.deepEqual(page.broadcasts.at(-1), { name: 'dndapp.sheet', data: { campaignId: String(t.campaign.id), userId: String(t.sam.id), version: 1 } });
+    assert.deepEqual(page.broadcasts.at(-1), { name: 'dndapp.sheet', data: { campaignId: String(t.campaign.id), userId: String(t.sam.id), version: 1, number: 1 } });
 
     // Another window saves a newer version.
     const put = async (name, version) => {
