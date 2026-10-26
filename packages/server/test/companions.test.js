@@ -153,3 +153,66 @@ test('companions: in a fight it rolls from its stat block, and its player can se
     await t.cleanup();
   }
 });
+
+test('companions on the sheet: put on the map next to the character, hit points kept in step both ways, one map at a time, gone when dismissed on the sheet', async () => {
+  const llm = createFakeLLM({ structured: () => readOut() });
+  const t = await setup({ llm });
+  try {
+    const { base, thorin } = await cave(t);
+    const cid = t.campaign.id;
+    const mapId = base.split('/').pop();
+    const sheetOf = () => t.sheets.get(cid, t.sam.id);
+    const owl = { id: 'owl-1', name: 'Hoot', kind: 'familiar', form: (await (await t.request('GET', `/campaigns/${cid}/forms/lookup?name=Owl`, { as: t.sam.token })).json()), from: { kind: 'spell', name: 'Find Familiar' } };
+    t.sheets.save(cid, t.sam.id, { name: 'Thorin', companions: [owl] });
+    assert.equal(sheetOf().sheet.companions[0].hp.max, 1, 'an owl has 1 hit point (SRD)');
+
+    // Only its player; the DM has none.
+    const put = (as = t.sam.token, body = {}) => t.request('POST', `/campaigns/${cid}/sheet/companions/owl-1/map`, { body, as });
+    assert.equal((await put(t.alex.token)).statusCode, 404);
+    assert.equal((await put(t.dmToken)).statusCode, 403);
+    const res = await put();
+    assert.equal(res.statusCode, 200, res.body);
+    const token = res.json().token;
+    assert.equal(token.kind, 'companion');
+    assert.equal(token.companion, 'owl-1');
+    assert.equal(token.name, 'Hoot');
+    assert.equal(token.follows, thorin.id, 'it follows its character');
+    assert.ok(Math.abs(token.x - thorin.x) <= 40, 'next to the character');
+    assert.match(token.stats.text, /Talons/);
+    assert.deepEqual(token.hp, { current: 1, max: 1 });
+
+    // Hurt on the map: the sheet changes. Healed on the sheet: the token shows it.
+    t.sheets.save(cid, t.sam.id, { ...sheetOf().sheet, companions: [{ ...sheetOf().sheet.companions[0], hp: { current: 1, max: 1 } }] });
+    const hit = await t.request('PATCH', `${base}/tokens/${token.id}`, { body: { hp: { current: 0, max: 1 } }, as: t.sam.token });
+    assert.equal(hit.statusCode, 200, hit.body);
+    assert.equal(sheetOf().sheet.companions[0].hp.current, 0);
+    assert.equal(hit.json().token.hp.current, 0);
+    t.sheets.save(cid, t.sam.id, { ...sheetOf().sheet, companions: [{ ...sheetOf().sheet.companions[0], name: 'Hooty', hp: { current: 1, max: 1 } }] });
+    const seen = (as) => t.request('GET', base, { as }).then((r) => r.json().tokens.find((x) => x.id === token.id));
+    assert.deepEqual((await seen(t.sam.token)).hp, { current: 1, max: 1 });
+    assert.equal((await seen(t.sam.token)).name, 'Hooty');
+    // Another player sees its hit points but not its stat block, and can't move it.
+    const forAlex = await seen(t.alex.token);
+    assert.deepEqual(forAlex.hp, { current: 1, max: 1 });
+    assert.equal(forAlex.stats, null);
+    assert.equal((await t.request('PATCH', `${base}/tokens/${token.id}`, { body: { x: 300 }, as: t.alex.token })).statusCode, 403);
+
+    // Where it is, for the sheet.
+    const where = (await t.request('GET', `/campaigns/${cid}/sheet/companions/where`, { as: t.sam.token })).json().where;
+    assert.equal(where['owl-1'].map_id, mapId);
+
+    // Put on the map again: still one token. Off the map: it stays on the sheet.
+    await put();
+    assert.equal(t.maps.get(cid, mapId).tokens.filter((x) => x.companion === 'owl-1').length, 1);
+    assert.equal((await t.request('DELETE', `/campaigns/${cid}/sheet/companions/owl-1/map`, { as: t.sam.token })).statusCode, 200);
+    assert.ok(!t.maps.get(cid, mapId).tokens.some((x) => x.companion === 'owl-1'));
+    assert.equal(sheetOf().sheet.companions.length, 1);
+
+    // Dismissed on the sheet: its token goes.
+    await put();
+    t.sheets.save(cid, t.sam.id, { ...sheetOf().sheet, companions: [] });
+    assert.ok(!t.maps.get(cid, mapId).tokens.some((x) => x.companion === 'owl-1'));
+  } finally {
+    await t.cleanup();
+  }
+});

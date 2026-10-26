@@ -980,7 +980,7 @@ test('campaign settings: the DM ignores weight limits from Settings', async () =
     assert.equal(page.el('#setting-weight').value, 'capacity');
     page.type('#setting-weight', 'ignore');
     await page.waitFor(() => /Saved/.test(page.text('#settings-dialog')), { what: 'the setting to save' });
-    assert.deepEqual(t.store.getSettings(t.campaign.id), { weight: 'ignore', edition: null, clock: 480, travel: { time: 'clock', roads: true, terrain: true, vehicles: true, marches: true, encounters: true }, backgrounds: [] });
+    assert.deepEqual(t.store.getSettings(t.campaign.id), { weight: 'ignore', edition: null, clock: 480, travel: { time: 'clock', roads: true, terrain: true, vehicles: true, marches: true, encounters: true }, attacks: { on: true, damage: 'auto', show_ac: false }, backgrounds: [] });
   });
 });
 
@@ -1037,6 +1037,45 @@ test('sheet: Review sheet shows the rules checks and the AI\'s findings above th
     assert.match(problems[1], /Action Surge comes at 2nd level\. \(Player's Handbook p\. 72\)/);
     page.click(page.$$('#sheet-review-result button').find((b) => page.text(b) === 'Close'));
     assert.ok(box.hidden);
+  });
+});
+
+// The review's empty "Against the rules" heading and list went into the box as null, printed "nullnull".
+test('regression: a Sheet review with nothing against the rules shows no "null" in its box', async () => {
+  const llm = createFakeLLM({
+    qaScript: [[
+      { tool: 'submit_review', input: { summary: 'Looks fine.', findings: [{ severity: 'check', area: 'Skills', message: 'Only four skills.', source: '' }] } },
+      { answer: 'Done.' },
+    ]],
+  });
+  await withPage(sheetPage({ setup: { llm } }), async (page) => {
+    page.click('[data-tab=sheet]');
+    page.type(byLabel(page, 'Class'), 'Rogue');
+    page.click('#sheet-review');
+    await page.waitFor(() => page.$('#sheet-review-result h3'), { what: 'the review' });
+    const text = page.el('#sheet-review-result').textContent;
+    assert.match(text, /Worth checking/);
+    assert.doesNotMatch(text, /null|undefined/);
+  });
+});
+
+// With no subclass or race features, those two sections went into the box as null, printed "nullnull".
+test('regression: Class features with no subclass or race rows shows no "null"', async () => {
+  await withPage(sheetPage(), async (page) => {
+    page.click('[data-tab=sheet]');
+    const text = page.el('#sheet .class-features').textContent;
+    assert.match(text, /Nothing to track for your class/);
+    assert.doesNotMatch(text, /null|undefined/);
+  });
+});
+
+// With no note to show, the Companions box put null into the page, printed "null" under its text.
+test('regression: the Companions box with no companions shows no "null"', async () => {
+  await withPage(sheetPage(), async (page) => {
+    page.click('[data-tab=sheet]');
+    const text = page.el('#sheet .companions').textContent;
+    assert.match(text, /Familiars, pets/);
+    assert.doesNotMatch(text, /null|undefined/);
   });
 });
 
@@ -1140,5 +1179,42 @@ test('inventory: Add by hand asks the kind first and opens the fields for it; ar
     assert.equal(sheet.hp.current, 3 + healed);
     assert.equal(sheet.inventory.find((g) => g.name === 'Potion of Healing').qty, 1);
     assert.equal(sheet.inventory.find((g) => g.name === 'Mithral coat').armor.base, 14);
+  });
+});
+
+test('class features on the sheet: Sneak Attack ticked under a weapon adds its dice; Weapon Mastery picked in the Inventory shows on the attack; Thieves\' Cant is in Features & traits, once', async () => {
+  const { addToInventory } = await import('@dndapp/shared/gear.js');
+  const before = async (t) => {
+    t.store.setSettings(t.campaign.id, { edition: '2024' });
+    const inventory = addToInventory([], { name: 'Rapier' }, 1);
+    inventory[0].equipped = 1;
+    inventory[0].proficient = true;
+    await t.request('PUT', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token, body: { sheet: { ...emptySheet(), classes: [{ name: 'Rogue', subclass: '', level: 5 }], abilities: { ...emptySheet().abilities, dex: 16 }, inventory, features: 'Expertise: Stealth and thieves’ tools.' }, version: 0 } });
+  };
+  await withPage(sheetPage({ before }), async (page) => {
+    page.click('[data-tab=sheet]');
+    await page.waitFor(() => page.$('#sheet [aria-label="Sneak Attack: Rapier"]'), { what: 'the Sneak Attack tick box' });
+    page.click(byLabel(page, 'Sneak Attack: Rapier'));
+    page.click(byLabel(page, 'Roll Rapier damage'));
+    await page.settle();
+    const rolls = () => page.requests.filter((r) => r.path.endsWith('/roll')).map((r) => r.body);
+    assert.equal(rolls().at(-1).notation, '1d8+3d6+3');
+    // Once a turn: it's unticked after the damage is rolled.
+    assert.equal(byLabel(page, 'Sneak Attack: Rapier').checked, false);
+
+    // Weapon Mastery: two weapons for a 2024 rogue, chosen from the Inventory.
+    assert.match(page.text('#sheet .combat-bar'), /Weapon Mastery 0 of 2/);
+    page.click('[data-tab=inventory]');
+    page.click(page.el('#inventory [aria-label="Weapon mastery: Rapier"]'));
+    page.click('[data-tab=sheet]');
+    assert.match(page.text('#sheet .combat-bar'), /Rapier \(Vex\)/);
+    assert.match(page.text('#sheet .atk-mastery'), /Mastery: Vex/);
+
+    // Features & traits lists the rogue's text features; Expertise is already written, so it isn't listed again.
+    const traits = page.$$('#sheet .auto-traits li').map((li) => li.querySelector('strong').textContent);
+    assert.ok(traits.includes("Thieves' Cant"));
+    assert.ok(!traits.includes('Expertise'));
+    // The player's own text is left as it was.
+    assert.equal(page.$$('#sheet textarea').find((x) => x.getAttribute('aria-label') === 'Features & traits').value, 'Expertise: Stealth and thieves\u2019 tools.');
   });
 });

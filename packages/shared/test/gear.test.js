@@ -34,7 +34,7 @@ test('gear: magic names and what an item does, from the tables or its descriptio
   const blade = itemStats({ name: 'Sun Blade', kind: 'weapon', text: 'Martial melee weapon (finesse, versatile). 2d6 radiant damage.' });
   assert.deepEqual(blade.weapon, { damage: '2d6 radiant', ability: 'finesse', category: 'martial', properties: ['finesse', 'versatile'] });
   assert.equal(itemStats({ name: 'Elven Mail', kind: 'armor', text: 'Medium armour. AC 14 + Dex modifier (max 2).' }).armor.type, 'medium');
-  assert.deepEqual(itemStats({ name: 'Bag of Holding', kind: 'magic', text: 'A bag.' }), { kind: 'magic', weapon: null, armor: null, magic: 0, weight: null, charges: null, effects: [], heal: '' });
+  assert.deepEqual(itemStats({ name: 'Bag of Holding', kind: 'magic', text: 'A bag.' }), { kind: 'magic', weapon: null, armor: null, magic: 0, weight: null, charges: null, effects: [], heal: '', actions: [] });
 });
 
 test('gear: class proficiency from the PHB, unknown classes left to the player', () => {
@@ -149,8 +149,8 @@ test('gear: weight carried and the campaign\'s weight rule', () => {
   assert.deepEqual(['none', 'encumbered', 'heavy', 'over'].map((l, i) => encumbrance([50, 51, 101, 151][i], 10, 'variant').level), ['none', 'encumbered', 'heavy', 'over']);
   assert.equal(encumbrance(101, 10, 'variant').speed, -20);
   assert.equal(encumbrance(101, 10, 'variant').disadvantage, true);
-  assert.deepEqual(normalizeSettings({ weight: 'nonsense', other: 1 }), { weight: 'capacity', edition: null, clock: 480, travel: { time: 'clock', roads: true, terrain: true, vehicles: true, marches: true, encounters: true }, backgrounds: [] });
-  assert.deepEqual(normalizeSettings({ weight: 'ignore' }), { weight: 'ignore', edition: null, clock: 480, travel: { time: 'clock', roads: true, terrain: true, vehicles: true, marches: true, encounters: true }, backgrounds: [] });
+  assert.deepEqual(normalizeSettings({ weight: 'nonsense', other: 1 }), { weight: 'capacity', edition: null, clock: 480, travel: { time: 'clock', roads: true, terrain: true, vehicles: true, marches: true, encounters: true }, attacks: { on: true, damage: 'auto', show_ac: false }, backgrounds: [] });
+  assert.deepEqual(normalizeSettings({ weight: 'ignore' }), { weight: 'ignore', edition: null, clock: 480, travel: { time: 'clock', roads: true, terrain: true, vehicles: true, marches: true, encounters: true }, attacks: { on: true, damage: 'auto', show_ac: false }, backgrounds: [] });
   assert.equal(normalizeSettings({ edition: '2024' }).edition, '2024');
   assert.equal(normalizeSettings({ edition: 2014 }).edition, '2014');
   assert.equal(normalizeSettings({ edition: '5e' }).edition, null);

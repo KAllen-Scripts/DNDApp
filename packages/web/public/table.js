@@ -9,6 +9,7 @@
  */
 import { api, listen, fileUrl, h, readBase64, LoggedOut } from './api.js';
 import { tableRoll } from './dice.js';
+import { markdownBox } from './markdown.js';
 import { merchantChanged } from './merchants.js';
 import { restHeard } from './rests.js';
 import { settingsHeard } from './campaign-settings.js';
@@ -152,7 +153,7 @@ function drawHandouts() {
       h('h3', {}, x.title),
       h('time', { class: 'muted small', datetime: x.created_at }, new Date(x.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }))),
     x.image ? picture(x) : null,
-    x.text ? h('p', { class: 'handout-text' }, x.text) : null,
+    x.text ? markdownBox(x.text, { class: 'handout-text' }) : null,
     state.canEdit ? dmControls(x) : null,
   )));
 }

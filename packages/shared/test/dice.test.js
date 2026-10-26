@@ -61,3 +61,18 @@ test('advantage and disadvantage roll the d20 twice and keep one', () => {
 test('a natural 20 is reported', () => {
   assert.equal(rollDice(parseRoll('1d20-2'), { random: fixed(20) }).natural, 20);
 });
+
+test('min: each die counts as at least n (Great Weapon Fighting 2024, Reliable Talent)', () => {
+  const r = rollDice(parseRoll('2d6min3+2'), { random: fixed(1, 5) });
+  assert.equal(r.total, 3 + 5 + 2);
+  assert.deepEqual(r.terms[0].dice[0], { value: 1, kept: true, counts: 3 });
+  const reliable = rollDice(parseRoll('1d20min10+5'), { random: fixed(4) });
+  assert.equal(reliable.total, 15);
+  assert.equal(reliable.natural, 4);
+});
+
+test('ro: each die at or under n is rerolled once and the new one kept (Great Weapon Fighting 2014)', () => {
+  const r = rollDice(parseRoll('2d6ro2'), { random: fixed(2, 1, 6) });
+  assert.equal(r.total, 1 + 6);
+  assert.deepEqual(r.terms[0].dice.map((d) => d.kept), [false, true, true]);
+});

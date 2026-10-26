@@ -176,9 +176,10 @@ export function draw() {
   const el = $('#sheet-characters');
   if (!el) return;
   el.hidden = !state.campaignId;
-  el.replaceChildren(
+  // replaceChildren would print a null as the text "null", so the parts not shown are left out.
+  el.replaceChildren(...[
     strip(),
     state.open ? list() : null,
     state.message ? h('p', { class: `chars-message small${state.error ? ' error' : ''}`, role: 'status' }, state.message) : null,
-  );
+  ].filter(Boolean));
 }
