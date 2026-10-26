@@ -15,6 +15,9 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-26 | The wiki AI's proposals made in the same millisecond came back in a random order (sorted by their random ids), so the DM's list could shuffle and two wiki tests failed now and then under load. | `server/test/wiki-ai.test.js`: regression: proposals made in the same millisecond keep the order the AI gave them |
+| 2026-10-26 | In the page tests, the Deluxe dice (which can't start in jsdom) could fail after the page had closed and then touch a document that was gone ("document is not defined"), so the map companions test failed now and then under load. A closing page now waits for a roller still loading. | `web/test/dice.test.js`: regression: a 3D roller still loading when the page closes finishes first, so nothing runs without the page |
+| 2026-10-26 | The Bag of Tricks test said its creature has more than 1 hit point, but a 1 on the d8 is a weasel, which has 1: it failed one run in eight. It now checks the SRD's own hit points. | `server/test/item-actions.test.js`: regression: a Bag of Tricks weasel (1 hit point in the SRD) gets its stat block |
 | 2026-10-22 | The new Companions box on the sheet showed "null" under its text when it had no note to show (found by the page tests' null check when the companions work was merged). | `web/test/sheet.test.js`: regression: the Companions box with no companions shows no "null" |
 | 2026-10-21 | The Sheet review showed "nullnull" when nothing was against the rules (empty parts were put into the page as null). | `web/test/sheet.test.js`: regression: a Sheet review with nothing against the rules shows no "null" in its box |
 | 2026-10-21 | The Class features box showed "nullnull" when there were no subclass or race features. | `web/test/sheet.test.js`: regression: Class features with no subclass or race rows shows no "null" |
