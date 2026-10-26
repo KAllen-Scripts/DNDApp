@@ -34,6 +34,7 @@ import { loadCharacters, refreshCharacters, nameTyped } from './sheet-characters
 import { traitsList } from './sheet-traits.js';
 import { attackPlan, combatBar, extrasLine, inventoryMastery, rollAttackPlan, rollDamagePlan, spellPlan } from './sheet-attacks.js';
 import { backgroundBox, backgroundNames, forgetApplied } from './sheet-background.js';
+import { helpPanel } from './sheet-help.js';
 import { itemNames } from './shared/item-names.js';
 import { GEAR_KINDS, effectText, gearCard } from './gear-card.js';
 
@@ -1710,6 +1711,7 @@ function render() {
     datalist('dl-alignments', ALIGNMENTS),
     datalist('dl-schools', SCHOOLS),
     header(),
+    helpPanel({ state, changed, redraw: render }),
     ...LAYOUTS[state.layout](),
   );
   inventoryTab();
