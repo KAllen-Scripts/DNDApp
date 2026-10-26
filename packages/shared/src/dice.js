@@ -15,8 +15,9 @@ const MAX_CONSTANT = 999;
 export const ROLL_MODES = ['normal', 'advantage', 'disadvantage'];
 
 // A dice term can end in min<n> (each die counts as at least n: 2024 Great Weapon Fighting's 3, Reliable
-// Talent's 10) or ro<n> (each die of n or less is rolled once more and the new one kept: 2014 Great Weapon Fighting).
-const TERM = /([+-]?)\s*(?:(\d*)\s*d\s*(\d+|%)(?:\s*(min|ro)\s*(\d+))?|(\d+))/giy;
+// Talent's 10), ro<n> (each die of n or less is rolled once more and the new one kept: 2014 Great Weapon
+// Fighting, a halfling's Luck on a d20's 1) and, on a d20, ea (Elven Accuracy: with advantage, three d20s).
+const TERM = /([+-]?)\s*(?:(\d*)\s*d\s*(\d+|%)((?:\s*(?:min|ro)\s*\d+|\s*ea(?![a-z]))*)|(\d+))/giy;
 
 /**
  * Read dice notation. Returns { notation, terms } where each term is
@@ -38,8 +39,8 @@ export function parseRoll(text) {
     if (!m || m.index !== pos) throw new Error(`Couldn't read "${src}". Use dice like 1d20+5 or 2d6+1d4.`);
     if (terms.length && !m[1]) throw new Error(`Put + or - between the parts of "${src}".`);
     const sign = m[1] === '-' ? -1 : 1;
-    if (m[6] !== undefined) {
-      const value = Number(m[6]);
+    if (m[5] !== undefined) {
+      const value = Number(m[5]);
       if (value > MAX_CONSTANT) throw new Error(`${value} is too big a number to add.`);
       terms.push({ sign, value });
     } else {
@@ -48,10 +49,15 @@ export function parseRoll(text) {
       if (!DICE_SIDES.includes(sides)) throw new Error(`There's no d${sides} here. Dice: ${DICE_SIDES.map((s) => `d${s}`).join(', ')}.`);
       if (count < 1) throw new Error('Roll at least one die.');
       const term = { sign, count, sides };
-      if (m[4]) {
-        const n = Number(m[5]);
-        if (!(n >= 1 && n <= sides)) throw new Error(`${m[4]}${n} doesn't fit a d${sides}.`);
-        if (m[4] === 'min') term.min = n;
+      for (const [, rule, num] of (m[4] ?? '').matchAll(/(min|ro|ea)\s*(\d*)/gi)) {
+        if (rule.toLowerCase() === 'ea') {
+          if (sides !== 20) throw new Error('ea (Elven Accuracy) is only for a d20.');
+          term.elven = true;
+          continue;
+        }
+        const n = Number(num);
+        if (!(n >= 1 && n <= sides)) throw new Error(`${rule}${n} doesn't fit a d${sides}.`);
+        if (rule.toLowerCase() === 'min') term.min = n;
         else if (n < sides) term.reroll = n;
       }
       terms.push(term);
@@ -82,7 +88,7 @@ export function findRoll(text) {
 /** Terms back into notation: [{ sign: 1, count: 2, sides: 6, min: 3 }, { sign: 1, value: 4 }] → "2d6min3+4". */
 export function formatTerms(terms) {
   return terms
-    .map((t, i) => (t.sign < 0 ? '-' : i ? '+' : '') + (t.value !== undefined ? t.value : `${t.count}d${t.sides}${t.min ? `min${t.min}` : t.reroll ? `ro${t.reroll}` : ''}`))
+    .map((t, i) => (t.sign < 0 ? '-' : i ? '+' : '') + (t.value !== undefined ? t.value : `${t.count}d${t.sides}${t.reroll ? `ro${t.reroll}` : ''}${t.min ? `min${t.min}` : ''}${t.elven ? 'ea' : ''}`))
     .join('');
 }
 
@@ -114,24 +120,29 @@ export function rollDice({ notation, terms }, { mode = 'normal', random }) {
       total += t.sign * t.value;
       return { sign: t.sign, value: t.value };
     }
-    const dice = [];
-    for (let i = 0; i < t.count; i++) {
+    // One die, rolled again once if it's at or under the reroll number (the first then isn't kept).
+    const one = () => {
       const d = { value: random(t.sides), kept: true };
       if (t.reroll && d.value <= t.reroll) {
         d.kept = false;
-        dice.push(d, { value: random(t.sides), kept: true });
-      } else dice.push(d);
-    }
+        return [d, { value: random(t.sides), kept: true }];
+      }
+      return [d];
+    };
+    const dice = [];
+    for (let i = 0; i < t.count; i++) dice.push(...one());
     if (t.sides === 20 && twice) {
-      const other = { value: random(20), kept: true };
-      const firstKept = mode === 'advantage' ? dice[0].value >= other.value : dice[0].value <= other.value;
-      (firstKept ? other : dice[0]).kept = false;
-      dice.push(other);
+      // Advantage or disadvantage: one more d20 (two more with Elven Accuracy's advantage); the best (or worst) is kept.
+      const extra = t.elven && mode === 'advantage' ? 2 : 1;
+      for (let i = 0; i < extra; i++) dice.push(...one());
+      const kept = dice.filter((d) => d.kept);
+      const best = kept.reduce((b, d) => ((mode === 'advantage' ? d.value > b.value : d.value < b.value) ? d : b));
+      for (const d of kept) if (d !== best) d.kept = false;
     }
     if (t.min) for (const d of dice) if (d.value < t.min) d.counts = t.min;
     for (const d of dice) if (d.kept) total += t.sign * (d.counts ?? d.value);
     if (t.sides === 20 && d20s === 1) natural = dice.find((d) => d.kept).value;
-    return { sign: t.sign, sides: t.sides, dice, ...(t.min && { min: t.min }), ...(t.reroll && { reroll: t.reroll }) };
+    return { sign: t.sign, sides: t.sides, dice, ...(t.min && { min: t.min }), ...(t.reroll && { reroll: t.reroll }), ...(t.elven && { elven: true }) };
   });
   return { notation, mode: twice ? mode : 'normal', terms: out, total, natural };
 }

@@ -29,8 +29,8 @@ const picksFor = (key) => {
 };
 
 /** The plan for one attack now (shared/attack-extras.js planAttack). */
-export function attackPlan(state, a, { key, weapon = null, two = false } = {}) {
-  return planAttack(state.sheet, state.calc, a, { edition: editionOf(state), weapon, two, picks: picksFor(key) });
+export function attackPlan(state, a, { key, weapon = null, two = false, offhand = false } = {}) {
+  return planAttack(state.sheet, state.calc, a, { edition: editionOf(state), weapon, two, offhand, picks: picksFor(key) });
 }
 
 /**

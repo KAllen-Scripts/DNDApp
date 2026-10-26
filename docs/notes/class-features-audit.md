@@ -296,7 +296,7 @@ Editions: "2014" and "2024" are the two Player's Handbooks; the campaign's Setti
 
 ## Subclasses
 
-Subclass features with uses or numbers are rows of the Class features box (under a Subclass heading). Those marked *applied* are also worked into the numbers or rolls. Subclass features with no uses and nothing to work out (most ribbons) aren't listed on the sheet; the player writes them in Features & traits. That is a gap left for later (see HANDOFF.md).
+Subclass features with uses or numbers are rows of the Class features box (under a Subclass heading). Those marked *applied* are also worked into the numbers or rolls. Subclass features with no uses and nothing to work out (most ribbons) are listed in Features & traits with a short summary (subclass-traits.js), unless a Class features row of that subclass has the same name.
 
 ### Barbarian subclasses
 
@@ -324,6 +324,36 @@ Subclass features with uses or numbers are rows of the Class features box (under
 | Magic Awareness | Barbarian (Path of Wild Magic) 3 | both | Class features row: uses ticked off, back on a long rest. An action: sense spells and magic items within 60 feet. Wild Surge: when you rage, roll on the Wild Magic table (save DC 10). | Works (tracked) |
 | Bolstering Magic | Barbarian (Path of Wild Magic) 6 | both | Class features row: uses ticked off, back on a long rest. An action: a creature adds 1d3 to attacks and checks for 10 minutes, or regains a spell slot of level 1d3. | Works (tracked) |
 | Giant's Havoc | Barbarian (Path of the Giant) 3 | both | Class features row: a note with its numbers. Giant's Power: Druidcraft or Thaumaturgy, and Giant language. While raging: Large size if there's room, reach +5 feet, and Crushing Throw (thrown weapons deal your Rage damage… | Note only |
+| Mindless Rage | Barbarian (Path of the Berserker) 6 | both | Listed in Features & traits with a short summary. You can't be charmed or frightened while raging; raging ends either effect on you. | Listed (nothing to work out) |
+| Retaliation | Barbarian (Path of the Berserker) 14 | 2014 | Listed in Features & traits with a short summary. A reaction: a melee weapon attack against a creature within 5 feet that damages you. | Listed (nothing to work out) |
+| Retaliation | Barbarian (Path of the Berserker) 14 | 2024 | Listed in Features & traits with a short summary. A reaction: a melee attack against a creature within 5 feet that damages you. | Listed (nothing to work out) |
+| Spirit Seeker | Barbarian (Path of the Totem Warrior) 3 | 2014 | Listed in Features & traits with a short summary. Beast Sense and Speak with Animals as rituals. | Listed (nothing to work out) |
+| Aspect of the Beast | Barbarian (Path of the Totem Warrior) 6 | 2014 | Listed in Features & traits with a short summary. Bear (carry more), Eagle (see far, no dim-light Perception disadvantage), Wolf (track at a fast pace)... | Listed (nothing to work out) |
+| Spirit Walker | Barbarian (Path of the Totem Warrior) 10 | 2014 | Listed in Features & traits with a short summary. Commune with Nature as a ritual. | Listed (nothing to work out) |
+| Totemic Attunement | Barbarian (Path of the Totem Warrior) 14 | 2014 | Listed in Features & traits with a short summary. Bear (enemies near you have disadvantage against others), Eagle (fly while raging), Wolf (knock prone as a bonus action)... | Listed (nothing to work out) |
+| Animal Speaker | Barbarian (Path of the Wild Heart) 3 | 2024 | Listed in Features & traits with a short summary. Beast Sense and Speak with Animals as rituals. | Listed (nothing to work out) |
+| Aspect of the Wilds | Barbarian (Path of the Wild Heart) 6 | 2024 | Listed in Features & traits with a short summary. Owl (darkvision 60 ft), Panther (climb speed) or Salmon (swim speed); change after a long rest. | Listed (nothing to work out) |
+| Nature Speaker | Barbarian (Path of the Wild Heart) 10 | 2024 | Listed in Features & traits with a short summary. Commune with Nature as a ritual. | Listed (nothing to work out) |
+| Power of the Wilds | Barbarian (Path of the Wild Heart) 14 | 2024 | Listed in Features & traits with a short summary. While raging: Falcon (fly), Lion (enemies near you have disadvantage against others) or Ram (knock Large or smaller prone). | Listed (nothing to work out) |
+| Branches of the Tree | Barbarian (Path of the World Tree) 6 | 2024 | Listed in Features & traits with a short summary. A reaction while raging: teleport a creature within 30 feet next to you (Strength save), its speed 0. | Listed (nothing to work out) |
+| Battering Roots | Barbarian (Path of the World Tree) 10 | 2024 | Listed in Features & traits with a short summary. Heavy or Versatile melee weapons have 10 more feet of reach; Push or Topple on a hit, as well as their mastery. | Listed (nothing to work out) |
+| Travel along the Tree | Barbarian (Path of the World Tree) 14 | 2024 | Listed in Features & traits with a short summary. While raging, teleport up to 60 feet as a bonus action (and once a rage, 150 feet with allies). | Listed (nothing to work out) |
+| Fanatical Focus | Barbarian (Path of the Zealot) 6 | 2014 | Listed in Features & traits with a short summary. Once a rage, reroll a failed saving throw. | Listed (nothing to work out) |
+| Fanatical Focus | Barbarian (Path of the Zealot) 6 | 2024 | Listed in Features & traits with a short summary. Once a rage, reroll a failed saving throw with a bonus equal to your rage damage. | Listed (nothing to work out) |
+| Rage beyond Death | Barbarian (Path of the Zealot) 14 | 2014 | Listed in Features & traits with a short summary. While raging, dropping to 0 hit points doesn't knock you unconscious; you die only when the rage ends. | Listed (nothing to work out) |
+| Spirit Shield | Barbarian (Path of the Ancestral Guardian) 6 | both | Listed in Features & traits with a short summary. A reaction while raging: reduce the damage an ally within 30 feet takes by 2d6 (3d6 at 10th, 4d6 at 14th). | Listed (nothing to work out) |
+| Vengeful Ancestors | Barbarian (Path of the Ancestral Guardian) 14 | both | Listed in Features & traits with a short summary. Spirit Shield also deals the damage it prevents to the attacker. | Listed (nothing to work out) |
+| Storm Soul | Barbarian (Path of the Storm Herald) 6 | both | Listed in Features & traits with a short summary. Resistance by your aura (fire, cold or lightning) and a small effect outside rage. | Listed (nothing to work out) |
+| Shielding Storm | Barbarian (Path of the Storm Herald) 10 | both | Listed in Features & traits with a short summary. Creatures in your aura gain your Storm Soul resistance. | Listed (nothing to work out) |
+| Raging Storm | Barbarian (Path of the Storm Herald) 14 | both | Listed in Features & traits with a short summary. A reaction with your aura: Desert (fire), Sea (knock prone) or Tundra (speed 0). | Listed (nothing to work out) |
+| Bestial Soul | Barbarian (Path of the Beast) 6 | both | Listed in Features & traits with a short summary. Swim and climb speeds or a better jump, chosen each rest; your natural weapons count as magical. | Listed (nothing to work out) |
+| Wild Surge | Barbarian (Path of Wild Magic) 3 | both | Listed in Features & traits with a short summary. Entering a rage rolls on the Wild Magic table (d8). | Listed (nothing to work out) |
+| Unstable Backlash | Barbarian (Path of Wild Magic) 10 | both | Listed in Features & traits with a short summary. A reaction when you take damage or fail a save while raging: a new Wild Surge. | Listed (nothing to work out) |
+| Controlled Surge | Barbarian (Path of Wild Magic) 14 | both | Listed in Features & traits with a short summary. Roll twice on the Wild Magic table and choose. | Listed (nothing to work out) |
+| Giant's Power | Barbarian (Path of the Giant) 3 | both | Listed in Features & traits with a short summary. Giant language; Druidcraft or Thaumaturgy (Wisdom). | Listed (nothing to work out) |
+| Elemental Cleaver | Barbarian (Path of the Giant) 6 | both | Listed in Features & traits with a short summary. While raging your weapon deals elemental damage, gains thrown (20/60), returns, and 1d6 more damage. | Listed (nothing to work out) |
+| Mighty Impel | Barbarian (Path of the Giant) 10 | both | Listed in Features & traits with a short summary. A bonus action while raging: throw a creature up to 30 feet. | Listed (nothing to work out) |
+| Demiurgic Colossus | Barbarian (Path of the Giant) 14 | both | Listed in Features & traits with a short summary. Raging makes you Large or Huge; Elemental Cleaver does 2d6. | Listed (nothing to work out) |
 
 ### Bard subclasses
 
@@ -351,6 +381,21 @@ Subclass features with uses or numbers are rows of the Class features box (under
 | Silver Tongue | Bard (College of Eloquence) 3 | both | Class features row: a note with its numbers. Persuasion and Deception checks roll at least 10. Unsettling Words: a bonus action, spend a Bardic Inspiration to take the roll off a creature's next save. | Note only |
 | Universal Speech | Bard (College of Eloquence) 6 | both | Class features row: uses ticked off, back on a long rest. An action: up to 1 creatures understand you for 1 hour. Spend a spell slot to use it again. | Works (tracked) |
 | Infectious Inspiration | Bard (College of Eloquence) 14 | both | Class features row: uses ticked off, back on a long rest. A reaction when a creature uses your Bardic Inspiration and succeeds: give one to another creature, without spending one. | Works (tracked) |
+| Bonus Proficiencies | Bard (College of Lore) 3 | both | Listed in Features & traits with a short summary. Three skills of your choice. | Listed (nothing to work out) |
+| Additional Magical Secrets | Bard (College of Lore) 6 | 2014 | Listed in Features & traits with a short summary. Two spells from any class. | Listed (nothing to work out) |
+| Magical Discoveries | Bard (College of Lore) 6 | 2024 | Listed in Features & traits with a short summary. Two spells from the Cleric, Druid or Wizard lists, always prepared. | Listed (nothing to work out) |
+| Peerless Skill | Bard (College of Lore) 14 | both | Listed in Features & traits with a short summary. Add a Bardic Inspiration die to a failed ability check (2024: kept only if it then succeeds). | Listed (nothing to work out) |
+| Bonus Proficiencies | Bard (College of Valor) 3 | both | Listed in Features & traits with a short summary. Medium armour, shields and martial weapons. | Listed (nothing to work out) |
+| Extra Attack | Bard (College of Valor) 6 | both | Listed in Features & traits with a short summary. Attack twice with the Attack action (2024: a cantrip can replace one). | Listed (nothing to work out) |
+| Battle Magic | Bard (College of Valor) 14 | both | Listed in Features & traits with a short summary. After casting a spell with an action, a weapon attack as a bonus action. | Listed (nothing to work out) |
+| Inspiring Movement | Bard (College of Dance) 6 | 2024 | Listed in Features & traits with a short summary. A reaction when an enemy ends its turn near you: spend Bardic Inspiration to move half speed with an ally. | Listed (nothing to work out) |
+| Tandem Footwork | Bard (College of Dance) 6 | 2024 | Listed in Features & traits with a short summary. When you roll initiative, spend Bardic Inspiration to add the die to yours and allies' within 30 feet. | Listed (nothing to work out) |
+| Leading Evasion | Bard (College of Dance) 14 | 2024 | Listed in Features & traits with a short summary. Evasion, shared with creatures within 5 feet. | Listed (nothing to work out) |
+| Bonus Proficiencies | Bard (College of Swords) 3 | both | Listed in Features & traits with a short summary. Medium armour and scimitars; a melee weapon as your spellcasting focus. | Listed (nothing to work out) |
+| Fighting Style | Bard (College of Swords) 3 | both | Listed in Features & traits with a short summary. Dueling or Two-Weapon Fighting (pick it in Features & traits). | Listed (nothing to work out) |
+| Extra Attack | Bard (College of Swords) 6 | both | Listed in Features & traits with a short summary. Attack twice with the Attack action. | Listed (nothing to work out) |
+| Master's Flourish | Bard (College of Swords) 14 | both | Listed in Features & traits with a short summary. A Blade Flourish with a d6 instead of a Bardic Inspiration die. | Listed (nothing to work out) |
+| Unsettling Words | Bard (College of Eloquence) 6 | both | Listed in Features & traits with a short summary. Spend Bardic Inspiration: a creature subtracts the die from its next save. | Listed (nothing to work out) |
 
 ### Cleric subclasses
 
@@ -382,6 +427,76 @@ Subclass features with uses or numbers are rows of the Class features box (under
 | Eyes of Night | Cleric (Twilight Domain) 1 | both | Class features row: uses ticked off, back on a long rest. Darkvision 300 feet. An action: share it with up to 1 creatures for 1 hour; spend a spell slot to share it again. Vigilant Blessing: advantage on one creature's next initiative. | Works (tracked) |
 | Steps of Night | Cleric (Twilight Domain) 6 | both | Class features row: uses ticked off, back on a long rest. A bonus action in dim light or darkness: a flying speed equal to your walking speed for 1 minute. | Works (tracked) |
 | Reaper | Cleric (Death Domain) 1 | both | Class features row: a note with its numbers. Your necromancy cantrips that target one creature can target two within 5 feet of each other. | Note only |
+| Blessings of Knowledge | Cleric (Knowledge Domain) 1 | 2014 | Listed in Features & traits with a short summary. Two languages and expertise in two of Arcana, History, Nature, Religion. | Listed (nothing to work out) |
+| Channel Divinity: Read Thoughts | Cleric (Knowledge Domain) 6 | 2014 | Listed in Features & traits with a short summary. Read a creature's surface thoughts (Wisdom save); then a Suggestion without a slot. | Listed (nothing to work out) |
+| Potent Spellcasting | Cleric (Knowledge Domain) 8 | 2014 | Listed in Features & traits with a short summary. Add Wisdom to cleric cantrip damage (in your rolls). | Listed (nothing to work out) |
+| Bonus Proficiency | Cleric (Life Domain) 1 | 2014 | Listed in Features & traits with a short summary. Heavy armour (2014; 2024: Life Domain spells always prepared). | Listed (nothing to work out) |
+| Bonus Proficiency | Cleric (Life Domain) 3 | 2024 | Listed in Features & traits with a short summary. Heavy armour (2014; 2024: Life Domain spells always prepared). | Listed (nothing to work out) |
+| Blessed Healer | Cleric (Life Domain) 6 | both | Listed in Features & traits with a short summary. Healing someone else with a spell also heals you 2 + the slot level. | Listed (nothing to work out) |
+| Divine Strike | Cleric (Life Domain) 8 | 2014 | Listed in Features & traits with a short summary. 1d8 radiant once a turn on a weapon hit (2d8 at 14th; a tick under the attack). | Listed (nothing to work out) |
+| Supreme Healing | Cleric (Life Domain) 17 | both | Listed in Features & traits with a short summary. Healing dice from spells count as their highest number. | Listed (nothing to work out) |
+| Bonus Cantrip | Cleric (Light Domain) 1 | 2014 | Listed in Features & traits with a short summary. Light (2014). Light Domain spells always prepared. | Listed (nothing to work out) |
+| Bonus Cantrip | Cleric (Light Domain) 3 | 2024 | Listed in Features & traits with a short summary. Light (2014). Light Domain spells always prepared. | Listed (nothing to work out) |
+| Improved Flare | Cleric (Light Domain) 6 | both | Listed in Features & traits with a short summary. Warding Flare protects allies within 30 feet too (2024: and gives them temporary hit points). | Listed (nothing to work out) |
+| Potent Spellcasting | Cleric (Light Domain) 8 | 2014 | Listed in Features & traits with a short summary. Add Wisdom to cleric cantrip damage (in your rolls). | Listed (nothing to work out) |
+| Acolyte of Nature | Cleric (Nature Domain) 1 | 2014 | Listed in Features & traits with a short summary. A druid cantrip and Animal Handling, Nature or Survival. | Listed (nothing to work out) |
+| Bonus Proficiency | Cleric (Nature Domain) 1 | 2014 | Listed in Features & traits with a short summary. Heavy armour. | Listed (nothing to work out) |
+| Dampen Elements | Cleric (Nature Domain) 6 | 2014 | Listed in Features & traits with a short summary. A reaction: resistance against acid, cold, fire, lightning or thunder damage for you or an ally. | Listed (nothing to work out) |
+| Divine Strike | Cleric (Nature Domain) 8 | 2014 | Listed in Features & traits with a short summary. 1d8 cold, fire or lightning once a turn on a weapon hit (a tick under the attack). | Listed (nothing to work out) |
+| Master of Nature | Cleric (Nature Domain) 17 | 2014 | Listed in Features & traits with a short summary. Command animals and plants you charmed. | Listed (nothing to work out) |
+| Bonus Proficiencies | Cleric (Tempest Domain) 1 | 2014 | Listed in Features & traits with a short summary. Martial weapons and heavy armour. | Listed (nothing to work out) |
+| Thunderbolt Strike | Cleric (Tempest Domain) 6 | 2014 | Listed in Features & traits with a short summary. Lightning damage you deal can push Large or smaller creatures 10 feet. | Listed (nothing to work out) |
+| Divine Strike | Cleric (Tempest Domain) 8 | 2014 | Listed in Features & traits with a short summary. 1d8 thunder once a turn on a weapon hit (a tick under the attack). | Listed (nothing to work out) |
+| Stormborn | Cleric (Tempest Domain) 17 | 2014 | Listed in Features & traits with a short summary. A flying speed equal to your walking speed outdoors. | Listed (nothing to work out) |
+| Blessing of the Trickster | Cleric (Trickery Domain) 1 | 2014 | Listed in Features & traits with a short summary. Advantage on Stealth for a creature you touch, for an hour. | Listed (nothing to work out) |
+| Blessing of the Trickster | Cleric (Trickery Domain) 3 | 2024 | Listed in Features & traits with a short summary. Advantage on Stealth for a creature you touch, for an hour. | Listed (nothing to work out) |
+| Channel Divinity: Invoke Duplicity | Cleric (Trickery Domain) 2 | 2014 | Listed in Features & traits with a short summary. An illusory double for a minute (a row). | Listed (nothing to work out) |
+| Channel Divinity: Cloak of Shadows | Cleric (Trickery Domain) 6 | 2014 | Listed in Features & traits with a short summary. Invisible until the end of your next turn. | Listed (nothing to work out) |
+| Divine Strike | Cleric (Trickery Domain) 8 | 2014 | Listed in Features & traits with a short summary. 1d8 poison once a turn on a weapon hit (a tick under the attack). | Listed (nothing to work out) |
+| Trickster's Transposition | Cleric (Trickery Domain) 6 | 2024 | Listed in Features & traits with a short summary. Swap places with your duplicate. | Listed (nothing to work out) |
+| Improved Duplicity | Cleric (Trickery Domain) 17 | both | Listed in Features & traits with a short summary. Four duplicates (2014); 2024: allies have advantage near it and it heals when it ends. | Listed (nothing to work out) |
+| Bonus Proficiencies | Cleric (War Domain) 1 | 2014 | Listed in Features & traits with a short summary. Martial weapons and heavy armour. | Listed (nothing to work out) |
+| War God's Blessing | Cleric (War Domain) 6 | both | Listed in Features & traits with a short summary. A reaction (Channel Divinity): +10 to an ally's attack (2014); 2024: Shield of Faith or Spiritual Weapon without a slot. | Listed (nothing to work out) |
+| Divine Strike | Cleric (War Domain) 8 | 2014 | Listed in Features & traits with a short summary. 1d8 of your weapon's type once a turn on a weapon hit (a tick under the attack). | Listed (nothing to work out) |
+| Avatar of Battle | Cleric (War Domain) 17 | both | Listed in Features & traits with a short summary. Resistance to bludgeoning, piercing and slashing damage (2014: from nonmagical weapons). | Listed (nothing to work out) |
+| Bonus Proficiencies | Cleric (Forge Domain) 1 | 2014 | Listed in Features & traits with a short summary. Heavy armour and smith's tools. | Listed (nothing to work out) |
+| Bonus Proficiencies | Cleric (Forge Domain) 3 | 2024 | Listed in Features & traits with a short summary. Heavy armour and smith's tools. | Listed (nothing to work out) |
+| Channel Divinity: Artisan's Blessing | Cleric (Forge Domain) 2 | 2014 | Listed in Features & traits with a short summary. Make a simple metal item in an hour-long ritual. | Listed (nothing to work out) |
+| Channel Divinity: Artisan's Blessing | Cleric (Forge Domain) 3 | 2024 | Listed in Features & traits with a short summary. Make a simple metal item in an hour-long ritual. | Listed (nothing to work out) |
+| Soul of the Forge | Cleric (Forge Domain) 6 | both | Listed in Features & traits with a short summary. Resistance to fire; +1 AC in heavy armour. | Listed (nothing to work out) |
+| Divine Strike | Cleric (Forge Domain) 8 | 2014 | Listed in Features & traits with a short summary. 1d8 fire once a turn on a weapon hit (a tick under the attack). | Listed (nothing to work out) |
+| Saint of Forge and Fire | Cleric (Forge Domain) 17 | both | Listed in Features & traits with a short summary. Immunity to fire; in heavy armour, resistance to nonmagical bludgeoning, piercing and slashing. | Listed (nothing to work out) |
+| Channel Divinity: Path to the Grave | Cleric (Grave Domain) 2 | 2014 | Listed in Features & traits with a short summary. The next hit on a cursed creature deals double damage (vulnerability). | Listed (nothing to work out) |
+| Channel Divinity: Path to the Grave | Cleric (Grave Domain) 3 | 2024 | Listed in Features & traits with a short summary. The next hit on a cursed creature deals double damage (vulnerability). | Listed (nothing to work out) |
+| Potent Spellcasting | Cleric (Grave Domain) 8 | 2014 | Listed in Features & traits with a short summary. Add Wisdom to cleric cantrip damage (in your rolls). | Listed (nothing to work out) |
+| Keeper of Souls | Cleric (Grave Domain) 17 | both | Listed in Features & traits with a short summary. When an enemy dies near you, you or an ally heals hit points equal to its Hit Dice. | Listed (nothing to work out) |
+| Bonus Proficiencies | Cleric (Order Domain) 1 | 2014 | Listed in Features & traits with a short summary. Heavy armour and Intimidation or Persuasion. | Listed (nothing to work out) |
+| Bonus Proficiencies | Cleric (Order Domain) 3 | 2024 | Listed in Features & traits with a short summary. Heavy armour and Intimidation or Persuasion. | Listed (nothing to work out) |
+| Channel Divinity: Order's Demand | Cleric (Order Domain) 2 | 2014 | Listed in Features & traits with a short summary. Creatures you choose make a Wisdom save or are charmed and drop what they hold. | Listed (nothing to work out) |
+| Channel Divinity: Order's Demand | Cleric (Order Domain) 3 | 2024 | Listed in Features & traits with a short summary. Creatures you choose make a Wisdom save or are charmed and drop what they hold. | Listed (nothing to work out) |
+| Divine Strike | Cleric (Order Domain) 8 | 2014 | Listed in Features & traits with a short summary. 1d8 psychic once a turn on a weapon hit (a tick under the attack). | Listed (nothing to work out) |
+| Implement of Peace | Cleric (Peace Domain) 1 | 2014 | Listed in Features & traits with a short summary. Insight, Performance or Persuasion. | Listed (nothing to work out) |
+| Implement of Peace | Cleric (Peace Domain) 3 | 2024 | Listed in Features & traits with a short summary. Insight, Performance or Persuasion. | Listed (nothing to work out) |
+| Channel Divinity: Balm of Peace | Cleric (Peace Domain) 2 | 2014 | Listed in Features & traits with a short summary. Move without opportunity attacks, healing creatures you pass. | Listed (nothing to work out) |
+| Channel Divinity: Balm of Peace | Cleric (Peace Domain) 3 | 2024 | Listed in Features & traits with a short summary. Move without opportunity attacks, healing creatures you pass. | Listed (nothing to work out) |
+| Protective Bond | Cleric (Peace Domain) 6 | both | Listed in Features & traits with a short summary. Bonded creatures can teleport to take each other's damage. | Listed (nothing to work out) |
+| Potent Spellcasting | Cleric (Peace Domain) 8 | 2014 | Listed in Features & traits with a short summary. Add Wisdom to cleric cantrip damage (in your rolls). | Listed (nothing to work out) |
+| Expansive Bond | Cleric (Peace Domain) 17 | both | Listed in Features & traits with a short summary. Bond range 60 feet; the creature taking the damage resists it. | Listed (nothing to work out) |
+| Bonus Proficiencies | Cleric (Twilight Domain) 1 | 2014 | Listed in Features & traits with a short summary. Martial weapons and heavy armour. | Listed (nothing to work out) |
+| Bonus Proficiencies | Cleric (Twilight Domain) 3 | 2024 | Listed in Features & traits with a short summary. Martial weapons and heavy armour. | Listed (nothing to work out) |
+| Vigilant Blessing | Cleric (Twilight Domain) 1 | 2014 | Listed in Features & traits with a short summary. Give a creature advantage on its next initiative roll. | Listed (nothing to work out) |
+| Vigilant Blessing | Cleric (Twilight Domain) 3 | 2024 | Listed in Features & traits with a short summary. Give a creature advantage on its next initiative roll. | Listed (nothing to work out) |
+| Channel Divinity: Twilight Sanctuary | Cleric (Twilight Domain) 2 | 2014 | Listed in Features & traits with a short summary. A 30-foot sphere: temporary hit points or ending charm and fear each turn. | Listed (nothing to work out) |
+| Channel Divinity: Twilight Sanctuary | Cleric (Twilight Domain) 3 | 2024 | Listed in Features & traits with a short summary. A 30-foot sphere: temporary hit points or ending charm and fear each turn. | Listed (nothing to work out) |
+| Divine Strike | Cleric (Twilight Domain) 8 | 2014 | Listed in Features & traits with a short summary. 1d8 radiant once a turn on a weapon hit (a tick under the attack). | Listed (nothing to work out) |
+| Twilight Shroud | Cleric (Twilight Domain) 17 | both | Listed in Features & traits with a short summary. You and allies in your sanctuary have half cover. | Listed (nothing to work out) |
+| Bonus Proficiency | Cleric (Death Domain) 1 | 2014 | Listed in Features & traits with a short summary. Martial weapons. | Listed (nothing to work out) |
+| Bonus Proficiency | Cleric (Death Domain) 3 | 2024 | Listed in Features & traits with a short summary. Martial weapons. | Listed (nothing to work out) |
+| Channel Divinity: Touch of Death | Cleric (Death Domain) 2 | 2014 | Listed in Features & traits with a short summary. On a melee hit, 5 + twice your cleric level necrotic damage. | Listed (nothing to work out) |
+| Channel Divinity: Touch of Death | Cleric (Death Domain) 3 | 2024 | Listed in Features & traits with a short summary. On a melee hit, 5 + twice your cleric level necrotic damage. | Listed (nothing to work out) |
+| Inescapable Destruction | Cleric (Death Domain) 6 | both | Listed in Features & traits with a short summary. Your necrotic damage ignores resistance. | Listed (nothing to work out) |
+| Divine Strike | Cleric (Death Domain) 8 | 2014 | Listed in Features & traits with a short summary. 1d8 necrotic once a turn on a weapon hit (a tick under the attack). | Listed (nothing to work out) |
+| Improved Reaper | Cleric (Death Domain) 17 | both | Listed in Features & traits with a short summary. Necromancy spells of 1st to 5th level that target one creature can target two. | Listed (nothing to work out) |
 
 ### Druid subclasses
 
@@ -410,6 +525,37 @@ Subclass features with uses or numbers are rows of the Class features box (under
 | Summon Wildfire Spirit | Druid (Circle of Wildfire) 2 | both | Class features row: a note with its numbers. Spend a Wild Shape use: a wildfire spirit for 1 hour (AC 13, 15 hit points; arrival 2d6 fire, Dexterity save DC 10; Flame Seed 1d6 + 2). | Note only |
 | Cauterizing Flames | Druid (Circle of Wildfire) 10 | both | Class features row: uses ticked off, back on a long rest. When a creature dies within 30 feet of your spirit: a flame; a reaction when someone enters it to heal or hurt them 2d10 + 0. | Works (tracked) |
 | Blazing Revival | Druid (Circle of Wildfire) 14 | both | Class features row: uses ticked off, back on a long rest. When you drop to 0 hit points with your spirit within 120 feet: it drops to 0 and you regain half your hit points and stand up. | Works (tracked) |
+| Bonus Cantrip | Druid (Circle of the Land) 2 | 2014 | Listed in Features & traits with a short summary. One more druid cantrip. | Listed (nothing to work out) |
+| Circle Spells | Druid (Circle of the Land) 2 | 2014 | Listed in Features & traits with a short summary. Spells of your chosen land always prepared. | Listed (nothing to work out) |
+| Circle Spells | Druid (Circle of the Land) 3 | 2024 | Listed in Features & traits with a short summary. Spells of your chosen land always prepared. | Listed (nothing to work out) |
+| Land's Stride | Druid (Circle of the Land) 6 | 2014 | Listed in Features & traits with a short summary. Nonmagical difficult terrain costs no extra movement; advantage against magical plants. | Listed (nothing to work out) |
+| Nature's Ward | Druid (Circle of the Land) 10 | 2014 | Listed in Features & traits with a short summary. Can't be charmed or frightened by elementals or fey; immune to poison and disease. | Listed (nothing to work out) |
+| Nature's Sanctuary | Druid (Circle of the Land) 14 | 2014 | Listed in Features & traits with a short summary. Beasts and plants must make a Wisdom save to attack you. | Listed (nothing to work out) |
+| Nature's Ward | Druid (Circle of the Land) 10 | 2024 | Listed in Features & traits with a short summary. Immune to poisoned; resistance by your land. | Listed (nothing to work out) |
+| Nature's Sanctuary | Druid (Circle of the Land) 14 | 2024 | Listed in Features & traits with a short summary. Spend a Wild Shape use for a cube of trees that gives half cover and resistance. | Listed (nothing to work out) |
+| Circle Forms | Druid (Circle of the Moon) 2 | 2014 | Listed in Features & traits with a short summary. Wild Shape into beasts of a higher CR (in the Wild Shape box). | Listed (nothing to work out) |
+| Circle Forms | Druid (Circle of the Moon) 3 | 2024 | Listed in Features & traits with a short summary. Wild Shape into beasts of a higher CR (in the Wild Shape box). | Listed (nothing to work out) |
+| Primal Strike | Druid (Circle of the Moon) 6 | 2014 | Listed in Features & traits with a short summary. Your beast attacks count as magical. | Listed (nothing to work out) |
+| Elemental Wild Shape | Druid (Circle of the Moon) 10 | 2014 | Listed in Features & traits with a short summary. Spend two Wild Shape uses to become an elemental. | Listed (nothing to work out) |
+| Thousand Forms | Druid (Circle of the Moon) 14 | 2014 | Listed in Features & traits with a short summary. Alter Self at will. | Listed (nothing to work out) |
+| Lunar Form | Druid (Circle of the Moon) 14 | 2024 | Listed in Features & traits with a short summary. Once a turn 2d10 radiant on a hit in Wild Shape; Moonlight Step can bring someone. | Listed (nothing to work out) |
+| Aquatic Affinity | Druid (Circle of the Sea) 6 | 2024 | Listed in Features & traits with a short summary. Wrath of the Sea's emanation grows; a swim speed. | Listed (nothing to work out) |
+| Stormborn | Druid (Circle of the Sea) 10 | 2024 | Listed in Features & traits with a short summary. While Wrath of the Sea is on: fly, and resistance to cold, lightning and thunder. | Listed (nothing to work out) |
+| Oceanic Gift | Druid (Circle of the Sea) 14 | 2024 | Listed in Features & traits with a short summary. Wrath of the Sea can be on another creature (or both, spending two uses). | Listed (nothing to work out) |
+| Twinkling Constellations | Druid (Circle of the Stars) 10 | both | Listed in Features & traits with a short summary. Starry Form gets stronger and you can change constellation each turn. | Listed (nothing to work out) |
+| Full of Stars | Druid (Circle of the Stars) 14 | both | Listed in Features & traits with a short summary. In Starry Form, resistance to bludgeoning, piercing and slashing damage. | Listed (nothing to work out) |
+| Speech of the Woods | Druid (Circle of the Shepherd) 2 | 2014 | Listed in Features & traits with a short summary. Sylvan, and talk with beasts as Speak with Animals. | Listed (nothing to work out) |
+| Speech of the Woods | Druid (Circle of the Shepherd) 3 | 2024 | Listed in Features & traits with a short summary. Sylvan, and talk with beasts as Speak with Animals. | Listed (nothing to work out) |
+| Guardian Spirit | Druid (Circle of the Shepherd) 10 | both | Listed in Features & traits with a short summary. Your summoned beasts and fey in your Spirit Totem aura heal half your druid level each turn. | Listed (nothing to work out) |
+| Circle Spells | Druid (Circle of Spores) 2 | 2014 | Listed in Features & traits with a short summary. Chill Touch and spore spells always prepared. | Listed (nothing to work out) |
+| Circle Spells | Druid (Circle of Spores) 3 | 2024 | Listed in Features & traits with a short summary. Chill Touch and spore spells always prepared. | Listed (nothing to work out) |
+| Symbiotic Entity | Druid (Circle of Spores) 2 | 2014 | Listed in Features & traits with a short summary. Spend Wild Shape for temporary hit points; Halo of Spores and melee hits deal more. | Listed (nothing to work out) |
+| Symbiotic Entity | Druid (Circle of Spores) 3 | 2024 | Listed in Features & traits with a short summary. Spend Wild Shape for temporary hit points; Halo of Spores and melee hits deal more. | Listed (nothing to work out) |
+| Spreading Spores | Druid (Circle of Spores) 10 | both | Listed in Features & traits with a short summary. Move Halo of Spores to a 10-foot cube. | Listed (nothing to work out) |
+| Fungal Body | Druid (Circle of Spores) 14 | both | Listed in Features & traits with a short summary. Can't be blinded, deafened, frightened or poisoned; critical hits on you are normal hits. | Listed (nothing to work out) |
+| Circle Spells | Druid (Circle of Wildfire) 2 | 2014 | Listed in Features & traits with a short summary. Fire spells always prepared. | Listed (nothing to work out) |
+| Circle Spells | Druid (Circle of Wildfire) 3 | 2024 | Listed in Features & traits with a short summary. Fire spells always prepared. | Listed (nothing to work out) |
+| Enhanced Bond | Druid (Circle of Wildfire) 6 | both | Listed in Features & traits with a short summary. With your wildfire spirit summoned: +1d8 to fire damage or healing from your spells; spells can come from it. | Listed (nothing to work out) |
 
 ### Fighter subclasses
 
@@ -432,6 +578,41 @@ Subclass features with uses or numbers are rows of the Class features box (under
 | Telekinetic Master | Fighter (Psi Warrior) 18 | both | Class features row: uses ticked off, back on a long rest. Cast Telekinesis without a slot (Intelligence), with a weapon attack as a bonus action each turn while concentrating. Spend a Psionic Energy die to use it again. | Works (tracked) |
 | Giant's Might | Fighter (Rune Knight) 3 | both | Class features row: uses ticked off, back on a long rest. A tick box on weapon attacks adds the d6. A bonus action for 1 minute: Large, advantage on Strength, and 6 damage more once a turn (1d6). Runes: each once per short rest (save DC 10). | Works (applied) |
 | Runic Shield | Fighter (Rune Knight) 7 | both | Class features row: uses ticked off, back on a long rest. A reaction when a creature within 60 feet is hit: the attacker rerolls and uses the new roll. | Works (tracked) |
+| Remarkable Athlete | Fighter (Champion) 7 | 2014 | Listed in Features & traits with a short summary. Half proficiency on Strength, Dexterity and Constitution checks (in your numbers); longer running jumps. | Listed (nothing to work out) |
+| Remarkable Athlete | Fighter (Champion) 3 | 2024 | Listed in Features & traits with a short summary. Advantage on initiative and Athletics (rolled so); move half speed after a critical hit. | Listed (nothing to work out) |
+| Additional Fighting Style | Fighter (Champion) 10 | both | Listed in Features & traits with a short summary. A second fighting style (pick it in Features & traits). | Listed (nothing to work out) |
+| Additional Fighting Style | Fighter (Champion) 7 | 2024 | Listed in Features & traits with a short summary. A second fighting style (pick it in Features & traits). | Listed (nothing to work out) |
+| Heroic Warrior | Fighter (Champion) 10 | 2024 | Listed in Features & traits with a short summary. Heroic Inspiration at the start of each of your turns in combat if you don't have it. | Listed (nothing to work out) |
+| Superior Critical | Fighter (Champion) 15 | both | Listed in Features & traits with a short summary. Critical hits on 18–20 (in your attacks). | Listed (nothing to work out) |
+| Combat Superiority | Fighter (Battle Master) 3 | both | Listed in Features & traits with a short summary. Manoeuvres fuelled by superiority dice (a row; a tick under each attack adds the die). | Listed (nothing to work out) |
+| Student of War | Fighter (Battle Master) 3 | both | Listed in Features & traits with a short summary. One artisan's tools (2024: and a skill). | Listed (nothing to work out) |
+| Relentless | Fighter (Battle Master) 15 | both | Listed in Features & traits with a short summary. Get a superiority die back when you roll initiative with none (2024: once a turn, a d8 instead of spending one). | Listed (nothing to work out) |
+| Spellcasting | Fighter (Eldritch Knight) 3 | both | Listed in Features & traits with a short summary. Wizard spells (abjuration and evocation) with Intelligence; in your spell slots. | Listed (nothing to work out) |
+| Weapon Bond | Fighter (Eldritch Knight) 3 | both | Listed in Features & traits with a short summary. Bond up to two weapons: you can't be disarmed of them and can summon one as a bonus action. | Listed (nothing to work out) |
+| Eldritch Strike | Fighter (Eldritch Knight) 10 | both | Listed in Features & traits with a short summary. A creature you hit has disadvantage on its next save against your spell. | Listed (nothing to work out) |
+| Arcane Charge | Fighter (Eldritch Knight) 15 | both | Listed in Features & traits with a short summary. Teleport 30 feet when you use Action Surge. | Listed (nothing to work out) |
+| Improved War Magic | Fighter (Eldritch Knight) 18 | both | Listed in Features & traits with a short summary. Replace two attacks with a spell of 1st or 2nd level (2014: a spell and a bonus-action attack). | Listed (nothing to work out) |
+| Telekinetic Adept | Fighter (Psi Warrior) 7 | both | Listed in Features & traits with a short summary. Psi-Powered Leap (fly) and Telekinetic Thrust (push or knock prone). | Listed (nothing to work out) |
+| Guarded Mind | Fighter (Psi Warrior) 10 | both | Listed in Features & traits with a short summary. Resistance to psychic; spend a psionic die to end charm or fear. | Listed (nothing to work out) |
+| Arcane Archer Lore | Fighter (Arcane Archer) 3 | both | Listed in Features & traits with a short summary. Arcana or Nature, and Prestidigitation or Druidcraft. | Listed (nothing to work out) |
+| Magic Arrow | Fighter (Arcane Archer) 7 | both | Listed in Features & traits with a short summary. Your arrows count as magical. | Listed (nothing to work out) |
+| Curving Shot | Fighter (Arcane Archer) 7 | both | Listed in Features & traits with a short summary. A bonus action: reroll a missed magic arrow at a different target within 60 feet. | Listed (nothing to work out) |
+| Ever-Ready Shot | Fighter (Arcane Archer) 15 | both | Listed in Features & traits with a short summary. Get one Arcane Shot back when you roll initiative with none. | Listed (nothing to work out) |
+| Bonus Proficiency | Fighter (Cavalier) 3 | both | Listed in Features & traits with a short summary. Animal Handling, History, Insight, Performance or Persuasion, or a language. | Listed (nothing to work out) |
+| Born to the Saddle | Fighter (Cavalier) 3 | both | Listed in Features & traits with a short summary. Advantage to stay mounted; mount and dismount for 5 feet. | Listed (nothing to work out) |
+| Hold the Line | Fighter (Cavalier) 10 | both | Listed in Features & traits with a short summary. Opportunity attacks when creatures move within your reach; a hit stops them. | Listed (nothing to work out) |
+| Ferocious Charger | Fighter (Cavalier) 15 | both | Listed in Features & traits with a short summary. Moving 10 feet before a hit can knock the target prone (Strength save). | Listed (nothing to work out) |
+| Vigilant Defender | Fighter (Cavalier) 18 | both | Listed in Features & traits with a short summary. One opportunity attack on every other creature's turn. | Listed (nothing to work out) |
+| Bonus Proficiency | Fighter (Samurai) 3 | both | Listed in Features & traits with a short summary. History, Insight, Performance or Persuasion, or a language. | Listed (nothing to work out) |
+| Elegant Courtier | Fighter (Samurai) 7 | both | Listed in Features & traits with a short summary. Add Wisdom to Persuasion; Wisdom saves proficiency (or Int or Cha). | Listed (nothing to work out) |
+| Tireless Spirit | Fighter (Samurai) 10 | both | Listed in Features & traits with a short summary. Get a Fighting Spirit use back when you roll initiative with none. | Listed (nothing to work out) |
+| Rapid Strike | Fighter (Samurai) 15 | both | Listed in Features & traits with a short summary. Trade advantage on an attack for an extra attack. | Listed (nothing to work out) |
+| Strength before Death | Fighter (Samurai) 18 | both | Listed in Features & traits with a short summary. Dropping to 0: take an extra turn first. | Listed (nothing to work out) |
+| Bonus Proficiencies | Fighter (Rune Knight) 3 | both | Listed in Features & traits with a short summary. Smith's tools and Giant. | Listed (nothing to work out) |
+| Rune Carver | Fighter (Rune Knight) 3 | both | Listed in Features & traits with a short summary. Inscribe runes on your gear; each has a passive effect and one use (written as your own rows). | Listed (nothing to work out) |
+| Great Stature | Fighter (Rune Knight) 10 | both | Listed in Features & traits with a short summary. Grow a few inches; Giant's Might does 1d8. | Listed (nothing to work out) |
+| Master of Runes | Fighter (Rune Knight) 15 | both | Listed in Features & traits with a short summary. Each rune twice per rest. | Listed (nothing to work out) |
+| Runic Juggernaut | Fighter (Rune Knight) 18 | both | Listed in Features & traits with a short summary. Giant's Might makes you Huge, 1d10, +5 feet reach. | Listed (nothing to work out) |
 
 ### Monk subclasses
 
@@ -456,6 +637,31 @@ Subclass features with uses or numbers are rows of the Class features box (under
 | Arms of the Astral Self | Monk (Way of the Astral Self) 3 | both | Class features row: a note with its numbers. 1 ki, a bonus action, 10 minutes: astral arms (Wisdom for Strength checks and saves, reach +5, 1d4 force with Wisdom); summoning them deals 2d4 force to creatures within 10 feet… | Note only |
 | Hand of Healing | Monk (Warrior of Mercy) 3 | both | Class features row: a note with its numbers. 1 ki (or in place of a Flurry strike): heal 1d4 + 0. Hand of Harm: once a turn, 1 ki for 1d4 + 0 necrotic more. | Note only |
 | Hand of Ultimate Mercy | Monk (Warrior of Mercy) 17 | both | Class features row: uses ticked off, back on a long rest. 5 ki: bring back a creature that died in the last 24 hours with 4d10 + 0 hit points. | Works (tracked) |
+| Tranquility | Monk (Way of the Open Hand) 11 | both | Listed in Features & traits with a short summary. Sanctuary on you after a long rest (2014); 2024: Fleet Step, step away after a bonus action. | Listed (nothing to work out) |
+| Quivering Palm | Monk (Way of the Open Hand) 17 | both | Listed in Features & traits with a short summary. Set lethal vibrations in a creature you hit, then end them: a Constitution save or drop to 0 (2014) / 10d12 force (2024). | Listed (nothing to work out) |
+| Shadow Step | Monk (Way of Shadow) 6 | both | Listed in Features & traits with a short summary. Teleport 60 feet between dim light or darkness as a bonus action, with advantage on your next melee attack. | Listed (nothing to work out) |
+| Cloak of Shadows | Monk (Way of Shadow) 11 | both | Listed in Features & traits with a short summary. Invisible in dim light or darkness (2014); 2024: Improved Shadow Step. | Listed (nothing to work out) |
+| Opportunist | Monk (Way of Shadow) 17 | both | Listed in Features & traits with a short summary. A reaction attack when a creature near you is hit by someone else (2014); 2024: Cloak of Shadows. | Listed (nothing to work out) |
+| Elemental Burst | Monk (Way of the Four Elements) 6 | 2024 | Listed in Features & traits with a short summary. Spend focus points for a 20-foot sphere of elemental damage. | Listed (nothing to work out) |
+| Stride of the Elements | Monk (Way of the Four Elements) 11 | 2024 | Listed in Features & traits with a short summary. While Elemental Attunement is on, fly and swim at your speed. | Listed (nothing to work out) |
+| Elemental Epitome | Monk (Way of the Four Elements) 17 | 2024 | Listed in Features & traits with a short summary. Resistance to an element, faster steps, and more damage once a turn. | Listed (nothing to work out) |
+| Implements of Mercy | Monk (Warrior of Mercy) 3 | both | Listed in Features & traits with a short summary. Insight and Medicine, and the herbalism kit; a mask. | Listed (nothing to work out) |
+| Physician's Touch | Monk (Warrior of Mercy) 6 | both | Listed in Features & traits with a short summary. Hand of Healing also ends a disease or condition; Hand of Harm poisons. | Listed (nothing to work out) |
+| Flurry of Healing and Harm | Monk (Warrior of Mercy) 11 | both | Listed in Features & traits with a short summary. Hand of Healing for each Flurry of Blows strike, and Hand of Harm once a turn free. | Listed (nothing to work out) |
+| Bonus Proficiencies | Monk (Way of the Drunken Master) 3 | both | Listed in Features & traits with a short summary. Performance and brewer's supplies. | Listed (nothing to work out) |
+| Tipsy Sway | Monk (Way of the Drunken Master) 6 | both | Listed in Features & traits with a short summary. Redirect a missed attack to another creature; stand up for 5 feet. | Listed (nothing to work out) |
+| Drunkard's Luck | Monk (Way of the Drunken Master) 11 | both | Listed in Features & traits with a short summary. Spend 2 ki to cancel disadvantage. | Listed (nothing to work out) |
+| Intoxicated Frenzy | Monk (Way of the Drunken Master) 17 | both | Listed in Features & traits with a short summary. Flurry of Blows makes up to five attacks against different creatures. | Listed (nothing to work out) |
+| One with the Blade | Monk (Way of the Kensei) 6 | both | Listed in Features & traits with a short summary. Kensei weapons count as magical; Deft Strike adds a martial arts die. | Listed (nothing to work out) |
+| Sharpen the Blade | Monk (Way of the Kensei) 11 | both | Listed in Features & traits with a short summary. Spend ki for up to +3 to a kensei weapon for a minute. | Listed (nothing to work out) |
+| Unerring Accuracy | Monk (Way of the Kensei) 17 | both | Listed in Features & traits with a short summary. Reroll a missed monk weapon attack once a turn. | Listed (nothing to work out) |
+| Searing Arc Strike | Monk (Way of the Sun Soul) 6 | both | Listed in Features & traits with a short summary. Burning Hands for ki after the Attack action. | Listed (nothing to work out) |
+| Searing Sunburst | Monk (Way of the Sun Soul) 11 | both | Listed in Features & traits with a short summary. A 20-foot sphere of radiant light, more with ki. | Listed (nothing to work out) |
+| Sun Shield | Monk (Way of the Sun Soul) 17 | both | Listed in Features & traits with a short summary. Bright light around you, and radiant damage back on melee attackers. | Listed (nothing to work out) |
+| Draconic Disciple | Monk (Way of the Ascendant Dragon) 3 | both | Listed in Features & traits with a short summary. Unarmed strikes can deal elemental damage; reroll failed Intimidation or Persuasion; a language. | Listed (nothing to work out) |
+| Visage of the Astral Self | Monk (Way of the Astral Self) 6 | both | Listed in Features & traits with a short summary. Astral sight and voice while your arms are summoned. | Listed (nothing to work out) |
+| Body of the Astral Self | Monk (Way of the Astral Self) 11 | both | Listed in Features & traits with a short summary. Deflect energy and add damage with your arms and visage both summoned. | Listed (nothing to work out) |
+| Awakened Astral Self | Monk (Way of the Astral Self) 17 | both | Listed in Features & traits with a short summary. Full astral self: +2 AC, three arm attacks. | Listed (nothing to work out) |
 
 ### Paladin subclasses
 
@@ -489,6 +695,26 @@ Subclass features with uses or numbers are rows of the Class features box (under
 | Mortal Bulwark | Paladin (Oath of the Watchers) 20 | both | Class features row: uses ticked off, back on a long rest. A bonus action for 1 minute: truesight 120 feet, advantage against aberrations, celestials, elementals, fey and fiends, and banish them on a hit. Spend a 5th-level slot to use it… | Works (tracked) |
 | Oathbreaker Channel Divinity | Paladin (Oathbreaker) 3 | both | Class features row: a note with its numbers. Control Undead: an undead within 30 feet obeys you for 24 hours (Wisdom save, DC 10). Dreadful Aspect: creatures you choose within 30 feet are frightened for 1 minute. | Note only |
 | Dread Lord | Paladin (Oathbreaker) 20 | both | Class features row: uses ticked off, back on a long rest. An action for 1 minute: a 30-foot aura of gloom; frightened enemies take 4d10 psychic damage, and a bonus action for a 3d10 + 0 necrotic shadow attack. | Works (tracked) |
+| Turn the Unholy | Paladin (Oath of Devotion) 3 | 2014 | Listed in Features & traits with a short summary. Channel Divinity: fiends and undead make a Wisdom save or are turned. | Listed (nothing to work out) |
+| Aura of Devotion | Paladin (Oath of Devotion) 7 | both | Listed in Features & traits with a short summary. You and allies near you can't be charmed. | Listed (nothing to work out) |
+| Purity of Spirit | Paladin (Oath of Devotion) 15 | 2014 | Listed in Features & traits with a short summary. Always under Protection from Evil and Good. | Listed (nothing to work out) |
+| Smite of Protection | Paladin (Oath of Devotion) 15 | 2024 | Listed in Features & traits with a short summary. Divine Smite gives you and allies half cover until your next turn. | Listed (nothing to work out) |
+| Turn the Faithless | Paladin (Oath of the Ancients) 3 | 2014 | Listed in Features & traits with a short summary. Channel Divinity: fey and fiends make a Wisdom save or are turned. | Listed (nothing to work out) |
+| Aura of Warding | Paladin (Oath of the Ancients) 7 | both | Listed in Features & traits with a short summary. You and allies near you have resistance to spell damage (2024: necrotic, psychic and radiant). | Listed (nothing to work out) |
+| Abjure Enemy | Paladin (Oath of Vengeance) 3 | 2014 | Listed in Features & traits with a short summary. Channel Divinity: a creature makes a Wisdom save or is frightened, speed 0. | Listed (nothing to work out) |
+| Relentless Avenger | Paladin (Oath of Vengeance) 7 | both | Listed in Features & traits with a short summary. After an opportunity attack hit, move half speed without provoking (2024: and its speed is 0). | Listed (nothing to work out) |
+| Soul of Vengeance | Paladin (Oath of Vengeance) 15 | both | Listed in Features & traits with a short summary. A reaction melee attack when your vowed enemy attacks. | Listed (nothing to work out) |
+| Peerless Athlete | Paladin (Oath of Glory) 3 | both | Listed in Features & traits with a short summary. Channel Divinity: advantage on Athletics and Acrobatics and longer jumps for an hour. | Listed (nothing to work out) |
+| Aura of Alacrity | Paladin (Oath of Glory) 7 | both | Listed in Features & traits with a short summary. +10 feet speed (and allies who start near you, 2014). | Listed (nothing to work out) |
+| Conquering Presence | Paladin (Oath of Conquest) 3 | both | Listed in Features & traits with a short summary. Channel Divinity: creatures near you make a Wisdom save or are frightened. | Listed (nothing to work out) |
+| Aura of Conquest | Paladin (Oath of Conquest) 7 | both | Listed in Features & traits with a short summary. Frightened creatures near you have speed 0 and take psychic damage. | Listed (nothing to work out) |
+| Scornful Rebuke | Paladin (Oath of Conquest) 15 | both | Listed in Features & traits with a short summary. Creatures that hit you take psychic damage equal to your Charisma. | Listed (nothing to work out) |
+| Aura of the Guardian | Paladin (Oath of Redemption) 7 | both | Listed in Features & traits with a short summary. Take the damage an ally near you would take. | Listed (nothing to work out) |
+| Protective Spirit | Paladin (Oath of Redemption) 15 | both | Listed in Features & traits with a short summary. Heal at the end of each turn while below half hit points. | Listed (nothing to work out) |
+| Aura of the Sentinel | Paladin (Oath of the Watchers) 7 | both | Listed in Features & traits with a short summary. You and allies near you add your proficiency bonus to initiative. | Listed (nothing to work out) |
+| Vigilant Rebuke | Paladin (Oath of the Watchers) 15 | both | Listed in Features & traits with a short summary. When a creature near you succeeds on a mental save, the caster takes force damage. | Listed (nothing to work out) |
+| Aura of Hate | Paladin (Oathbreaker) 7 | both | Listed in Features & traits with a short summary. You and undead or fiends near you add Charisma to melee damage. | Listed (nothing to work out) |
+| Supernatural Resistance | Paladin (Oathbreaker) 15 | both | Listed in Features & traits with a short summary. Resistance to nonmagical bludgeoning, piercing and slashing. | Listed (nothing to work out) |
 
 ### Ranger subclasses
 
@@ -516,6 +742,28 @@ Subclass features with uses or numbers are rows of the Class features box (under
 | Gathered Swarm | Ranger (Swarmkeeper) 3 | both | Class features row: a note with its numbers. Once a turn after a hit: 1d6 piercing more, or push 15 feet (Strength save, DC 10), or move 5 feet. | Note only |
 | Writhing Tide | Ranger (Swarmkeeper) 7 | both | Class features row: uses ticked off, back on a long rest. A bonus action: fly 10 feet and hover for 1 minute. | Works (tracked) |
 | Swarming Dispersal | Ranger (Swarmkeeper) 15 | both | Class features row: uses ticked off, back on a long rest. A reaction when you take damage: resist it, and teleport 30 feet. | Works (tracked) |
+| Hunter's Lore | Ranger (Hunter) 3 | both | Listed in Features & traits with a short summary. While Hunter's Mark is on a creature you know its immunities, resistances and vulnerabilities (2024). | Listed (nothing to work out) |
+| Defensive Tactics | Ranger (Hunter) 7 | both | Listed in Features & traits with a short summary. Escape the Horde, Multiattack Defense or Steel Will (2024: change after a rest). | Listed (nothing to work out) |
+| Multiattack | Ranger (Hunter) 11 | both | Listed in Features & traits with a short summary. Volley or Whirlwind Attack (2014); 2024: Superior Hunter's Prey, Hunter's Mark damage to a second creature. | Listed (nothing to work out) |
+| Superior Hunter's Defense | Ranger (Hunter) 15 | both | Listed in Features & traits with a short summary. Evasion, Stand Against the Tide or Uncanny Dodge (2024: resistance to one attack's damage type). | Listed (nothing to work out) |
+| Exceptional Training | Ranger (Beast Master) 7 | both | Listed in Features & traits with a short summary. Your companion can Dash, Disengage, Dodge or Help as a bonus action; its attacks are magical. | Listed (nothing to work out) |
+| Bestial Fury | Ranger (Beast Master) 11 | both | Listed in Features & traits with a short summary. Your companion attacks twice (2024: and its hits on your marked target deal Hunter's Mark damage). | Listed (nothing to work out) |
+| Share Spells | Ranger (Beast Master) 15 | both | Listed in Features & traits with a short summary. A spell that targets you also affects your companion within 30 feet. | Listed (nothing to work out) |
+| Otherworldly Glamour | Ranger (Fey Wanderer) 3 | both | Listed in Features & traits with a short summary. Add Wisdom to Charisma checks; Deception, Performance or Persuasion. | Listed (nothing to work out) |
+| Beguiling Twist | Ranger (Fey Wanderer) 7 | both | Listed in Features & traits with a short summary. Advantage against charm and fear; redirect it to another creature when someone near you saves. | Listed (nothing to work out) |
+| Umbral Sight | Ranger (Gloom Stalker) 3 | both | Listed in Features & traits with a short summary. Darkvision 60 feet (or 30 more); invisible to creatures that rely on darkvision in the dark. | Listed (nothing to work out) |
+| Iron Mind | Ranger (Gloom Stalker) 7 | both | Listed in Features & traits with a short summary. Proficiency in Wisdom saves (or Intelligence or Charisma). | Listed (nothing to work out) |
+| Stalker's Flurry | Ranger (Gloom Stalker) 11 | both | Listed in Features & traits with a short summary. Once a turn, attack again after a miss (2014); 2024: Dreadful Strike frightens or hits a second creature. | Listed (nothing to work out) |
+| Shadowy Dodge | Ranger (Gloom Stalker) 15 | both | Listed in Features & traits with a short summary. A reaction: impose disadvantage on an attack against you (2024: and teleport 30 feet). | Listed (nothing to work out) |
+| Planar Warrior | Ranger (Horizon Walker) 3 | both | Listed in Features & traits with a short summary. A bonus action: your next hit on a creature deals force damage and 1d8 more (a tick under the attack). | Listed (nothing to work out) |
+| Distant Strike | Ranger (Horizon Walker) 11 | both | Listed in Features & traits with a short summary. Teleport 10 feet before each attack; attack a third creature. | Listed (nothing to work out) |
+| Spectral Defense | Ranger (Horizon Walker) 15 | both | Listed in Features & traits with a short summary. A reaction: resistance against an attack's damage. | Listed (nothing to work out) |
+| Supernatural Defense | Ranger (Monster Slayer) 7 | both | Listed in Features & traits with a short summary. Add 1d6 to saves and escape checks against your Slayer's Prey target. | Listed (nothing to work out) |
+| Slayer's Counter | Ranger (Monster Slayer) 15 | both | Listed in Features & traits with a short summary. A reaction attack when your prey forces a save; a hit makes you succeed. | Listed (nothing to work out) |
+| Draconic Gift | Ranger (Drakewarden) 3 | both | Listed in Features & traits with a short summary. Draconic, and Thaumaturgy. | Listed (nothing to work out) |
+| Bond of Fang and Scale | Ranger (Drakewarden) 7 | both | Listed in Features & traits with a short summary. Your drake grows: you can ride it, it can fly or swim, and its bite deals more. | Listed (nothing to work out) |
+| Perfected Bond | Ranger (Drakewarden) 15 | both | Listed in Features & traits with a short summary. Your drake is Large and bites harder; reflexive resistance. | Listed (nothing to work out) |
+| Swarmkeeper Magic | Ranger (Swarmkeeper) 3 | both | Listed in Features & traits with a short summary. Mage Hand and swarm spells always prepared. | Listed (nothing to work out) |
 
 ### Rogue subclasses
 
@@ -538,6 +786,38 @@ Subclass features with uses or numbers are rows of the Class features box (under
 | Psionic Energy | Rogue (Soulknife) 3 | both | Class features row: a pool of points, back on a long rest. Psionic Energy dice (d6); a bonus action to get one back once per short rest. Psi-Bolstered Knack, Psychic Whispers. Psychic Blades: 1d6 (1d4 off hand), thrown 60 feet. | Works (tracked) |
 | Psychic Veil | Rogue (Soulknife) 13 | both | Class features row: uses ticked off, back on a long rest. An action: invisible for 1 hour. Spend a Psionic Energy die to use it again. | Works (tracked) |
 | Rend Mind | Rogue (Soulknife) 17 | both | Class features row: uses ticked off, back on a long rest. After Sneak Attack with your blades: Wisdom save (DC 14) or stunned for 1 minute. Spend 3 Psionic Energy dice to use it again. | Works (tracked) |
+| Second-Story Work | Rogue (Thief) 3 | both | Listed in Features & traits with a short summary. Climbing costs no extra movement; longer running jumps (2024: a climb speed). | Listed (nothing to work out) |
+| Supreme Sneak | Rogue (Thief) 9 | both | Listed in Features & traits with a short summary. Advantage on Stealth moving at half speed (2024: Cunning Strike Stealth Attack). | Listed (nothing to work out) |
+| Use Magic Device | Rogue (Thief) 13 | both | Listed in Features & traits with a short summary. Ignore class, race and level requirements on magic items (2024: a fourth attunement, more charges). | Listed (nothing to work out) |
+| Thief's Reflexes | Rogue (Thief) 17 | both | Listed in Features & traits with a short summary. Two turns in the first round of combat. | Listed (nothing to work out) |
+| Bonus Proficiencies | Rogue (Assassin) 3 | both | Listed in Features & traits with a short summary. Disguise and poisoner's kits. | Listed (nothing to work out) |
+| Infiltration Expertise | Rogue (Assassin) 9 | both | Listed in Features & traits with a short summary. Make false identities (2014); 2024: Roving Aim, and copy speech and handwriting. | Listed (nothing to work out) |
+| Impostor | Rogue (Assassin) 13 | both | Listed in Features & traits with a short summary. Mimic someone's speech, writing and behaviour (2014); 2024: Envenom Weapons. | Listed (nothing to work out) |
+| Death Strike | Rogue (Assassin) 17 | both | Listed in Features & traits with a short summary. A creature you hit in the first round makes a Constitution save or takes double damage. | Listed (nothing to work out) |
+| Spellcasting | Rogue (Arcane Trickster) 3 | both | Listed in Features & traits with a short summary. Wizard spells (enchantment and illusion) with Intelligence; in your spell slots. | Listed (nothing to work out) |
+| Mage Hand Legerdemain | Rogue (Arcane Trickster) 3 | both | Listed in Features & traits with a short summary. An invisible Mage Hand that can pick locks and pockets. | Listed (nothing to work out) |
+| Magical Ambush | Rogue (Arcane Trickster) 9 | both | Listed in Features & traits with a short summary. Creatures have disadvantage on saves against your spells while you're hidden. | Listed (nothing to work out) |
+| Versatile Trickster | Rogue (Arcane Trickster) 13 | both | Listed in Features & traits with a short summary. Your Mage Hand gives you advantage on attacks against a creature near it. | Listed (nothing to work out) |
+| Psychic Blades | Rogue (Soulknife) 3 | both | Listed in Features & traits with a short summary. Psychic blades from your hand: 1d6 (finesse, thrown), and a 1d4 bonus-action one. | Listed (nothing to work out) |
+| Soul Blades | Rogue (Soulknife) 9 | both | Listed in Features & traits with a short summary. Spend psionic dice to add to a missed attack or teleport. | Listed (nothing to work out) |
+| Ear for Deceit | Rogue (Inquisitive) 3 | both | Listed in Features & traits with a short summary. Insight rolls of 7 or lower count as 8. | Listed (nothing to work out) |
+| Eye for Detail | Rogue (Inquisitive) 3 | both | Listed in Features & traits with a short summary. Perception or Investigation as a bonus action. | Listed (nothing to work out) |
+| Steady Eye | Rogue (Inquisitive) 9 | both | Listed in Features & traits with a short summary. Advantage on Perception and Investigation if you move half speed or less. | Listed (nothing to work out) |
+| Eye for Weakness | Rogue (Inquisitive) 17 | both | Listed in Features & traits with a short summary. Sneak Attack does 3d6 more against your Insightful Fighting target. | Listed (nothing to work out) |
+| Master of Intrigue | Rogue (Mastermind) 3 | both | Listed in Features & traits with a short summary. Disguise and forgery kits, a gaming set, two languages; mimic speech. | Listed (nothing to work out) |
+| Insightful Manipulator | Rogue (Mastermind) 9 | both | Listed in Features & traits with a short summary. Learn how a creature compares to you after a minute of watching. | Listed (nothing to work out) |
+| Misdirection | Rogue (Mastermind) 13 | both | Listed in Features & traits with a short summary. Redirect an attack to a creature giving you cover. | Listed (nothing to work out) |
+| Soul of Deceit | Rogue (Mastermind) 17 | both | Listed in Features & traits with a short summary. Your thoughts can't be read; magic can't compel the truth. | Listed (nothing to work out) |
+| Survivalist | Rogue (Scout) 3 | both | Listed in Features & traits with a short summary. Expertise in Nature and Survival. | Listed (nothing to work out) |
+| Superior Mobility | Rogue (Scout) 9 | both | Listed in Features & traits with a short summary. +10 feet of speed (in your speed). | Listed (nothing to work out) |
+| Ambush Master | Rogue (Scout) 13 | both | Listed in Features & traits with a short summary. Advantage on initiative; allies get advantage on the first creature you hit. | Listed (nothing to work out) |
+| Sudden Strike | Rogue (Scout) 17 | both | Listed in Features & traits with a short summary. A second Sneak Attack on another creature. | Listed (nothing to work out) |
+| Rakish Audacity | Rogue (Swashbuckler) 3 | both | Listed in Features & traits with a short summary. Charisma on initiative (in your initiative); Sneak Attack with no one else near. | Listed (nothing to work out) |
+| Panache | Rogue (Swashbuckler) 9 | both | Listed in Features & traits with a short summary. Persuasion against Insight charms or taunts a creature. | Listed (nothing to work out) |
+| Elegant Maneuver | Rogue (Swashbuckler) 13 | both | Listed in Features & traits with a short summary. A bonus action for advantage on Acrobatics or Athletics. | Listed (nothing to work out) |
+| Whispers of the Dead | Rogue (Phantom) 3 | both | Listed in Features & traits with a short summary. A skill or tool proficiency, changed after a rest. | Listed (nothing to work out) |
+| Tokens of the Departed | Rogue (Phantom) 9 | both | Listed in Features & traits with a short summary. Soul trinkets: advantage on Con saves and death saves, questions for the dead. | Listed (nothing to work out) |
+| Death's Friend | Rogue (Phantom) 17 | both | Listed in Features & traits with a short summary. Wails from the Grave hits both creatures; a trinket after each long rest. | Listed (nothing to work out) |
 
 ### Sorcerer subclasses
 
@@ -565,6 +845,35 @@ Subclass features with uses or numbers are rows of the Class features box (under
 | Restore Balance | Sorcerer (Clockwork Sorcery) 1 | both | Class features row: uses ticked off, back on a long rest. A reaction: cancel advantage or disadvantage on a roll within 60 feet. | Works (tracked) |
 | Trance of Order | Sorcerer (Clockwork Sorcery) 14 | both | Class features row: uses ticked off, back on a long rest. A bonus action for 1 minute: attacks against you lose advantage, and your attacks, checks and saves roll at least 10. 5 sorcery points to use it again. | Works (tracked) |
 | Clockwork Cavalcade | Sorcerer (Clockwork Sorcery) 18 | both | Class features row: uses ticked off, back on a long rest. An action: in a 30-foot cube, heal up to 100 hit points shared, repair objects and end spells of 6th level or lower. 7 sorcery points to use it again. | Works (tracked) |
+| Dragon Ancestor | Sorcerer (Draconic Bloodline) 1 | 2014 | Listed in Features & traits with a short summary. Draconic, and double proficiency talking to dragons. | Listed (nothing to work out) |
+| Draconic Spells | Sorcerer (Draconic Bloodline) 3 | 2024 | Listed in Features & traits with a short summary. Dragon spells always prepared. | Listed (nothing to work out) |
+| Elemental Affinity | Sorcerer (Draconic Bloodline) 6 | both | Listed in Features & traits with a short summary. Add Charisma to damage of your ancestry's type (a tick on the spell) and spend a sorcery point for resistance. | Listed (nothing to work out) |
+| Draconic Presence | Sorcerer (Draconic Bloodline) 18 | both | Listed in Features & traits with a short summary. Spend sorcery points for an aura of awe or fear (2014); 2024: Dragon Companion. | Listed (nothing to work out) |
+| Wild Magic Surge | Sorcerer (Wild Magic) 1 | 2014 | Listed in Features & traits with a short summary. After a levelled spell, the DM can have you roll for a surge. | Listed (nothing to work out) |
+| Wild Magic Surge | Sorcerer (Wild Magic) 3 | 2024 | Listed in Features & traits with a short summary. After a levelled spell, the DM can have you roll for a surge. | Listed (nothing to work out) |
+| Bend Luck | Sorcerer (Wild Magic) 6 | both | Listed in Features & traits with a short summary. Spend 2 sorcery points: add or subtract 1d4 to another creature's roll. | Listed (nothing to work out) |
+| Controlled Chaos | Sorcerer (Wild Magic) 14 | both | Listed in Features & traits with a short summary. Roll twice on the surge table and choose. | Listed (nothing to work out) |
+| Spell Bombardment | Sorcerer (Wild Magic) 18 | 2014 | Listed in Features & traits with a short summary. Roll one damage die again when it shows its highest number. | Listed (nothing to work out) |
+| Psionic Spells | Sorcerer (Aberrant Sorcery) 1 | 2014 | Listed in Features & traits with a short summary. Aberrant spells always known or prepared. | Listed (nothing to work out) |
+| Psionic Spells | Sorcerer (Aberrant Sorcery) 3 | 2024 | Listed in Features & traits with a short summary. Aberrant spells always known or prepared. | Listed (nothing to work out) |
+| Psychic Defenses | Sorcerer (Aberrant Sorcery) 6 | both | Listed in Features & traits with a short summary. Resistance to psychic; advantage against charm and fear. | Listed (nothing to work out) |
+| Revelation in Flesh | Sorcerer (Aberrant Sorcery) 14 | both | Listed in Features & traits with a short summary. Spend sorcery points to see invisible things, fly, swim or squeeze. | Listed (nothing to work out) |
+| Clockwork Magic | Sorcerer (Clockwork Sorcery) 1 | 2014 | Listed in Features & traits with a short summary. Order spells always known or prepared. | Listed (nothing to work out) |
+| Clockwork Magic | Sorcerer (Clockwork Sorcery) 3 | 2024 | Listed in Features & traits with a short summary. Order spells always known or prepared. | Listed (nothing to work out) |
+| Bastion of Law | Sorcerer (Clockwork Sorcery) 6 | both | Listed in Features & traits with a short summary. Spend sorcery points for a ward that reduces damage. | Listed (nothing to work out) |
+| Divine Magic | Sorcerer (Divine Soul) 1 | 2014 | Listed in Features & traits with a short summary. Cleric spells too, and an affinity spell. | Listed (nothing to work out) |
+| Divine Magic | Sorcerer (Divine Soul) 3 | 2024 | Listed in Features & traits with a short summary. Cleric spells too, and an affinity spell. | Listed (nothing to work out) |
+| Otherworldly Wings | Sorcerer (Divine Soul) 14 | both | Listed in Features & traits with a short summary. A flying speed of 30 feet as a bonus action. | Listed (nothing to work out) |
+| Eyes of the Dark | Sorcerer (Shadow Magic) 1 | 2014 | Listed in Features & traits with a short summary. Darkvision 120 feet; Darkness with sorcery points. | Listed (nothing to work out) |
+| Eyes of the Dark | Sorcerer (Shadow Magic) 3 | 2024 | Listed in Features & traits with a short summary. Darkvision 120 feet; Darkness with sorcery points. | Listed (nothing to work out) |
+| Hound of Ill Omen | Sorcerer (Shadow Magic) 6 | both | Listed in Features & traits with a short summary. Spend 3 sorcery points for a hound that hunts a creature. | Listed (nothing to work out) |
+| Shadow Walk | Sorcerer (Shadow Magic) 14 | both | Listed in Features & traits with a short summary. Teleport 120 feet between dim light or darkness. | Listed (nothing to work out) |
+| Wind Speaker | Sorcerer (Storm Sorcery) 1 | 2014 | Listed in Features & traits with a short summary. Primordial and its dialects. | Listed (nothing to work out) |
+| Wind Speaker | Sorcerer (Storm Sorcery) 3 | 2024 | Listed in Features & traits with a short summary. Primordial and its dialects. | Listed (nothing to work out) |
+| Heart of the Storm | Sorcerer (Storm Sorcery) 6 | both | Listed in Features & traits with a short summary. Resistance to lightning and thunder; your storm spells damage nearby creatures. | Listed (nothing to work out) |
+| Storm Guide | Sorcerer (Storm Sorcery) 6 | both | Listed in Features & traits with a short summary. Stop the rain or steer the wind. | Listed (nothing to work out) |
+| Storm's Fury | Sorcerer (Storm Sorcery) 14 | both | Listed in Features & traits with a short summary. A reaction: lightning damage and a push against a melee attacker. | Listed (nothing to work out) |
+| Wind Soul | Sorcerer (Storm Sorcery) 18 | both | Listed in Features & traits with a short summary. Immunity to lightning and thunder; fly 60 feet (and share it). | Listed (nothing to work out) |
 
 ### Warlock subclasses
 
@@ -598,6 +907,31 @@ Subclass features with uses or numbers are rows of the Class features box (under
 | Bottled Respite | Warlock (The Genie) 1 | both | Class features row: uses ticked off, back on a long rest. An action: step into your vessel for up to 4 hours. | Works (tracked) |
 | Elemental Gift | Warlock (The Genie) 6 | both | Class features row: uses ticked off, back on a long rest. A bonus action: fly 30 feet for 10 minutes. You also resist your genie's damage type. | Works (tracked) |
 | Limited Wish | Warlock (The Genie) 14 | both | Class features row: uses ticked off, not by resting. An action: the effect of any 6th-level or lower spell with a casting time of one action, with no components. Back after 1d4 long rests (tick it back by hand). | Works (tracked) |
+| Expanded Spell List | Warlock (The Archfey) 1 | 2014 | Listed in Features & traits with a short summary. Archfey spells. | Listed (nothing to work out) |
+| Expanded Spell List | Warlock (The Archfey) 3 | 2024 | Listed in Features & traits with a short summary. Archfey spells. | Listed (nothing to work out) |
+| Expanded Spell List | Warlock (The Fiend) 1 | 2014 | Listed in Features & traits with a short summary. Fiend spells. | Listed (nothing to work out) |
+| Expanded Spell List | Warlock (The Fiend) 3 | 2024 | Listed in Features & traits with a short summary. Fiend spells. | Listed (nothing to work out) |
+| Fiendish Resilience | Warlock (The Fiend) 10 | both | Listed in Features & traits with a short summary. Resistance to a damage type you choose after each rest. | Listed (nothing to work out) |
+| Awakened Mind | Warlock (The Great Old One) 1 | 2014 | Listed in Features & traits with a short summary. Talk telepathically with a creature within 30 feet. | Listed (nothing to work out) |
+| Awakened Mind | Warlock (The Great Old One) 3 | 2024 | Listed in Features & traits with a short summary. Talk telepathically with a creature within 30 feet. | Listed (nothing to work out) |
+| Psychic Spells | Warlock (The Great Old One) 3 | 2024 | Listed in Features & traits with a short summary. Your warlock spells can deal psychic damage and need no verbal or somatic components for enchantment and illusion. | Listed (nothing to work out) |
+| Thought Shield | Warlock (The Great Old One) 10 | both | Listed in Features & traits with a short summary. Resistance to psychic damage; your thoughts can't be read; psychic damage reflected. | Listed (nothing to work out) |
+| Create Thrall | Warlock (The Great Old One) 14 | both | Listed in Features & traits with a short summary. Charm an incapacitated humanoid permanently (2014); 2024: summon an aberration without concentration, with temporary hit points. | Listed (nothing to work out) |
+| Bonus Cantrips | Warlock (The Celestial) 1 | 2014 | Listed in Features & traits with a short summary. Light and Sacred Flame (2014). | Listed (nothing to work out) |
+| Bonus Cantrips | Warlock (The Celestial) 3 | 2024 | Listed in Features & traits with a short summary. Light and Sacred Flame (2014). | Listed (nothing to work out) |
+| Radiant Soul | Warlock (The Celestial) 6 | both | Listed in Features & traits with a short summary. Resistance to radiant; add Charisma to one radiant or fire damage roll of a spell. | Listed (nothing to work out) |
+| Celestial Resilience | Warlock (The Celestial) 10 | both | Listed in Features & traits with a short summary. Temporary hit points for you and allies after each rest. | Listed (nothing to work out) |
+| Hex Warrior | Warlock (The Hexblade) 1 | 2014 | Listed in Features & traits with a short summary. Medium armour, shields, martial weapons; Charisma for attacks with one weapon. | Listed (nothing to work out) |
+| Hex Warrior | Warlock (The Hexblade) 3 | 2024 | Listed in Features & traits with a short summary. Medium armour, shields, martial weapons; Charisma for attacks with one weapon. | Listed (nothing to work out) |
+| Armor of Hexes | Warlock (The Hexblade) 10 | both | Listed in Features & traits with a short summary. Your cursed target misses you on a d6 roll of 4 or higher. | Listed (nothing to work out) |
+| Master of Hexes | Warlock (The Hexblade) 14 | both | Listed in Features & traits with a short summary. Move your curse when its target dies. | Listed (nothing to work out) |
+| Gift of the Sea | Warlock (The Fathomless) 1 | 2014 | Listed in Features & traits with a short summary. A swim speed of 40 feet; breathe water. | Listed (nothing to work out) |
+| Gift of the Sea | Warlock (The Fathomless) 3 | 2024 | Listed in Features & traits with a short summary. A swim speed of 40 feet; breathe water. | Listed (nothing to work out) |
+| Oceanic Soul | Warlock (The Fathomless) 6 | both | Listed in Features & traits with a short summary. Resistance to cold; talk underwater. | Listed (nothing to work out) |
+| Guardian Coil | Warlock (The Fathomless) 6 | both | Listed in Features & traits with a short summary. Your tentacle can reduce damage to someone near it. | Listed (nothing to work out) |
+| Expanded Spell List | Warlock (The Genie) 1 | 2014 | Listed in Features & traits with a short summary. Genie spells by your patron's kind. | Listed (nothing to work out) |
+| Expanded Spell List | Warlock (The Genie) 3 | 2024 | Listed in Features & traits with a short summary. Genie spells by your patron's kind. | Listed (nothing to work out) |
+| Sanctuary Vessel | Warlock (The Genie) 10 | both | Listed in Features & traits with a short summary. Bring up to five creatures into your vessel; a short rest there heals more. | Listed (nothing to work out) |
 
 ### Wizard subclasses
 
@@ -619,6 +953,54 @@ Subclass features with uses or numbers are rows of the Class features box (under
 | Bladesong | Wizard (Bladesinging) 2 | both | Class features row: uses ticked off, back on a long rest. A Now toggle: AC +Int, speed +10 (spends a use). A bonus action for 1 minute: +1 AC, +10 feet speed, advantage on Acrobatics, +1 to concentration saves. | Works (applied) |
 | Manifest Mind | Wizard (Order of Scribes) 6 | both | Class features row: uses ticked off, back on a long rest. Cast a spell through your manifested mind as if you were in its space. Wizardly Quill and Awakened Spellbook (swap a spell's damage type; ritual in normal time once per long rest). | Works (tracked) |
 | Awakened Spellbook | Wizard (Order of Scribes) 2 | both | Class features row: uses ticked off, back on a long rest. Cast a ritual spell in its normal time. Spells can take the damage type of another spell of that level in your book. | Works (tracked) |
+| Abjuration Savant | Wizard (School of Abjuration) 2 | 2014 | Listed in Features & traits with a short summary. Copying abjuration spells takes half the time and gold. | Listed (nothing to work out) |
+| Abjuration Savant | Wizard (School of Abjuration) 3 | 2024 | Listed in Features & traits with a short summary. Two abjuration spells added to your spellbook, and one more each spell level. | Listed (nothing to work out) |
+| Projected Ward | Wizard (School of Abjuration) 6 | both | Listed in Features & traits with a short summary. A reaction: your Arcane Ward takes the damage for a creature within 30 feet. | Listed (nothing to work out) |
+| Improved Abjuration | Wizard (School of Abjuration) 10 | both | Listed in Features & traits with a short summary. Add your proficiency bonus to Counterspell and Dispel Magic checks (2014); 2024: Spell Breaker. | Listed (nothing to work out) |
+| Spell Resistance | Wizard (School of Abjuration) 14 | both | Listed in Features & traits with a short summary. Advantage on saves against spells and resistance to their damage. | Listed (nothing to work out) |
+| Conjuration Savant | Wizard (School of Conjuration) 2 | 2014 | Listed in Features & traits with a short summary. Copying conjuration spells takes half the time and gold. | Listed (nothing to work out) |
+| Minor Conjuration | Wizard (School of Conjuration) 2 | 2014 | Listed in Features & traits with a short summary. Conjure a nonmagical object for an hour. | Listed (nothing to work out) |
+| Focused Conjuration | Wizard (School of Conjuration) 10 | 2014 | Listed in Features & traits with a short summary. Damage can't break your concentration on a conjuration spell. | Listed (nothing to work out) |
+| Durable Summons | Wizard (School of Conjuration) 14 | 2014 | Listed in Features & traits with a short summary. Your conjured creatures have 30 temporary hit points. | Listed (nothing to work out) |
+| Divination Savant | Wizard (School of Divination) 2 | 2014 | Listed in Features & traits with a short summary. Copying divination spells is cheaper (2024: two added, and one more each level). | Listed (nothing to work out) |
+| Divination Savant | Wizard (School of Divination) 3 | 2024 | Listed in Features & traits with a short summary. Copying divination spells is cheaper (2024: two added, and one more each level). | Listed (nothing to work out) |
+| Expert Divination | Wizard (School of Divination) 6 | both | Listed in Features & traits with a short summary. Casting a divination spell gives back a lower slot. | Listed (nothing to work out) |
+| Greater Portent | Wizard (School of Divination) 14 | both | Listed in Features & traits with a short summary. Three portent dice. | Listed (nothing to work out) |
+| Enchantment Savant | Wizard (School of Enchantment) 2 | 2014 | Listed in Features & traits with a short summary. Copying enchantment spells takes half the time and gold. | Listed (nothing to work out) |
+| Instinctive Charm | Wizard (School of Enchantment) 6 | 2014 | Listed in Features & traits with a short summary. A reaction: an attacker makes a Wisdom save or attacks someone else. | Listed (nothing to work out) |
+| Split Enchantment | Wizard (School of Enchantment) 10 | 2014 | Listed in Features & traits with a short summary. A one-target enchantment spell can target two. | Listed (nothing to work out) |
+| Alter Memories | Wizard (School of Enchantment) 14 | 2014 | Listed in Features & traits with a short summary. A creature you charm forgets it was charmed. | Listed (nothing to work out) |
+| Evocation Savant | Wizard (School of Evocation) 2 | 2014 | Listed in Features & traits with a short summary. Copying evocation spells is cheaper (2024: two added, and one more each level). | Listed (nothing to work out) |
+| Evocation Savant | Wizard (School of Evocation) 3 | 2024 | Listed in Features & traits with a short summary. Copying evocation spells is cheaper (2024: two added, and one more each level). | Listed (nothing to work out) |
+| Potent Cantrip | Wizard (School of Evocation) 6 | both | Listed in Features & traits with a short summary. Creatures that save against your cantrips take half damage. | Listed (nothing to work out) |
+| Empowered Evocation | Wizard (School of Evocation) 10 | both | Listed in Features & traits with a short summary. Add Intelligence to one damage roll of a wizard evocation spell (in your rolls). | Listed (nothing to work out) |
+| Illusion Savant | Wizard (School of Illusion) 2 | 2014 | Listed in Features & traits with a short summary. Copying illusion spells is cheaper (2024: two added, and one more each level). | Listed (nothing to work out) |
+| Illusion Savant | Wizard (School of Illusion) 3 | 2024 | Listed in Features & traits with a short summary. Copying illusion spells is cheaper (2024: two added, and one more each level). | Listed (nothing to work out) |
+| Improved Minor Illusion | Wizard (School of Illusion) 2 | 2014 | Listed in Features & traits with a short summary. Minor Illusion makes a sound and an image at once (2024: no components for illusions, more range). | Listed (nothing to work out) |
+| Improved Minor Illusion | Wizard (School of Illusion) 3 | 2024 | Listed in Features & traits with a short summary. Minor Illusion makes a sound and an image at once (2024: no components for illusions, more range). | Listed (nothing to work out) |
+| Malleable Illusions | Wizard (School of Illusion) 6 | both | Listed in Features & traits with a short summary. Change an illusion you're concentrating on (2024: Phantasmal Creatures, summon spells as illusions). | Listed (nothing to work out) |
+| Illusory Reality | Wizard (School of Illusion) 14 | both | Listed in Features & traits with a short summary. Make one object of an illusion real for a minute. | Listed (nothing to work out) |
+| Necromancy Savant | Wizard (School of Necromancy) 2 | 2014 | Listed in Features & traits with a short summary. Copying necromancy spells takes half the time and gold. | Listed (nothing to work out) |
+| Undead Thralls | Wizard (School of Necromancy) 6 | 2014 | Listed in Features & traits with a short summary. Animate Dead makes one more creature; your undead hit harder and have more hit points. | Listed (nothing to work out) |
+| Inured to Undeath | Wizard (School of Necromancy) 10 | 2014 | Listed in Features & traits with a short summary. Resistance to necrotic; your hit point maximum can't be reduced. | Listed (nothing to work out) |
+| Command Undead | Wizard (School of Necromancy) 14 | 2014 | Listed in Features & traits with a short summary. Control an undead creature (Charisma save). | Listed (nothing to work out) |
+| Transmutation Savant | Wizard (School of Transmutation) 2 | 2014 | Listed in Features & traits with a short summary. Copying transmutation spells takes half the time and gold. | Listed (nothing to work out) |
+| Minor Alchemy | Wizard (School of Transmutation) 2 | 2014 | Listed in Features & traits with a short summary. Change one material into another for an hour. | Listed (nothing to work out) |
+| Transmuter's Stone | Wizard (School of Transmutation) 6 | 2014 | Listed in Features & traits with a short summary. A stone that gives darkvision, speed, a save or a resistance. | Listed (nothing to work out) |
+| Master Transmuter | Wizard (School of Transmutation) 14 | 2014 | Listed in Features & traits with a short summary. Destroy your stone for a great transmutation. | Listed (nothing to work out) |
+| Tactical Wit | Wizard (War Magic) 2 | 2014 | Listed in Features & traits with a short summary. Add Intelligence to initiative. | Listed (nothing to work out) |
+| Tactical Wit | Wizard (War Magic) 3 | 2024 | Listed in Features & traits with a short summary. Add Intelligence to initiative. | Listed (nothing to work out) |
+| Durable Magic | Wizard (War Magic) 10 | both | Listed in Features & traits with a short summary. +2 AC and saves while you concentrate on a spell. | Listed (nothing to work out) |
+| Deflecting Shroud | Wizard (War Magic) 14 | both | Listed in Features & traits with a short summary. Arcane Deflection also deals force damage to creatures near you. | Listed (nothing to work out) |
+| Training in War and Song | Wizard (Bladesinging) 2 | 2014 | Listed in Features & traits with a short summary. Light armour, a one-handed melee weapon and Performance. | Listed (nothing to work out) |
+| Training in War and Song | Wizard (Bladesinging) 3 | 2024 | Listed in Features & traits with a short summary. Light armour, a one-handed melee weapon and Performance. | Listed (nothing to work out) |
+| Extra Attack | Wizard (Bladesinging) 6 | both | Listed in Features & traits with a short summary. Attack twice (one can be a cantrip). | Listed (nothing to work out) |
+| Song of Defense | Wizard (Bladesinging) 10 | both | Listed in Features & traits with a short summary. A reaction: spend a spell slot to reduce damage by five times its level. | Listed (nothing to work out) |
+| Song of Victory | Wizard (Bladesinging) 14 | both | Listed in Features & traits with a short summary. Add Intelligence to melee weapon damage while your Bladesong is on. | Listed (nothing to work out) |
+| Wizardly Quill | Wizard (Order of Scribes) 2 | 2014 | Listed in Features & traits with a short summary. A magic quill that copies spells fast. | Listed (nothing to work out) |
+| Wizardly Quill | Wizard (Order of Scribes) 3 | 2024 | Listed in Features & traits with a short summary. A magic quill that copies spells fast. | Listed (nothing to work out) |
+| Master Scrivener | Wizard (Order of Scribes) 10 | both | Listed in Features & traits with a short summary. Make a scroll from your spellbook once a long rest, cast one level higher. | Listed (nothing to work out) |
+| One with the Word | Wizard (Order of Scribes) 14 | both | Listed in Features & traits with a short summary. Your spellbook takes damage for you, at the cost of spells. | Listed (nothing to work out) |
 
 ### Artificer subclasses
 
@@ -631,6 +1013,22 @@ Subclass features with uses or numbers are rows of the Class features box (under
 | Eldritch Cannon | Artificer (Artillerist) 3 | both | Class features row: uses ticked off, back on a long rest. An action: make a cannon (flamethrower, force ballista or protector, 2d8; save DC 10) for 1 hour; or spend a spell slot to make one. | Works (tracked) |
 | Steel Defender | Artificer (Battle Smith) 3 | both | Class features row: a note with its numbers. Your steel defender: AC 15, 17 hit points, acts after you; force-empowered rend 1d8 + 2. Battle Ready: magic weapons can use Intelligence. | Note only |
 | Arcane Jolt | Artificer (Battle Smith) 9 | both | Class features row: uses ticked off, back on a long rest. When you or your defender hit with a magic weapon attack: 2d6 force damage more, or heal a creature within 30 feet that much. | Works (tracked) |
+| Tool Proficiency | Artificer (Alchemist) 3 | both | Listed in Features & traits with a short summary. Alchemist's supplies. | Listed (nothing to work out) |
+| Alchemical Savant | Artificer (Alchemist) 5 | both | Listed in Features & traits with a short summary. Add Intelligence to one healing or acid, fire, necrotic or poison damage roll of a spell. | Listed (nothing to work out) |
+| Chemical Mastery | Artificer (Alchemist) 15 | both | Listed in Features & traits with a short summary. Resistance to acid and poison; Greater Restoration and Heal free once a long rest. | Listed (nothing to work out) |
+| Tools of the Trade | Artificer (Armorer) 3 | both | Listed in Features & traits with a short summary. Heavy armour and smith's tools. | Listed (nothing to work out) |
+| Arcane Armor | Artificer (Armorer) 3 | both | Listed in Features & traits with a short summary. Your armour is your spellcasting focus and can't be removed against your will. | Listed (nothing to work out) |
+| Extra Attack | Artificer (Armorer) 5 | both | Listed in Features & traits with a short summary. Attack twice with the Attack action. | Listed (nothing to work out) |
+| Armor Modifications | Artificer (Armorer) 9 | both | Listed in Features & traits with a short summary. Your armour counts as separate items for infusions; two more. | Listed (nothing to work out) |
+| Perfected Armor | Artificer (Armorer) 15 | both | Listed in Features & traits with a short summary. Guardian pulls creatures to you; Infiltrator's lightning lights them up. | Listed (nothing to work out) |
+| Tool Proficiency | Artificer (Artillerist) 3 | both | Listed in Features & traits with a short summary. Woodcarver's tools. | Listed (nothing to work out) |
+| Arcane Firearm | Artificer (Artillerist) 5 | both | Listed in Features & traits with a short summary. Add 1d8 to one damage roll of an artificer spell through it. | Listed (nothing to work out) |
+| Explosive Cannon | Artificer (Artillerist) 9 | both | Listed in Features & traits with a short summary. Your cannon deals 1d8 more and can explode. | Listed (nothing to work out) |
+| Fortified Position | Artificer (Artillerist) 15 | both | Listed in Features & traits with a short summary. Two cannons; half cover near them. | Listed (nothing to work out) |
+| Tool Proficiency | Artificer (Battle Smith) 3 | both | Listed in Features & traits with a short summary. Smith's tools. | Listed (nothing to work out) |
+| Battle Ready | Artificer (Battle Smith) 3 | both | Listed in Features & traits with a short summary. Martial weapons; Intelligence for magic weapon attacks. | Listed (nothing to work out) |
+| Extra Attack | Artificer (Battle Smith) 5 | both | Listed in Features & traits with a short summary. Attack twice with the Attack action. | Listed (nothing to work out) |
+| Improved Defender | Artificer (Battle Smith) 15 | both | Listed in Features & traits with a short summary. Arcane Jolt does 4d6; your defender gets +2 AC and its Deflect Attack damages. | Listed (nothing to work out) |
 
 ## Races
 
@@ -728,9 +1126,44 @@ Subclass features with uses or numbers are rows of the Class features box (under
 | Serpentine Spellcasting | Yuan-ti 3 | both | Race features row: uses ticked off, back on a long rest. Suggestion without a slot, once per long rest. Animal Friendship on snakes at will; you know Poison Spray. | Works (tracked) |
 | Speed | Dwarf, halfling, gnome | 2024 | Worked into the sheet's speed: 30 feet (25 under 2014) | Fixed 2026-10-22 (was 25 feet under 2024 rules too) |
 
+## Feats
+
+Found by name in Features & traits (or Additional features); each is a row of the Class features box under Feats, and the numbers are worked in where the sheet works them out (feats.js).
+
+| Feature | Class/level | Edition | What it does in the app now | Status |
+|---|---|---|---|---|
+| Alert | feat | 2014 | Class features row (Feats): a note with its numbers. +5 initiative (in your initiative); you can't be surprised while conscious, and hidden attackers gain no advantage against you. | Works (applied) |
+| Alert | feat | 2024 | Class features row (Feats): a note with its numbers. +2 initiative (in your initiative); after rolling initiative you can swap with a willing ally. | Works (applied) |
+| Tough | feat | both | Class features row (Feats): a note with its numbers. +2 hit points (2 each level; in your hit point maximum). | Works (applied) |
+| Lucky | feat | 2014 | Class features row (Feats): uses ticked off, back on a long rest. Spend a luck point to roll one more d20 for an attack, check or save (before the result), and choose which to use; or for an attack against you. | Works (tracked) |
+| Lucky | feat | 2024 | Class features row (Feats): uses ticked off, back on a long rest. Spend a Luck Point for advantage on a d20 test, or to give an attack against you disadvantage. | Works (tracked) |
+| Great Weapon Master | feat | 2014 | Class features row (Feats): a note with its numbers. Heavy melee weapons you're proficient with: tick −5 to hit for +10 damage under the attack. A bonus-action attack after a critical hit or dropping a creature to 0. | Works (applied) |
+| Great Weapon Master | feat | 2024 | Class features row (Feats): a note with its numbers. Heavy weapons: +2 damage on a hit with the Attack action (in your attacks). Hew: a bonus-action attack after a critical hit or dropping a creature to 0. | Works (applied) |
+| Sharpshooter | feat | 2014 | Class features row (Feats): a note with its numbers. Ranged weapons you're proficient with: tick −5 to hit for +10 damage under the attack. No disadvantage at long range; ignore half and three-quarters cover. | Works (applied) |
+| Sharpshooter | feat | 2024 | Class features row (Feats): a note with its numbers. Ranged weapons: no disadvantage at long range or within 5 feet of an enemy; your attacks ignore half and three-quarters cover. | Note only |
+| War Caster | feat | both | Class features row (Feats): a note with its numbers. Advantage on Constitution saves to keep concentration. Somatic components with your hands full; a spell as an opportunity attack. | Note only |
+| Savage Attacker | feat | both | Class features row (Feats): a note with its numbers. Once a turn, roll a weapon's damage dice twice and use either roll: roll damage again and keep the better. | Note only |
+| Dual Wielder | feat | 2014 | Class features row (Feats): a note with its numbers. +1 AC while you hold a melee weapon in each hand (in your AC); two-weapon fighting with one-handed weapons that aren't light. | Works (applied) |
+| Dual Wielder | feat | 2024 | Class features row (Feats): a note with its numbers. After attacking with a Light weapon, a bonus-action attack with a different one-handed melee weapon (the off-hand line in Attacks); no modifier to its damage unless negative. | Works (applied) |
+| Mobile | feat | 2014 | Class features row (Feats): a note with its numbers. +10 feet speed (in your speed); Dash ignores difficult terrain; no opportunity attacks from a creature you attacked this turn. | Works (applied) |
+| Speedy | feat | 2024 | Class features row (Feats): a note with its numbers. +10 feet speed (in your speed); Dash ignores difficult terrain; opportunity attacks against you have disadvantage. | Works (applied) |
+| Observant | feat | 2014 | Class features row (Feats): a note with its numbers. +5 passive Perception and Investigation (passive Perception is in your numbers); read lips. | Works (applied) |
+| Observant | feat | 2024 | Class features row (Feats): a note with its numbers. Proficiency (or expertise) in Insight, Investigation or Perception; Search as a bonus action. | Note only |
+| Durable | feat | 2014 | Class features row (Feats): a note with its numbers. Hit dice you spend heal at least 2. | Note only |
+| Durable | feat | 2024 | Class features row (Feats): a note with its numbers. Advantage on death saves; a bonus action to spend a Hit Die and heal. | Note only |
+| Crossbow Expert | feat | 2014 | Class features row (Feats): a note with its numbers. Ignore loading; no disadvantage within 5 feet of an enemy; a bonus-action hand crossbow attack after attacking with a one-handed weapon. | Note only |
+| Crossbow Expert | feat | 2024 | Class features row (Feats): a note with its numbers. Ignore Loading; no disadvantage within 5 feet of an enemy with crossbows; add your modifier to a light crossbow's extra attack. | Note only |
+| Polearm Master | feat | both | Class features row (Feats): a note with its numbers. A bonus-action 1d4 bludgeoning attack with the other end of a glaive, halberd, quarterstaff or spear (pike in 2024); opportunity attacks when creatures come into your reach. | Note only |
+| Sentinel | feat | both | Class features row (Feats): a note with its numbers. A creature you hit with an opportunity attack has speed 0 for the turn; opportunity attacks even when they Disengage; react when they attack someone else. | Note only |
+| Heavy Armor Master | feat | 2014 | Class features row (Feats): a note with its numbers. In heavy armour, nonmagical bludgeoning, piercing and slashing damage you take is reduced by 3. | Note only |
+| Heavy Armor Master | feat | 2024 | Class features row (Feats): a note with its numbers. In heavy armour, bludgeoning, piercing and slashing damage you take is reduced by 2. | Note only |
+| Defensive Duelist | feat | 2014 | Class features row (Feats): a note with its numbers. A reaction with a finesse weapon: +2 AC against one melee attack. | Note only |
+| Defensive Duelist | feat | 2024 | Class features row (Feats): a note with its numbers. A reaction with a finesse weapon: +2 AC against one melee attack (until the start of your next turn). | Note only |
+| Tavern Brawler | feat | 2014 | Class features row (Feats): a note with its numbers. Unarmed strikes and improvised weapons deal 1d4; a bonus-action grapple after hitting with one. | Note only |
+| Tavern Brawler | feat | 2024 | Class features row (Feats): a note with its numbers. Unarmed strikes deal 1d4+0 bludgeoning (1s rolled again); push 5 feet once a turn. | Note only |
+
 ## Still not on the sheet
 
-- Subclass features with nothing to track or work out (most "ribbons") aren't listed in Features & traits yet; the player writes them in.
-- Feats (Great Weapon Master, Sharpshooter, Elven Accuracy...) and the halfling's Luck rerolls aren't applied to rolls; they're text the player keeps.
-- Two-Weapon Fighting's off-hand attack isn't its own attack line; the Two-Weapon Fighting style is chosen in Features & traits and noted on the attack.
+- Feats not in feats.js (and the reminders there: War Caster, Savage Attacker, Sentinel...) are text the player keeps; the sheet doesn't apply them.
+- A halfling's Luck and Elven Accuracy aren't applied to rolls made in Wild Shape (the beast's own attacks).
 - The AI sheet review (Review sheet) still checks the 2014 numbers; its prompt says so.

@@ -76,3 +76,28 @@ test('ro: each die at or under n is rerolled once and the new one kept (Great We
   assert.equal(r.total, 1 + 6);
   assert.deepEqual(r.terms[0].dice.map((d) => d.kept), [false, true, true]);
 });
+
+test('a halfling reroll (ro1), Great Weapon Fighting (min3) and Elven Accuracy (ea) read, write and roll', () => {
+  assert.equal(parseRoll('1d20ro1min10+5').notation, '1d20ro1min10+5');
+  assert.equal(parseRoll('1d20 ea + 7').notation, '1d20ea+7');
+  assert.equal(parseRoll('1d20ro1ea+7').notation, '1d20ro1ea+7');
+  assert.throws(() => parseRoll('1d6ea'), Error);
+  // ro1: a 1 is rolled again and the new die counts.
+  const lucky = rollDice(parseRoll('1d20ro1+2'), { random: fixed(1, 14) });
+  assert.deepEqual(lucky.terms[0].dice.map((d) => [d.value, d.kept]), [[1, false], [14, true]]);
+  assert.equal(lucky.total, 16);
+  assert.equal(lucky.natural, 14);
+  // Advantage with ro1: each d20 gets the reroll, then the higher is kept.
+  const adv = rollDice(parseRoll('1d20ro1'), { mode: 'advantage', random: fixed(1, 3, 9) });
+  assert.equal(adv.natural, 9);
+  // Elven Accuracy: three d20s with advantage, two with disadvantage.
+  const elven = rollDice(parseRoll('1d20ea+1'), { mode: 'advantage', random: fixed(4, 6, 19) });
+  assert.equal(elven.terms[0].dice.length, 3);
+  assert.equal(elven.natural, 19);
+  const dis = rollDice(parseRoll('1d20ea'), { mode: 'disadvantage', random: fixed(4, 6) });
+  assert.equal(dis.terms[0].dice.length, 2);
+  assert.equal(dis.natural, 4);
+  // min on damage dice: a 1 or 2 counts as 3.
+  const gwf = rollDice(parseRoll('2d6min3'), { random: fixed(1, 5) });
+  assert.equal(gwf.total, 8);
+});

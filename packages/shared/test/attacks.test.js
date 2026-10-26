@@ -104,7 +104,7 @@ test('sheetActions: equipped weapons as the sheet rolls them, typed attacks (not
   const { sheet, calc } = rogue();
   const actions = sheetActions(sheet, calc);
   const rapier = actions.find((a) => a.name === 'Rapier');
-  assert.deepEqual({ kind: rapier.kind, bonus: rapier.bonus, damage: rapier.damage, finesse: rapier.finesse }, { kind: 'attack', bonus: 6, damage: [{ dice: '1d8+3', type: 'piercing' }], finesse: true });
+  assert.deepEqual({ kind: rapier.kind, bonus: rapier.bonus, damage: rapier.damage, finesse: rapier.finesse }, { kind: 'attack', bonus: 6, damage: [{ dice: '1d8+3', type: 'piercing', crit: '2d8+3' }], finesse: true });
   const breath = actions.find((a) => a.name === 'Fire breath');
   assert.deepEqual({ kind: breath.kind, dc: breath.dc, save: breath.save, half: breath.half }, { kind: 'save', dc: 12, save: 'dex', half: true });
   assert.equal(actions.find((a) => a.name === 'Longsword'), undefined, 'no longsword in the inventory, so it does not roll');
@@ -272,4 +272,72 @@ test('attackLogFor: players see only what they can see, never an enemy AC unless
   assert.equal(attackLogFor(log, { dm: false, visible: new Set(['ana001', 'orc001']), own: new Set(['ana001']), showAc: true })[0].targets[1].ac, 13);
   assert.deepEqual(attackLogFor(log, { dm: false, visible: new Set(), own: new Set(), showAc: false }), [], 'nothing they can see: no card');
   assert.equal(attackLogFor(log, { dm: true })[0].targets.length, 3);
+});
+
+/** A character with these fields and equipped weapons (by PHB name), worked out for an edition. */
+const armedSheet = (fields, weapons, edition = '2014') => {
+  const sheet = normalizeSheet({ ...emptySheet(), ...fields, inventory: weapons.map((w) => normalizeGear({ name: w.name, equipped: w.equipped ?? 1, proficient: true, weapon: w.weapon })) });
+  return { sheet, calc: computeSheet(sheet, { edition }), edition };
+};
+const W = {
+  longbow: { name: 'Longbow', weapon: { damage: '1d8 piercing', ability: 'dex', category: 'martial', properties: ['ammunition', 'heavy', 'two-handed'] } },
+  longsword: { name: 'Longsword', weapon: { damage: '1d8 slashing', ability: 'str', category: 'martial', properties: ['versatile'] } },
+  greatsword: { name: 'Greatsword', weapon: { damage: '2d6 slashing', ability: 'str', category: 'martial', properties: ['heavy', 'two-handed'] } },
+  maul: { name: 'Maul', weapon: { damage: '2d6 bludgeoning', ability: 'str', category: 'martial', properties: ['heavy', 'two-handed'] } },
+  shortsword: { name: 'Shortsword', weapon: { damage: '1d6 piercing', ability: 'finesse', category: 'martial', properties: ['finesse', 'light'] } },
+  scimitar: { name: 'Scimitar', weapon: { damage: '1d6 slashing', ability: 'finesse', category: 'martial', properties: ['finesse', 'light'] } },
+};
+const goblin = { id: 'g', name: 'Goblin', ac: 15, saves: { con: 0 }, conditions: [] };
+
+test('map attacks work weapons out as the sheet does: Archery, Great Weapon Fighting, a Champion\'s 19, the off hand, a halfling\'s Luck', () => {
+  const archer = armedSheet({ classes: [{ name: 'Fighter', level: 1 }], abilities: { dex: 16 }, combat: { choices: ['archery'] } }, [W.longbow]);
+  const bow = sheetActions(archer.sheet, archer.calc).find((x) => x.name === 'Longbow');
+  assert.equal(bow.bonus, 2 + 3 + 2);
+  const gwf = armedSheet({ classes: [{ name: 'Fighter', subclass: 'Champion', level: 3 }], abilities: { str: 16 }, combat: { choices: ['great_weapon'] } }, [W.greatsword], '2024');
+  const gs = sheetActions(gwf.sheet, gwf.calc, { edition: '2024' }).find((x) => x.name === 'Greatsword');
+  assert.deepEqual(gs.damage[0], { dice: '2d6min3+3', type: 'slashing', crit: '4d6min3+3' });
+  assert.equal(gs.crit_on, 19);
+  // A natural 19 is a critical hit for a Champion: 4d6, each at least 3.
+  const r = resolveAttack({ action: gs, targets: [goblin], random: dice(19, 1, 1, 1, 1) });
+  assert.equal(r.targets[0].crit, true);
+  assert.equal(r.targets[0].amount, 12 + 3);
+  // Two light weapons: an off-hand attack without the modifier on its damage.
+  const twf = armedSheet({ classes: [{ name: 'Fighter', level: 1 }], abilities: { dex: 16 } }, [W.shortsword, W.scimitar]);
+  const off = sheetActions(twf.sheet, twf.calc).find((x) => x.offhand);
+  assert.deepEqual([off.name, off.damage[0].dice], ['Scimitar (off-hand)', '1d6']);
+  // A halfling rerolls a 1 on the d20.
+  const hob = armedSheet({ race: 'Lightfoot Halfling', classes: [{ name: 'Rogue', level: 1 }], abilities: { dex: 16 } }, [W.shortsword]);
+  const ss = sheetActions(hob.sheet, hob.calc).find((x) => x.name === 'Shortsword');
+  assert.equal(ss.d20, 'ro1');
+  assert.equal(resolveAttack({ action: ss, targets: [goblin], random: dice(1, 15, 4) }).targets[0].hit, true);
+});
+
+test('map attacks: Weapon Mastery Graze deals damage on a miss, Topple rolls the Constitution save and knocks it prone, Vex is noted (2024)', () => {
+  const f = armedSheet({ classes: [{ name: 'Fighter', level: 1 }], abilities: { str: 16 }, combat: { masteries: ['greatsword', 'maul', 'longsword'] } }, [W.greatsword, W.maul], '2024');
+  const acts = sheetActions(f.sheet, f.calc, { edition: '2024' });
+  const gs = acts.find((x) => x.name === 'Greatsword');
+  const miss = resolveAttack({ action: gs, targets: [goblin], random: dice(5) });
+  assert.equal(miss.targets[0].hit, false);
+  assert.equal(miss.targets[0].amount, 3);
+  assert.match(miss.targets[0].notes.join(' '), /Graze: 3 damage on a miss/);
+  const maul = acts.find((x) => x.name === 'Maul');
+  // Hit (15 + 5), damage 3 + 4 + 3, then the goblin's Con save: 6 against DC 8 + 3 + 2 = 13.
+  const hit = resolveAttack({ action: maul, targets: [goblin], random: dice(15, 3, 4, 6) });
+  assert.equal(hit.targets[0].condition, 'prone');
+  assert.deepEqual(hit.targets[0].topple, { total: 6, dc: 13, success: false });
+  assert.equal(resolveAttack({ action: maul, targets: [goblin], random: dice(15, 3, 4, 18) }).targets[0].condition, undefined);
+});
+
+test('map riders: Great Weapon Master\'s −5/+10 changes the roll to hit; Divine Smite\'s slot is the player\'s pick', () => {
+  const gwm = armedSheet({ classes: [{ name: 'Fighter', level: 4 }], abilities: { str: 16 }, features: 'Feats: Great Weapon Master' }, [W.greatsword]);
+  const gs = sheetActions(gwm.sheet, gwm.calc).find((x) => x.name === 'Greatsword');
+  const [power] = attackRiders(gwm.sheet, gwm.calc.values, gs);
+  assert.deepEqual([power.id, power.hit, power.dice, power.suggest('normal', false)], ['great_weapon_master', -5, '10', false]);
+  // 14 + 5 − 5 = 14 misses AC 15; 16 hits, for 2d6 + 3 + 10.
+  assert.equal(resolveAttack({ action: gs, targets: [goblin], riders: [power], random: dice(14) }).targets[0].hit, false);
+  assert.equal(resolveAttack({ action: gs, targets: [goblin], riders: [power], random: dice(16, 2, 2) }).targets[0].amount, 17);
+  const pal = armedSheet({ classes: [{ name: 'Paladin', level: 5 }], abilities: { str: 16 } }, [W.longsword]);
+  const ls = sheetActions(pal.sheet, pal.calc).find((x) => x.name === 'Longsword');
+  const [smite] = attackRiders(pal.sheet, pal.calc.values, ls, { picks: { divine_smite: 2 } });
+  assert.deepEqual([smite.dice, smite.spend, smite.options.map((o) => o.value)], ['3d8', { slot: 2 }, [1, 2]]);
 });

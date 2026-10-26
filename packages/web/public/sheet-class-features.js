@@ -72,14 +72,16 @@ export function classFeaturesBox({ state, changed, render, heal, wildShape }) {
     const multi = new Set(list.filter((r) => r.class).map((r) => r.class)).size > 1;
     const own = list.filter((r) => !r.subclass && !r.race);
     const sub = list.filter((r) => r.subclass);
-    const race = list.filter((r) => r.race);
+    const race = list.filter((r) => r.race && r.race !== 'Feat');
+    const feats = list.filter((r) => r.race === 'Feat');
     setChildren(el,
       h('h3', {}, 'Class features'),
       own.length
         ? h('div', { class: 'cf-rows' }, own.map((r) => rowView(r, multi)))
-        : h('p', { class: 'muted small' }, 'Nothing to track for your class at this level yet. Add your own below (a feat like Lucky...).'),
+        : h('p', { class: 'muted small' }, 'Nothing to track for your class at this level yet. Add your own below.'),
       subclassSection(sub),
       raceSection(race),
+      featSection(feats),
       h('p', { class: 'muted small cf-rules' }, `${edition()} rules. Rests give uses back; the DM has the last word on any number here.`),
       addForm(),
     );
@@ -116,6 +118,15 @@ export function classFeaturesBox({ state, changed, render, heal, wildShape }) {
       h('h4', {}, 'Race features', names.length ? h('span', { class: 'muted small' }, ` (${names.join(', ')})`) : null),
       rows.length ? h('div', { class: 'cf-rows' }, rows.map((r) => rowView(r, false))) : null,
       unknown ? h('p', { class: 'muted small cf-unknown' }, `${typed}: not in the list yet. Add its traits as your own rows below.`) : null,
+    );
+  }
+
+  /** General feats named in Features & traits (shared/feats.js): their numbers, and Lucky's points. */
+  function featSection(rows) {
+    if (!rows.length) return null;
+    return h('div', { class: 'cf-subclass cf-feats' },
+      h('h4', {}, 'Feats', h('span', { class: 'muted small' }, ' (named in Features & traits)')),
+      h('div', { class: 'cf-rows' }, rows.map((r) => rowView(r, false))),
     );
   }
 

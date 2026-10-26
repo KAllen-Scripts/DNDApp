@@ -42,18 +42,19 @@ export function registerAttacks(app, r) {
   };
 
   /** A player character's saved sheet, worked out; null without one. */
-  const sheetOf = (cid, token) => {
+  const sheetOf = (cid, token, edition = null) => {
     if (token.kind !== 'pc' || token.user_id == null) return null;
     const { sheet, version } = sheets.get(cid, token.user_id);
-    return version ? { sheet, calc: computeSheet(sheet, store.getSettings(cid)), version } : null;
+    const settings = store.getSettings(cid);
+    return version ? { sheet, calc: computeSheet(sheet, { ...settings, edition: edition ?? settings.edition }), version } : null;
   };
 
   /** The token's actions: a character's from their sheet, anyone else's from its stat block. */
-  const actionsOf = (cid, token, slots = {}) => {
+  const actionsOf = (cid, token, slots = {}, edition = '2014') => {
     if (token.kind === 'pc') {
-      const s = sheetOf(cid, token);
+      const s = sheetOf(cid, token, edition);
       if (!s) throw new BadRequestError(`${token.name} has no saved character sheet to attack from.`);
-      return { list: sheetActions(s.sheet, s.calc, { slots }), sheet: s };
+      return { list: sheetActions(s.sheet, s.calc, { slots, edition }), sheet: s };
     }
     return { list: creatureActions(token.stats?.text), sheet: null };
   };
@@ -85,26 +86,27 @@ export function registerAttacks(app, r) {
    * What a token can do, for the attack picker: GET ?target=<token> adds, per
    * action, what the conditions do to it ({ mode, reasons }) and how far away
    * the target is. { attacker, target, gap, actions, riders: { action id:
-   * [{ id, name, note, dice, checked }] }, slots }.
+   * [{ id, name, note, dice, checked, options?, picked? }] }, slots }. options: Divine Smite's slots
+   * ([{ value, label, dice }]), the player's pick sent back as rider_options.
    */
   app.get('/campaigns/:cid/maps/:mid/tokens/:tid/actions', async (request) => {
     const a = access(request);
     mustBeOn(a.cid);
     const { map, view } = viewableMap(request);
     const token = actorOf(request, a, map, view, request.params.tid);
-    const { list, sheet } = actionsOf(a.cid, token);
+    const edition = await editions.of(a.cid);
+    const { list, sheet } = actionsOf(a.cid, token, {}, edition);
     const tid = typeof request.query?.target === 'string' ? request.query.target : '';
     const seen = tid ? (a.role === 'dm' ? map.tokens : view.tokens).find((t) => t.id === tid) : null;
     const target = seen ? map.tokens.find((t) => t.id === seen.id) : null;
     const gap = target ? tokenGap(map, token, target) : null;
-    const edition = await editions.of(a.cid);
     const riders = {};
     const actions = list.map((x) => {
       const sit = target && x.kind === 'attack' ? attackSituation({ attacker: token, target, ranged: x.ranged, gap }) : null;
       if (sheet) {
         const near = target ? allyNear(map, token, target) : false;
         const rs = attackRiders(sheet.sheet, sheet.calc.values, x, { edition });
-        if (rs.length) riders[x.id] = rs.map((rd) => ({ id: rd.id, name: rd.name, note: rd.note, dice: rd.dice, checked: rd.suggest(sit?.mode ?? 'normal', near) }));
+        if (rs.length) riders[x.id] = rs.map((rd) => ({ id: rd.id, name: rd.name, note: rd.note, dice: rd.dice, ...(rd.hit && { hit: rd.hit }), checked: rd.suggest(sit?.mode ?? 'normal', near), ...(rd.options && { options: rd.options, picked: rd.picked }) }));
       }
       return { ...actionView(x), ...(sit && { situation: { mode: sit.mode, reasons: sit.reasons } }) };
     });
@@ -212,6 +214,8 @@ export function registerAttacks(app, r) {
     slot: z.number().int().min(1).max(9).optional(),
     use_slot: z.boolean().default(true),
     riders: z.array(z.string().max(40)).max(10).default([]),
+    // A rider's choice: { divine_smite: 3 } (the slot level, or 'free' for 2024 Paladin's Smite).
+    rider_options: z.record(z.string().max(40), z.union([z.number().int().min(1).max(9), z.literal('free')])).default({}),
     two_hands: z.boolean().default(false),
   });
 
@@ -229,12 +233,12 @@ export function registerAttacks(app, r) {
     const dm = a.role === 'dm';
     const body = ATTACK.parse(request.body ?? {});
     const attacker = actorOf(request, a, map, view, body.attacker);
-    const pre = actionsOf(a.cid, attacker);
+    const edition = await editions.of(a.cid);
+    const pre = actionsOf(a.cid, attacker, {}, edition);
     const picked = pre.list.find((x) => x.id === body.action);
     if (!picked) throw new NotFoundError(`${attacker.name} has no such attack.`);
     // A spell cast higher: its damage at that slot.
-    const action = body.slot && picked.source === 'spell' ? actionsOf(a.cid, attacker, { [picked.id.slice(6)]: body.slot }).list.find((x) => x.id === body.action) : picked;
-    const edition = await editions.of(a.cid);
+    const action = body.slot && picked.source === 'spell' ? actionsOf(a.cid, attacker, { [picked.id.slice(6)]: body.slot }, edition).list.find((x) => x.id === body.action) : picked;
 
     let targets;
     let template = null;
@@ -263,7 +267,7 @@ export function registerAttacks(app, r) {
     }
 
     const defenses = new Map(targets.map((t) => [t.id, defensesOf(a.cid, t, edition)]));
-    const riders = pre.sheet ? attackRiders(pre.sheet.sheet, pre.sheet.calc.values, action, { edition }).filter((rd) => body.riders.includes(rd.id)) : [];
+    const riders = pre.sheet ? attackRiders(pre.sheet.sheet, pre.sheet.calc.values, action, { edition, picks: body.rider_options }).filter((rd) => body.riders.includes(rd.id)) : [];
     // What the riders use up (Divine Smite's slot, a superiority die...): refused now if there's none left, spent below on a hit.
     const spends = riders.filter((rd) => rd.spend).map((rd) => ({ ...rd.spend, name: rd.name }));
     let sheetAfterSpends = null;
@@ -316,6 +320,12 @@ export function registerAttacks(app, r) {
             if (!res.heal) t.concentration = concentration(m, token, defenses.get(token.id), res.amount, !!sheetOf(a.cid, token));
           }
         }
+        // Topple (Weapon Mastery): the condition goes on the token straight away (Undo takes it off).
+        if (token && res.condition && !token.conditions.includes(res.condition)) {
+          token.conditions = [...token.conditions, res.condition];
+          t.condition_added = res.condition;
+        }
+        delete t.condition;
         if (t.note) t.notes = [...t.notes, t.note];
         delete t.note;
         entry.targets.push(t);
@@ -347,6 +357,12 @@ export function registerAttacks(app, r) {
         for (const t of e.targets) {
           if (t.status === 'applied' && undoHp(a.cid, m, t, later, a.userId)) t.status = 'undone';
           else if (t.status === 'pending') t.status = 'skipped';
+          if (t.condition_added) {
+            const token = m.tokens.find((x) => x.id === t.id);
+            if (token) token.conditions = token.conditions.filter((c) => c !== t.condition_added);
+            delete t.condition_added;
+            if (t.status === 'none') t.status = 'undone';
+          }
         }
         if (e.action.used && e.action.slot) {
           const attacker = m.tokens.find((t) => t.id === e.attacker.id);

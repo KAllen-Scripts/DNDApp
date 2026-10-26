@@ -244,3 +244,40 @@ test('regression: Draconic Resilience sets AC and adds hit points (13+Dex in 201
   s.abilities.cha = 18;
   assert.equal(computeSheet(s, { edition: '2024' }).values.ac, 16);
 });
+
+test('feats named in Features & traits change the numbers: Alert, Tough, Mobile/Speedy, Observant, Dual Wielder', async () => {
+  const { addToInventory } = await import('../src/gear.js');
+  const base = { classes: [{ name: 'Fighter', level: 4 }], race: 'Human', abilities: { str: 10, dex: 14, con: 12, int: 10, wis: 12, cha: 10 } };
+  const plain = computeSheet(sheetWith(base)).values;
+  const v = (features, edition = '2014') => computeSheet(sheetWith({ ...base, features }), { edition }).values;
+  assert.equal(v('Alert').initiative, plain.initiative + 5);
+  assert.equal(v('Alert', '2024').initiative, plain.initiative + 2);
+  assert.equal(v('Feat: Tough').hp_max, plain.hp_max + 8);
+  // "Toughness" isn't the feat (a dwarf trait shares the word).
+  assert.equal(v('Dwarven Toughness').hp_max, plain.hp_max);
+  assert.equal(v('Mobile').speed, plain.speed + 10);
+  assert.equal(v('Speedy', '2024').speed, plain.speed + 10);
+  assert.equal(v('Observant').passive_perception, plain.passive_perception + 5);
+  assert.equal(v('Observant', '2024').passive_perception, plain.passive_perception);
+  const dual = sheetWith({ ...base, features: 'Dual Wielder' });
+  dual.inventory = addToInventory([], { name: 'Shortsword' }, 2);
+  dual.inventory[0].equipped = 2;
+  const ac = computeSheet(dual).values.ac;
+  dual.features = '';
+  assert.equal(ac, computeSheet(dual).values.ac + 1);
+});
+
+test("a halfling's Luck: their d20 rolls reroll 1s; the Lucky feat needs its name written as a feat", async () => {
+  const { featureRows } = await import('../src/class-features.js');
+  const halfling = sheetWith({ race: 'Lightfoot Halfling', classes: [{ name: 'Rogue', level: 1 }], features: 'Lucky: reroll 1s.' });
+  assert.equal(computeSheet(halfling).d20, 'ro1');
+  assert.equal(computeSheet(sheetWith({ race: 'Human' })).d20, '');
+  const feat = (s, edition) => featureRows(s, { edition, values: computeSheet(s, { edition }).values }).find((r) => r.id === 'feat_lucky');
+  assert.equal(feat(halfling), undefined);
+  assert.equal(feat({ ...halfling, features: 'Feat: Lucky' }).max, 3);
+  // The line a 2024 background adds (backgrounds.js) counts too.
+  assert.ok(feat({ ...halfling, features: 'Origin feat: Lucky (Wayfarer background).' }));
+  const human = sheetWith({ race: 'Human', classes: [{ name: 'Fighter', level: 5 }], features: 'Lucky' });
+  assert.equal(feat(human, '2024').max, 3);
+  assert.equal(feat(human).race, 'Feat');
+});

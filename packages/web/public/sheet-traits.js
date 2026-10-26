@@ -34,7 +34,7 @@ export function traitsList({ state, changed, render }) {
     const written = rows.length - shown.length;
     if (!rows.length && !groups.length) return el.replaceChildren();
     el.replaceChildren(h('details', { class: 'auto-traits-list', open: true },
-      h('summary', {}, 'From your class and race', h('span', { class: 'muted small' }, ` · ${shown.length}${written ? `, ${written} already in your notes below` : ''}`)),
+      h('summary', {}, 'From your class, subclass and race', h('span', { class: 'muted small' }, ` · ${shown.length}${written ? `, ${written} already in your notes below` : ''}`)),
       h('ul', { class: 'small' }, shown.map((r) => h('li', { 'data-trait': r.key },
         h('strong', {}, r.name), ` ${r.text}`,
         HOW[r.how] && !/In your|pick|Tick it|rolled so/i.test(r.text) ? h('span', { class: 'muted' }, ` (${HOW[r.how]})`) : null))),

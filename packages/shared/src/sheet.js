@@ -17,6 +17,7 @@ import { normalizeClassFeatures, restClassFeatures } from './class-features.js';
 import { normalizeCombat } from './attack-extras.js';
 import { subclassOf } from './subclass-features.js';
 import { normalizeCompanions } from './companions.js';
+import { d20Rule, featsOf } from './feats.js';
 
 export { WEAPONS };
 
@@ -567,11 +568,15 @@ export function computeSheet(sheet, { weight = 'capacity', edition = '2014' } = 
     const mult = p === 'expertise' ? 2 : p === 'proficient' ? 1 : 0;
     set(`skill.${k}`, mod(ability) + (mult ? mult * pb : unskilled(ability)));
   }
-  set('passive_perception', 10 + values['skill.perception']);
-  // Initiative: Rakish Audacity (Xanathar's swashbuckler 3: + Cha), Dread Ambusher (gloom stalker 3: + Wis).
+  // Feats named in Features & traits that are numbers (feats.js).
+  const feats = new Set(featsOf(sheet, { edition: ed }).map((f) => f.id));
+  const feat = (id) => feats.has(id);
+  set('passive_perception', 10 + values['skill.perception'] + (feat('feat_observant') && ed === '2014' ? 5 : 0));
+  // Initiative: Alert (2014 +5, 2024 + proficiency), Rakish Audacity (Xanathar's swashbuckler 3: + Cha), Dread Ambusher (gloom stalker 3: + Wis).
   const initiativeMore = (subOf('rogue') === 'swashbuckler' && levelIn('rogue') >= 3 ? mod('cha') : 0)
     + (subOf('ranger') === 'gloom_stalker' && levelIn('ranger') >= 3 ? mod('wis') : 0);
-  set('initiative', mod('dex') + unskilled('dex') + initiativeMore + sum('initiative'));
+  const alert = feat('feat_alert') ? (ed === '2024' ? pb : 5) : 0;
+  set('initiative', mod('dex') + unskilled('dex') + initiativeMore + alert + sum('initiative'));
 
   // AC from the armour and shield equipped in the inventory, else unarmoured (monk and barbarian
   // Unarmored Defense, Draconic Resilience), plus magic items (a Ring of Protection; Bracers of Defense
@@ -589,7 +594,10 @@ export function computeSheet(sheet, { weight = 'capacity', edition = '2014' } = 
   const defense = combat.choices.includes('defense') && worn?.armor ? 1 : 0;
   // Bladesong (Tasha's bladesinger, while it's on, no medium or heavy armour or shield): + Int to AC (at least 1), +10 feet.
   const bladesong = combat.on.bladesong && subOf('wizard') === 'bladesinging' && !worn?.shield && !['medium', 'heavy'].includes(worn?.armor?.armor.type) ? Math.max(1, mod('int')) : 0;
-  set('ac', Math.max(...ac) + defense + bladesong + sum('ac') + (worn ? 0 : sum('ac_unarmored')));
+  // Dual Wielder (2014): +1 with a melee weapon in each hand.
+  const melee = (sheet.inventory ?? []).filter((g) => g.equipped && g.weapon && !(g.weapon.properties ?? []).some((x) => ['ammunition', 'two-handed'].includes(x))).reduce((n, g) => n + Math.max(1, Number(g.equipped) || 1), 0);
+  const dualWielder = feat('feat_dual_wielder') && ed === '2014' && melee >= 2 ? 1 : 0;
+  set('ac', Math.max(...ac) + defense + bladesong + dualWielder + sum('ac') + (worn ? 0 : sum('ac_unarmored')));
 
   // Speed: race, Unarmored Movement (monk 2: no armour or shield), Fast Movement (barbarian 5) and Roving
   // (2024 ranger 6) out of heavy armour, magic items, then heavy armour without the Strength for it (−10 ft) and weight.
@@ -598,7 +606,8 @@ export function computeSheet(sheet, { weight = 'capacity', edition = '2014' } = 
   const heavy = worn?.armor?.armor.type === 'heavy';
   // Superior Mobility (Xanathar's scout 9): +10 feet. Bladesong: +10 feet.
   const fast = (levelIn('barbarian') >= 5 && !heavy ? 10 : 0) + (ed === '2024' && levelIn('ranger') >= 6 && !heavy ? 10 : 0)
-    + (subOf('rogue') === 'scout' && levelIn('rogue') >= 9 ? 10 : 0) + (bladesong ? 10 : 0);
+    + (subOf('rogue') === 'scout' && levelIn('rogue') >= 9 ? 10 : 0) + (bladesong ? 10 : 0)
+    + (feat('feat_mobile') || feat('feat_speedy') ? 10 : 0) + (feat('feat_squat_nimbleness') ? 5 : 0);
   const tooHeavy = worn?.armor && worn.armor.armor.strength > scores.str ? worn.armor : null;
   const load = encumbrance(carriedWeight(sheet.inventory, sheet.coins), scores.str, weight, { bigger: POWERFUL_BUILD.test(sheet.race ?? '') });
   let speed = raceSpeed(sheet.race, ed) + monkSpeed + fast + sum('speed') - (tooHeavy ? 10 : 0);
@@ -626,6 +635,8 @@ export function computeSheet(sheet, { weight = 'capacity', edition = '2014' } = 
     }
   }
   if (draconic) hp += levelIn('sorcerer');
+  // Tough: 2 more each level.
+  if (feat('feat_tough')) hp += 2 * Math.min(20, classes.reduce((n, c) => n + c.level, 0));
   set('hp_max', classes.length ? hp : null);
   set('hit_dice', [...dice].sort((x, y) => y[0] - x[0]).map(([die, n]) => `${n}d${die}`).join(' + '));
 
@@ -651,7 +662,7 @@ export function computeSheet(sheet, { weight = 'capacity', edition = '2014' } = 
   // Reliable Talent (rogue 11; 2024 rogue 7): a d20 of 9 or lower counts as 10 on a check you're proficient in.
   const reliable = levelIn('rogue') >= (ed === '2024' ? 7 : 11);
 
-  return { auto, values, overridden: new Set(Object.keys(overrides).filter((k) => k in auto)), level, casters, scores, effects, load, tooHeavy, disadvantage, advantage, reliable, edition: ed };
+  return { auto, values, overridden: new Set(Object.keys(overrides).filter((k) => k in auto)), level, casters, scores, effects, load, tooHeavy, disadvantage, advantage, reliable, edition: ed, feats: [...feats], d20: d20Rule(sheet) };
 }
 
 /**
