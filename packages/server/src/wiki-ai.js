@@ -113,7 +113,7 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
 
   const list = (cid, status) =>
     db
-      .prepare(`SELECT * FROM wiki_proposals WHERE campaign_id = ? ${status ? 'AND status = ?' : ''} ORDER BY created_at, id`)
+      .prepare(`SELECT * FROM wiki_proposals WHERE campaign_id = ? ${status ? 'AND status = ?' : ''} ORDER BY created_at, rowid`)
       .all(...[cid, status].filter((x) => x != null))
       .map(toProposal);
 
