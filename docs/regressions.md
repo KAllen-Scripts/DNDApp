@@ -16,6 +16,9 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 | Date | What was wrong | Test |
 |---|---|---|
 | 2026-10-22 | The wiki's proposals from one AI run came back in a random order (they were made in the same millisecond and then sorted by their random ids), so the DM's list shuffled and a test failed now and then. | `server/test/wiki-ai.test.js`: regression: proposals made in one run are listed in the order the AI gave them (they shared a millisecond and were sorted by their random ids) |
+| 2026-10-22 | The new Companions box on the sheet showed "null" under its text when it had no note to show (found by the page tests' null check when the companions work was merged). | `web/test/sheet.test.js`: regression: the Companions box with no companions shows no "null" |
+| 2026-10-21 | The Sheet review showed "nullnull" when nothing was against the rules (empty parts were put into the page as null). | `web/test/sheet.test.js`: regression: a Sheet review with nothing against the rules shows no "null" in its box |
+| 2026-10-21 | The Class features box showed "nullnull" when there were no subclass or race features. | `web/test/sheet.test.js`: regression: Class features with no subclass or race rows shows no "null" |
 | 2026-10-22 | A rogue's Sneak Attack was only a note in Class features; nothing added its dice to an attack. | `shared/test/attack-extras.test.js`: regression: Sneak Attack can be applied to an attack from the sheet (it was only a note in Class features) |
 | 2026-10-22 | Thieves' Cant (and the other class features with no uses) appeared nowhere on the sheet. | `shared/test/class-traits.test.js`: regression: Thieves' Cant is listed in Features & traits for a rogue (it was nowhere on the sheet) |
 | 2026-10-22 | A monk's Unarmored Movement was added to their speed even in armour or with a shield. | `shared/test/sheet.test.js`: regression: a monk's Unarmored Movement only applies with no armour and no shield |

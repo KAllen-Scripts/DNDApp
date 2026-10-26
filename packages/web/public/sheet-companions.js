@@ -10,7 +10,7 @@
  * stat block is worked out from the character. The rules are in
  * shared/companions.js; sheet.js owns the sheet and passes in what this needs.
  */
-import { api, h } from './api.js';
+import { api, h, setChildren } from './api.js';
 import { ABILITIES, ABILITY_NAMES, formatBonus } from './shared/sheet.js';
 import { d20Plus } from './shared/dice.js';
 import { speedText } from './shared/wild-shape.js';
@@ -25,15 +25,15 @@ const FROM_NAMES = { spell: 'spell', feature: 'feature', item: 'item' };
 /** The dice of an action's damage ("2d4+2 piercing" → "2d4+2"), or ''. */
 const dice = (a) => /^\s*(\d+d\d+(?:\s*[+-]\s*\d+)?)/i.exec(a.damage ?? '')?.[1].replace(/\s+/g, '') ?? '';
 
+/** The creature names the SRD offers, fetched once per campaign. */
+const srdNames = new Map();
+
 /**
  * @param {object} ctx
  * @param {object} ctx.state  the sheet's state (sheet, calc, settings, edition, campaignId, guarded, renders)
  * @param {() => void} ctx.changed  the sheet changed: save soon
  * @param {() => Promise<void>} ctx.flush  save now (before the server needs the companion)
  */
-/** The creature names the SRD offers, fetched once per campaign. */
-const srdNames = new Map();
-
 export function companionsBox({ state, changed, flush }) {
   const el = h('section', { class: 'sh-box companions' });
   const base = () => `/campaigns/${state.campaignId}`;
@@ -57,7 +57,7 @@ export function companionsBox({ state, changed, flush }) {
 
   function draw() {
     const cs = list();
-    el.replaceChildren(
+    setChildren(el,
       h('h3', {}, 'Companions'),
       cs.length ? h('div', { class: 'companion-list' }, cs.map(card)) : h('p', { class: 'muted small' }, 'Familiars, pets, mounts, summons and animal companions. Each keeps its stat block and hit points here, and goes on the map with you.'),
       note ? h('p', { class: 'small companion-note', role: 'status' }, note) : null,
@@ -74,6 +74,12 @@ export function companionsBox({ state, changed, flush }) {
       if (!Number.isFinite(n)) return (hp.value = String(c.hp.current));
       c.hp.current = Math.min(c.hp.max, n);
       hp.value = String(c.hp.current);
+      // A summon from an item vanishes at 0 hit points (the server takes its token off the map when the sheet saves).
+      if (c.vanishes && c.hp.current <= 0) {
+        list().splice(list().indexOf(c), 1);
+        changed();
+        return say(`${c.name} dropped to 0 hit points and vanished.`);
+      }
       changed();
       if (c.hp.current <= 0) say(`${c.name} is at 0 hit points.${c.expires === 'dawn' || c.from.kind === 'item' ? ' A summon like this one vanishes: Dismiss it.' : ''}`);
     });
