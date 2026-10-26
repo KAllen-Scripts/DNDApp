@@ -50,8 +50,23 @@ export function normalizeCompanion(c = {}) {
     },
     until: str(c.until, 80),
     expires: c.expires === 'dawn' ? 'dawn' : '',
+    // Gone at 0 hit points (a summon from an item: Bag of Tricks, a figurine), rather than dying and staying on the sheet.
+    vanishes: c.vanishes === true,
     notes: str(c.notes, 2000),
   };
+}
+
+/** Minutes in a day on the campaign's clock, and dawn (6 in the morning). */
+const DAY = 24 * 60;
+const DAWN = 6 * 60;
+/** Did the clock go past a dawn moving from `before` to `now` (minutes since day 1 began)? */
+export const passedDawn = (before, now) => now > before && Math.floor((now - DAWN) / DAY) > Math.floor((before - DAWN) / DAY);
+
+/** Dawn came: the companions that last until then go. { sheet, gone: [names] }. */
+export function expireAtDawn(sheet) {
+  const gone = (sheet.companions ?? []).filter((c) => c.expires === 'dawn');
+  if (!gone.length) return { sheet, gone: [] };
+  return { sheet: { ...sheet, companions: sheet.companions.filter((c) => c.expires !== 'dawn') }, gone: gone.map((c) => c.name) };
 }
 
 export const normalizeCompanions = (list) => (Array.isArray(list) ? list : []).slice(0, MAX_SHEET_COMPANIONS).map(normalizeCompanion);
@@ -62,7 +77,12 @@ export function setCompanionHp(sheet, id, current) {
   const c = out.companions.find((x) => x.id === id);
   if (!c) return { sheet: out, companion: null };
   c.hp.current = Math.min(c.hp.max, Math.max(-9999, Math.trunc(Number(current) || 0)));
-  return { sheet: out, companion: c };
+  // A summon that vanishes at 0 hit points goes from the sheet (and so from the map).
+  if (c.vanishes && c.hp.current <= 0) {
+    out.companions = out.companions.filter((x) => x.id !== id);
+    return { sheet: out, companion: c, gone: true };
+  }
+  return { sheet: out, companion: c, gone: false };
 }
 
 const signed = (n) => (n < 0 ? `-${Math.abs(n)}` : `+${n}`);

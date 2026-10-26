@@ -29,6 +29,7 @@ const MODULES = {
   'shared/attack-extras.js': '@dndapp/shared/attack-extras.js',
   'shared/class-traits.js': '@dndapp/shared/class-traits.js',
   'shared/gear.js': '@dndapp/shared/gear.js',
+  'shared/item-actions.js': '@dndapp/shared/item-actions.js',
   'shared/companions.js': '@dndapp/shared/companions.js',
   'shared/item-names.js': '@dndapp/shared/item-names.js',
   'shared/settings.js': '@dndapp/shared/settings.js',

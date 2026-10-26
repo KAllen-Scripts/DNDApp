@@ -26,6 +26,7 @@ import { initPhone, phoneMenu, phoneSheet } from './phone.js';
 import { WINDOW_TAB, SHEET_WINDOW, windowCampaign, besidePanel, placeBeside, setSheetCampaign, initSheetPlace } from './sheet-place.js';
 
 const $ = (sel) => document.querySelector(sel);
+const APP_NAME = 'The Party Ledger'; // the site's name (the domain is thepartyledger.fyi)
 const CAMPAIGN_KEY = 'dndapp.campaign'; // last campaign chosen in this browser (pre-selected next time)
 
 // The campaign this browser tab is in. Survives reloads, but a new visit asks again.
@@ -61,6 +62,7 @@ function showLogin(message) {
   state.me = null;
   hideAll();
   $('#login-view').hidden = false;
+  document.title = APP_NAME;
   const err = $('#login-error');
   err.textContent = message ?? '';
   err.hidden = !message;
@@ -95,6 +97,30 @@ async function start() {
     if (current) return enterCampaign(current);
     if (campaigns.length === 1) return enterCampaign(campaigns[0]);
     showCampaignPicker();
+  });
+}
+
+// ---------- the account menu in the top bar ----------
+
+/**
+ * The top bar's account button opens a small menu under it (campaign
+ * settings, Look, change password, log out), so the bar fits on one row.
+ * On a phone the menu's buttons sit in the ☰ sheet with the rest (mobile.css).
+ */
+function initAccountMenu() {
+  const button = $('#account-menu-open');
+  const list = $('#account-menu');
+  const setOpen = (open) => {
+    list.classList.toggle('open', open);
+    button.setAttribute('aria-expanded', String(open));
+  };
+  button.addEventListener('click', () => setOpen(!list.classList.contains('open')));
+  // Choosing something closes it (the button's own handler runs first).
+  list.addEventListener('click', (e) => { if (e.target.closest('button')) setOpen(false); });
+  // So does a click anywhere else, or Escape.
+  document.addEventListener('click', (e) => { if (!e.target.closest?.('.account-menu')) setOpen(false); });
+  list.parentElement.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && list.classList.contains('open')) { e.stopPropagation(); setOpen(false); button.focus(); }
   });
 }
 
@@ -181,6 +207,8 @@ async function enterCampaign(campaign) {
   $('#campaign-name').textContent = campaign.name;
   $('#character').textContent = describe(campaign);
   $('#switch-campaign').hidden = state.me.campaigns.length < 2;
+  $('#account-name').textContent = state.me.user.name;
+  if (!WINDOW_TAB) document.title = `${campaign.name} · ${APP_NAME}`;
   newConversation();
   const isDm = campaign.role === 'dm';
   // The Archivist tab is the DM's; a player who was on it goes back to the first tab.
@@ -779,6 +807,7 @@ $('#note-form textarea').addEventListener('keydown', (e) => {
 });
 
 initPhone();
+initAccountMenu();
 phoneMenu($('#admin-view > .topbar'), { label: 'Look, change password, log out', keep: '.who' });
 phoneMenu($('.chat-actions'), { label: 'This chat: pin, rename, delete, new chat' });
 initSheetActions();
