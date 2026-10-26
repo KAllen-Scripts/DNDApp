@@ -1474,8 +1474,8 @@ The owner's feedback (item 5): "I want players to be able to have multiple sheet
 - **Archivist:** reads every character's changes, each marked as played now, not played now or deleted, and gets `<characters_changed>` lines for switches and deletions; its instructions say what a switch means. **`PIPELINE_VERSION` 26 → 27** (Ask's speed work took 26).
 - **Page:** `web/public/sheet-characters.js` (the strip and list above the sheet); `sheet.js` sends the character's number with saves and follows switches made in another window or device (live `sheet` events carry `number`).
 - **Decided (Claude's call):** switching is the player's alone; the DM sees only the active character (no list, no switching), to keep inactive sheets private. Up to 20 characters per player per campaign. The active one can't be deleted.
-- **Tests:** `server/test/characters.test.js` (5), a v19 → v20 test in `db.test.js`, `web/test/characters.test.js` (2).
-
+- **Tests:** `server/test/characters.test.js` (5), a v19 → v20 test in `db.test.js`, `web/test/characters.test.js` (3).
+- 2026-10-26, merging main: the Characters strip printed "null" when its list was shut (the page tests' new null check found it); fixed, with a regression test (`docs/regressions.md`).
 
 ### 2026-10-21: Ask made faster (the quick way, the campaign's edition only, a quicker start, timings)
 
