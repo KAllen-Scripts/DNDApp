@@ -175,30 +175,60 @@ export function createUpdates({ db, store, archive, handoutsBetween = () => [] }
   const setMark = (cid, until) =>
     db.prepare('INSERT INTO archivist_marks (campaign_id, updates_until) VALUES (?, ?) ON CONFLICT (campaign_id) DO UPDATE SET updates_until = excluded.updates_until').run(cid, until);
 
-  /** Sheets: one block per player whose sheet changed. */
+  /**
+   * Sheets: one block per character whose sheet changed (a player can have
+   * several; the block says whether it's the one they play now), and a line
+   * for each player who switched characters, deleted one or made a new one.
+   */
   function sheetBlocks(cid, since, until) {
     const c = store.getCampaign(cid);
     const roster = new Map(store.roster(cid).map((m) => [m.user_id, m]));
-    const users = db.prepare(`SELECT user_id FROM character_sheets WHERE campaign_id = ? AND updated_at > ? AND ${PLAYERS_ONLY} ORDER BY user_id`).all(cid, since, cid).map((r) => r.user_id);
+    const rows = db.prepare(`SELECT user_id, number, active, deleted_at FROM character_sheets WHERE campaign_id = ? AND ${PLAYERS_ONLY} ORDER BY user_id, number`).all(cid, cid);
+    const byUser = Map.groupBy(rows, (r) => r.user_id);
     const blocks = [];
-    for (const uid of users) {
-      const { before, after, changes } = sheetChanges(archive.readSheetChanges(c.slug, uid), { since, until });
-      if (!after || !changes.length) continue;
+    for (const [uid, chars] of byUser) {
       const who = roster.get(uid);
-      const head = `<character_sheet user="${uid}" player="${who?.name ?? '?'}"${who?.character_name ? ` plays="${who.character_name}"` : ''}>`;
-      const created = changes.find((ch) => ch.created);
-      const list = changes
-        .filter((ch) => !ch.created)
-        .map((ch) => `[${localTime(ch.at)}] ${ch.field}: ${showChange(ch.before, ch.after)}`);
-      blocks.push(
-        [
-          head,
-          before ? 'You have read this sheet before. Changes since then, oldest first:' : `New sheet, first saved ${localTime(created?.at ?? changes[0].at)}.`,
-          ...(before ? list : list.length ? ['Changes after it was first saved, oldest first:', ...list] : []),
-          `Sheet now:\n${sheetText(after, store.getSettings(cid))}`,
-          '</character_sheet>',
-        ].join('\n'),
-      );
+      const several = chars.length > 1;
+      // What each character is called now (from its latest sheet), for the lines below.
+      const named = new Map();
+      for (const ch of chars) {
+        const { before, after, changes } = sheetChanges(archive.readSheetChanges(c.slug, uid, ch.number), { since, until });
+        named.set(ch.number, (after?.name || '').trim() || `character ${ch.number}`);
+        if (!after || !changes.length) continue;
+        const status = !several ? '' : ch.deleted_at ? ' character="' + ch.number + '" status="deleted by the player"' : ch.active ? ` character="${ch.number}" status="the character they play now"` : ` character="${ch.number}" status="not played now"`;
+        const head = `<character_sheet user="${uid}" player="${who?.name ?? '?'}"${who?.character_name ? ` plays="${who.character_name}"` : ''}${status}>`;
+        const created = changes.find((x) => x.created);
+        const list = changes
+          .filter((x) => !x.created)
+          .map((x) => `[${localTime(x.at)}] ${x.field}: ${showChange(x.before, x.after)}`);
+        blocks.push(
+          [
+            head,
+            before ? 'You have read this sheet before. Changes since then, oldest first:' : `New sheet, first saved ${localTime(created?.at ?? changes[0].at)}.`,
+            ...(before ? list : list.length ? ['Changes after it was first saved, oldest first:', ...list] : []),
+            `Sheet now:\n${sheetText(after, store.getSettings(cid))}`,
+            '</character_sheet>',
+          ].join('\n'),
+        );
+      }
+      // Switches between characters (and deletions), from the player's list in the archive.
+      const lines = archive.readCharacterList(c.slug, uid);
+      // Before a player's list has a line, their first character was the one they played.
+      let prev = { active: 1, deleted: [] };
+      const said = [];
+      for (const e of lines) {
+        if (e.saved_at > until) break;
+        if (e.saved_at > since) {
+          const player = `user ${uid} (${who?.name ?? '?'})`;
+          if (e.active != null && e.active !== prev.active) {
+            said.push(`[${localTime(e.saved_at)}] ${player} now plays ${named.get(e.active) ?? `character ${e.active}`} instead of ${named.get(prev.active) ?? `character ${prev.active}`} (who is kept, not played now).`);
+          }
+          const gone = (e.deleted ?? []).filter((d) => !(prev.deleted ?? []).some((x) => x.number === d.number));
+          for (const d of gone) said.push(`[${localTime(e.saved_at)}] ${player} deleted their character ${named.get(d.number) ?? `character ${d.number}`}: they no longer play them.`);
+        }
+        prev = e;
+      }
+      if (said.length) blocks.push([`<characters_changed user="${uid}" player="${who?.name ?? '?'}">`, ...said, '</characters_changed>'].join('\n'));
     }
     return blocks;
   }
@@ -231,7 +261,7 @@ export function createUpdates({ db, store, archive, handoutsBetween = () => [] }
     /** Whether anything is waiting for the archivist (cheap enough to call on start-up). */
     pendingSince(cid) {
       const since = mark(cid);
-      return !!db.prepare(`SELECT 1 FROM character_sheets WHERE campaign_id = ? AND updated_at > ? AND ${PLAYERS_ONLY}`).get(cid, since, cid) ||
+      return !!db.prepare(`SELECT 1 FROM character_sheets WHERE campaign_id = ? AND (updated_at > ? OR activated_at > ? OR deleted_at > ?) AND ${PLAYERS_ONLY}`).get(cid, since, since, since, cid) ||
         !!db.prepare('SELECT 1 FROM player_notes WHERE campaign_id = ? AND COALESCE(deleted_at, edited_at, written_at) > ?').get(cid, since) ||
         !!db.prepare('SELECT 1 FROM handouts WHERE campaign_id = ? AND updated_at > ?').get(cid, since);
     },
