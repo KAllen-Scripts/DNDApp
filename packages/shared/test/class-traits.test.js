@@ -45,3 +45,38 @@ test('a feature the player wrote is marked written, and their text is untouched'
 test("regression: Thieves' Cant is listed in Features & traits for a rogue (it was nowhere on the sheet)", () => {
   assert.ok(rows({ classes: [{ name: 'Rogue', level: 1 }] }).some((r) => r.name === "Thieves' Cant" && !r.written));
 });
+
+test('subclass text features are listed by subclass, level and edition, and not when they are Class features rows', async () => {
+  const { SUBCLASS_TRAITS } = await import('../src/subclass-traits.js');
+  const { SUBCLASS_BY_KEY } = await import('../src/subclass-features.js');
+  for (const t of SUBCLASS_TRAITS) {
+    assert.ok(SUBCLASS_BY_KEY[t.sc], `${t.sc} is a subclass`);
+    assert.ok(!t.edition || SUBCLASS_BY_KEY[t.sc].editions.includes(t.edition), `${t.sc} ${t.name} is in ${t.edition}`);
+  }
+  const names = (cls, sub, lvl, ed) => rows({ classes: [{ name: cls, subclass: sub, level: lvl }] }, ed).map((r) => r.name);
+  // A Champion: Remarkable Athlete at 7th in 2014, at 3rd in 2024; Improved Critical and Survivor are rows of the Class features box.
+  assert.ok(!names('Fighter', 'Champion', 6).includes('Remarkable Athlete'));
+  assert.ok(names('Fighter', 'Champion', 7).includes('Remarkable Athlete'));
+  assert.ok(names('Fighter', 'Champion', 3, '2024').includes('Remarkable Athlete'));
+  assert.ok(!names('Fighter', 'Champion', 20).includes('Improved Critical'));
+  assert.ok(!names('Fighter', 'Champion', 20).includes('Survivor'));
+  // A Thief's Second-Story Work, and nothing of another rogue's subclass.
+  const thief = names('Rogue', 'Thief', 3);
+  assert.ok(thief.includes('Second-Story Work') && !thief.includes('Mage Hand Legerdemain'));
+  // 2014 clerics pick a domain at 1st; in 2024 every subclass starts at 3rd.
+  assert.ok(names('Cleric', 'Trickery Domain', 1).includes('Blessing of the Trickster'));
+  assert.ok(!names('Cleric', 'Trickery Domain', 2, '2024').includes('Blessing of the Trickster'));
+  assert.ok(names('Cleric', 'Trickery Domain', 3, '2024').includes('Blessing of the Trickster'));
+  // Frenzy is a row (both editions), so neither summary of it shows here.
+  assert.ok(!names('Barbarian', 'Berserker', 3).some((n) => /^Frenzy/.test(n)));
+  assert.ok(!names('Barbarian', 'Berserker', 3, '2024').some((n) => /^Frenzy/.test(n)));
+  // A book subclass (Xanathar's).
+  assert.ok(names('Rogue', 'Swashbuckler', 9).includes('Panache'));
+  // No subclass typed: no subclass features.
+  assert.ok(!names('Fighter', '', 20).includes('Remarkable Athlete'));
+});
+
+test('a subclass feature the player wrote is marked written', () => {
+  const s = { classes: [{ name: 'Wizard', subclass: 'Evocation', level: 6 }], features: 'Potent Cantrip: half damage on a save.' };
+  assert.equal(rows(s).find((r) => r.name === 'Potent Cantrip').written, true);
+});

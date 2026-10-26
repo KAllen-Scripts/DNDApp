@@ -22,6 +22,7 @@
  */
 import { classLevels } from './class-features.js';
 import { racesOf } from './race-features.js';
+import { subclassTraitsOf } from './subclass-traits.js';
 
 const step = (table, level) => table.reduce((v, [from, n]) => (level >= from ? n : v), table[0][1]);
 const plus = (n) => (n < 0 ? `−${-n}` : `+${n}`);
@@ -312,7 +313,7 @@ const tidy = (s) => String(s ?? '').toLowerCase().replace(/[’']/g, "'").replac
  */
 export function traitRows(sheet, { edition = '2014', values = null } = {}) {
   const ed = edition === '2024' ? E24 : E14;
-  const { levels } = classLevels(sheet);
+  const { levels, subclasses } = classLevels(sheet);
   const pb = values?.proficiency_bonus ?? 2 + Math.floor((Math.min(20, Math.max(1, Object.values(levels).reduce((a, b) => a + b, 0))) - 1) / 4);
   const mod = (a) => values?.[`mod.${a}`] ?? Math.floor(((sheet?.abilities?.[a] ?? 10) - 10) / 2);
   const typed = tidy(`${sheet?.features ?? ''}\n${sheet?.additional_features ?? ''}`);
@@ -331,6 +332,10 @@ export function traitRows(sheet, { edition = '2014', values = null } = {}) {
     if (!level || level < t.from || (t.edition && t.edition !== ed) || t.id) continue;
     const c = { level, edition: ed, pb, mod, race: String(sheet?.race ?? '') };
     push({ name: typeof t.name === 'function' ? t.name(c) : t.name, text: typeof t.text === 'function' ? t.text(c) : t.text, how: t.how, class: t.class, race: null, from: t.from });
+  }
+  // The subclass's own features with nothing to count (subclass-traits.js).
+  for (const t of subclassTraitsOf(levels, subclasses, ed)) {
+    push({ name: t.name, text: t.text, how: 'text', class: t.class, subclass: t.subclass, race: null, from: t.from });
   }
   const races = racesOf(sheet?.race);
   for (const t of RACE_TRAITS) {

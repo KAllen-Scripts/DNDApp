@@ -16,6 +16,7 @@
     "./rolls.js": "./src/rolls.js",
     "./attack-extras.js": "./src/attack-extras.js",
     "./class-traits.js": "./src/class-traits.js",
+    "./subclass-traits.js": "./src/subclass-traits.js",
     "./feats.js": "./src/feats.js",
     "./attacks.js": "./src/attacks.js",
     "./attack-riders.js": "./src/attack-riders.js",
