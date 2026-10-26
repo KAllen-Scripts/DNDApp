@@ -85,3 +85,13 @@ test("characters: a switch made on another device shows the other character's sh
     assert.match(page.text('.chars-toggle'), /Characters \(2\)/);
   });
 });
+
+test('regression: the Characters strip with its list shut and no message shows no "null"', async () => {
+  await withPage(sheetPage(), async (page, t) => {
+    t.sheets.save(t.campaign.id, t.sam.id, emptySheet({ name: 'Thorin' }));
+    page.click('[data-tab=sheet]');
+    await page.waitFor(() => page.visible('#sheet-characters'));
+    assert.match(page.text('#sheet-characters'), /Playing\s*Thorin/);
+    assert.doesNotMatch(page.el('#sheet-characters').textContent, /null/);
+  });
+});
