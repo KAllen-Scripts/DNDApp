@@ -173,6 +173,27 @@ test("dice: Deluxe is the default; a roller this browser picked that no longer e
   });
 });
 
+// Opening the tray starts loading Deluxe, which fails in jsdom and then redraws the dice settings. Under load
+// that came after the page had closed, so a map test failed now and then with "document is not defined".
+test('regression: a 3D roller still loading when the page closes finishes first, so nothing runs without the page', async () => {
+  const late = [];
+  const onLate = (err) => late.push(err);
+  process.on('unhandledRejection', onLate);
+  let closed;
+  try {
+    await withPage({ page: (t) => ({ as: t.sam, storage: { 'dndapp.dice': JSON.stringify({ sound: false }) } }) }, async (page) => {
+      closed = page;
+      page.click('#dice-open'); // starts loading Deluxe; the page closes straight away
+    });
+    // Let Deluxe's own load finish (the same module the page was loading), then give its failure time to land.
+    await closed.module('dice-deluxe.js').catch(() => {});
+    await new Promise((r) => setTimeout(r, 300));
+    assert.deepEqual(late.map(String), []);
+  } finally {
+    process.off('unhandledRejection', onLate);
+  }
+});
+
 test('dice: settings and the chosen style are kept in this browser', async () => {
   await withPage({ page: (t) => ({ as: t.sam, storage: NO_3D }) }, async (page) => {
     page.click('#dice-open');

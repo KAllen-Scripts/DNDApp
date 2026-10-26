@@ -194,6 +194,13 @@ export async function openPage(t, { as = null, campaign = null, storage = {}, an
         await new Promise((r) => setTimeout(r, 5));
         if (!(await connections())) break;
       }
+      // A 3D roller still loading (Deluxe, which can't start in jsdom) finishes first: its failure redraws the
+      // dice settings, which needs this page's document. Under load it used to land after close ("document is
+      // not defined") or in the next test's page.
+      try {
+        const dice = await page.module('dice.js');
+        await Promise.race([dice.rollersLoaded?.(), new Promise((r) => setTimeout(r, 20000).unref())]);
+      } catch {}
       for (const handle of page.timers) clearTimeout(handle);
       restore();
       window.close();
