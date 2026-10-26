@@ -39,3 +39,8 @@ Which books have been read for the backgrounds the sheet suggests and applies (`
 | Xanathar's, Tasha's, Fizban's, the DMGs, Monsters of the Multiverse, Volo's, Tome of Foes, the Monster Manuals | Nothing to add | No backgrounds. |
 
 Not in the folder yet, with backgrounds the sheet would want: Sword Coast Adventurer's Guide, Eberron, Wildemount, Theros, Ravenloft, Strixhaven, Spelljammer, Planescape. Until then the DM can make them as their own backgrounds in Campaign settings.
+
+## Help making a character (the sheet's Help panel)
+
+`packages/shared/src/creation-help.js` (2026-10-22): each class's proficiencies, skills, starting equipment, spellcasting basics and features per level, from the Player's Handbook (2014) and (2024), and the artificer from Tasha's Cauldron of Everything (used in both editions); the PHB 2014's 15 races and subraces and the PHB 2024's 10 species. Short summaries, not the books' text. Subclass features and other books' races aren't in it yet (the Class features box has them: see above).
+
