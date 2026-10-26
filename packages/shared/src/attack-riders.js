@@ -34,9 +34,12 @@ export const RIDERS = [
 ];
 const RIDER_BY_ID = Object.fromEntries(RIDERS.map((r) => [r.id, r]));
 
+/** The option picked for an extra with options (Divine Smite's slot): picks[id] when it's one of them, else the first. */
+const optionOf = (x, picks) => x.options?.find((o) => String(o.value) === String(picks?.[x.id])) ?? x.options?.[0] ?? null;
+
 /** An extra's dice and number as one notation: "1d6", "1d6+2", "3". */
-function riderDice(x) {
-  const dice = x.options?.[0]?.dice ?? x.dice;
+function riderDice(x, picks) {
+  const dice = optionOf(x, picks)?.dice ?? x.dice;
   if (dice && x.flat) return `${dice}${plain(x.flat)}`;
   if (dice) return dice;
   return x.flat ? String(x.flat) : '';
@@ -44,26 +47,32 @@ function riderDice(x) {
 
 /**
  * The riders this character can add to this action: [{ id, name, note, dice,
- * type, once, spend, suggest(mode, allyNear) → boolean }]. type '' means the
- * action's own damage type. spend is what it uses up (a spell slot, a
- * feature's use), as planAttack's spends; the map shows it, the sheet
- * spends it (spendForAttack).
+ * type, hit, once, spend, options, picked, suggest(mode, allyNear) → boolean }].
+ * type '' means the action's own damage type. hit changes the roll to hit
+ * (Great Weapon Master's −5). options: the choices one has (Divine Smite's
+ * slots: [{ value, label, dice }]), picks: { id: value } the player chose
+ * (else the first). spend is what it uses up (a spell slot, a feature's
+ * use), as planAttack's spends; the map spends it on a hit (routes/attacks.js).
  */
-export function attackRiders(sheet, values, action, { edition = '2014' } = {}) {
+export function attackRiders(sheet, values, action, { edition = '2014', picks = {} } = {}) {
   const extras = actionExtras(sheet, values, action, { edition });
   return extras
-    .filter((x) => !x.needs && riderDice(x))
+    .filter((x) => !x.needs && (riderDice(x, picks) || x.hit))
     .map((x) => {
       const extra = RIDER_BY_ID[x.id];
       const byDefault = !!(x.auto || x.on);
+      const option = optionOf(x, picks);
       return {
         id: x.id,
         name: x.name,
         note: extra?.note ?? x.note ?? '',
-        dice: riderDice(x),
+        dice: riderDice(x, picks),
         type: /^[a-z]+$/.test(x.type ?? '') ? x.type : '',
+        hit: x.hit || 0,
         once: !!x.once,
-        spend: x.options?.[0] ? (x.options[0].value === 'free' ? { feature: 'paladins_smite' } : { slot: x.options[0].value }) : x.spend ?? null,
+        options: x.options ? x.options.map((o) => ({ value: o.value, label: o.label, dice: o.dice })) : null,
+        picked: option ? option.value : null,
+        spend: option ? (option.value === 'free' ? { feature: 'paladins_smite' } : { slot: option.value }) : x.spend ?? null,
         suggest: (mode, allyNear) => (extra?.suggest ? !!extra.suggest({ mode, allyNear, extra: x }) : byDefault),
       };
     });

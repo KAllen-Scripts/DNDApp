@@ -73,9 +73,16 @@ export async function pickAction({ attacker = null, target = null }) {
   const who = choices.length > 1 ? h('select', { 'aria-label': 'Who attacks', onchange: (e) => pickAction({ attacker: map.tokens.find((t) => t.id === e.target.value), target }) }, choices.map((t) => new Option(t.name, t.id, false, t.id === attacker.id))) : null;
   const slots = res.slots;
   const rows = res.actions.map((x) => {
+    // What the character can add on a hit; one with options (Divine Smite's slot) has a picker beside it.
+    const picks = {};
     const riders = (res.riders?.[x.id] ?? []).map((rd) => {
       const box = h('input', { type: 'checkbox', checked: rd.checked, 'data-rider': rd.id });
-      return h('label', { class: 'map-check small', title: rd.note }, box, ` ${rd.name} (+${rd.dice})`);
+      const what = rd.hit ? `${rd.hit} to hit, +${rd.dice}` : `+${rd.dice}`;
+      const label = h('label', { class: 'map-check small', title: rd.note }, box, ` ${rd.name} (${what})`);
+      if (!rd.options?.length) return label;
+      const pick = h('select', { 'aria-label': `${rd.name}: slot`, class: 'small' }, rd.options.map((o) => new Option(`${o.label}: ${o.dice}`, String(o.value), false, String(o.value) === String(rd.picked))));
+      picks[rd.id] = pick;
+      return h('span', { class: 'attack-rider' }, label, ' ', pick);
     });
     const twoHands = x.damage2 ? h('input', { type: 'checkbox' }) : null;
     const slotPick = x.level >= 1 && x.upcast ? h('select', { 'aria-label': `${x.name}: slot level` }, Array.from({ length: 10 - x.level }, (_, k) => new Option(`${ORD[x.level + k]} level${slots ? ` (${slots[x.level + k] ?? 0}${slots.pact?.level === x.level + k ? ` + ${slots.pact.left} pact` : ''} left)` : ''}`, x.level + k))) : null;
@@ -85,6 +92,7 @@ export async function pickAction({ attacker = null, target = null }) {
       const opts = {
         mode,
         riders: riders.map((l) => l.querySelector('input')).filter((b) => b.checked).map((b) => b.dataset.rider),
+        rider_options: Object.fromEntries(Object.entries(picks).map(([id, sel]) => [id, sel.value === 'free' ? 'free' : Number(sel.value)])),
         two_hands: !!twoHands?.checked,
         ...(slotPick && { slot: Number(slotPick.value) }),
         ...(useSlot && { use_slot: useSlot.checked }),

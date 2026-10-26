@@ -251,3 +251,36 @@ test('Divine Smite from the map: offered unticked, its slot spent on a hit, refu
     await t.cleanup();
   }
 });
+
+test('from the map: Divine Smite with the slot the player picks; Weapon Mastery Topple knocks the target prone (Undo stands it up)', async () => {
+  const { t, dice, base, add, sheet, sheetOf, attack } = await table();
+  try {
+    await t.request('PATCH', `/campaigns/${t.campaign.id}/settings`, { body: { edition: '2024' } });
+    const LONGSWORD = { name: 'Longsword', qty: 1, equipped: 1, proficient: true, kind: 'weapon', weapon: { damage: '1d8 slashing', ability: 'str', category: 'martial', properties: ['versatile'] } };
+    const MAUL = { name: 'Maul', qty: 1, equipped: 1, proficient: true, kind: 'weapon', weapon: { damage: '2d6 bludgeoning', ability: 'str', category: 'martial', properties: ['heavy', 'two-handed'] } };
+    await sheet(t.sam, { classes: [{ name: 'Paladin', subclass: '', level: 5 }], abilities: { str: 16, dex: 10, con: 12, int: 10, wis: 10, cha: 14 }, inventory: [LONGSWORD, MAUL], combat: { masteries: ['maul'], choices: [], on: {} } });
+    const thorin = await add({ kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 52.5, y: 52.5 });
+    const goblin = await add({ kind: 'enemy', name: 'Goblin', x: 87.5, y: 52.5, hp: { current: 60, max: 60 }, stats: { text: GOBLIN } });
+    const acts = (await t.request('GET', `${base}/tokens/${thorin.id}/actions?target=${goblin.id}`, { as: t.sam.token })).json();
+    const sword = acts.actions.find((x) => x.name === 'Longsword');
+    const smite = acts.riders[sword.id].find((x) => x.id === 'divine_smite');
+    assert.deepEqual(smite.options.map((o) => o.value), ['free', 1, 2]);
+    // The 2nd-level slot: 3d8. d20 15 + 6; 1d8 4 + 3; 3d8 = 2 + 3 + 4.
+    dice.next(15, 4, 2, 3, 4);
+    const hit = await attack({ attacker: thorin.id, action: sword.id, target: goblin.id, riders: ['divine_smite'], rider_options: { divine_smite: 2 } }, t.sam.token);
+    assert.equal(hit.statusCode, 200, hit.body);
+    assert.equal(hit.json().attack.targets[0].amount, 16);
+    assert.equal((await sheetOf(t.sam)).spellcasting.slots_used[2], 1);
+
+    // The maul (Topple): hit, damage 3 + 3 + 3, the goblin's Con save 5 against DC 8 + 3 + 3: prone.
+    const maul = acts.actions.find((x) => x.name === 'Maul');
+    dice.next(15, 3, 3, 5);
+    const top = (await attack({ attacker: thorin.id, action: maul.id, target: goblin.id }, t.sam.token)).json();
+    assert.match(top.attack.targets[0].notes.join(' '), /Topple: Constitution save 5 against DC 14, falls prone/);
+    assert.ok(t.maps.get(t.campaign.id, top.map.id).tokens.find((x) => x.id === goblin.id).conditions.includes('prone'));
+    await t.request('POST', `${base}/attacks/${top.attack.id}`, { body: { do: 'undo' } });
+    assert.ok(!t.maps.get(t.campaign.id, top.map.id).tokens.find((x) => x.id === goblin.id).conditions.includes('prone'));
+  } finally {
+    await t.cleanup();
+  }
+});

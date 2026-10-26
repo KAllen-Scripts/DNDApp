@@ -11,13 +11,14 @@
  * server passes a secure random number, the tests fixed ones). The server
  * applies the result to hit points (routes/attacks.js).
  */
-import { parseRoll, rollDice } from './dice.js';
+import { formatTerms, parseRoll, rollDice } from './dice.js';
 import { abilityModifier as statBlockModifier, pxPerUnit, spellArea, squarePx } from './map.js';
 import { attackRolls, gearRolls, spellRolls, splitDamage } from './rolls.js';
 import { WEAPONS, attackWeapon, ownsWeapon } from './gear.js';
 import { ABILITIES, ABILITY_NAMES, DAMAGE_TYPES, rollDisadvantage } from './sheet.js';
 import { activeForm, formStats } from './wild-shape.js';
 import { attackRiders } from './attack-riders.js';
+import { offhandWeapon, planAttack, planSpell } from './attack-extras.js';
 
 export { attackRiders };
 
@@ -60,9 +61,15 @@ const RANGED_WEAPON = (props) => props.includes('ammunition');
  * Each: { id, name, source: weapon | attack | spell | form, kind: attack |
  * save | auto | heal, bonus, dc, save, damage: [{ dice, type }], damage2
  * (versatile, both hands), ranged, finesse, magical, area, half, level,
- * upcast, ability, text }.
+ * upcast, ability, text }. Weapon attacks are worked out as the sheet's
+ * Attacks box does (attack-extras.js planAttack, by the campaign's edition):
+ * Archery, Great Weapon Fighting, Martial Arts, the off-hand attack of two
+ * weapons, the critical range (crit_on) and dice (damage parts' crit), the
+ * d20's own rules (d20: 'ro1' for a halfling, 'ea' for Elven Accuracy) and
+ * the weapon's mastery (2024); what the player adds on a hit (Sneak Attack,
+ * Divine Smite, Rage, Dueling...) comes as riders (attack-riders.js).
  */
-export function sheetActions(sheet, calc, { slots = {} } = {}) {
+export function sheetActions(sheet, calc, { slots = {}, edition = '2014' } = {}) {
   const out = [];
   const form = activeForm(sheet);
   if (form) {
@@ -74,18 +81,28 @@ export function sheetActions(sheet, calc, { slots = {} } = {}) {
       });
     }
   }
+  const fromPlan = (p, type) => (p.damage || p.flat != null ? [{ dice: p.damage ?? String(p.flat), type: damageType(type), crit: p.crit ?? null }] : []);
+  const planned = (p) => ({ bonus: p.bonus, crit_on: p.crit_on, d20: /^1d20([a-z0-9]*)/i.exec(p.hit ?? '')?.[1] ?? '', mastery: p.mastery, notes: p.notes.filter((n) => !p.mastery || n !== p.mastery.line) });
+  const gearAction = (g, { offhand = false } = {}) => {
+    const props = g.weapon.properties ?? [];
+    const a = { name: g.name, kind: 'attack', ability: g.weapon.ability, proficient: g.proficient, magic: g.magic, bonus: '', save: '', dc: '', damage: g.weapon.damage };
+    const opts = { edition, weapon: { ...g.weapon, name: g.name }, riders: true, offhand };
+    const p = planAttack(sheet, calc, a, opts);
+    const two = props.includes('versatile') && !offhand ? planAttack(sheet, calc, a, { ...opts, two: true }) : null;
+    const r = gearRolls(g, calc);
+    return {
+      id: `${offhand ? 'offhand' : 'gear'}:${g.id}`, name: offhand ? `${g.name} (off-hand)` : g.name, source: 'weapon', kind: 'attack', dc: null, save: '',
+      damage: fromPlan(p, r.type), damage2: two ? fromPlan(two, r.type) : null,
+      ranged: RANGED_WEAPON(props), thrown: props.includes('thrown'), reach: props.includes('reach'), finesse: g.weapon.ability === 'finesse' || props.includes('finesse'), magical: (g.magic ?? 0) > 0, area: null, half: false, level: null, upcast: false,
+      ability: g.weapon.ability === 'finesse' ? 'dex' : g.weapon.ability, text: '', offhand, ...planned(p),
+    };
+  };
   for (const g of sheet.inventory ?? []) {
     if (!g.equipped || !g.weapon) continue;
-    const r = gearRolls(g, calc);
-    const props = g.weapon.properties ?? [];
-    const flat = r.damage ?? (r.flat != null ? String(r.flat) : null);
-    out.push({
-      id: `gear:${g.id}`, name: g.name, source: 'weapon', kind: 'attack', bonus: r.bonus, dc: null, save: '',
-      damage: flat ? [{ dice: flat, type: damageType(r.type) }] : [], damage2: r.damage2 ? [{ dice: r.damage2, type: damageType(r.type) }] : null,
-      ranged: RANGED_WEAPON(props), thrown: props.includes('thrown'), reach: props.includes('reach'), finesse: g.weapon.ability === 'finesse' || props.includes('finesse'), magical: (g.magic ?? 0) > 0, area: null, half: false, level: null, upcast: false,
-      ability: g.weapon.ability === 'finesse' ? 'dex' : g.weapon.ability, text: '',
-    });
+    out.push(gearAction(g));
   }
+  const off = offhandWeapon(sheet, edition);
+  if (off) out.push(gearAction(off, { offhand: true }));
   for (const [i, a] of (sheet.attacks ?? []).entries()) {
     if (!a.name.trim()) continue;
     const weapon = attackWeapon(a.name);
@@ -93,9 +110,11 @@ export function sheetActions(sheet, calc, { slots = {} } = {}) {
     const r = attackRolls(a, calc);
     const props = weapon ? WEAPONS[weapon.toLowerCase()].properties : [];
     const flat = r.damage ?? (r.flat != null ? String(r.flat) : null);
+    const p = r.kind === 'attack' ? planAttack(sheet, calc, a, { edition, riders: true }) : null;
     out.push({
       id: `attack:${i}`, name: a.name.trim(), source: 'attack', kind: r.kind, bonus: r.bonus, dc: r.dc, save: r.save,
-      damage: flat ? [{ dice: flat, type: damageType(r.type) }] : [], damage2: null,
+      damage: p ? fromPlan(p, r.type) : flat ? [{ dice: flat, type: damageType(r.type) }] : [], damage2: null,
+      ...(p && planned(p)),
       ranged: RANGED_WEAPON(props) || /\bbow\b|crossbow|sling|ranged/i.test(a.name), finesse: a.ability === 'finesse' || props.includes('finesse'), magical: (a.magic ?? 0) > 0 || a.ability === 'spell',
       area: spellArea({ description: `${a.name} ${a.notes}` }), half: r.kind === 'save' ? !/no damage/i.test(a.notes) : false, level: null, upcast: false,
       ability: a.ability === 'finesse' ? 'dex' : a.ability === 'spell' ? calc.values.spell_ability ?? '' : a.ability, text: a.notes,
@@ -113,6 +132,7 @@ export function sheetActions(sheet, calc, { slots = {} } = {}) {
       ranged: /ranged spell attack/i.test(sp.description), finesse: false, magical: true, area: spellArea(sp),
       half: kind === 'save' ? halvesOnSave(sp.description, { cantrip: sp.level === 0 }) : false,
       level: sp.level, slot: level, upcast: sp.level >= 1 && !!sp.higher_damage.trim(), prepared: sp.prepared, ability: calc.values.spell_ability ?? '', text: '',
+      d20: kind === 'attack' ? /^1d20([a-z0-9]*)/i.exec(planSpell(sheet, calc, sp, { edition, slot: level }).hit ?? '')?.[1] ?? '' : '',
     });
   }
   return out.slice(0, 120);
@@ -340,7 +360,8 @@ export function saveSituation(target, ability, { sheetWhy = '' } = {}) {
 /** The same roll with twice the dice (a critical hit): "1d8+3" → "2d8+3". */
 export function critNotation(notation) {
   if (!/d/i.test(notation)) return notation;
-  return parseRoll(notation).terms.map((t, i) => `${t.sign < 0 ? '-' : i ? '+' : ''}${t.value !== undefined ? t.value : `${t.count * 2}d${t.sides}`}`).join('');
+  const { terms } = parseRoll(notation);
+  return formatTerms(terms.map((t) => (t.value !== undefined ? t : { ...t, count: t.count * 2 })));
 }
 
 const signed = (n) => (n >= 0 ? `+${n}` : `${n}`);
@@ -350,6 +371,46 @@ function rollSome(notation, random, mode = 'normal') {
   if (!/d/i.test(notation)) return { notation, total: Number(notation) || 0, result: null };
   const result = rollDice(parseRoll(notation), { mode, random });
   return { notation, total: result.total, result };
+}
+
+/**
+ * A weapon's mastery (2024 Weapon Mastery, the action's mastery from
+ * planAttack) on one target: Graze's damage on a miss; Topple's
+ * Constitution save, rolled here (condition: 'prone' on a failure, which the
+ * server puts on the token); the others as a note for the table.
+ */
+function masteryOnTarget(action, entry, t, { hit, ownType, land, rolls, random }) {
+  const m = action.mastery;
+  if (hit === false && m.property === 'graze' && m.graze > 0) {
+    entry.rolled = [{ notation: String(m.graze), type: ownType, total: m.graze }];
+    const { amount, notes } = land(entry.rolled, t);
+    entry.amount = amount;
+    entry.notes.push(`Graze: ${m.graze} damage on a miss`, ...notes);
+    entry.mastery = 'graze';
+    return;
+  }
+  if (hit !== true) return;
+  entry.mastery = m.property;
+  if (m.property === 'topple') {
+    const bonus = t.saves?.con ?? 0;
+    const save = rollDice(parseRoll(`1d20${bonus ? signed(bonus) : ''}`), { mode: 'normal', random });
+    rolls.push({ label: `${t.name}: Constitution save (Topple)`, result: save });
+    const fell = save.total < m.dc;
+    entry.topple = { total: save.total, dc: m.dc, success: !fell };
+    entry.notes.push(fell ? `Topple: Constitution save ${save.total} against DC ${m.dc}, falls prone` : `Topple: Constitution save ${save.total} against DC ${m.dc}, stays standing`);
+    if (fell) entry.condition = 'prone';
+    return;
+  }
+  const NOTE = {
+    vex: 'Vex: advantage on the attacker\'s next attack against it before the end of their next turn',
+    sap: 'Sap: disadvantage on its next attack before the attacker\'s next turn',
+    slow: 'Slow: its speed is 10 feet lower until the start of the attacker\'s next turn',
+    push: 'Push: it can be pushed 10 feet straight away (Large or smaller)',
+    cleave: 'Cleave: once a turn, attack a second creature within 5 feet of it (no modifier to the damage)',
+    nick: 'Nick: the extra Light-weapon attack can be part of the Attack action',
+    graze: '',
+  };
+  if (NOTE[m.property]) entry.notes.push(NOTE[m.property]);
 }
 
 /**
@@ -367,8 +428,10 @@ function rollSome(notation, random, mode = 'normal') {
 export function resolveAttack({ action, attacker = null, targets, mode = 'normal', riders = [], twoHands = false, random }) {
   const rolls = [];
   const damageList = twoHands && action.damage2 ? action.damage2 : action.damage;
-  const rollDamage = (crit, label, extra = []) => [...damageList, ...extra].map((p) => {
-    const r = rollSome(crit ? critNotation(p.dice) : p.dice, random);
+  // A rider with no type of its own (Sneak Attack, Rage) deals the weapon's.
+  const ownType = damageList[0]?.type ?? '';
+  const rollDamage = (crit, label, extra = []) => [...damageList, ...extra.map((x) => ({ ...x, type: x.type || ownType }))].map((p) => {
+    const r = rollSome(crit ? p.crit ?? critNotation(p.dice) : p.dice, random);
     if (r.result) rolls.push({ label: `${label}${p.type ? ` (${p.type})` : ''}`, result: r.result });
     return { notation: r.notation, type: p.type, total: r.total };
   });
@@ -388,14 +451,17 @@ export function resolveAttack({ action, attacker = null, targets, mode = 'normal
   if (action.kind === 'attack') {
     for (const t of targets) {
       const sit = attackSituation({ attacker, target: t, ranged: action.ranged, gap: t.gap ?? 5, chosen: mode });
-      const d20 = rollDice(parseRoll(`1d20${action.bonus ? signed(action.bonus) : ''}`), { mode: sit.mode, random });
+      // Riders that change the roll to hit (Great Weapon Master's −5); the d20's own rules (a halfling's Luck, Elven Accuracy).
+      const bonus = (action.bonus ?? 0) + riders.reduce((n, x) => n + (x.hit || 0), 0);
+      const d20 = rollDice(parseRoll(`1d20${action.d20 ?? ''}${bonus ? signed(bonus) : ''}`), { mode: sit.mode, random });
       rolls.push({ label: `${action.name} vs ${t.name}: to hit`, result: d20 });
       const natural = d20.natural;
-      const hit = natural === 20 ? true : natural === 1 ? false : t.ac == null ? null : d20.total >= t.ac;
-      const crit = natural === 20 || (hit === true && sit.autoCrit);
+      const critOn = action.crit_on ?? 20;
+      const hit = natural >= critOn ? true : natural === 1 ? false : t.ac == null ? null : d20.total >= t.ac;
+      const crit = natural >= critOn || (hit === true && sit.autoCrit);
       const entry = {
         id: t.id, name: t.name, ac: t.ac ?? null,
-        attack: { d20: d20.terms.find((x) => x.sides === 20).dice.map((d) => d.value), natural, bonus: action.bonus ?? 0, total: d20.total, mode: d20.mode },
+        attack: { d20: d20.terms.find((x) => x.sides === 20).dice.map((d) => d.value), natural, bonus, total: d20.total, mode: d20.mode },
         hit, crit, rolled: [], amount: 0, notes: [...sit.reasons],
       };
       if (hit !== false && damageList.length) {
@@ -403,6 +469,7 @@ export function resolveAttack({ action, attacker = null, targets, mode = 'normal
         Object.assign(entry, (({ amount, notes }) => ({ amount, notes: [...entry.notes, ...notes] }))(land(entry.rolled, t)));
       }
       if (hit === null) entry.notes.push('its AC is unknown: the DM decides');
+      if (action.mastery) masteryOnTarget(action, entry, t, { hit, ownType, land, rolls, random });
       out.targets.push(entry);
     }
     return out;

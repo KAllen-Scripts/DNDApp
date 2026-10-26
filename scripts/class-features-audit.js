@@ -3,7 +3,7 @@
  * feature the sheet knows, by edition, with what the app does with it and
  * whether that's all it needs. Made from the lists themselves
  * (packages/shared/src/class-traits.js, class-features.js,
- * subclass-features*.js, race-features.js), so run it again after changing
+ * subclass-features*.js, subclass-traits.js, race-features.js, feats.js), so run it again after changing
  * them:
  *
  *   node scripts/class-features-audit.js
@@ -14,6 +14,8 @@ import { FEATURES } from '../packages/shared/src/class-features.js';
 import { SUBCLASS_FEATURES, SUBCLASSES } from '../packages/shared/src/subclass-features.js';
 import { BOOK_SUBCLASS_FEATURES, BOOK_SUBCLASSES } from '../packages/shared/src/subclass-features-books.js';
 import { RACE_FEATURES, RACE_BY_KEY } from '../packages/shared/src/race-features.js';
+import { SUBCLASS_TRAITS } from '../packages/shared/src/subclass-traits.js';
+import { GENERAL_FEATS } from '../packages/shared/src/feats.js';
 
 const FIXED = '2026-10-22';
 /** Bugs found in the audit, by feature name: what was wrong. */
@@ -139,7 +141,7 @@ for (const [cls, rows] of byClass) {
 // ---------- Subclasses ----------
 out('## Subclasses');
 out();
-out('Subclass features with uses or numbers are rows of the Class features box (under a Subclass heading). Those marked *applied* are also worked into the numbers or rolls. Subclass features with no uses and nothing to work out (most ribbons) aren\'t listed on the sheet; the player writes them in Features & traits. That is a gap left for later (see HANDOFF.md).');
+out('Subclass features with uses or numbers are rows of the Class features box (under a Subclass heading). Those marked *applied* are also worked into the numbers or rolls. Subclass features with no uses and nothing to work out (most ribbons) are listed in Features & traits with a short summary (subclass-traits.js), unless a Class features row of that subclass has the same name.');
 out();
 const subName = new Map([...SUBCLASSES, ...BOOK_SUBCLASSES].map((s) => [s.key, s.name]));
 const subRows = [...SUBCLASS_FEATURES, ...BOOK_SUBCLASS_FEATURES];
@@ -153,6 +155,16 @@ for (const f of subRows) {
     const sub = subName.get(f.sc) ?? f.sc;
     if (!subByClass.has(f.class)) subByClass.set(f.class, []);
     subByClass.get(f.class).push({ key: `${f.id}`, cells: [nameOf(f, c), `${cap(f.class)} (${sub}) ${from}`, ed, `${rowWhat(f, c)}${APPLIED[f.id] ? `. ${APPLIED[f.id]}` : ''}.${noteOf(f, c)}`, status(nameOf(f, c), st)] });
+  }
+}
+const rowNames = new Set(subRows.map((f) => `${f.sc}:${String(nameOf(f, ctx('2014', 20))).toLowerCase()}`));
+for (const t of SUBCLASS_TRAITS) {
+  if (rowNames.has(`${t.sc}:${t.name.toLowerCase().replace(/\s*\(.*?\)/g, '')}`)) continue;
+  for (const ed of editions(t.edition)) {
+    if (!(SUBCLASSES.concat(BOOK_SUBCLASSES).find((x) => x.key === t.sc)?.editions ?? []).includes(ed)) continue;
+    const from = ed === '2024' ? Math.max(3, t.from) : t.from;
+    if (!subByClass.has(t.class)) subByClass.set(t.class, []);
+    subByClass.get(t.class).push({ key: `trait:${t.sc}:${t.name}:${from}`, cells: [t.name, `${cap(t.class)} (${subName.get(t.sc) ?? t.sc}) ${from}`, ed, `${HOW.text[0]}. ${t.text}`, status(t.name, HOW.text[1])] });
   }
 }
 for (const [cls, rows] of subByClass) {
@@ -193,11 +205,30 @@ for (const r of raceRows) {
 }
 table(mergedRace);
 
+// ---------- Feats ----------
+out('## Feats');
+out();
+out('Found by name in Features & traits (or Additional features); each is a row of the Class features box under Feats, and the numbers are worked in where the sheet works them out (feats.js).');
+out();
+const featRows = [];
+for (const f of GENERAL_FEATS) {
+  for (const ed of editions(f.edition)) {
+    const c = ctx(ed, 1);
+    const kind = val(f.kind, c) ?? 'info';
+    featRows.push([f.name, 'feat', ed, `${rowWhat(f, c).replace('Class features row', 'Class features row (Feats)')}.${noteOf(f, c)}`, /in your|\btick\b|on the attack|off-hand line/i.test(val(f.note, c) ?? '') ? 'Works (applied)' : kind === 'info' ? 'Note only' : 'Works (tracked)']);
+  }
+}
+const mergedFeats = [];
+for (const r of featRows) {
+  const twin = mergedFeats.find((m) => m[0] === r[0] && m[3] === r[3] && m[4] === r[4]);
+  if (twin) twin[2] = 'both'; else mergedFeats.push([...r]);
+}
+table(mergedFeats);
+
 out('## Still not on the sheet');
 out();
-out('- Subclass features with nothing to track or work out (most "ribbons") aren\'t listed in Features & traits yet; the player writes them in.');
-out('- Feats (Great Weapon Master, Sharpshooter, Elven Accuracy...) and the halfling\'s Luck rerolls aren\'t applied to rolls; they\'re text the player keeps.');
-out('- Two-Weapon Fighting\'s off-hand attack isn\'t its own attack line; the Two-Weapon Fighting style is chosen in Features & traits and noted on the attack.');
+out('- Feats not in feats.js (and the reminders there: War Caster, Savage Attacker, Sentinel...) are text the player keeps; the sheet doesn\'t apply them.');
+out('- A halfling\'s Luck and Elven Accuracy aren\'t applied to rolls made in Wild Shape (the beast\'s own attacks).');
 out('- The AI sheet review (Review sheet) still checks the 2014 numbers; its prompt says so.');
 
 writeFileSync(new URL('../docs/notes/class-features-audit.md', import.meta.url), `${lines.join('\n')}\n`);

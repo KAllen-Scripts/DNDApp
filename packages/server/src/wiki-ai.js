@@ -111,9 +111,10 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
 
   const toProposal = (r) => r && { ...json.parse(r.data, {}), status: r.status };
 
+  // In the order they were made (rowid): several are made in the same millisecond, and their ids are random.
   const list = (cid, status) =>
     db
-      .prepare(`SELECT * FROM wiki_proposals WHERE campaign_id = ? ${status ? 'AND status = ?' : ''} ORDER BY created_at, id`)
+      .prepare(`SELECT * FROM wiki_proposals WHERE campaign_id = ? ${status ? 'AND status = ?' : ''} ORDER BY created_at, rowid`)
       .all(...[cid, status].filter((x) => x != null))
       .map(toProposal);
 

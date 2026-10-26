@@ -80,7 +80,7 @@ test('a player picks an enemy, presses Attack and taps their weapon: the server 
     page.click(actionButton(page, 'Rapier'));
     await page.waitFor(() => page.$('#map-attack-cards .attack-card'), { what: 'the card' });
     const sent = page.requests.filter((r) => r.path.endsWith('/attack')).at(-1).body;
-    assert.deepEqual(sent, { attacker: sent.attacker, action: sent.action, target: goblin.id, mode: 'normal', riders: ['sneak_attack'], two_hands: false });
+    assert.deepEqual(sent, { attacker: sent.attacker, action: sent.action, target: goblin.id, mode: 'normal', riders: ['sneak_attack'], rider_options: {}, two_hands: false });
     assert.match(page.text('#map-attack-cards'), /Thorin · Rapier · \+ Sneak Attack/);
     assert.match(page.text('#map-attack-cards'), /Goblin: 20 \(14, 3\), hit, 13 piercing damage/);
     assert.doesNotMatch(page.text('#map-attack-cards'), /AC 15/, 'players do not see its AC');
