@@ -1,3 +1,5 @@
+import { normalizeCustomBackgrounds } from './backgrounds.js';
+
 /**
  * A campaign's settings, chosen by its DM and used by the server and the page.
  *
@@ -10,6 +12,9 @@
  * the group's Player's Handbook in the books folder, else 2014). Rests, Ask's
  * rules answers and lookups in the books follow it. The character sheet's own
  * rules are 2014 whatever it says (a 2024 sheet is a job for later).
+ *
+ * backgrounds: the DM's own backgrounds (backgrounds.js `normalizeCustomBackground`),
+ * suggested on every player's sheet beside the books' ones.
  */
 export const WEIGHT_RULES = { capacity: 'Carrying capacity (PHB)', variant: 'Variant encumbrance (PHB)', ignore: 'Ignore weight limits' };
 
@@ -56,7 +61,7 @@ export const normalizeAttackSettings = (a = {}) => ({
   damage: a && a.damage in ATTACK_DAMAGE ? a.damage : DEFAULT_ATTACKS.damage,
   show_ac: typeof a?.show_ac === 'boolean' ? a.show_ac : DEFAULT_ATTACKS.show_ac,
 });
-export const DEFAULT_SETTINGS = Object.freeze({ weight: 'capacity', edition: null, clock: START_CLOCK, travel: DEFAULT_TRAVEL, attacks: DEFAULT_ATTACKS });
+export const DEFAULT_SETTINGS = Object.freeze({ weight: 'capacity', edition: null, clock: START_CLOCK, travel: DEFAULT_TRAVEL, attacks: DEFAULT_ATTACKS, backgrounds: Object.freeze([]) });
 /** The clock goes at most this far (about 27,000 years of days), so it stays a plain number. */
 export const MAX_CLOCK = 1440 * 10_000_000;
 
@@ -68,6 +73,7 @@ export function normalizeSettings(s = {}) {
     clock: Number.isInteger(s?.clock) && s.clock >= 0 && s.clock <= MAX_CLOCK ? s.clock : DEFAULT_SETTINGS.clock,
     travel: normalizeTravel(s?.travel),
     attacks: normalizeAttackSettings(s?.attacks),
+    backgrounds: normalizeCustomBackgrounds(s?.backgrounds),
   };
 }
 

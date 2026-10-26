@@ -982,7 +982,7 @@ test('campaign settings: the DM ignores weight limits from Settings', async () =
     assert.equal(page.el('#setting-weight').value, 'capacity');
     page.type('#setting-weight', 'ignore');
     await page.waitFor(() => /Saved/.test(page.text('#settings-dialog')), { what: 'the setting to save' });
-    assert.deepEqual(t.store.getSettings(t.campaign.id), { weight: 'ignore', edition: null, clock: 480, travel: { time: 'clock', roads: true, terrain: true, vehicles: true, marches: true, encounters: true }, attacks: { on: true, damage: 'auto', show_ac: false } });
+    assert.deepEqual(t.store.getSettings(t.campaign.id), { weight: 'ignore', edition: null, clock: 480, travel: { time: 'clock', roads: true, terrain: true, vehicles: true, marches: true, encounters: true }, attacks: { on: true, damage: 'auto', show_ac: false }, backgrounds: [] });
   });
 });
 

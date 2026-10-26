@@ -15,6 +15,7 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-26 | The Characters strip above the sheet showed "null" after it when its list was shut and there was no message (found by the page tests' null check when the tidier pages work was merged). | `web/test/characters.test.js`: regression: the Characters strip with its list shut and no message shows no "null" |
 | 2026-10-22 | The wiki's proposals from one AI run came back in a random order (they were made in the same millisecond and then sorted by their random ids), so the DM's list shuffled and a test failed now and then. | `server/test/wiki-ai.test.js`: regression: proposals made in one run are listed in the order the AI gave them (they shared a millisecond and were sorted by their random ids) |
 | 2026-10-22 | The new Companions box on the sheet showed "null" under its text when it had no note to show (found by the page tests' null check when the companions work was merged). | `web/test/sheet.test.js`: regression: the Companions box with no companions shows no "null" |
 | 2026-10-21 | The Sheet review showed "nullnull" when nothing was against the rules (empty parts were put into the page as null). | `web/test/sheet.test.js`: regression: a Sheet review with nothing against the rules shows no "null" in its box |

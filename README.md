@@ -59,7 +59,7 @@ A login lasts 30 days from when it was last used (`LOGIN_DAYS`). After 10 wrong 
 
 ### Character sheets
 
-Each player has a **Sheet** tab (the DM has Creatures instead, and no sheet), laid out like the official 5e sheet (core stats, then character details, then spells). It's private to them, saved to the server a moment after they stop typing, and archived.
+Each player has a **Sheet** tab (the DM has Creatures instead, and no sheet), laid out like the official 5e sheet (core stats, then character details, then spells). It's private to them, saved to the server a moment after they stop typing, and archived. A player can have **several characters** and plays one at a time: the strip above the sheet says who they play now, and **Characters** lists them with **New character**, **Make active**, **Rename** and **Delete**. The active one is their sheet, their token on maps, the one rests and purchases change and the one the DM sees; the others are kept, private to them.
 
 - **Automatic values** (modifiers, proficiency bonus, saves, skills, passive Perception, initiative, AC (from the armour and shield equipped on the Inventory tab, or unarmoured), speed, HP, hit dice, spell save DC and attack bonus, spell slots) are worked out from the scores, classes and race using the 2014 Player's Handbook rules. Anything a player types into one of those boxes becomes **their own value**: it's marked, never changed by the rules, and stays until they click ↺.
 - **Upload a sheet**: a PDF (filled-in form, typed or scanned), a photo, a text file, or a sheet downloaded from here. The AI copies it in; numbers on their sheet that differ from the rules are kept as their own values. The uploaded file is archived as it was.
@@ -80,7 +80,9 @@ The Hit dice box on a player's sheet has a row per die size (a Fighter 3 / Wizar
 
 Players have an **Inventory** tab: look an item up by name (PHB weapons and armour straight from the tables, anything else from the books or the AI, never the DM's own items) or add one by hand, then equip it. Equipped weapons show in Attacks with their to-hit and damage worked out; equipped armour and a shield set the AC; weight, charges, attunement and magic items' effects on the sheet are tracked there too. The DM's Items tab shows what each player has **equipped** (with their AC, weight carried and attunements), not the rest of their sheet.
 
-The DM's **Campaign settings** (in the account menu under their name, top right) holds the campaign's settings: the **Rules edition** (2014 or 2024: rests, Ask's rules answers and lookups in the books follow it; the character sheet itself always uses the 2014 rules for now) and **Weight limits** (carrying capacity, variant encumbrance, or ignore).
+The DM's **Campaign settings** (in the account menu under their name, top right) holds the campaign's settings: the **Rules edition** (2014 or 2024: rests, Ask's rules answers and lookups in the books follow it; the character sheet itself always uses the 2014 rules for now) and **Weight limits** (carrying capacity, variant encumbrance, or ignore). It also holds **Your own backgrounds**: the DM's own, with their skills, tools, languages, equipment, gold and a feature or origin feat, which every player's sheet then suggests.
+
+On the sheet, the **Background** box suggests the books' backgrounds for the campaign's edition (and the DM's own). Pick one and it fills in the sheet: its skills ticked, its feature or feat in Features & traits, its tools and languages, and equipment and gold only where they're empty. A note says what changed, with Undo.
 
 ### Dice
 
@@ -216,7 +218,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | POST | `/logout` | Ends this login |
 | GET | `/me` | Your account and campaigns (each with its `settings`) |
 | GET | `/campaigns/:cid` | Campaign, your role and character, and its `settings` |
-| PATCH | `/campaigns/:cid/settings` | Change the campaign's settings (DM) `{weight?: capacity \| variant \| ignore, edition?: 2014 \| 2024 \| null, travel?: {time?: clock \| skip \| none, roads?, terrain?, vehicles?, marches?, encounters?}, attacks?: {on?, damage?: auto \| dm, show_ac?}}` (`null`: not chosen, follow `REST_RULES` or the books' Player's Handbook; travel switches change one at a time) → the settings; sent live as `settings` |
+| PATCH | `/campaigns/:cid/settings` | Change the campaign's settings (DM) `{weight?: capacity \| variant \| ignore, edition?: 2014 \| 2024 \| null, travel?: {time?: clock \| skip \| none, roads?, terrain?, vehicles?, marches?, encounters?}, backgrounds?: [{id?, name, skills, tools, languages, equipment, gold, feature: {name, text} \| null, abilities: [3] \| [], feat}] (the whole list, up to 50), attacks?: {on?, damage?: auto \| dm, show_ac?}}` (`null`: not chosen, follow `REST_RULES` or the books' Player's Handbook; travel switches change one at a time) → the settings; sent live as `settings` |
 | GET | `/campaigns/:cid/members` | List members (DM) |
 | GET / POST | `/admin/users` | List accounts (with campaigns, logins, status) / create `{name, password}` (admin) |
 | PUT | `/admin/users/:uid/campaigns` | Set exactly which campaigns an account can access `{campaigns: [{campaign_id, role, character_name?}]}` (admin). `POST /admin/users` takes the same optional `campaigns` |
@@ -254,7 +256,10 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/conversations[/:id]` | Your chats (pinned first, then most recent) |
 | PATCH | `/campaigns/:cid/conversations/:id` | `{ pinned?, title? }`: pin/unpin or rename one of your chats |
 | DELETE | `/campaigns/:cid/conversations/:id` | Delete one of your chats (its questions and answers are erased; it still counts toward the hourly limit) |
-| GET / PUT | `/campaigns/:cid/sheet` | Your character sheet (blank, version 0, if none) / save it `{sheet, version}`. 409 `{error, current}` if it was saved elsewhere since `version`. 400 if it adds an attack with a PHB weapon that isn't in the sheet's inventory (one the saved sheet already had may stay). Players only: 403 for the DM (who has Creatures), as for all sheet and character picture routes |
+| GET / PUT | `/campaigns/:cid/sheet` | Your active character's sheet `{sheet, version, number, edition}` (blank, version 0, if none) / save it `{sheet, version, character?}`. 409 `{error, current}` if it was saved elsewhere since `version`, or `{…, switched: true}` if `character` isn't the active one any more. 400 if it adds an attack with a PHB weapon that isn't in the sheet's inventory (one the saved sheet already had may stay). Players only: 403 for the DM (who has Creatures), as for all sheet and character picture routes |
+| GET / POST | `/campaigns/:cid/characters` | Your characters `{characters: [{number, name, summary, active, version, updated_at}], active}` / make a new one `{name, active?}` (made active unless `active: false`; 201 with the list, `number` and, when active, its `sheet`). Players only, only ever your own |
+| POST | `/campaigns/:cid/characters/:n/active` | Play character `n`: it becomes your sheet everywhere. Replies with the list and its `sheet` |
+| PATCH / DELETE | `/campaigns/:cid/characters/:n` | Rename `{name}` / delete one you aren't playing (400 for the active one; the archive keeps it) |
 | POST | `/campaigns/:cid/sheet/import` | Upload a sheet `{filename, data (base64), version?}`: PDF, image, text, or a downloaded sheet. Replies with the saved sheet and the AI's `notes` |
 | GET | `/campaigns/:cid/character/pictures` | Your token and full picture `{token, picture}` (each null or `{key, width, height}`) |
 | PUT / DELETE | `/campaigns/:cid/character/token` | Upload your token picture `{filename?, data (base64)}` (shown on your token on maps) / stop using it |

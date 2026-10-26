@@ -8,7 +8,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // v5 only added the character_sheets table, v7 the maps table, v8 map_pins, v9 character_pictures and v10 map_explored (all created by schema.sql), so they need no migration.
 // v11 added handouts, rolls and archivist_marks (created by schema.sql), and edited_at/deleted_at to player_notes.
 // v12 added creatures, v13 rests, v14 items and merchants, v15 campaign_settings, v16 map_assets, v17 map_stamps, v18 wiki_pages, v19 wiki_proposals and wiki_chronicle (all created by schema.sql).
-const SCHEMA_VERSION = 19;
+// v20: players have several characters (character_sheets and character_pictures get a character number; migrateV19).
+const SCHEMA_VERSION = 20;
 
 /**
  * @param {string} file  path to the SQLite file, or ':memory:'
@@ -52,6 +53,53 @@ function migrateBeforeSchema(db) {
   if (version < 4) migrateV3(db);
   if (version < 6) migrateV5(db, has);
   if (version < 11) migrateV10(db, has);
+  if (version < 20) migrateV19(db, has);
+}
+
+/**
+ * v19 -> v20: a player can have several characters, one active. Each existing
+ * sheet (and its pictures) becomes that player's first character, active.
+ */
+function migrateV19(db, has) {
+  const cols = (table) => db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  db.transaction(() => {
+    if (has('character_sheets') && !cols('character_sheets').includes('number')) {
+      db.exec(`
+        CREATE TABLE character_sheets_v20 (
+          campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+          user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          number       INTEGER NOT NULL DEFAULT 1,
+          data         TEXT NOT NULL,
+          version      INTEGER NOT NULL,
+          updated_at   TEXT NOT NULL,
+          active       INTEGER NOT NULL DEFAULT 1,
+          activated_at TEXT,
+          deleted_at   TEXT,
+          PRIMARY KEY (campaign_id, user_id, number)
+        );
+        INSERT INTO character_sheets_v20 (campaign_id, user_id, number, data, version, updated_at, active)
+          SELECT campaign_id, user_id, 1, data, version, updated_at, 1 FROM character_sheets;
+        DROP TABLE character_sheets;
+        ALTER TABLE character_sheets_v20 RENAME TO character_sheets;
+      `);
+    }
+    if (has('character_pictures') && !cols('character_pictures').includes('number')) {
+      db.exec(`
+        CREATE TABLE character_pictures_v20 (
+          campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+          user_id     INTEGER NOT NULL REFERENCES users(id),
+          number      INTEGER NOT NULL DEFAULT 1,
+          data        TEXT NOT NULL,
+          updated_at  TEXT NOT NULL,
+          PRIMARY KEY (campaign_id, user_id, number)
+        );
+        INSERT INTO character_pictures_v20 (campaign_id, user_id, number, data, updated_at)
+          SELECT campaign_id, user_id, 1, data, updated_at FROM character_pictures;
+        DROP TABLE character_pictures;
+        ALTER TABLE character_pictures_v20 RENAME TO character_pictures;
+      `);
+    }
+  })();
 }
 
 /** v10 -> v11: players can edit and delete their notes; sessions remember when they were processed. */

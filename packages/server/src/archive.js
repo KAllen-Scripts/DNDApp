@@ -12,7 +12,10 @@
  *     corrections.jsonl                DM corrections, append-only
  *     player-notes/<YYYY-MM-DD>.jsonl  private player notes, append-only; an edit or a
  *                                       delete is a later line with the same id
- *     character-sheets/<user id>.jsonl each save's changes to a player's sheet, append-only
+ *     character-sheets/<user id>.jsonl each save's changes to a player's first character's sheet, append-only
+ *     character-sheets/<user id>-<n>.jsonl  the same for their character number n (2, 3, ...)
+ *     character-sheets/<user id>.characters.jsonl  which of their characters is active and which they deleted
+ *                                       (the whole record each change, append-only)
  *     character-sheets/uploads/        sheets players uploaded, as uploaded
  *     maps/<map id>/image.<ext>        a map the DM imported, as uploaded
  *     maps/<map id>/changes.jsonl      each change to that map, append-only
@@ -20,6 +23,7 @@
  *     maps/<map id>/pins/<user id>.jsonl  someone's private pins on it (the whole list each time)
  *     characters/<user id>/<kind>-<ts>.<ext>  a player's token or full picture of their character, as uploaded
  *     characters/<user id>/pictures.jsonl     which of them are in use (the whole record each time)
+ *     characters/<user id>/pictures-<n>.jsonl the same for their character number n (2, 3, ...)
  *     handouts/<id>/<picture file>     a handout's picture, as uploaded
  *     handouts/<id>/changes.jsonl      the whole handout after each change, append-only
  *     maps/<map id>/tokens/<file>      a picture the DM gave a token (NPCs, enemies), as uploaded
@@ -70,6 +74,14 @@ const libraryDir = (folder) => {
   if (!LIBRARY_FOLDERS.includes(folder)) throw new Error(`Bad library folder: ${folder}`);
   return folder;
 };
+const characterNumber = (n) => {
+  if (!Number.isInteger(Number(n)) || Number(n) <= 0) throw new Error(`Bad character number: ${n}`);
+  return Number(n);
+};
+/** A character's sheet file: <user id>.jsonl for the first, <user id>-<n>.jsonl for the others. */
+const sheetFile = (userId, number = 1) => (characterNumber(number) === 1 ? `${userDir(userId)}.jsonl` : `${userDir(userId)}-${characterNumber(number)}.jsonl`);
+/** A character's pictures record: pictures.jsonl for the first, pictures-<n>.jsonl for the others. */
+const picturesFile = (number = 1) => (characterNumber(number) === 1 ? 'pictures.jsonl' : `pictures-${characterNumber(number)}.jsonl`);
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
 export const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 
@@ -181,10 +193,17 @@ export function createArchive(root) {
       return readLines(path.join(campaignDir(slug), 'player-notes', `${date}.jsonl`));
     },
 
-    appendSheetChanges: (slug, userId, entry) =>
-      appendLine(path.join(campaignDir(slug), 'character-sheets', `${Number(userId)}.jsonl`), entry),
+    /** A save's changes to one of a player's characters (number 1, their first, keeps the file it always had). */
+    appendSheetChanges: (slug, userId, entry, number = 1) =>
+      appendLine(path.join(campaignDir(slug), 'character-sheets', sheetFile(userId, number)), entry),
 
-    readSheetChanges: (slug, userId) => readLines(path.join(campaignDir(slug), 'character-sheets', `${userDir(userId)}.jsonl`)),
+    readSheetChanges: (slug, userId, number = 1) => readLines(path.join(campaignDir(slug), 'character-sheets', sheetFile(userId, number))),
+
+    /** Which of a player's characters is active and which they deleted: { saved_at, by, active, deleted: [{ number, at }] }, the whole record each time. */
+    appendCharacterList: (slug, userId, entry) =>
+      appendLine(path.join(campaignDir(slug), 'character-sheets', `${userDir(userId)}.characters.jsonl`), entry),
+
+    readCharacterList: (slug, userId) => readLines(path.join(campaignDir(slug), 'character-sheets', `${userDir(userId)}.characters.jsonl`)),
 
     /** Keep an uploaded sheet file exactly as uploaded. @returns {string} its file name */
     saveSheetUpload(slug, userId, filename, buf) {
@@ -220,7 +239,7 @@ export function createArchive(root) {
 
     characterImagePath: (slug, userId, file) => path.join(campaignDir(slug), 'characters', userDir(userId), path.basename(file)),
 
-    appendCharacterPictures: (slug, userId, entry) => appendLine(path.join(campaignDir(slug), 'characters', userDir(userId), 'pictures.jsonl'), entry),
+    appendCharacterPictures: (slug, userId, entry, number = 1) => appendLine(path.join(campaignDir(slug), 'characters', userDir(userId), picturesFile(number)), entry),
 
     /** Keep a handout's picture exactly as uploaded (never replaced). */
     saveHandoutImage(slug, id, file, buf) {
@@ -316,8 +335,17 @@ export function createArchive(root) {
         const sheets = fs.existsSync(sheetsDir)
           ? fs
               .readdirSync(sheetsDir)
-              .filter((f) => /^\d+\.jsonl$/.test(f))
-              .map((f) => ({ user_id: Number(f.split('.')[0]), entries: readLines(path.join(sheetsDir, f)) }))
+              .map((f) => f.match(/^(\d+)(?:-(\d+))?\.jsonl$/))
+              .filter(Boolean)
+              .map((m) => ({ user_id: Number(m[1]), number: Number(m[2] ?? 1), entries: readLines(path.join(sheetsDir, m[0])) }))
+          : [];
+        // Which character each player has active and which they deleted (players with only one have no file).
+        const characterLists = fs.existsSync(sheetsDir)
+          ? fs
+              .readdirSync(sheetsDir)
+              .map((f) => f.match(/^(\d+)\.characters\.jsonl$/))
+              .filter(Boolean)
+              .map((m) => ({ user_id: Number(m[1]), entries: readLines(path.join(sheetsDir, m[0])) }))
           : [];
         const mapsDir = path.join(campaignDir(slug), 'maps');
         const maps = fs.existsSync(mapsDir)
@@ -340,7 +368,10 @@ export function createArchive(root) {
           ? fs
               .readdirSync(charactersDir)
               .filter((d) => /^\d+$/.test(d))
-              .map((d) => ({ user_id: Number(d), entries: readLines(path.join(charactersDir, d, 'pictures.jsonl')) }))
+              .flatMap((d) => fs.readdirSync(path.join(charactersDir, d))
+                .map((f) => f.match(/^pictures(?:-(\d+))?\.jsonl$/))
+                .filter(Boolean)
+                .map((m) => ({ user_id: Number(d), number: Number(m[1] ?? 1), entries: readLines(path.join(charactersDir, d, m[0])) })))
           : [];
         const handoutsDir = path.join(campaignDir(slug), 'handouts');
         const handouts = fs.existsSync(handoutsDir)
@@ -378,6 +409,7 @@ export function createArchive(root) {
           corrections: readLines(path.join(campaignDir(slug), 'corrections.jsonl')),
           playerNotes,
           sheets,
+          characterLists,
           maps,
           characters,
           handouts,

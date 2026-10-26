@@ -276,5 +276,18 @@ export function createAuth({ db, archive, loginDays = 30, maxFailedLogins = 10, 
       ).run(campaignId, userId, role, characterName);
       archiveMembers(campaignId);
     },
+
+    /**
+     * The character a player plays in a campaign changed (they made another of
+     * their characters active, or renamed the active one): attendance, speaker
+     * names, Ask and the archivist name them by it. An empty name changes nothing.
+     */
+    setCharacterName(campaignId, userId, name) {
+      const n = String(name ?? '').trim().slice(0, 100);
+      const m = db.prepare('SELECT role, character_name FROM memberships WHERE campaign_id = ? AND user_id = ?').get(campaignId, userId);
+      if (!n || !m || m.role === 'dm' || m.character_name === n) return;
+      db.prepare('UPDATE memberships SET character_name = ? WHERE campaign_id = ? AND user_id = ?').run(n, campaignId, userId);
+      archiveMembers(campaignId);
+    },
   };
 }

@@ -26,3 +26,16 @@ Not in the folder yet, with subclasses or races the sheet would want: Sword Coas
 **Companions' stat blocks (2026-10-21, `shared/src/companions.js`):** Steel Defender and the 2014 Primal Companion beasts checked against Tasha's PDF; the 2024 Primal Companion beasts, Otherworldly Steed and Find Familiar list against the PHB 2024 PDF; the Drakewarden's drake from Claude's knowledge of Fizban's (not in the session's folder); the 2014 Find Familiar and Find Steed lists and the Ranger's Companion from the PHB 2014. Magic items' summons and spells (Bag of Tricks, Figurines, Horn of Valhalla, Wand and Necklace of Fireballs…) come from a summary of the DMG 2014 and 2024 made on the owner's PC (`/mnt/project-files/feedback-2026-10-21/dmg-summoning-items.md`), not the PDFs themselves.
 
 **Feats and subclass text features (2026-10-26, `shared/src/feats.js`, `subclass-traits.js`):** the general feats that change numbers or rolls (Alert, Tough, Lucky, Great Weapon Master, Sharpshooter, War Caster, Savage Attacker, Dual Wielder, Mobile / Speedy, Observant, Durable, Crossbow Expert, Polearm Master, Sentinel, Heavy Armor Master, Defensive Duelist, Tavern Brawler) from the PHB 2014 (pages checked) and the PHB 2024 (pages checked for Alert, Lucky, Savage Attacker, Tavern Brawler and Tough; the others say "ch. 5"). The subclasses' features with nothing to track, short summaries in our own words, from the PHB 2014 and 2024 text and Xanathar's and Tasha's; the other books' (Fizban's, the 2014 DMG, Glory of the Giants) from Claude's knowledge.
+## Backgrounds (the sheet's Background box)
+
+Which books have been read for the backgrounds the sheet suggests and applies (`packages/shared/src/backgrounds.js`, 2026-10-22). Each row there is a short summary (skills, tools, languages, equipment, gold, and the feature's or origin feat's name with a line on what it does), not the book's text.
+
+| Book | Backgrounds | Notes |
+|---|---|---|
+| Player's Handbook (2014) | Done (2026-10-22), from the PDF: all 13, and the variants Spy, Gladiator, Guild Merchant, Knight and Pirate | Personality tables aren't copied. |
+| Player's Handbook (2024) | Done (2026-10-22), from the PDF: all 16, with their three abilities, origin feat, tool, and equipment (option A; option B is 50 GP) | 2024 languages come from the character, not the background. |
+| Bigby Presents: Glory of the Giants | Giant Foundling and Rune Carver, from Claude's knowledge | Not in the staged folder (and the copy noted above is a picture-only scan): check them against the book. |
+| The Book of Many Things | Rewarded and Ruined: skills and origin feat only, from Claude's knowledge | The PDF in the folder only names them; check the tools and equipment against the book. |
+| Xanathar's, Tasha's, Fizban's, the DMGs, Monsters of the Multiverse, Volo's, Tome of Foes, the Monster Manuals | Nothing to add | No backgrounds. |
+
+Not in the folder yet, with backgrounds the sheet would want: Sword Coast Adventurer's Guide, Eberron, Wildemount, Theros, Ravenloft, Strixhaven, Spelljammer, Planescape. Until then the DM can make them as their own backgrounds in Campaign settings.
