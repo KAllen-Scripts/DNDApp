@@ -275,6 +275,8 @@ test("a halfling's Luck: their d20 rolls reroll 1s; the Lucky feat needs its nam
   const feat = (s, edition) => featureRows(s, { edition, values: computeSheet(s, { edition }).values }).find((r) => r.id === 'feat_lucky');
   assert.equal(feat(halfling), undefined);
   assert.equal(feat({ ...halfling, features: 'Feat: Lucky' }).max, 3);
+  // The line a 2024 background adds (backgrounds.js) counts too.
+  assert.ok(feat({ ...halfling, features: 'Origin feat: Lucky (Wayfarer background).' }));
   const human = sheetWith({ race: 'Human', classes: [{ name: 'Fighter', level: 5 }], features: 'Lucky' });
   assert.equal(feat(human, '2024').max, 3);
   assert.equal(feat(human).race, 'Feat');
