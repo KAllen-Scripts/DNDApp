@@ -1606,7 +1606,7 @@ The owner (2026-10-21 feedback, item 2): "some way of managing attacks and such 
 - Tests: shared `creation-help.test.js`, web `creation-help.test.js`.
 
 ### 2026-10-26: Tests that failed now and then under load
-- **Wiki proposals' order.** `wiki-ai.js` sorted proposals by `created_at, id`, and the ids are random, so proposals written in the same millisecond came back shuffled. That was behind both the server's "wiki AI: after each session…" test and the web's "the AI's changes wait in a list…" test failing at random. It sorts by `created_at, rowid` now (the order they were written; a restore from the archive writes them in order too). This was also a real bug: the DM's list could shuffle.
+- **Wiki proposals' order** was already fixed on main (PR #96), behind both the server's "wiki AI: after each session…" test and the web's "the AI's changes wait in a list…" test failing at random.
 - **Dice after a page closed.** In the page tests, the default Deluxe dice load Three.js and then fail (no WebGL in jsdom), which redraws the dice settings. Under load that landed after the page had closed ("document is not defined", seen in the map companions test). `dice.js` has `rollersLoaded()`, and `test/page.js` waits for it when a page closes.
 - **Bag of Tricks.** `item-actions.test.js` asserted more than 1 hit point, but the weasel (a 1 on the d8) has 1. It now checks the SRD's own hit points; a regression test forces the weasel.
 - Checked by running each test 16–32 times, 8–16 at once, and the web suite twice beside the server suite. The creatures tab's "Add token offers the DM's creatures" failure seen once could not be reproduced (24 runs at 12 at once, and full runs under load); no change for it.

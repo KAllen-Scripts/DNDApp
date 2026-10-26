@@ -4,7 +4,7 @@
  * approves. Who each proposed part is available to comes from the records'
  * known_by, never from the AI.
  */
-import { test, mock } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { setup, createFakeLLM, fakeEmbedder, SAMPLE, SAMPLE_2 } from './helpers.js';
@@ -95,32 +95,6 @@ test('wiki AI: after each session it proposes changes; each part reaches only th
     assert.equal(res.approved, 1);
     assert.equal(res.proposals, 0);
     assert.equal((await t.request('POST', `${base}/proposals/${reveal.id}/approve`, { body: {} })).statusCode, 400, 'already dealt with');
-  } finally {
-    await t.cleanup();
-  }
-});
-
-// Proposals made in the same millisecond came back in a random order (sorted by their random ids), so the
-// DM's list shuffled and the test above failed now and then under load.
-test('regression: proposals made in the same millisecond keep the order the AI gave them', async () => {
-  const titles = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot'];
-  const llm = createFakeLLM({
-    wiki: ({ prompt }) => ({ changes: titles.map((title) => change({ action: 'new_page', new_page: { title, kind: 'place', aliases: [], parent_title: null, sections: [{ heading: '', text: `${title}.`, sources: [idIn(prompt, 'The mill')] }] } })) }),
-  });
-  const t = await setup({ llm });
-  try {
-    const cid = t.campaign.id;
-    await t.kb.create(cid, 'test', { kind: 'place', title: 'The mill', body: 'North of Brindle.' });
-    // Every proposal gets the same time, as when the server is fast.
-    mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-10-21T12:00:00Z') });
-    try {
-      assert.equal((await t.request('POST', `/campaigns/${cid}/wiki/proposals/run`, { body: {} })).statusCode, 200);
-      await t.jobs.idle();
-    } finally {
-      mock.timers.reset();
-    }
-    const { proposals } = (await t.request('GET', `/campaigns/${cid}/wiki/proposals`)).json();
-    assert.deepEqual(proposals.map((p) => p.title), titles);
   } finally {
     await t.cleanup();
   }
