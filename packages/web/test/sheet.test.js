@@ -1220,3 +1220,20 @@ test('class features on the sheet: Sneak Attack ticked under a weapon adds its d
     assert.equal(page.$$('#sheet textarea').find((x) => x.getAttribute('aria-label') === 'Features & traits').value, 'Expertise: Stealth and thieves\u2019 tools.');
   });
 });
+
+test("feats and subclass features on the sheet: a feat named in Features & traits gets a Feats row, a Champion's Remarkable Athlete is listed, a halfling's d20 rolls reroll 1s", async () => {
+  const before = async (t) => {
+    await t.request('PUT', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token, body: { sheet: { ...emptySheet(), race: 'Lightfoot Halfling', classes: [{ name: 'Fighter', subclass: 'Champion', level: 7 }], features: 'Feat: Great Weapon Master' }, version: 0 } });
+  };
+  await withPage(sheetPage({ before }), async (page) => {
+    page.click('[data-tab=sheet]');
+    await page.waitFor(() => page.$('#sheet .cf-feats [data-feature="feat_great_weapon_master"]'), { what: 'the Feats row' });
+    const traits = page.$$('#sheet .auto-traits li').map((li) => li.querySelector('strong').textContent);
+    assert.ok(traits.includes('Remarkable Athlete'), traits.join(', '));
+    assert.ok(!traits.includes('Improved Critical'), 'a Class features row, not listed twice');
+    const save = page.$$('#sheet button.row-name').find((b) => /Strength/.test(b.textContent));
+    page.click(save);
+    await page.settle();
+    assert.match(page.requests.filter((r) => r.path.endsWith('/roll')).at(-1).body.notation, /^1d20ro1/);
+  });
+});
