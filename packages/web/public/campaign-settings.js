@@ -6,6 +6,7 @@
 import { api, h } from './api.js';
 import { ATTACK_DAMAGE, EDITIONS, TRAVEL_PARTS, TRAVEL_TIME, WEIGHT_RULES, normalizeSettings } from './shared/settings.js';
 import { setSheetSettings } from './sheet.js';
+import { backgroundsSection } from './campaign-backgrounds.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -41,11 +42,14 @@ function openDialog() {
   const save = async (patch, done) => {
     try {
       const saved = await state.guarded(() => api('PATCH', `/campaigns/${state.campaignId}/settings`, patch));
-      if (!saved) return;
+      if (!saved) return false;
       settingsHeard(saved);
       result.textContent = done;
+      backgrounds.draw();
+      return true;
     } catch (err) {
       result.textContent = `Couldn't save that: ${err.message}`;
+      return false;
     }
   };
   const help = h('p', { class: 'muted small' }, WEIGHT_HELP[state.settings.weight]);
@@ -83,6 +87,8 @@ function openDialog() {
   attackOn.addEventListener('change', () => save({ attacks: { on: attackOn.checked } }, attackSaved));
   attackDamage.addEventListener('change', () => save({ attacks: { damage: attackDamage.value } }, attackSaved));
   attackAc.addEventListener('change', () => save({ attacks: { show_ac: attackAc.checked } }, attackSaved));
+  // The DM's own backgrounds (campaign-backgrounds.js): every player's sheet suggests them.
+  const backgrounds = backgroundsSection({ list: () => state.settings.backgrounds, save: (list, done) => save({ backgrounds: list }, done) });
   dialog.replaceChildren(
     h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => e.preventDefault() },
       h('h2', {}, 'Campaign settings'),
@@ -99,6 +105,7 @@ function openDialog() {
       h('label', { class: 'fld' }, h('span', {}, 'Damage from players\u2019 attacks lands'), attackDamage),
       h('label', { class: 'check' }, attackAc, ' Players see an enemy\u2019s AC on the result (otherwise just hit or miss)'),
       h('p', { class: 'muted small' }, 'The server rolls to hit against AC, the saves and the damage, and changes the hit points. You can undo any attack from its card or the Attack log.'),
+      backgrounds.el,
       result,
       h('div', { class: 'map-dialog-actions' }, h('span', { class: 'spacer' }), h('button', { type: 'button', class: 'primary', onclick: () => dialog.close() }, 'Done')),
     ),
