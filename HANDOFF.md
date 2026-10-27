@@ -1649,6 +1649,7 @@ The owner (2026-10-21 feedback, item 2): "some way of managing attacks and such 
 - The AI never rewrites players' parts: `update_section` skips them, Expand and Tidy refuse them, a set_fact never replaces their tie, and its instructions say so. `PIPELINE_VERSION` 34.
 - Not yet: pictures in players' lore (the wiki's picture upload is the DM's); changing facts and events from the page (the API does it).
 - Tests: `server/test/wiki-lore.test.js` (2), `web/test/wiki-lore.test.js` (2).
+- End of stage 6: regression tests and the full `npm test` pass (shared 322, server 229, web 280).
 
 ### 2026-10-27: The wiki's space, stage 6b: character pages
 - A page can be a player's character's: `player` on the page (`src/wiki.js`; one page per player, only a campaign's player; `POST`/`PUT …/wiki` take it). Waiting lists **Character pages**, one button for each character with a name and no page (`characters` from `GET …/wiki/proposals`); `POST …/wiki/characters {player}` makes the page: the character's name, kind `character`, for everyone, with a copy of their token picture. They aren't AI proposals, so the AI's counts and Approve all are unchanged.
