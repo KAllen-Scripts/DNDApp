@@ -78,7 +78,7 @@ test('wiki web: a player gets no hidden page and no line from a part they cannot
     assert.deepEqual(sam.lines.map((l) => l.labels.join('/') || l.kind).sort(), ['Rival', 'mention']);
     assert.doesNotMatch(text, new RegExp(`${secret.id}|Masked|Secret ally|Will betray|Ilsa|available`));
     assert.equal((await t.request('GET', `${base}/web?around=${secret.id}&as=${t.sam.id}`)).json().around, null, 'a hidden page in the middle is ignored');
-    assert.equal((await t.request('GET', `${base}/web`, { as: t.sam.token })).statusCode, 403);
+    assert.deepEqual((await t.request('GET', `${base}/web`, { as: t.sam.token })).json(), (await t.request('GET', `${base}/web?as=${t.sam.id}`)).json(), 'a player gets their own (stage 6a)');
   } finally {
     await t.cleanup();
   }

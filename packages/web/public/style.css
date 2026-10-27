@@ -2531,3 +2531,9 @@ button.wiki-tile { text-align: left; border: 1px solid var(--border); color: inh
 .wiki-link-it { margin-left: 0.25rem; padding: 0 0.35rem; border: 1px solid var(--accent); border-radius: 999px; background: none; color: var(--accent); font-size: 0.72rem; line-height: 1.4; cursor: pointer; vertical-align: 1px; }
 .wiki-link-it:hover, .wiki-link-it:focus-visible { background: color-mix(in srgb, var(--accent) 15%, transparent); }
 .wiki-make-up form { display: flex; flex-direction: column; gap: 0.6rem; min-width: min(28rem, 90vw); }
+
+/* A player's wiki (stage 6a): they only read, so the DM's tools aren't there. */
+#tab-wiki[data-player] #wiki-truth,
+#tab-wiki[data-player] #wiki-new,
+#tab-wiki[data-player] #wiki-review,
+#tab-wiki[data-player] select[aria-label="View as"] { display: none; }

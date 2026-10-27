@@ -9,11 +9,11 @@ import { BadRequestError, NotFoundError } from '../store.js';
 import { WIKI_LIMITS as L } from '../wiki.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 import { SOURCE_KINDS } from '../wiki-pictures.js';
-import { wikiKey, wikiPieces, unlink, unpicture, audienceOf, canSeeAudience, CANONS, TONES } from '@dndapp/shared/wiki.js';
+import { wikiKey, wikiLinks, wikiPieces, unlink, unpicture, audienceOf, canSeeAudience, CANONS, TONES } from '@dndapp/shared/wiki.js';
 import { MAX_SOURCES } from '@dndapp/shared/citations.js';
 import { createTools } from '../qa/tools.js';
 import { webGraph } from '../wiki-web.js';
-import { pageOnMaps, makePageFor, atlasLayers, pagePlaces } from '../wiki-maps.js';
+import { pageOnMaps, makePageFor, atlasLayers, pagePlaces, shownToViewer } from '../wiki-maps.js';
 import { timeline } from '../wiki-timeline.js';
 import { STARTER_TEMPLATES } from '@dndapp/shared/wiki-templates.js';
 import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass } from '../wiki-views.js';
@@ -65,9 +65,11 @@ export function registerWiki(app, r) {
 
   /** Every page, the players things can be made available to, and how many AI proposals wait. */
   app.get('/campaigns/:cid/wiki', async (request) => {
-    const { cid } = access(request, { dm: true });
+    const { cid, role } = access(request);
     const players = store.roster(cid).filter((m) => m.role === 'player').map((m) => ({ id: m.user_id, name: m.name, character_name: m.character_name }));
     const { calendar, clock } = store.getSettings(cid);
+    // A player gets the pages they may see (titles only, as they see them: the names for links in Ask too).
+    if (role !== 'dm') return { pages: viewerPages(request).pages.map(summary), players, calendar, clock };
     return { pages: wiki.list(cid).map(summary), players, proposals: wikiAI.count(cid), ai_run: lastRun(cid), calendar, clock };
   });
 
@@ -110,15 +112,17 @@ export function registerWiki(app, r) {
 
   // ---------- the space's views (wiki-views.js), as the DM sees them or ?as= a player ----------
 
-  /** `?as=<player id>` checked: the viewer, and the pages they may see (a hidden parent left out). */
+  /**
+   * The viewer and the pages they may see (a hidden parent left out): the DM, or the DM `?as=<player id>`, or a
+   * player (stage 6a: always as themselves, whatever `?as=` says).
+   */
   function viewerPages(request) {
-    const { cid } = access(request, { dm: true });
-    const { as } = z.object({ as: z.coerce.number().int().optional() }).parse(request.query ?? {});
+    const a = access(request);
+    const { cid } = a;
+    const { as } = a.role === 'dm' ? z.object({ as: z.coerce.number().int().optional() }).parse(request.query ?? {}) : { as: a.userId };
     if (as == null) return { cid, as: null, pages: wiki.list(cid) };
     if (auth.membership(cid, as)?.role !== 'player') throw new BadRequestError("That isn't a player in this campaign.");
-    const pages = wiki.list(cid).map((p) => wiki.forViewer(cid, p, { userId: as, seesAll: false })).filter(Boolean);
-    const ids = new Set(pages.map((p) => p.id));
-    return { cid, as, pages: pages.map((p) => (p.parent && !ids.has(p.parent) ? { ...p, parent: null } : p)) };
+    return { cid, as, pages: wiki.listFor(cid, { userId: as, seesAll: false }) };
   }
 
   /**
@@ -195,8 +199,9 @@ export function registerWiki(app, r) {
   app.get('/campaigns/:cid/wiki/atlas', async (request) => {
     const { cid, as, pages } = viewerPages(request);
     const { map: mapId } = z.object({ map: z.string().max(40).optional() }).parse(request.query ?? {});
-    const all = maps.list(cid);
-    const map = mapId ? maps.get(cid, mapId) : all.find((m) => !all.some((o) => o.places.some((p) => p.to === m.id))) ?? all[0];
+    // A player: only maps shown to them, and nothing said about any other.
+    const all = maps.list(cid).filter((m) => as == null || shownToViewer(m, as, { revealed: 'shown', to: 'shown_to' }));
+    const map = mapId ? (as == null ? maps.get(cid, mapId) : all.find((m) => m.id === mapId)) : all.find((m) => !all.some((o) => o.places.some((p) => p.to === m.id))) ?? all[0];
     if (!map) return { layers: null, maps: [] };
     return { layers: atlasLayers(map, pages, { as }), as };
   });
@@ -255,6 +260,8 @@ export function registerWiki(app, r) {
     const { cid, as, pages } = viewerPages(request);
     wiki.get(cid, request.params.pid); // 404 for a page that doesn't exist
     const page = pages.find((p) => p.id === request.params.pid);
+    // A player gets the same 404 for a page they can't see, so nothing says it's there.
+    if (!page && access(request).role !== 'dm') throw new NotFoundError('No such page');
     return { compass: page ? compass(page, pages) : null, ...(as == null ? {} : { as }) };
   });
 
@@ -361,7 +368,17 @@ export function registerWiki(app, r) {
    * (`page: null` when nothing on it is available to them).
    */
   app.get('/campaigns/:cid/wiki/:pid', async (request) => {
-    const { cid } = access(request, { dm: true });
+    const { cid, role } = access(request);
+    if (role !== 'dm') {
+      // A player: the page as they may see it, and the pages they may see that link to it; the same 404 as a page
+      // that doesn't exist when nothing on it is theirs.
+      const { as, pages } = viewerPages(request);
+      const page = pages.find((p) => p.id === request.params.pid);
+      if (!page) throw new NotFoundError('No such page');
+      const names = new Set([page.title].map(wikiKey));
+      const mentioned = pages.filter((p) => p.id !== page.id && p.sections.some((s) => wikiLinks(s.text).some((n) => names.has(wikiKey(n))))).map((p) => ({ id: p.id, title: p.title }));
+      return { page, mentioned_in: mentioned, as };
+    }
     const page = wiki.get(cid, request.params.pid, { templates: true });
     const { as } = z.object({ as: z.coerce.number().int().optional() }).parse(request.query ?? {});
     if (as != null) {

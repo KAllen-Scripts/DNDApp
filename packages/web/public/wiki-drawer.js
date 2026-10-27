@@ -2,8 +2,7 @@
  * The drawer: a wiki page shown at the side, over either space, without
  * leaving what you're doing (a name in Ask's answer, a search result while at
  * the table). It has the page's compass, Open in the wiki and Edit; Escape or
- * ✕ closes it. On a phone it's a sheet from the bottom. Only the DM's (the
- * wiki is the DM's).
+ * ✕ closes it. On a phone it's a sheet from the bottom. A player's has no Edit.
  */
 import { api, h } from './api.js';
 import { state, nav, base, report, fam, kindBadge } from './wiki-data.js';
@@ -47,10 +46,10 @@ export async function openDrawer(id) {
     ),
     h('div', { class: 'wiki-drawer-actions' },
       h('button', { type: 'button', class: 'primary', onclick: () => go('page') }, 'Open in the wiki'),
-      h('button', { type: 'button', class: 'ghost', onclick: () => go('edit') }, 'Edit'),
+      state.dm ? h('button', { type: 'button', class: 'ghost', onclick: () => go('edit') }, 'Edit') : null,
     ),
     drawCompass(page, { onMaps }),
-    h('div', { class: 'wiki-drawer-body wiki-content' }, ...pageContent(page, { dm: true })),
+    h('div', { class: 'wiki-drawer-body wiki-content' }, ...pageContent(page, { dm: state.dm, me: state.me })),
   );
   box.hidden = false;
   box.querySelector('.wiki-drawer-close').focus({ preventScroll: true });

@@ -24,7 +24,9 @@ export const state = {
   atlasMap: null, // the map the Atlas shows (wiki-atlas.js)
   webAround: null, // the page in the middle of the Web (wiki-web.js), or null for the whole web
   timelineFocus: null, // the page whose times the Timeline shows first (wiki-timeline.js), or null
-  as: null, // a player's id while viewing as them
+  as: null, // a player's id while viewing as them (a player's own, always, when the reader is a player)
+  dm: true, // the DM's wiki; false: a player reading their own version (stage 6a)
+  me: null, // the reader's user id
   proposals: 0, // how many of the AI's changes wait for the DM
   aiRun: null, // the AI's last run for the wiki: { status, message, finished_at }
   poll: null,

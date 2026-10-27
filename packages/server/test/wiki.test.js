@@ -37,12 +37,12 @@ test('wiki text: blocks, names and audiences', () => {
   assert.equal(narrowest(null, null), null);
 });
 
-test('wiki: only the DM can read or write it; pages save, keep history and restore', async () => {
+test('wiki: only the DM can write it; pages save, keep history and restore', async () => {
   const t = await setup();
   try {
     const base = `/campaigns/${t.campaign.id}/wiki`;
     for (const as of [t.sam.token, t.alex.token]) {
-      assert.equal((await t.request('GET', base, { as })).statusCode, 403);
+      assert.deepEqual((await t.request('GET', base, { as })).json().pages, [], 'a player reads only what is theirs (stage 6a)');
       assert.equal((await t.request('POST', base, { as, body: { title: 'x' } })).statusCode, 403);
     }
     const res = await t.request('POST', base, { body: { title: 'Hollow Mill', kind: 'place', sections: [{ heading: '', text: 'Old mill north of Brindle.', available: 'all' }] } });

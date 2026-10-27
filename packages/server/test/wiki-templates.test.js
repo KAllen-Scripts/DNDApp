@@ -39,7 +39,7 @@ test('templates: the DM\'s own are kept apart from the wiki and from players', a
     assert.deepEqual(list.own.map((x) => x.title), ['Shopkeeper']);
     assert.ok(!(await t.request('GET', base)).json().pages.some((p) => p.id === tpl.id), 'not in the wiki\'s list');
     assert.equal((await t.request('GET', `${base}/${tpl.id}`)).json().page.title, 'Shopkeeper', 'the DM can open it to edit');
-    assert.equal((await t.request('GET', `${base}/${tpl.id}`, { as: t.sam.token })).statusCode, 403);
+    assert.equal((await t.request('GET', `${base}/${tpl.id}`, { as: t.sam.token })).statusCode, 404, 'a player never gets a template');
     assert.equal((await t.request('GET', `${base}/templates`, { as: t.sam.token })).statusCode, 403);
     assert.equal((await t.search.search(cid, 'what they sell', { kinds: ['wiki'] })).length, 0, 'never indexed for Ask');
     // A page can share a template's name; edits and deletes work.

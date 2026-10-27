@@ -98,7 +98,7 @@ export async function makePageFor({ wiki, maps, wikiPictures }, cid, { map_id, k
 /** The family colour key of a page, and what the Atlas needs to draw it. */
 const atlasPage = (p) => ({ ...summary(p), family: kindFamily(p.kind), dated: !!(p.when?.from != null || p.events?.some((e) => e.when?.from != null)) });
 
-const shownToViewer = (thing, uid, { revealed = 'revealed', to = 'revealed_to' } = {}) => !!thing[revealed] && (thing[to] == null || thing[to].includes(uid));
+export const shownToViewer = (thing, uid, { revealed = 'revealed', to = 'revealed_to' } = {}) => !!thing[revealed] && (thing[to] == null || thing[to].includes(uid));
 
 /**
  * Where each page is pinned (the first place linked to it), for the Timeline's Show on the

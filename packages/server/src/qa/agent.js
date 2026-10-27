@@ -170,10 +170,7 @@ export function createQA({ db, store, kb, search, books, creatures = null, editi
   function namesFor(campaignId, viewer, roster) {
     const names = kb.list(campaignId, { viewer }).map((r) => r.title);
     if (wiki) {
-      for (const page of wiki.list(campaignId)) {
-        const seen = wiki.forViewer(campaignId, page, viewer);
-        if (seen) names.push(seen.title, ...(viewer.seesAll ? seen.aliases ?? [] : []));
-      }
+      for (const seen of wiki.listFor(campaignId, viewer)) names.push(seen.title, ...(viewer.seesAll ? seen.aliases ?? [] : []));
     }
     for (const m of roster) names.push(m.character_name, m.name);
     return names.filter(Boolean);
