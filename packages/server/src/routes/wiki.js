@@ -1,15 +1,16 @@
 /**
- * The DM's wiki (src/wiki.js). Every route is the DM's but one: players have
- * no Wiki tab and reach the wiki only through Ask, which reads just the parts
- * available to them. The one is a picture's bytes, which a player gets only
- * when the picture is in a part of a page available to them.
+ * The wiki (src/wiki.js). The DM writes it; a player reads their own version
+ * (stage 6a): every read route gives them only what's available to them. A
+ * player may also choose which parts of their sheet their character's page
+ * shares (stage 6b).
  */
 import { z } from 'zod';
 import { BadRequestError, NotFoundError } from '../store.js';
+import { AuthError } from '../auth.js';
 import { WIKI_LIMITS as L } from '../wiki.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 import { SOURCE_KINDS } from '../wiki-pictures.js';
-import { wikiKey, wikiLinks, wikiPieces, unlink, unpicture, audienceOf, canSeeAudience, CANONS, TONES } from '@dndapp/shared/wiki.js';
+import { wikiKey, wikiLinks, wikiPieces, unlink, unpicture, audienceOf, canSeeAudience, CANONS, TONES, SHEET_PARTS, sheetParts } from '@dndapp/shared/wiki.js';
 import { MAX_SOURCES } from '@dndapp/shared/citations.js';
 import { createTools } from '../qa/tools.js';
 import { webGraph } from '../wiki-web.js';
@@ -19,7 +20,7 @@ import { STARTER_TEMPLATES } from '@dndapp/shared/wiki-templates.js';
 import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass } from '../wiki-views.js';
 
 export function registerWiki(app, r) {
-  const { access, auth, store, wiki, wikiAI, wikiPictures, jobs, pictures, search, maps, handouts, db, kb, config } = r;
+  const { access, auth, store, wiki, wikiAI, wikiPictures, jobs, pictures, search, maps, handouts, sheets, db, kb, config } = r;
 
   const crop = z.object({ x: z.number().min(0), y: z.number().min(0), w: z.number().positive(), h: z.number().positive() });
   const pictureId = z.string().regex(/^[a-f0-9]{10}$/);
@@ -45,11 +46,14 @@ export function registerWiki(app, r) {
     // In-game times (stage 4b): the text only; the server works out when it is (src/wiki.js `dated`).
     when: z.object({ text: z.string().max(L.when) }).nullable(),
     events: z.array(z.object({ id: z.string().regex(/^[a-f0-9]{6}$/).optional(), when: z.object({ text: z.string().max(L.when) }).nullable().default(null), text: z.string().max(L.event), available: available.default('all'), ...canon, ...sources })).max(L.events),
+    // Whose character the page is (stage 6b), or null.
+    player: z.number().int().positive().nullable(),
   };
 
   /** Chosen players must be players of this campaign. */
   function checkPlayers(cid, body) {
     const own = [...(body.sections ?? []), ...(body.facts ?? []), ...(body.events ?? []), ...(body.gallery ?? []), body.picture, body.banner, body.fact].filter(Boolean).map((x) => x.available);
+    if (body.player != null && auth.membership(cid, body.player)?.role !== 'player') throw new BadRequestError(`User ${body.player} isn't a player in this campaign.`);
     for (const a of [body.available, body.page_available, body.players, ...own]) {
       if (!Array.isArray(a)) continue;
       for (const id of a) if (auth.membership(cid, id)?.role !== 'player') throw new BadRequestError(`User ${id} isn't a player in this campaign.`);
@@ -154,15 +158,39 @@ export function registerWiki(app, r) {
     return { ...timelineFor(request, v), as: v.as };
   });
 
-  /** The party, for the middle of the Wheel and the Home: each player's character, and their token picture's key. */
-  const party = (cid) => store.roster(cid).filter((m) => m.role === 'player').map((m) => ({
+  /**
+   * The party, for the middle of the Wheel and the Home: each player's character, their token picture's key, and
+   * their character's page if the viewer may see it.
+   */
+  const party = (cid, pages) => store.roster(cid).filter((m) => m.role === 'player').map((m) => ({
     id: m.user_id, name: m.name, character_name: m.character_name, token: pictures?.view(cid, m.user_id).token?.key ?? null,
+    page: pages.find((p) => p.player === m.user_id)?.id ?? null,
   }));
+
+  /** The players whose characters have a name but no page yet (offered under Waiting), unless a page has that name already. */
+  function characterOffers(cid) {
+    const pages = wiki.list(cid);
+    const taken = new Set(pages.flatMap((p) => [p.title, ...p.aliases]).map(wikiKey));
+    return store.roster(cid)
+      .filter((m) => m.role === 'player' && m.character_name?.trim() && !taken.has(wikiKey(m.character_name)) && !pages.some((p) => p.player === m.user_id))
+      .map((m) => ({ id: m.user_id, name: m.name, character_name: m.character_name.trim(), token: pictures?.view(cid, m.user_id).token?.key ?? null }));
+  }
+
+  /**
+   * A character's page's parts drawn live from its player's sheet (stage 6b): all of them for the DM (`as` null) and
+   * the player; for the other players only those the player shares. `share` is what the player shares.
+   */
+  function fromSheet(cid, page, as) {
+    if (!page?.player || !sheets || auth.membership(cid, page.player)?.role !== 'player') return null;
+    const all = as == null || as === page.player;
+    const { sheet } = sheets.get(cid, page.player);
+    return { ...sheetParts(sheet, all ? SHEET_PARTS.map((p) => p.key) : page.sheet_share), share: page.sheet_share, mine: as === page.player };
+  }
 
   /** The Wheel: the kind families with their counts, the party, and the pages as cards. */
   app.get('/campaigns/:cid/wiki/wheel', async (request) => {
     const { cid, as, pages } = viewerPages(request);
-    return { families: wheelFamilies(pages), party: party(cid), pages: pages.map(summary), as };
+    return { families: wheelFamilies(pages), party: party(cid, pages), pages: pages.map(summary), as };
   });
 
   /**
@@ -179,7 +207,7 @@ export function registerWiki(app, r) {
       last_session: last ? summary(last) : null,
       families: wheelFamilies(pages),
       recent: recentPages(pages).map(summary),
-      party: party(cid),
+      party: party(cid, pages),
       // The Timeline tile: the latest moments (by in-game time).
       moments: timeline(pages).items.slice(-12).map((x) => ({ at: x.when.from, family: x.family, title: x.type === 'event' ? x.text : x.title })),
       ...(as == null ? { waiting: { proposals: wikiAI.count(cid) } } : { as }),
@@ -322,7 +350,7 @@ export function registerWiki(app, r) {
   /** Proposals waiting for the DM, each with what's on the page now. */
   app.get('/campaigns/:cid/wiki/proposals', async (request) => {
     const { cid } = access(request, { dm: true });
-    return { proposals: wikiAI.pending(cid), ai_run: lastRun(cid) };
+    return { proposals: wikiAI.pending(cid), ai_run: lastRun(cid), characters: characterOffers(cid) };
   });
 
   /** Have the AI read what the archivist changed now (it also does after every session when WIKI_AUTO is on). */
@@ -377,20 +405,45 @@ export function registerWiki(app, r) {
       if (!page) throw new NotFoundError('No such page');
       const names = new Set([page.title].map(wikiKey));
       const mentioned = pages.filter((p) => p.id !== page.id && p.sections.some((s) => wikiLinks(s.text).some((n) => names.has(wikiKey(n))))).map((p) => ({ id: p.id, title: p.title }));
-      return { page, mentioned_in: mentioned, as };
+      return { page, mentioned_in: mentioned, as, from_sheet: fromSheet(cid, page, as) };
     }
     const page = wiki.get(cid, request.params.pid, { templates: true });
     const { as } = z.object({ as: z.coerce.number().int().optional() }).parse(request.query ?? {});
     if (as != null) {
       if (auth.membership(cid, as)?.role !== 'player') throw new BadRequestError("That isn't a player in this campaign.");
-      return { page: wiki.forViewer(cid, page, { userId: as, seesAll: false }), as };
+      const seen = wiki.forViewer(cid, page, { userId: as, seesAll: false });
+      return { page: seen, as, from_sheet: seen && fromSheet(cid, seen, as) };
     }
-    return { page, mentioned_in: wiki.mentionedIn(cid, page), unknown_names: wiki.unknownNames(cid, page), on_maps: pageOnMaps(maps, cid, page.id) };
+    return { page, mentioned_in: wiki.mentionedIn(cid, page), unknown_names: wiki.unknownNames(cid, page), on_maps: pageOnMaps(maps, cid, page.id), from_sheet: fromSheet(cid, page, null) };
+  });
+
+  /** A page for a player's character (stage 6b, Waiting's one click) `{player}`: named after the character, with their token picture, for the whole party. */
+  app.post('/campaigns/:cid/wiki/characters', async (request, reply) => {
+    const { cid } = access(request, { dm: true });
+    const { player } = z.object({ player: z.number().int().positive() }).parse(request.body ?? {});
+    const m = characterOffers(cid).find((x) => x.id === player);
+    if (!m) throw new BadRequestError("That player's character has a page already, or no name yet.");
+    const token = pictures?.view(cid, player).token ? await wikiPictures.copy(cid, { kind: 'token', id: String(player) }, { by: request.user.id }) : null;
+    const page = await wiki.create(cid, { title: m.character_name, kind: 'character', available: 'all', player, picture: token && { id: token.id, caption: '', available: 'all' } }, { by: request.user.id });
+    reply.status(201);
+    return { page };
+  });
+
+  /** Which parts of their sheet a character's page shares with the other players `{share: [part keys]}`: its player's (or the DM's) choice. */
+  app.put('/campaigns/:cid/wiki/:pid/sheet-share', async (request) => {
+    const a = access(request);
+    const { share } = z.object({ share: z.array(z.enum(SHEET_PARTS.map((p) => p.key))).max(SHEET_PARTS.length) }).parse(request.body ?? {});
+    const page = a.role === 'dm' ? wiki.get(a.cid, request.params.pid) : viewerPages(request).pages.find((p) => p.id === request.params.pid);
+    if (!page) throw new NotFoundError('No such page');
+    if (!page.player) throw new BadRequestError("This isn't a character's page.");
+    if (a.role !== 'dm' && page.player !== a.userId) throw new AuthError("Only the character's player can choose that.", 403);
+    const saved = await wiki.update(a.cid, page.id, { sheet_share: share }, { by: request.user.id });
+    return { share: saved.sheet_share };
   });
 
   app.post('/campaigns/:cid/wiki', async (request, reply) => {
     const { cid } = access(request, { dm: true });
-    const body = checkPlayers(cid, z.object({ ...fields, aliases: fields.aliases.default([]), kind: fields.kind.default(''), parent: fields.parent.default(null), tags: fields.tags.default([]), available: available.default('dm'), sections: fields.sections.default([]), picture: fields.picture.default(null), banner: fields.banner.default(null), gallery: fields.gallery.default([]), facts: fields.facts.default([]), when: fields.when.default(null), events: fields.events.default([]), template: z.boolean().default(false) }).parse(request.body ?? {}));
+    const body = checkPlayers(cid, z.object({ ...fields, player: fields.player.default(null), aliases: fields.aliases.default([]), kind: fields.kind.default(''), parent: fields.parent.default(null), tags: fields.tags.default([]), available: available.default('dm'), sections: fields.sections.default([]), picture: fields.picture.default(null), banner: fields.banner.default(null), gallery: fields.gallery.default([]), facts: fields.facts.default([]), when: fields.when.default(null), events: fields.events.default([]), template: z.boolean().default(false) }).parse(request.body ?? {}));
     const page = await wiki.create(cid, body, { by: request.user.id });
     reply.status(201);
     return { page, unknown_names: wiki.unknownNames(cid, page) };

@@ -20,7 +20,7 @@ import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { NotFoundError, BadRequestError } from './store.js';
 import { ArchiveConflictError } from './archive.js';
-import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, unpicture, wikiKey, isPictureId, pagePictureIds, normalizeCanon, playerCanon, canonMarker, TONES, LINK_RE, PICTURE_RE } from '@dndapp/shared/wiki.js';
+import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, unpicture, wikiKey, isPictureId, pagePictureIds, normalizeCanon, playerCanon, canonMarker, TONES, LINK_RE, PICTURE_RE, normalizeSheetShare } from '@dndapp/shared/wiki.js';
 import { normalizeSources } from '@dndapp/shared/citations.js';
 import { parseWhen, whenText } from '@dndapp/shared/wiki-time.js';
 
@@ -93,6 +93,9 @@ export function normalizeWikiPage(p = {}) {
     // A template for new pages of its kind (stage 5a): its sections' text and facts' values are writing prompts.
     // Kept apart from the wiki: never in Ask, the views, the AI's reading or a player's wiki.
     ...(p.template && { template: true }),
+    // A player character's page (stage 6b): whose character it is, and which parts of their sheet (drawn live,
+    // never copied) the player shares with the other players.
+    ...(Number(p.player) > 0 && Number.isInteger(Number(p.player)) && !p.template && { player: Number(p.player), sheet_share: normalizeSheetShare(p.sheet_share) }),
     sections: (Array.isArray(p.sections) ? p.sections : []).map((s) => ({
       id: String(s.id ?? crypto.randomBytes(3).toString('hex')),
       heading: String(s.heading ?? '').trim(),
@@ -200,7 +203,8 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
     const facts = page.facts.filter((f) => f.canon !== 'planned' && sees(f)).map(forPlayer);
     const events = page.events.filter((e) => e.canon !== 'planned' && sees(e)).map(forPlayer);
     const visible = parts(page, roster).filter((p) => p.text.trim() && canSeeAudience(viewer, p.audience));
-    if (!visible.length && !facts.length && !events.length && !picture && !banner && !gallery.length) return null;
+    // A character's page shows to whoever may see the page, even before anything is written on it (its sheet parts are live).
+    if (!visible.length && !facts.length && !events.length && !picture && !banner && !gallery.length && !page.player) return null;
     const sections = [];
     for (const p of visible) {
       const last = sections.at(-1);
@@ -289,6 +293,9 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
     for (const n of [page.title, ...page.aliases]) {
       if (taken.has(wikiKey(n))) throw new BadRequestError(`"${n}" is already the name of the page "${taken.get(wikiKey(n))}".`);
     }
+    // One page for each player's character.
+    const theirs = page.player && rows(cid).find((p) => p.player === page.player && p.id !== excludeId);
+    if (theirs) throw new BadRequestError(`"${theirs.title}" is already that player's character page.`);
     if (page.parent) {
       // No loops: walking up from the parent must never reach this page.
       const byId = new Map(rows(cid).map((p) => [p.id, p]));

@@ -75,11 +75,11 @@ test('wiki tab: the DM makes a page, links it, sees it as a player, edits it and
 
     // As Thorin's player: the shared part and Thorin's block, never the DM's.
     page.type('#wiki-main select[aria-label="View as"]', String(t.sam.id));
-    await page.waitFor(() => page.text('#wiki-main').includes('What Ask can tell Thorin'));
+    await page.waitFor(() => page.text('#wiki-main').includes('What Thorin gets'));
     assert.match(page.text('#wiki-main'), /millstone/);
     assert.doesNotMatch(page.text('#wiki-main'), /full moon/);
     page.type('#wiki-main select[aria-label="View as"]', String(t.alex.id));
-    await page.waitFor(() => page.text('#wiki-main').includes('What Ask can tell Lyra'));
+    await page.waitFor(() => page.text('#wiki-main').includes('What Lyra gets'));
     assert.doesNotMatch(page.text('#wiki-main'), /millstone|full moon/);
 
     // A link to a page that doesn't exist yet offers to make it (as the DM: a player gets just the words).
@@ -241,7 +241,7 @@ test('wiki tab: the front page is picture cards to filter by kind and tag; a pag
 
     // As Lyra's player: none of the DM's pictures or facts.
     page.type('#wiki-main select[aria-label="View as"]', String(t.alex.id));
-    await page.waitFor(() => page.text('#wiki-main').includes('What Ask can tell Lyra'));
+    await page.waitFor(() => page.text('#wiki-main').includes('What Lyra gets'));
     const shown = page.$$('#wiki-main .wiki-content img').length;
     assert.equal(shown, 2, 'the main picture and the one in the text, not the altar');
     assert.doesNotMatch(page.text('#wiki-main .wiki-content'), /altar|The cult/);

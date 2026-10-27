@@ -10,6 +10,7 @@ export const summary = (p) => ({
   id: p.id, title: p.title, aliases: p.aliases, kind: p.kind, parent: p.parent, tags: p.tags, available: p.available, updated_at: p.updated_at,
   picture: p.picture?.id ?? p.banner?.id ?? p.gallery[0]?.id ?? p.sections.flatMap((s) => picturesIn(s.text))[0] ?? null,
   excerpt: excerpt(p),
+  ...(p.player && { player: p.player }),
 });
 
 function excerpt(p) {

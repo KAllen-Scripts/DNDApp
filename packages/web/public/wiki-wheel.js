@@ -6,6 +6,7 @@
  * or as a player (GET …/wiki/wheel).
  */
 import { fileUrl } from './api.js';
+import { nav } from './wiki-data.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 
@@ -89,6 +90,16 @@ export function drawWheel({ campaignId, families, party = [], selected = null, o
       const img = svg('image', { x: (x - pr).toFixed(2), y: (y - pr).toFixed(2), width: (2 * pr).toFixed(2), height: (2 * pr).toFixed(2), 'clip-path': `url(#${id})`, preserveAspectRatio: 'xMidYMid slice' });
       g.append(svg('clipPath', { id }, svg('circle', { cx: x.toFixed(2), cy: y.toFixed(2), r: pr.toFixed(2) })), img);
       tokenUrl(campaignId, p).then((src) => img.setAttribute('href', src), () => img.remove());
+    }
+    // A character's page (stage 6b) opens from their place in the middle.
+    if (p.page) {
+      Object.assign(g.dataset, { page: p.page });
+      g.setAttribute('role', 'link');
+      g.setAttribute('tabindex', '0');
+      g.classList.add('has-page');
+      const open = (e) => { e.stopPropagation(); nav.go(`#/page/${p.page}`); };
+      g.addEventListener('click', open);
+      g.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(e); });
     }
     centre.append(g);
   });

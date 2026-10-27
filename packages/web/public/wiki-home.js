@@ -85,7 +85,9 @@ export async function drawHub(box) {
       h('section', { class: 'wiki-hub-party' },
         h('h3', {}, 'The party'),
         data.party.length
-          ? h('ul', { class: 'wiki-party' }, ...data.party.map((p) => h('li', {}, p.character_name || p.name, p.character_name ? h('span', { class: 'muted small' }, ` (${p.name})`) : null)))
+          ? h('ul', { class: 'wiki-party' }, ...data.party.map((p) => h('li', {},
+            p.page ? h('button', { type: 'button', class: 'link', onclick: () => nav.go(`#/page/${p.page}`) }, p.character_name || p.name) : p.character_name || p.name,
+            p.character_name ? h('span', { class: 'muted small' }, ` (${p.name})`) : null)))
           : h('p', { class: 'muted small' }, 'No players yet.'),
         data.waiting ? h('button', { type: 'button', class: `ghost wiki-hub-waiting${waiting ? ' waiting' : ''}`, onclick: () => nav.go('#/waiting') },
           waiting ? `${waiting} change${waiting === 1 ? '' : 's'} from the AI wait for you` : 'Nothing waits for you') : null,

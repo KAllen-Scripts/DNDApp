@@ -6,6 +6,7 @@
 import { api, h } from './api.js';
 import { state, nav, base, status, report, availableText, playerName, sourceImg, SOURCE_NOUN } from './wiki-data.js';
 import { sectionBody, availablePicker, richText } from './wiki-page.js';
+import { characterOffers } from './wiki-sheet.js';
 import { TONES } from './shared/wiki.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -51,7 +52,7 @@ export async function drawReview() {
   ));
   main.prepend(nav.phoneBack());
   try {
-    const { proposals, ai_run: run } = await state.guarded(() => api('GET', `${base()}/proposals`));
+    const { proposals, ai_run: run, characters } = await state.guarded(() => api('GET', `${base()}/proposals`));
     if (state.view !== 'review') return;
     state.aiRun = run;
     state.proposals = proposals.length;
@@ -62,6 +63,8 @@ export async function drawReview() {
           h('div', { class: 'wiki-actions' }, h('button', { type: 'button', class: 'primary', onclick: approveAll }, `Approve all ${proposals.length}`)),
           ...proposals.map(proposalCard))
       : h('p', { class: 'muted' }, 'Nothing waiting for you.'));
+    const offers = characterOffers(characters);
+    if (offers) main.querySelector('.wiki-run').after(offers);
     pollWhileBusy();
   } catch (err) {
     report(err);
