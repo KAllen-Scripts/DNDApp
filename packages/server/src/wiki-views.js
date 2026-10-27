@@ -3,7 +3,7 @@
  * or a player for View as): plain functions of the pages that viewer may see,
  * so nothing hidden reaches the page, not even in a count.
  */
-import { KIND_FAMILIES, kindFamily, wikiKey, wikiPieces, wikiPictures as picturesIn, unlink, unpicture } from '@dndapp/shared/wiki.js';
+import { KIND_FAMILIES, kindFamily, wikiKey, wikiPieces, wikiLinks, wikiPictures as picturesIn, unlink, unpicture } from '@dndapp/shared/wiki.js';
 
 /** A page as a card: enough for the cards and the preview shown over a link (its picture and its opening words). */
 export const summary = (p) => ({
@@ -65,3 +65,34 @@ export function heroPicture(pages, last) {
   const places = pages.filter((p) => kindFamily(p.kind) === 'place' && pic(p)).sort((a, b) => (inside.get(b.id) ?? 0) - (inside.get(a.id) ?? 0));
   return places.length ? pic(places[0]) : null;
 }
+
+/** The names a page's text and facts link to. */
+const linksOf = (p) => [...p.sections.map((s) => s.text), ...p.facts.map((f) => f.value)].flatMap(wikiLinks);
+
+/**
+ * A page's compass (the strip under its banner): its family, the pages it's
+ * inside (the top first), the pages inside it, the pages it links to and the
+ * pages that link to it. `pages` are the ones the viewer may see, `page` as
+ * they see it, so a link inside a part they can't see leads nowhere.
+ */
+export function compass(page, pages) {
+  const byId = new Map(pages.map((p) => [p.id, p]));
+  const byName = new Map();
+  for (const p of pages) for (const n of [p.title, ...p.aliases]) if (!byName.has(wikiKey(n))) byName.set(wikiKey(n), p);
+  const chain = [];
+  const seen = new Set([page.id]);
+  for (let p = byId.get(page.parent); p && !seen.has(p.id); p = byId.get(p.parent)) {
+    seen.add(p.id);
+    chain.unshift(p);
+  }
+  const unique = (list) => [...new Map(list.filter((p) => p && p.id !== page.id).map((p) => [p.id, p])).values()];
+  const names = new Set([page.title, ...page.aliases].map(wikiKey));
+  return {
+    family: kindFamily(page.kind),
+    chain: chain.map(summary),
+    children: pages.filter((p) => p.parent === page.id).sort((a, b) => a.title.localeCompare(b.title)).map(summary),
+    links_to: unique(linksOf(page).map((n) => byName.get(wikiKey(n)))).map(summary),
+    linked_from: unique(pages.filter((p) => linksOf(p).some((n) => names.has(wikiKey(n))))).map(summary),
+  };
+}
+

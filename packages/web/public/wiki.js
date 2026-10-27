@@ -26,6 +26,8 @@ import { drawReview } from './wiki-waiting.js';
 import { resetSpace } from './wiki-space.js';
 import { drawWheel } from './wiki-wheel.js';
 import { drawHub } from './wiki-home.js';
+import { pageDiff } from './wiki-diff.js';
+import { drawCompass } from './wiki-compass.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -270,6 +272,7 @@ function pageView() {
   });
   return h('article', { class: `wiki-page fam-${fam(page.kind)}` },
     hero(page),
+    drawCompass(page),
     h('div', { class: 'wiki-page-head' },
       h('p', { class: 'wiki-meta muted small' },
         [page.kind, parent && `in ${parent.title}`, page.aliases.length && `also called ${page.aliases.join(', ')}`, page.tags.length && `tags: ${page.tags.join(', ')}`].filter(Boolean).join(' · '),
@@ -338,7 +341,8 @@ async function drawHistory() {
 async function showVersion(version, box) {
   const { page } = state.open;
   try {
-    const old = (await state.guarded(() => api('GET', `${base()}/${page.id}/history/${version}`))).page;
+    const get = (v) => state.guarded(() => api('GET', `${base()}/${page.id}/history/${v}`)).then((r) => r.page);
+    const [old, before] = await Promise.all([get(version), version > 1 ? get(version - 1) : null]);
     box.replaceChildren(
       h('div', { class: 'wiki-page-head' },
         h('h3', {}, `Version ${version}: ${old.title}`),
@@ -356,11 +360,27 @@ async function showVersion(version, box) {
           }
         } }, 'Bring this version back'),
       ),
+      diffView(pageDiff(before, old), version),
       ...pageContent({ picture: null, banner: null, gallery: [], facts: [], ...old }, { dm: true }),
     );
   } catch (err) {
     report(err);
   }
+}
+
+/** What changed in a version, against the one before: sections and facts, with words added and taken out marked. */
+function diffView(diff, version) {
+  const runs = (list) => list.map((r) => (r.op === 'same' ? r.text : h(r.op === 'add' ? 'ins' : 'del', {}, r.text)));
+  const items = [
+    diff.title ? h('li', {}, h('strong', {}, 'Title: '), ...runs(diff.title)) : null,
+    ...diff.facts.map((f) => h('li', { class: `wiki-diff-${f.state}` }, h('strong', {}, `${f.label || 'Fact'} (${f.state}): `), ...runs(f.runs))),
+    ...diff.sections.map((s) => h('li', { class: `wiki-diff-${s.state}` },
+      h('strong', {}, ...runs(s.heading_runs.length ? s.heading_runs : [{ op: 'same', text: 'Opening' }]), ` (${s.state})`),
+      h('div', { class: 'wiki-diff-text' }, ...runs(s.runs)))),
+  ].filter(Boolean);
+  return h('details', { class: 'wiki-diff', open: true },
+    h('summary', {}, version === 1 ? 'The first version' : `What changed from version ${version - 1}`),
+    items.length ? h('ul', {}, ...items) : h('p', { class: 'muted small' }, 'Nothing in the text or facts (pictures or who it\'s available to may have changed).'));
 }
 
 // ---------- the AI's changes ----------
