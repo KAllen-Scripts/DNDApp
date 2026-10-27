@@ -3,7 +3,7 @@
  * or a player for View as): plain functions of the pages that viewer may see,
  * so nothing hidden reaches the page, not even in a count.
  */
-import { KIND_FAMILIES, kindFamily, wikiKey, wikiPieces, wikiLinks, wikiPictures as picturesIn, unlink, unpicture, embedNames, unembed, isPrepPage, prepPlayed } from '@dndapp/shared/wiki.js';
+import { KIND_FAMILIES, kindFamily, wikiKey, wikiPieces, wikiLinks, wikiPictures as picturesIn, unlink, unpicture, embedNames, unembed, isPrepPage, isArcPage, prepPlayed } from '@dndapp/shared/wiki.js';
 
 /** A page as a card: enough for the cards and the preview shown over a link (its picture and its opening words). */
 export const summary = (p) => ({
@@ -139,3 +139,113 @@ export function compass(page, pages) {
   };
 }
 
+
+/**
+ * The quest board's columns (stage 8a), in order: a quest's Status fact read loosely ("Under way" is active), others
+ * kept as written, and quests with no status last.
+ */
+export const QUEST_COLUMNS = [
+  { key: 'rumoured', label: 'Rumoured', re: /rumou?r|hook|heard|offered|not started/ },
+  { key: 'active', label: 'Active', re: /active|open|under ?way|in progress|ongoing|started|taken|accepted/ },
+  { key: 'done', label: 'Done', re: /done|complete|finish|succe|solved|closed/ },
+  { key: 'failed', label: 'Failed', re: /fail|lost|abandon|refused|dropped/ },
+];
+
+const factOf = (p, label) => p.facts.find((f) => wikiKey(f.label) === wikiKey(label)) ?? null;
+const plain = (text) => unpicture(unlink(String(text ?? ''))).trim();
+
+/** Which column a Status value goes in: a QUEST_COLUMNS key, its own words (lower case), or '' with none. */
+export function questColumn(status) {
+  const s = wikiKey(status ?? '');
+  if (!s) return '';
+  return QUEST_COLUMNS.find((c) => c.re.test(s))?.key ?? s;
+}
+
+/** The arc a quest belongs to: the arc page it's inside, else the arc its Arc fact links to. */
+function arcOf(page, byId, byName) {
+  const seen = new Set();
+  for (let p = byId.get(page.parent); p && !seen.has(p.id); p = byId.get(p.parent)) {
+    seen.add(p.id);
+    if (isArcPage(p)) return p;
+  }
+  const fact = factOf(page, 'arc');
+  for (const n of fact ? wikiLinks(fact.value) : []) if (isArcPage(byName.get(wikiKey(n)))) return byName.get(wikiKey(n));
+  return null;
+}
+
+/**
+ * The quest board (stage 8a), from the pages a viewer may see: the quests (pages in the quest family, not clues,
+ * arcs or plans) as cards with their status, Given by and Reward, in columns, and the arcs they're grouped by (the
+ * arc-less last). A column for each status nobody expected, kept as the DM wrote it.
+ */
+export function questBoard(pages) {
+  const byId = new Map(pages.map((p) => [p.id, p]));
+  const byName = new Map();
+  for (const p of pages) for (const n of [p.title, ...p.aliases]) if (!byName.has(wikiKey(n))) byName.set(wikiKey(n), p);
+  const quests = pages.filter((p) => kindFamily(p.kind) === 'quest' && !isArcPage(p) && !['clue', 'clues'].includes(wikiKey(p.kind)) && !p.template);
+  const cards = quests.map((p) => {
+    const status = factOf(p, 'status')?.value ?? '';
+    const arc = arcOf(p, byId, byName);
+    return { ...summary(p), status: plain(status), column: questColumn(plain(status)), given_by: plain(factOf(p, 'given by')?.value), reward: plain(factOf(p, 'reward')?.value), arc: arc?.id ?? null };
+  }).sort((a, b) => a.title.localeCompare(b.title));
+  const others = [...new Set(cards.map((c) => c.column).filter((k) => k && !QUEST_COLUMNS.some((x) => x.key === k)))].sort();
+  const columns = [
+    ...QUEST_COLUMNS.map(({ key, label }) => ({ key, label })),
+    ...others.map((key) => ({ key, label: key.charAt(0).toUpperCase() + key.slice(1) })),
+    ...(cards.some((c) => !c.column) ? [{ key: '', label: 'No status' }] : []),
+  ];
+  const arcs = [...new Map(cards.filter((c) => c.arc).map((c) => [c.arc, byId.get(c.arc)])).values()].sort((a, b) => a.title.localeCompare(b.title)).map(summary);
+  return { columns, arcs, quests: cards };
+}
+
+/**
+ * The pages a saved list shows (stage 8a), of the pages a viewer may see: a filter is { family, kind, tag, canon,
+ * fact: { label, value } } (all that are given must match; `value` is found in the fact's words), or { ids } for a
+ * list the AI picked.
+ */
+export function listPages(pages, filter = {}) {
+  if (Array.isArray(filter.ids)) {
+    const byId = new Map(pages.map((p) => [p.id, p]));
+    return filter.ids.map((id) => byId.get(id)).filter(Boolean);
+  }
+  const has = (p) => (filter.family ? kindFamily(p.kind) === filter.family : true)
+    && (filter.kind ? wikiKey(p.kind ?? '') === wikiKey(filter.kind) : true)
+    && (filter.tag ? p.tags.some((t) => wikiKey(t) === wikiKey(filter.tag)) : true)
+    && (filter.canon ? [...p.sections, ...p.facts, ...(p.events ?? [])].some((x) => (x.canon ?? 'true') === filter.canon) : true)
+    && (filter.fact?.label ? (() => {
+      const f = factOf(p, filter.fact.label);
+      return !!f && (!filter.fact.value || wikiKey(plain(f.value)).includes(wikiKey(filter.fact.value)));
+    })() : true);
+  return pages.filter((p) => !p.template && has(p)).sort((a, b) => a.title.localeCompare(b.title));
+}
+
+/**
+ * Who knows what (stage 8b): the DM's pages as rows, each with how much of it each player gets ('all', 'some' or
+ * 'none'); `coverage` maps each player's id to wiki.coverage for them.
+ */
+export function knowsGrid(pages, coverage) {
+  return pages.filter((p) => !p.template).sort((a, b) => a.title.localeCompare(b.title))
+    .map((p) => ({ ...summary(p), cells: Object.fromEntries([...coverage].map(([uid, c]) => [uid, c.get(p.id) ?? 'none'])) }));
+}
+
+/**
+ * The spoiler check (stage 8b): what some text names that a player can't see yet. Names are its links and the
+ * titles and other names of pages written out in it (four letters or more). `pages` are the DM's; `visible` maps
+ * each player's id to the ids of the pages they see; `except` are pages this change itself shows them. Returns
+ * [{ player, names: [{ id, title }] }] for the players it would spoil something for.
+ */
+export function spoilers(text, pages, visible, except = []) {
+  const plainText = ` ${wikiKey(unlink(String(text ?? '')))} `;
+  const linked = new Set(wikiLinks(String(text ?? '')).map((n) => wikiKey(n.replace(/^!/, ''))));
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const named = pages.filter((p) => !p.template && !except.includes(p.id) && [p.title, ...p.aliases].some((n) => {
+    const k = wikiKey(n);
+    return linked.has(k) || (k.length >= 4 && new RegExp(`(^|[^\\p{L}\\p{N}])${esc(k)}($|[^\\p{L}\\p{N}])`, 'u').test(plainText));
+  }));
+  const out = [];
+  for (const [player, ids] of visible) {
+    const names = named.filter((p) => !ids.has(p.id)).map((p) => ({ id: p.id, title: p.title }));
+    if (names.length) out.push({ player, names });
+  }
+  return out;
+}

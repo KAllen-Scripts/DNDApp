@@ -98,6 +98,15 @@ async function approveAll() {
   }
 }
 
+/** The spoiler check's warning (stage 8b), in a line per player, or null. */
+export function spoilerNote(list) {
+  if (!list?.length) return null;
+  return h('div', { class: 'wiki-spoilers wiki-warn small', role: 'note' }, ...list.map((s) => h('p', {}, `⚠ This names ${s.names.map((n) => n.title).join(', ')}, which ${s.name} doesn't know yet.`)));
+}
+
+/** In words, for a confirm(): null when nothing is spoiled. */
+export const spoilerWords = (list) => (list?.length ? list.map((s) => `This names ${s.names.map((n) => n.title).join(', ')}, which ${s.name} doesn't know yet.`).join('\n') : null);
+
 /** Who a proposed or current section is available to, in a line. */
 const sectionAvailable = (a) => h('p', { class: 'wiki-available small' }, a === 'all' ? 'Available as the page.' : `Available to ${availableText(a)}.`);
 
@@ -243,6 +252,8 @@ function proposalCard(p) {
     p.reason ? h('p', { class: 'muted small' }, p.reason) : null,
     p.gone ? h('p', { class: 'wiki-warn small' }, 'That page or section is gone, so this can only be rejected.') : null,
     p.dm_section ? h('p', { class: 'muted small' }, 'You wrote this section. The AI thinks the records disagree with it.') : null,
+    // The spoiler check (stage 8b): what this would name that its new readers can't see yet.
+    spoilerNote(p.spoilers),
     body,
     canonPick ? h('div', { class: 'wiki-lore-canon small' }, h('label', {}, 'Approve it as ', canonPick), truth) : null,
     h('div', { class: 'wiki-actions' }, approve, edit, reject),

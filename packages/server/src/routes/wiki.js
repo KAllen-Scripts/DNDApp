@@ -17,6 +17,7 @@ import { webGraph } from '../wiki-web.js';
 import { pageOnMaps, makePageFor, atlasLayers, pagePlaces, shownToViewer } from '../wiki-maps.js';
 import { timeline } from '../wiki-timeline.js';
 import { STARTER_TEMPLATES } from '@dndapp/shared/wiki-templates.js';
+import { viewerPagesFor, spoilerCheckFor, playersOf } from './wiki-viewer.js';
 import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass, embedsIn, prepMarks } from '../wiki-views.js';
 
 export function registerWiki(app, r) {
@@ -116,17 +117,27 @@ export function registerWiki(app, r) {
 
   // ---------- the space's views (wiki-views.js), as the DM sees them or ?as= a player ----------
 
+  const viewerPages = viewerPagesFor(r);
+  const spoilerCheck = spoilerCheckFor(r);
+
   /**
-   * The viewer and the pages they may see (a hidden parent left out): the DM, or the DM `?as=<player id>`, or a
-   * player (stage 6a: always as themselves, whatever `?as=` says).
+   * The spoiler check on what waits (stage 8b): a reveal, or a player's lore, that names pages its new readers can't
+   * see yet. The player who wrote the lore isn't warned about their own words.
    */
-  function viewerPages(request) {
-    const a = access(request);
-    const { cid } = a;
-    const { as } = a.role === 'dm' ? z.object({ as: z.coerce.number().int().optional() }).parse(request.query ?? {}) : { as: a.userId };
-    if (as == null) return { cid, as: null, pages: wiki.list(cid) };
-    if (auth.membership(cid, as)?.role !== 'player') throw new BadRequestError("That isn't a player in this campaign.");
-    return { cid, as, pages: wiki.listFor(cid, { userId: as, seesAll: false }) };
+  function withSpoilers(cid, p) {
+    if (p.gone) return p;
+    if (p.action === 'reveal') {
+      let text = '';
+      try {
+        text = wiki.get(cid, p.page_id).sections.find((s) => s.id === p.section_id)?.text ?? '';
+      } catch {}
+      return { ...p, spoilers: spoilerCheck(cid, text, p.players.map(Number), [p.page_id]) };
+    }
+    if (p.from !== 'player') return p;
+    const part = p.sections[0] ?? p.fact ?? p.event;
+    const text = [...p.sections.map((s) => s.text), p.fact?.value, p.event?.text].filter(Boolean).join('\n');
+    const who = playersOf(store, cid, part?.available === 'all' && p.page_available ? p.page_available : part?.available ?? 'dm').filter((uid) => uid !== p.by_player);
+    return { ...p, spoilers: spoilerCheck(cid, text, who, [p.page_id].filter(Boolean)) };
   }
 
   /**
@@ -351,7 +362,7 @@ export function registerWiki(app, r) {
   /** Proposals waiting for the DM, each with what's on the page now. */
   app.get('/campaigns/:cid/wiki/proposals', async (request) => {
     const { cid } = access(request, { dm: true });
-    return { proposals: wikiAI.pending(cid), ai_run: lastRun(cid), characters: characterOffers(cid) };
+    return { proposals: wikiAI.pending(cid).map((p) => withSpoilers(cid, p)), ai_run: lastRun(cid), characters: characterOffers(cid) };
   });
 
   /** Have the AI read what the archivist changed now (it also does after every session when WIKI_AUTO is on). */

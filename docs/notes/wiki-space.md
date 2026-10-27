@@ -169,7 +169,8 @@ A speed-up the views need from the start: `rows(cid)` in `src/wiki.js` parses ev
 | The calendar | campaign settings | `calendar: { preset, months: [{ name, days }], weekdays: [...], year, era, moons: [{ name, days, offset }], seasons: [{ name, month, day }], holidays: [{ name, month, day }] } \| null`; null = "Day N" as today | 4a |
 | When a page happened | the page | `when: { text, from, to } \| null` (in-game minutes; 0 = the start of Day 1) | 4b |
 | Dated lines on a page | the page | `events: [{ id, when, text, canon, sources, by, owner, available }]`, up to 100 | 4b |
-| Timeline lanes, the front picture, saved lists | campaign settings | `wiki: { front, lanes: [page ids], lists: [{ id, name, filter }] }` | 1b, 4c, 8a |
+| Timeline lanes, the front picture | campaign settings | `wiki: { front, lanes: [page ids] }` | 1b, 4c |
+| Saved lists | `wiki_proposals` (`action: 'list'`, status `saved` or `removed`), not the settings, which players get | `{ id, name, filter }` | 8a |
 | Templates | pages of kind `template` (DM only, never offered to players or Ask) | the sections, facts and prompts a new page of a kind starts with | 5a |
 | Who wrote it | sections, facts and events | `by: 'dm' \| 'ai' \| 'player'`, plus `owner` (user id) for a player's | 6c |
 | A character's page | the page | `player: <user id> \| null` | 6b |
