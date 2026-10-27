@@ -2624,3 +2624,10 @@ button.wiki-tile { text-align: left; border: 1px solid var(--border); color: inh
 .wiki-knows-parts { display: flex; flex-direction: column; gap: 0.2rem; }
 .wiki-spoilers p { margin: 0.2rem 0; }
 @media (max-width: 720px) { .wiki-knows-body { grid-template-columns: 1fr; } }
+
+/* Tidy up (wiki space stage 8c). */
+.wiki-tidy { display: flex; flex-direction: column; gap: 0.6rem; }
+.wiki-tidy-rule h3 { margin: 0.2rem 0; font-size: 0.95rem; }
+.wiki-tidy-rule ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.wiki-tidy-item { display: flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.4rem; border-radius: 8px; background: var(--surface-2); }
+.wiki-tidy-text { flex: 1; min-width: 0; }

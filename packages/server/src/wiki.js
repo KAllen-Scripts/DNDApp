@@ -496,6 +496,13 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
       return wiki.update(cid, pageId, { sections }, { by, version });
     },
 
+    /** The names of deleted pages (Tidy up, stage 8c: a fact still linking one), lower case. */
+    removedNames(cid) {
+      const live = new Set(rows(cid).flatMap((p) => [p.title, ...p.aliases]).map(wikiKey));
+      return new Set(db.prepare('SELECT data FROM wiki_pages WHERE campaign_id = ?').all(cid).map((r) => normalizeWikiPage(JSON.parse(r.data)))
+        .filter((p) => p.removed).flatMap((p) => [p.title, ...p.aliases]).map(wikiKey).filter((k) => !live.has(k)));
+    },
+
     /** Names in `:::for` blocks that match no player, so the editor can say so. */
     unknownNames: (cid, page) => unknownBlockNames(page.sections.map((s) => s.text), players(cid)),
 

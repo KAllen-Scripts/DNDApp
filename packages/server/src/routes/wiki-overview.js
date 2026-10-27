@@ -7,10 +7,11 @@ import { KIND_FAMILIES, CANONS, narrowest, audienceOf, canSeeAudience } from '@d
 import { BadRequestError, NotFoundError } from '../store.js';
 import { WIKI_LIMITS as L } from '../wiki.js';
 import { viewerPagesFor, spoilerCheckFor, playersOf } from './wiki-viewer.js';
-import { summary, questBoard, listPages, knowsGrid, QUEST_COLUMNS } from '../wiki-views.js';
+import { summary, questBoard, listPages, knowsGrid, tidyItems, TIDY_RULES, QUEST_COLUMNS } from '../wiki-views.js';
+import { pagePlaces } from '../wiki-maps.js';
 
 export function registerWikiOverview(app, r) {
-  const { access, auth, wiki, wikiAI, store } = r;
+  const { access, wiki, wikiAI, store, maps, db } = r;
   const viewerPages = viewerPagesFor(r);
   const spoilerCheck = spoilerCheckFor(r);
   const players = (cid) => store.roster(cid).filter((m) => m.role === 'player');
@@ -159,5 +160,24 @@ export function registerWikiOverview(app, r) {
     if (!none && ![...b.sections].every((id) => page.sections.some((s) => s.id === id))) throw new NotFoundError('No such section');
     const saved = await wiki.update(cid, page.id, { available: pageNow, sections, facts, events }, { by: request.user.id, version: b.version ?? page.version });
     return { page: saved, knows: Object.fromEntries(who.map((uid) => [uid, wiki.coverage(cid, { userId: uid, seesAll: false }).get(page.id)])) };
+  });
+
+  // ---------- Tidy up (stage 8c) ----------
+
+  /** What in the wiki needs a hand: { rules: [{ rule, label, fix, count }], items: [{ rule, page?, text, … }] }. */
+  app.get('/campaigns/:cid/wiki/tidy', async (request) => {
+    const { cid } = access(request, { dm: true });
+    const pages = wiki.list(cid);
+    const allMaps = maps.list(cid);
+    const played = db.prepare("SELECT processed_at FROM sessions WHERE campaign_id = ? AND status = 'ready' AND processed_at IS NOT NULL").all(cid).map((x) => x.processed_at);
+    const items = tidyItems(pages, {
+      onMaps: new Set([...pagePlaces(maps, cid).keys(), ...allMaps.flatMap((m) => (m.tokens ?? []).filter((x) => x.page).map((x) => x.page.id))]),
+      placesWithoutPage: allMaps.flatMap((m) => (m.places ?? []).filter((x) => !x.page && x.name?.trim()).map((x) => ({ map_id: m.id, map_name: m.name, place_id: x.id, name: x.name.trim() }))).slice(0, 50),
+      removed: wiki.removedNames(cid),
+      suggestions: (p) => wiki.linkSuggestions(cid, p),
+      unknown: (p) => wiki.unknownNames(cid, p),
+      sessionsSince: (iso) => played.filter((at) => String(at) > String(iso)).length,
+    });
+    return { rules: TIDY_RULES.map((x) => ({ ...x, count: items.filter((i) => i.rule === x.rule).length })), items };
   });
 }
