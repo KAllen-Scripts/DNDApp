@@ -122,6 +122,11 @@ export function hero(page) {
 }
 
 /** Who a picture or fact is available to, for the DM, when it isn't as the page. */
+/** The DM's Send as a handout button for part of a saved page (wiki-handout.js). */
+const sendButton = (page, part, label, dm) => (dm && page.id && nav.sendHandout
+  ? h('button', { type: 'button', class: 'ghost small wiki-send', title: `Send ${label.toLowerCase()} to players as a handout`, onclick: () => nav.sendHandout(page, part, label) }, 'Send as a handout')
+  : null);
+
 const ownAvailable = (x, dm) => (dm && x.available !== 'all' ? h('span', { class: 'wiki-available small' }, ` (${availableText(x.available)})`) : null);
 
 /** The "at a glance" box: the page's picture, its facts, where it is and what's inside it. */
@@ -141,6 +146,7 @@ function infobox(page, { dm }) {
     children.length ? h('div', { class: 'wiki-children' },
       h('div', { class: 'wiki-children-head small' }, 'Inside it'),
       h('ul', {}, ...children.map((c) => h('li', { class: `fam-${fam(c.kind)}` }, pageLink(c.title, c.title))))) : null,
+    page.facts?.length || page.picture ? sendButton(page, { glance: true }, 'The at-a-glance box', dm) : null,
   );
 }
 
@@ -150,7 +156,8 @@ function gallery(page, { dm }) {
     h('h3', {}, 'Gallery'),
     h('div', { class: 'wiki-gallery-grid' }, ...page.gallery.map((g) => h('figure', {},
       h('button', { type: 'button', class: 'wiki-figure-open', title: 'Show it bigger', onclick: () => showPicture(g.id, g.caption) }, pictureImg(g.id, { size: 'thumb', alt: g.caption })),
-      g.caption || (dm && g.available !== 'all') ? h('figcaption', {}, g.caption, ownAvailable(g, dm)) : null))),
+      g.caption || (dm && g.available !== 'all') ? h('figcaption', {}, g.caption, ownAvailable(g, dm)) : null,
+      sendButton(page, { picture: g.id }, 'A picture', dm)))),
   );
 }
 
@@ -168,6 +175,7 @@ function sections(page, { dm }) {
     dm && s.by === 'ai' ? h('p', { class: 'wiki-by-ai muted small' }, 'Written by the AI. It keeps this section up to date (with your approval) until you change it.') : null,
     dm && s.available !== 'all' ? h('p', { class: 'wiki-available small' }, `Available to ${availableText(s.available, { section: true })}.`) : null,
     ...(dm ? sectionBody(s.text) : [richText(s.text)]),
+    s.id ? sendButton(page, { section: s.id }, s.heading ? `The section "${s.heading}"` : 'A section', dm) : null,
   ));
 }
 

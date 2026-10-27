@@ -9,12 +9,12 @@ import { BadRequestError, NotFoundError } from '../store.js';
 import { WIKI_LIMITS as L } from '../wiki.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 import { SOURCE_KINDS } from '../wiki-pictures.js';
-import { wikiKey } from '@dndapp/shared/wiki.js';
-import { pageOnMaps } from '../wiki-maps.js';
+import { wikiKey, wikiPieces, unlink, unpicture, audienceOf, canSeeAudience } from '@dndapp/shared/wiki.js';
+import { pageOnMaps, makePageFor } from '../wiki-maps.js';
 import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass } from '../wiki-views.js';
 
 export function registerWiki(app, r) {
-  const { access, auth, store, wiki, wikiAI, wikiPictures, jobs, pictures, search, maps } = r;
+  const { access, auth, store, wiki, wikiAI, wikiPictures, jobs, pictures, search, maps, handouts } = r;
 
   const crop = z.object({ x: z.number().min(0), y: z.number().min(0), w: z.number().positive(), h: z.number().positive() });
   const pictureId = z.string().regex(/^[a-f0-9]{10}$/);
@@ -252,6 +252,69 @@ export function registerWiki(app, r) {
     const page = await wiki.create(cid, body, { by: request.user.id });
     reply.status(201);
     return { page, unknown_names: wiki.unknownNames(cid, page) };
+  });
+
+  /** A new page for a place or token on a map, linked to it (or the page it already has): { map_id, kind, id }. */
+  app.post('/campaigns/:cid/wiki/from-map', async (request, reply) => {
+    const { cid } = access(request, { dm: true });
+    const body = z.object({ map_id: z.string().max(40), kind: z.enum(['place', 'token']), id: z.string().max(40) }).parse(request.body ?? {});
+    const { page, made } = await makePageFor({ wiki, maps, wikiPictures }, cid, body, { by: request.user.id });
+    reply.status(made ? 201 : 200);
+    return { page, made };
+  });
+
+  /**
+   * Send part of a page as a handout (DM): { part: { section } | { picture } | { glance: true }, to: 'everyone' | [player ids],
+   * share? }. The text leaves out every `:::for` and `:::dm` block, links become plain names, and the glance box sends only
+   * the facts available to everyone. `share` also makes that part available to them in the wiki (never the page itself:
+   * `page_hidden` says when the page isn't, so the DM decides).
+   */
+  app.post('/campaigns/:cid/wiki/:pid/handout', async (request, reply) => {
+    const { cid } = access(request, { dm: true });
+    const body = z.object({
+      part: z.union([z.object({ section: z.string() }), z.object({ picture: pictureId }), z.object({ glance: z.literal(true) })]),
+      to: z.union([z.literal('everyone'), z.array(z.number().int()).min(1).max(100)]),
+      share: z.boolean().default(false),
+    }).parse(request.body ?? {});
+    if (Array.isArray(body.to)) checkPlayers(cid, { players: body.to });
+    const page = wiki.get(cid, request.params.pid);
+    const plain = (t) => unpicture(unlink(wikiPieces(t).filter((x) => !x.block).map((x) => x.text).join('\n\n'))).trim();
+    let title = page.title;
+    let text = '';
+    let picture = null;
+    const widen = (a) => (a === 'all' || body.to === 'everyone' ? 'all' : [...new Set([...(a === 'dm' ? [] : a), ...body.to])]);
+    const changes = {};
+    if (body.part.section) {
+      const sec = page.sections.find((x) => x.id === body.part.section);
+      if (!sec) throw new NotFoundError('No such section');
+      if (sec.heading) title = `${page.title}: ${sec.heading}`;
+      text = plain(sec.text);
+      if (body.share) changes.sections = page.sections.map((x) => (x === sec ? { ...x, available: widen(x.available) } : x));
+    } else if (body.part.picture) {
+      const slots = [['picture', page.picture], ['banner', page.banner], ...page.gallery.map((g) => ['gallery', g])].filter(([, x]) => x?.id === body.part.picture);
+      if (!slots.length) throw new NotFoundError('No such picture on this page');
+      const cap = slots[0][1].caption;
+      if (cap) text = cap;
+      picture = (await wikiPictures.image(cid, body.part.picture, 'full')).buf;
+      if (body.share) {
+        for (const [slot] of slots) {
+          if (slot === 'gallery') changes.gallery = page.gallery.map((g) => (g.id === body.part.picture ? { ...g, available: widen(g.available) } : g));
+          else changes[slot] = { ...page[slot], available: widen(page[slot].available) };
+        }
+      }
+    } else {
+      const facts = page.facts.filter((f) => f.available === 'all' || (body.share && f.available !== 'dm'));
+      text = facts.map((f) => `${f.label}: ${unlink(f.value)}`).join('\n');
+      if (page.picture && page.picture.available === 'all') picture = (await wikiPictures.image(cid, page.picture.id, 'full')).buf;
+    }
+    if (!text && !picture) throw new BadRequestError('There is nothing in that part to send: it is all in blocks for the DM or chosen players.');
+    const handout = await handouts.create(cid, { title: title.slice(0, 200), text, to: body.to, picture }, { by: request.user.id });
+    let saved = page;
+    if (Object.keys(changes).length) saved = await wiki.update(cid, page.id, changes, { by: request.user.id, version: page.version });
+    const players = body.to === 'everyone' ? store.roster(cid).filter((m) => m.role === 'player').map((m) => m.user_id) : body.to;
+    const pageAudience = audienceOf(saved.available);
+    reply.status(201);
+    return { handout: { id: handout.id, title: handout.title }, page: saved, page_hidden: body.share && players.some((uid) => !canSeeAudience({ userId: uid }, pageAudience)) };
   });
 
   /** Save a page: the fields that change, and the `version` the editor opened (409 if it was saved since). */

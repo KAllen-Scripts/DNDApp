@@ -28,6 +28,8 @@ import { drawWheel } from './wiki-wheel.js';
 import { drawHub } from './wiki-home.js';
 import { pageDiff } from './wiki-diff.js';
 import { drawCompass } from './wiki-compass.js';
+import { drawOnMap } from './wiki-onmap.js';
+import './wiki-handout.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -251,7 +253,7 @@ function drawMain() {
 }
 
 function pageView() {
-  const { page, mentioned_in: mentioned = [], unknown_names: unknown = [] } = state.open;
+  const { page, mentioned_in: mentioned = [], unknown_names: unknown = [], on_maps: onMaps = [] } = state.open;
   const parent = page.parent && state.pages.find((p) => p.id === page.parent);
   const viewAs = h('select', { 'aria-label': 'View as', title: 'See this page as a player would get it in Ask' },
     h('option', { value: '' }, 'As you see it'),
@@ -287,6 +289,7 @@ function pageView() {
     h('p', { class: 'wiki-available small' }, `Available to ${availableText(page.available)}.`),
     unknown.length ? h('p', { class: 'wiki-warn small' }, `No player is called ${unknown.map((n) => `"${n}"`).join(', ')}, so those blocks stay with you.`) : null,
     content,
+    drawOnMap(page, onMaps, { reload: () => nav.openPage(page.id) }),
     mentioned.length ? h('p', { class: 'wiki-mentioned muted small' }, 'Mentioned in: ', ...mentioned.flatMap((m, i) => [i ? ', ' : null, pageLink(m.title, m.title)])) : null,
   );
 }

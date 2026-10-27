@@ -40,6 +40,8 @@ export const nav = {
   go: async () => {}, // to a route of the space (wiki-space.js)
   enter: () => {}, // into the wiki's space from the table (app.js)
   drawer: async () => {}, // show a page in the drawer, over either space (wiki-drawer.js)
+  sendHandout: null, // send part of a page as a handout (wiki-handout.js)
+  showMap: null, // open a map at a point on the Map tab (app.js; none in a popped-out window)
 };
 
 /** Forget the pictures fetched for the last campaign. */

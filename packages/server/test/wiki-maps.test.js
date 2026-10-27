@@ -46,7 +46,7 @@ test('wiki maps: a place and a token link to pages, the page lists them, and pla
     assert.equal((await t.request('PATCH', `${base}/places`, { body: { add: { name: 'Nowhere', x: 1, y: 1, page: { id: 'abcdef0123' } } } })).statusCode, 404, 'no such page');
 
     const onMaps = (await t.request('GET', `/campaigns/${t.campaign.id}/wiki/${mill.id}`)).json().on_maps;
-    assert.deepEqual(onMaps, [{ map_id: map.id, map_name: map.name, kind: 'place', id: place.id, name: 'Hollow Mill' }]);
+    assert.deepEqual(onMaps.map(({ crop: _c, ...x }) => x), [{ map_id: map.id, map_name: map.name, kind: 'place', id: place.id, name: 'Hollow Mill', x: 100, y: 100, revealed: true }]);
 
     const asSam = await t.request('GET', base, { as: t.sam.token });
     assert.equal(asSam.statusCode, 200);
@@ -95,6 +95,71 @@ test('wiki maps: the DM takes a crop of a map, as a picture or for a page; a pla
     assert.equal(pic.statusCode, 201, pic.body);
     assert.deepEqual([pic.json().picture.width, pic.json().picture.height], [70, 35]);
     assert.deepEqual(pic.json().picture.from.crop, { x: 0, y: 0, w: 70, h: 35 });
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('wiki maps: making a page from a place names it, cuts its picture from the map, puts it inside the page of the place that opens the map, and links it', async () => {
+  const t = await setup();
+  try {
+    const { map, base, mill } = await world(t);
+    const inner = await t.request('POST', `/campaigns/${t.campaign.id}/maps`, { body: { read: true, filename: 'inside.png', data: (await terrain(350, 245, { size: 35 })).toString('base64') } });
+    const room = inner.json();
+    await until(() => t.maps.get(t.campaign.id, room.id).reading.status !== 'pending');
+    await t.request('PATCH', base, { body: { kind: 'region' } });
+    await t.request('PATCH', `${base}/places`, { body: { add: { name: 'Hollow Mill', x: 100, y: 100, to: room.id, page: { id: mill.id } } } });
+    const cellar = (await t.request('PATCH', `/campaigns/${t.campaign.id}/maps/${room.id}/places`, { body: { add: { name: 'Cellar', x: 50, y: 50 } } })).json().places[0];
+
+    const res = await t.request('POST', `/campaigns/${t.campaign.id}/wiki/from-map`, { body: { map_id: room.id, kind: 'place', id: cellar.id } });
+    assert.equal(res.statusCode, 201, res.body);
+    const { page } = res.json();
+    assert.equal(page.title, 'Cellar');
+    assert.equal(page.parent, mill.id, 'inside the page of the place that opens this map');
+    assert.equal(page.available, 'dm', "the DM's alone to start with");
+    assert.ok(page.picture?.id, 'a picture cut from the map');
+    assert.deepEqual(t.maps.get(t.campaign.id, room.id).places[0].page, { id: page.id, title: 'Cellar' });
+    const again = await t.request('POST', `/campaigns/${t.campaign.id}/wiki/from-map`, { body: { map_id: room.id, kind: 'place', id: cellar.id } });
+    assert.equal(again.statusCode, 200);
+    assert.equal(again.json().page.id, page.id, 'a linked place keeps its page');
+
+    const ghost = (await t.request('POST', `${base}/tokens`, { body: { kind: 'npc', name: 'Hollow Mill', x: 200, y: 200 } })).json().token;
+    const p2 = (await t.request('POST', `/campaigns/${t.campaign.id}/wiki/from-map`, { body: { map_id: map.id, kind: 'token', id: ghost.id } })).json().page;
+    assert.equal(p2.kind, 'npc');
+    assert.equal(p2.title, `Hollow Mill (${map.name})`, 'a taken title gets the map name');
+    const onMaps = (await t.request('GET', `/campaigns/${t.campaign.id}/wiki/${mill.id}`)).json().on_maps;
+    assert.equal(onMaps[0].revealed, false);
+    assert.ok(onMaps[0].crop.w > 0);
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('wiki handouts: a section goes as a handout without its DM and :::for blocks, and sharing it opens that section to them', async () => {
+  const t = await setup();
+  try {
+    const make = async (body) => (await t.request('POST', `/campaigns/${t.campaign.id}/wiki`, { body })).json().page;
+    const page = await make({ title: 'The Old Well', kind: 'place', available: [t.sam.id], sections: [
+      { heading: 'Rumours', text: 'The well is cursed, says [[Rennick]].\n:::dm\nIt is not.\n:::\n:::for Lyra\nLyra heard it sing.\n:::', available: 'dm' },
+    ], facts: [{ label: 'Depth', value: '40 ft', available: 'all' }, { label: 'Secret', value: 'A door', available: 'dm' }] });
+    const sec = page.sections[0];
+    const send = (body) => t.request('POST', `/campaigns/${t.campaign.id}/wiki/${page.id}/handout`, { body });
+
+    const res = await send({ part: { section: sec.id }, to: [t.alex.id], share: true });
+    assert.equal(res.statusCode, 201, res.body);
+    const handout = (await t.request('GET', `/campaigns/${t.campaign.id}/handouts`)).json().handouts.find((x) => x.id === res.json().handout.id);
+    assert.equal(handout.title, 'The Old Well: Rumours');
+    assert.equal(handout.text, 'The well is cursed, says Rennick.');
+    assert.deepEqual(res.json().page.sections[0].available, [t.alex.id], 'the section is shared with them');
+    assert.equal(res.json().page_hidden, true, 'the page is only for Thorin, so the DM is told');
+
+    const glance = await send({ part: { glance: true }, to: 'everyone' });
+    assert.equal(glance.statusCode, 201);
+    const g = (await t.request('GET', `/campaigns/${t.campaign.id}/handouts`)).json().handouts.find((x) => x.id === glance.json().handout.id);
+    assert.equal(g.text, 'Depth: 40 ft', 'only the facts for everyone');
+
+    assert.equal((await send({ part: { section: sec.id }, to: [t.dm.id] })).statusCode, 400, 'only players');
+    assert.equal((await t.request('POST', `/campaigns/${t.campaign.id}/wiki/${page.id}/handout`, { body: { part: { glance: true }, to: 'everyone' }, as: t.sam.token })).statusCode, 403);
   } finally {
     await t.cleanup();
   }
