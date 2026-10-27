@@ -32,6 +32,7 @@ import { registerCompanions } from './routes/companions.js';
 import { registerItemActions } from './routes/item-actions.js';
 import { registerWiki } from './routes/wiki.js';
 import { registerWikiOverview } from './routes/wiki-overview.js';
+import { registerWikiTransfer } from './routes/wiki-transfer.js';
 
 /**
  * Open a Server-Sent Events stream on a request. `stillAllowed`, if given, is
@@ -450,6 +451,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   registerCompanions(app, r);
   registerItemActions(app, r);
   registerWikiOverview(app, r);
+  registerWikiTransfer(app, r);
   registerWiki(app, r);
 
   serveWebPage(app, config.webDir);

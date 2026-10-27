@@ -7,7 +7,7 @@
  *
  * The address says where you are, so Back, Forward and reload work:
  * ?space=wiki#/home, #/page/<id>, #/page/<id>/edit, #/page/<id>/history,
- * #/new, #/waiting, #/quests, #/knows and #/tidy. More views join the rail as they're built
+ * #/new, #/waiting, #/quests, #/knows, #/tidy and #/import. More views join the rail as they're built
  * (docs/notes/wiki-space.md).
  */
 import { initTruthToggle } from './wiki-canon.js';
@@ -40,6 +40,7 @@ export function currentRoute() {
   if (state.view === 'quests') return '#/quests';
   if (state.view === 'knows') return '#/knows';
   if (state.view === 'tidy') return '#/tidy';
+  if (state.view === 'import') return '#/import';
   if (state.view === 'timeline') return `#/timeline${state.timelineFocus ? `/${state.timelineFocus}` : ''}`;
   if (!state.open) return '#/home';
   const id = state.open.page.id;
@@ -77,7 +78,7 @@ export function setSpace(space, { push = true } = {}) {
 
 /** Draw what the address says (on entering the space from Back, Forward or a reload). */
 export async function routeFromUrl() {
-  const m = /^#\/(home|waiting|new|templates|quests|knows|tidy|wheel(?:\/([a-z]+))?|page\/([a-f0-9]+)(?:\/(edit|history))?|atlas(?:\/([A-Za-z0-9_-]+))?|web(?:\/([a-f0-9]{10}))?|timeline(?:\/([a-f0-9]{10}))?)?$/.exec(location.hash) ?? [];
+  const m = /^#\/(home|waiting|new|templates|quests|knows|tidy|import|wheel(?:\/([a-z]+))?|page\/([a-f0-9]+)(?:\/(edit|history))?|atlas(?:\/([A-Za-z0-9_-]+))?|web(?:\/([a-f0-9]{10}))?|timeline(?:\/([a-f0-9]{10}))?)?$/.exec(location.hash) ?? [];
   applying = true;
   ready = true;
   // A player only reads: the DM's tools (new, templates, waiting, edit, history) open the Home instead.
@@ -100,7 +101,7 @@ export async function routeFromUrl() {
       state.view = 'templates';
       nav.drawList();
       nav.drawMain();
-    } else if (['quests', 'knows', 'tidy'].includes(m[1])) {
+    } else if (['quests', 'knows', 'tidy', 'import'].includes(m[1])) {
       state.open = null;
       state.view = m[1];
       nav.drawList();
@@ -185,6 +186,7 @@ function drawRail() {
     state.dm && item('#/knows', '◐', 'Who knows'),
     state.dm && item('#/tidy', '✧', 'Tidy up'),
     state.dm && item('#/templates', '▤', 'Templates'),
+    item('#/import', '⇅', state.dm ? 'Import and export' : 'Export and print'),
     state.dm && item('#/waiting', '✎', 'Waiting', { count: state.proposals }),
     h('span', { class: 'wiki-rail-gap' }),
     toTable && item('#table', '⌂', 'The table', { onclick: () => toTable(), cls: ' wiki-to-table' }),

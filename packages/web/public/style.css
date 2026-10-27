@@ -1683,6 +1683,25 @@ details.spell > summary::-webkit-details-marker { display: none; }
   .md-preview { max-height: none; overflow: visible; border: none; padding: 0; }
 }
 
+/* Moving the wiki in and out (wiki-transfer.js, stage 9b). */
+.wiki-transfer { display: grid; gap: 1rem; max-width: 52rem; }
+.wiki-transfer-part { display: grid; gap: 0.6rem; }
+.wiki-transfer-part h3 { margin: 0; }
+.wiki-transfer-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.wiki-transfer-part textarea { width: 100%; }
+.wiki-print-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: 0.2rem 0.75rem; max-height: 18rem; overflow-y: auto; }
+.wiki-import-list { columns: 2 12rem; margin: 0; }
+#wiki-print { display: none; }
+@media print {
+  .wiki-printing body > :not(#wiki-print) { display: none !important; }
+  .wiki-printing #wiki-print { display: block; }
+  #wiki-print .wiki-print-page { break-after: page; }
+  #wiki-print .wiki-print-page:last-child { break-after: auto; }
+  #wiki-print button, #wiki-print .wiki-app-rolls, #wiki-print .wiki-send { display: none !important; }
+  #wiki-print .wiki-hero { color: #000; background: none; }
+  #wiki-print .wiki-section, #wiki-print .wiki-infobox, #wiki-print figure { break-inside: avoid; }
+}
+
 /* ---------- maps (map.js) ---------- */
 
 .map-panel { min-height: 0; }
