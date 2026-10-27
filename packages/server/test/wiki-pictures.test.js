@@ -81,7 +81,7 @@ test('wiki pictures: the DM uploads one or copies one the app has; it is archive
     const page = (await t.request('POST', `/campaigns/${cid}/wiki`, { body: { title: 'Brindle', kind: 'town', picture: { id: fromMap.id, caption: 'Brindle from above' }, facts: [{ label: 'Region', value: 'The Vale' }] } })).json().page;
     assert.equal(page.picture.id, fromMap.id);
     assert.equal(page.picture.available, 'all');
-    assert.deepEqual(page.facts, [{ label: 'Region', value: 'The Vale', available: 'all' }]);
+    assert.deepEqual(page.facts, [{ label: 'Region', value: 'The Vale', available: 'all', canon: 'true' }]);
     const listed = (await t.request('GET', `/campaigns/${cid}/wiki`)).json().pages[0];
     assert.equal(listed.picture, fromMap.id, 'the list gives each page its picture for the cards');
   } finally {

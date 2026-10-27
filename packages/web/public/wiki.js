@@ -270,7 +270,7 @@ function pageView() {
     try {
       const res = await state.guarded(() => api('GET', `${base()}/${page.id}?as=${as}`));
       content.replaceChildren(...(res.page
-        ? [h('p', { class: 'wiki-as muted small' }, `What Ask can tell ${playerName(as)} from this page:`), ...pageContent(res.page, { dm: false })]
+        ? [h('p', { class: 'wiki-as muted small' }, `What Ask can tell ${playerName(as)} from this page:`), ...pageContent(res.page, { dm: false, me: as })]
         : [h('p', { class: 'wiki-as muted' }, `Nothing on this page is available to ${playerName(as)}.`)]));
     } catch (err) {
       report(err);

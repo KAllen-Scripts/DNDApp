@@ -20,14 +20,29 @@ import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { NotFoundError, BadRequestError } from './store.js';
 import { ArchiveConflictError } from './archive.js';
-import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, unpicture, wikiKey, isPictureId, pagePictureIds } from '@dndapp/shared/wiki.js';
+import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, unpicture, wikiKey, isPictureId, pagePictureIds, normalizeCanon, playerCanon, canonMarker } from '@dndapp/shared/wiki.js';
 
-export const WIKI_LIMITS = { title: 200, kind: 60, alias: 200, aliases: 50, tags: 30, tag: 60, sections: 200, heading: 200, text: 200_000, caption: 300, gallery: 60, facts: 30, label: 60, value: 500 };
+export const WIKI_LIMITS = { title: 200, kind: 60, alias: 200, aliases: 50, tags: 30, tag: 60, sections: 200, heading: 200, text: 200_000, caption: 300, gallery: 60, facts: 30, label: 60, value: 500, truth: 2000 };
 
 export const isWikiId = (id) => /^[a-f0-9]{10}$/.test(String(id));
 
 /** 'all', 'dm', or a list of user ids, from whatever was stored. */
 const normalizeAvailable = (a, fallback) => (a === 'all' || a === 'dm' ? a : Array.isArray(a) ? [...new Set(a.map(Number).filter(Number.isInteger))] : fallback);
+
+/**
+ * A part's canon (truth and rumour, shared/src/wiki.js CANONS): `canon`, the DM's `truth` beside a falsehood, and the
+ * `owner` (a player's user id) of an account.
+ */
+function canonOf(x) {
+  const canon = normalizeCanon(x?.canon);
+  const out = { canon };
+  if (canon === 'false') out.truth = String(x?.truth ?? '').trim().slice(0, WIKI_LIMITS.truth);
+  if (canon === 'told' && Number.isInteger(Number(x?.owner)) && x?.owner != null) out.owner = Number(x.owner);
+  return out;
+}
+
+/** A part as a player gets it: a falsehood is a rumour to them, and the truth is the DM's. */
+const forPlayer = ({ truth: _truth, ...x }) => ({ ...x, canon: playerCanon(x.canon) });
 
 /**
  * One of a page's pictures (its main picture, its banner, or one in its
@@ -37,7 +52,7 @@ const normalizeAvailable = (a, fallback) => (a === 'all' || a === 'dm' ? a : Arr
  */
 function normalizePicture(x, { banner = false } = {}) {
   if (!x || !isPictureId(x.id)) return null;
-  const out = { id: String(x.id), caption: String(x.caption ?? '').trim().slice(0, WIKI_LIMITS.caption), available: normalizeAvailable(x.available, 'all') };
+  const out = { id: String(x.id), caption: String(x.caption ?? '').trim().slice(0, WIKI_LIMITS.caption), available: normalizeAvailable(x.available, 'all'), ...canonOf(x) };
   if (banner) out.focus = Number.isFinite(Number(x.focus)) ? Math.min(100, Math.max(0, Math.round(Number(x.focus)))) : 50;
   return out;
 }
@@ -62,6 +77,7 @@ export function normalizeWikiPage(p = {}) {
       by: s.by === 'ai' ? 'ai' : 'dm',
       // 'all' here means "as the page".
       available: normalizeAvailable(s.available, 'all'),
+      ...canonOf(s),
     })),
     // Pictures (2026-10-21): the main picture (a portrait, a view of the place) beside the facts, a banner across the top, and a gallery.
     picture: normalizePicture(p.picture),
@@ -69,7 +85,7 @@ export function normalizeWikiPage(p = {}) {
     gallery: (Array.isArray(p.gallery) ? p.gallery : []).map((x) => normalizePicture(x)).filter(Boolean).slice(0, WIKI_LIMITS.gallery),
     // At a glance (an infobox): short facts like "Race: Half-elf", each with who it's available to ('all' = as the page).
     facts: (Array.isArray(p.facts) ? p.facts : [])
-      .map((f) => ({ label: String(f?.label ?? '').trim().slice(0, WIKI_LIMITS.label), value: String(f?.value ?? '').trim().slice(0, WIKI_LIMITS.value), available: normalizeAvailable(f?.available, 'all') }))
+      .map((f) => ({ label: String(f?.label ?? '').trim().slice(0, WIKI_LIMITS.label), value: String(f?.value ?? '').trim().slice(0, WIKI_LIMITS.value), available: normalizeAvailable(f?.available, 'all'), ...canonOf(f) }))
       .filter((f) => f.label || f.value)
       .slice(0, WIKI_LIMITS.facts),
     version: Number(p.version) || 1,
@@ -108,7 +124,8 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
     const pageAudience = audienceOf(page.available);
     const out = [];
     for (const section of page.sections) {
-      const sectionAudience = narrowest(pageAudience, audienceOf(section.available));
+      // Planned (the DM's prep) is the DM's only, whatever it's available to.
+      const sectionAudience = section.canon === 'planned' ? [] : narrowest(pageAudience, audienceOf(section.available));
       for (const piece of wikiPieces(section.text)) {
         const audience = narrowest(sectionAudience, blockAudience(piece.block, roster));
         const last = out.at(-1);
@@ -131,35 +148,39 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
     if (!canSeeAudience(viewer, pageAudience)) return null;
     // A picture or a fact is available to the narrowest of the page and its own setting.
     const sees = (x) => x && canSeeAudience(viewer, narrowest(pageAudience, audienceOf(x.available)));
-    const picture = sees(page.picture) ? page.picture : null;
-    const banner = sees(page.banner) ? page.banner : null;
-    const gallery = page.gallery.filter(sees);
-    const facts = page.facts.filter(sees);
+    // A picture's caption can be planned (the picture shows, the caption doesn't); a planned fact is the DM's.
+    const pic = (x) => (!sees(x) ? null : x.canon === 'planned' ? { ...forPlayer(x), caption: '', canon: 'true' } : forPlayer(x));
+    const picture = pic(page.picture);
+    const banner = pic(page.banner);
+    const gallery = page.gallery.map(pic).filter(Boolean);
+    const facts = page.facts.filter((f) => f.canon !== 'planned' && sees(f)).map(forPlayer);
     const visible = parts(page, roster).filter((p) => p.text.trim() && canSeeAudience(viewer, p.audience));
     if (!visible.length && !facts.length && !picture && !banner && !gallery.length) return null;
     const sections = [];
     for (const p of visible) {
       const last = sections.at(-1);
       if (last?.id === p.section.id) last.text += `\n\n${p.text}`;
-      else sections.push({ ...p.section, text: p.text });
+      else sections.push({ ...forPlayer(p.section), text: p.text });
     }
     // Other names can be secrets: a player gets only the title.
     return { ...page, aliases: [], sections, picture, banner, gallery, facts };
   }
 
   /** What a page's facts and picture captions say, grouped by who they're available to (for search). */
-  function extras(page) {
+  function extras(page, roster = []) {
+    const ownerName = (id) => { const m = roster.find((r) => r.user_id === id); return m ? m.character_name || m.name : ''; };
     const pageAudience = audienceOf(page.available);
     const groups = new Map();
     const add = (x, line) => {
       if (!line.trim()) return;
-      const audience = narrowest(pageAudience, audienceOf(x.available));
+      const audience = x.canon === 'planned' ? [] : narrowest(pageAudience, audienceOf(x.available));
       const key = JSON.stringify(audience);
       if (!groups.has(key)) groups.set(key, { audience, lines: [] });
       groups.get(key).lines.push(line);
     };
-    for (const f of page.facts) add(f, `${f.label}${f.label && f.value ? ': ' : ''}${unlink(f.value)}`);
-    for (const x of [page.picture, page.banner, ...page.gallery]) if (x?.caption) add(x, `Picture: ${x.caption}`);
+    const mark = (x) => { const m = canonMarker(x.canon, { owner: ownerName(x.owner) }); return m ? `${m} ` : ''; };
+    for (const f of page.facts) add(f, `${mark(f)}${f.label}${f.label && f.value ? ': ' : ''}${unlink(f.value)}`);
+    for (const x of [page.picture, page.banner, ...page.gallery]) if (x?.caption) add(x, `${mark(x)}Picture: ${x.caption}`);
     return [...groups.values()];
   }
 
@@ -168,16 +189,27 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
    * every doc anyway). Aliases can be secrets (a disguise's real name), so
    * they go in a doc of their own that only the DM finds.
    */
+  /** A part's canon marker for search (as a player would read it: the truth is never in a doc players can find). */
+  const partMarker = (x, roster) => {
+    const owner = roster.find((r) => r.user_id === x.owner);
+    const m = canonMarker(x.canon, { owner: owner ? owner.character_name || owner.name : '' });
+    return m ? `${m} ` : '';
+  };
+
   async function index(cid, page, roster = players(cid)) {
     if (page.removed) return search.removeDocs(cid, { kind: 'wiki', ref_id: page.id });
     const docs = parts(page, roster)
       .filter((p) => p.text.trim())
       .map((p) => ({
         title: `${page.title}${p.section.heading ? ` › ${p.section.heading}` : ''}`,
-        text: `${page.kind ? `(${page.kind}) ` : ''}${page.title}\n${unpicture(unlink(p.text))}`,
+        text: `${page.kind ? `(${page.kind}) ` : ''}${page.title}\n${partMarker(p.section, roster)}${unpicture(unlink(p.text))}`,
         visible_to: p.audience,
       }));
-    for (const g of extras(page)) docs.push({ title: `${page.title} › At a glance`, text: `${page.kind ? `(${page.kind}) ` : ''}${page.title}\n${g.lines.join('\n')}`, visible_to: g.audience });
+    // The truth beside a falsehood is the DM's alone: a doc of its own nobody else finds.
+    for (const x of [...page.sections, ...page.facts, page.picture, page.banner, ...page.gallery]) {
+      if (x?.canon === 'false' && x.truth) docs.push({ title: `${page.title} › The truth`, text: `${page.title}\nThe truth (players believe otherwise): ${x.truth}`, visible_to: [] });
+    }
+    for (const g of extras(page, roster)) docs.push({ title: `${page.title} › At a glance`, text: `${page.kind ? `(${page.kind}) ` : ''}${page.title}\n${g.lines.join('\n')}`, visible_to: g.audience });
     if (page.aliases.length) docs.push({ title: page.title, text: `${page.title}\nAlso called: ${page.aliases.join(', ')}`, visible_to: [] });
     await search.replaceDocs(cid, { kind: 'wiki', ref_id: page.id }, docs);
   }

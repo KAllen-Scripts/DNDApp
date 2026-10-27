@@ -544,6 +544,28 @@ button.wiki-name { color: inherit; font-size: inherit; text-decoration: underlin
 .wiki-actions select { width: auto; max-width: 100%; }
 .wiki-meta, .wiki-available, .wiki-warn, .wiki-as, .wiki-mentioned { margin: 0; }
 .wiki-available { color: var(--accent); }
+
+/* Truth and rumour (wiki-canon.js): one look for every view. Rumour dotted, false struck red with the truth
+   beside it (the DM only), planned faint (the DM only), an account in quote marks. */
+.wiki-canon { display: inline-block; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em; padding: 0.05rem 0.4rem; margin-right: 0.35rem; border-radius: 999px; border: 1px dotted currentColor; vertical-align: 0.1em; color: var(--muted); }
+.wiki-canon.canon-rumour { color: #8a6a1f; }
+.wiki-canon.canon-false { color: var(--accent); border-style: solid; }
+.wiki-canon.canon-told::before { content: '\201C'; margin-right: 0.15rem; }
+.wiki-section.canon-rumour, dd.canon-rumour { border-left: 3px dotted #b8923a; padding-left: 0.6rem; }
+.wiki-section.canon-told { border-left: 3px double var(--muted); padding-left: 0.6rem; }
+.wiki-section.canon-told > .wiki-canon-text { font-style: italic; }
+.wiki-section.canon-false, dd.canon-false { border-left: 3px solid var(--accent); padding-left: 0.6rem; }
+.canon-false > .wiki-canon-text, dd.canon-false > .wiki-fact-value { text-decoration: line-through; text-decoration-color: var(--accent); opacity: 0.75; }
+.canon-planned { opacity: 0.55; }
+.wiki-section.canon-planned { border-left: 3px dashed var(--muted); padding-left: 0.6rem; }
+.wiki-truth { display: block; margin: 0.25rem 0 0.4rem; padding: 0.3rem 0.5rem; border-radius: 6px; background: color-mix(in srgb, var(--accent) 10%, transparent); font-size: 0.9em; }
+.wiki-canon-picker { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
+.wiki-canon-picker .wiki-truth-box { flex-basis: 100%; min-width: 14rem; }
+.wiki-truth-toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+/* The DM's Truth toggle on "what's true": rumours and what's believed go, the truth stays. */
+#tab-wiki[data-truth] .canon-rumour, #tab-wiki[data-truth] dt.canon-false + dd.canon-false > .wiki-fact-value,
+#tab-wiki[data-truth] .canon-false > .wiki-canon-text, #tab-wiki[data-truth] .wiki-canon.canon-false { display: none; }
+#tab-wiki[data-truth] dt.canon-rumour { display: none; }
 .wiki-warn { color: var(--error); }
 .wiki-layout { display: grid; gap: 1rem 1.4rem; align-items: start; }
 .wiki-layout.with-box { grid-template-columns: minmax(0, 1fr) minmax(14rem, 19rem); }
@@ -634,7 +656,9 @@ button.wiki-link.missing { color: var(--muted); text-decoration-style: dashed; }
 .wiki-gallery-item img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; }
 .wiki-gallery-item .icon-btn { position: absolute; top: 0.5rem; right: 0.5rem; background: var(--surface); }
 .wiki-facts-edit { display: grid; gap: 0.35rem; }
-.wiki-fact-row { display: grid; grid-template-columns: minmax(6rem, 10rem) minmax(0, 1fr) auto auto; gap: 0.35rem; align-items: center; }
+.wiki-fact-row { display: grid; grid-template-columns: minmax(6rem, 10rem) minmax(0, 1fr) auto auto auto auto; gap: 0.35rem; align-items: center; }
+.wiki-fact-row .wiki-canon-picker { display: contents; }
+.wiki-fact-row .wiki-truth-box { grid-column: 1 / -1; order: 1; }
 .wiki-fact-row input { min-width: 0; }
 .wiki-edit-sections { display: grid; gap: 0.6rem; }
 .wiki-edit-section { padding: 0.6rem 0.7rem; display: grid; gap: 0.4rem; }

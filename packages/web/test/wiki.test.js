@@ -257,8 +257,8 @@ test('wiki tab: the DM adds pictures in the editor (main picture from the choose
     await page.waitFor(() => page.text('#wiki-main h2') === 'Mira');
     const [mira] = (await t.request('GET', `/campaigns/${t.campaign.id}/wiki`)).json().pages;
     const full = (await t.request('GET', `/campaigns/${t.campaign.id}/wiki/${mira.id}`)).json().page;
-    assert.deepEqual(full.picture, { id: old.id, caption: 'Mira at the market', available: 'all' });
-    assert.deepEqual(full.facts, [{ label: 'Race', value: 'Half-elf', available: 'all' }], 'the usual facts left empty are not kept');
+    assert.deepEqual(full.picture, { id: old.id, caption: 'Mira at the market', available: 'all', canon: 'true' });
+    assert.deepEqual(full.facts, [{ label: 'Race', value: 'Half-elf', available: 'all', canon: 'true' }], 'the usual facts left empty are not kept');
     assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/wiki/pictures`)).json().pictures.length, 2, 'the pasted picture was added');
     assert.ok(page.$('.wiki-text .wiki-figure img'));
     await page.settle();

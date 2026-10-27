@@ -18,7 +18,7 @@ import { renderRecord } from '../kb/store.js';
 import { preparedTranscript } from '../pipeline/prepare.js';
 import { fitWhole } from '../fit.js';
 import { creatureKey } from '../creatures.js';
-import { unlink, unpicture } from '@dndapp/shared/wiki.js';
+import { unlink, unpicture, canonMarker } from '@dndapp/shared/wiki.js';
 
 const SessionRange = {
   from_session: z.number().int().nullable().describe('Only from this session number, or null'),
@@ -136,6 +136,8 @@ function renderWikiSection(page, section, { forDm, names }) {
   const head = `--- Wiki: ${page.title}${section.heading ? ` › ${section.heading}` : ''}${page.kind ? ` (${page.kind})` : ''}`;
   const also = page.aliases.length ? `\nAlso called: ${page.aliases.join(', ')}` : '';
   let text = unpicture(unlink(section.text));
+  const mark = canonMarker(section.canon, { forDm, truth: section.truth ?? '', owner: names.get(section.owner) ?? '' });
+  if (mark) text = `${mark}\n${text}`;
   let who = '';
   if (forDm) {
     who = `\nAvailable to: ${section.available === 'all' ? `as the page (${availableText(page.available, names)})` : availableText(section.available, names)}`;
@@ -253,7 +255,10 @@ export function createTools({ db, store, kb, search, books, wiki = null, config,
   // A page's facts (its "at a glance" box) read as a section of their own, first. A player's page is already filtered.
   const factsSection = (page) => {
     if (!page.facts?.length) return [];
-    const line = (f) => `${f.label}${f.label && f.value ? ': ' : ''}${f.value}${viewer.seesAll && f.available !== 'all' ? ` [available to ${availableText(f.available, wikiNames)}]` : ''}`;
+    const line = (f) => {
+      const mark = canonMarker(f.canon, { forDm: viewer.seesAll, truth: f.truth ?? '', owner: wikiNames.get(f.owner) ?? '' });
+      return `${mark ? `${mark} ` : ''}${f.label}${f.label && f.value ? ': ' : ''}${f.value}${viewer.seesAll && f.available !== 'all' ? ` [available to ${availableText(f.available, wikiNames)}]` : ''}`;
+    };
     return [{ page, section: { id: 'facts', heading: 'At a glance', text: page.facts.map(line).join('\n'), available: 'all' } }];
   };
   const wikiSections = (pages) =>
