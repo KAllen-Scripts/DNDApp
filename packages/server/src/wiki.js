@@ -22,8 +22,9 @@ import { NotFoundError, BadRequestError } from './store.js';
 import { ArchiveConflictError } from './archive.js';
 import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, unpicture, wikiKey, isPictureId, pagePictureIds, normalizeCanon, playerCanon, canonMarker, TONES } from '@dndapp/shared/wiki.js';
 import { normalizeSources } from '@dndapp/shared/citations.js';
+import { parseWhen, whenText } from '@dndapp/shared/wiki-time.js';
 
-export const WIKI_LIMITS = { title: 200, kind: 60, alias: 200, aliases: 50, tags: 30, tag: 60, sections: 200, heading: 200, text: 200_000, caption: 300, gallery: 60, facts: 60, label: 60, value: 500, truth: 2000 };
+export const WIKI_LIMITS = { title: 200, kind: 60, alias: 200, aliases: 50, tags: 30, tag: 60, sections: 200, heading: 200, text: 200_000, caption: 300, gallery: 60, facts: 60, label: 60, value: 500, truth: 2000, events: 100, event: 2000, when: 200 };
 
 export const isWikiId = (id) => /^[a-f0-9]{10}$/.test(String(id));
 
@@ -46,6 +47,19 @@ function canonOf(x) {
 function sourcesOf(x) {
   const sources = normalizeSources(x?.sources);
   return sources.length ? { sources } : {};
+}
+
+/**
+ * An in-game time (stage 4b, shared/src/wiki-time.js): { text, from, to } in minutes of the clock, from and to
+ * null when the text isn't a time the parser knows. Null for none.
+ */
+function normalizeWhen(w) {
+  const text = String(w?.text ?? '').trim().slice(0, WIKI_LIMITS.when);
+  if (!text) return null;
+  const at = (n) => (Number.isFinite(n) ? Math.round(n) : null);
+  const from = at(w.from);
+  const to = from == null ? null : Math.max(from, at(w.to) ?? from);
+  return { text, from, to };
 }
 
 /** A part as a player gets it: a falsehood is a rumour to them, and the truth is the DM's. */
@@ -96,6 +110,21 @@ export function normalizeWikiPage(p = {}) {
       .map((f) => ({ label: String(f?.label ?? '').trim().slice(0, WIKI_LIMITS.label), value: String(f?.value ?? '').trim().slice(0, WIKI_LIMITS.value), available: normalizeAvailable(f?.available, 'all'), ...canonOf(f), ...sourcesOf(f), ...(TONES.includes(f?.tone) && { tone: f.tone }), ...(f?.by === 'ai' && { by: 'ai' }) }))
       .filter((f) => f.label || f.value)
       .slice(0, WIKI_LIMITS.facts),
+    // When it happened (stage 4b): a session, a war, a birth. Null for no time.
+    when: normalizeWhen(p.when),
+    // Dated lines on the page ("Day 12: the mill burned"), each with who it's for, its canon and how we know it.
+    events: (Array.isArray(p.events) ? p.events : [])
+      .map((e) => ({
+        id: /^[a-f0-9]{6}$/.test(String(e?.id)) ? String(e.id) : crypto.randomBytes(3).toString('hex'),
+        when: normalizeWhen(e?.when),
+        text: String(e?.text ?? '').trim().slice(0, WIKI_LIMITS.event),
+        available: normalizeAvailable(e?.available, 'all'),
+        ...canonOf(e),
+        ...sourcesOf(e),
+        ...(e?.by === 'ai' && { by: 'ai' }),
+      }))
+      .filter((e) => e.text)
+      .slice(0, WIKI_LIMITS.events),
     version: Number(p.version) || 1,
     created_by: p.created_by ?? null,
     created_at: String(p.created_at ?? ''),
@@ -162,8 +191,9 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
     const banner = pic(page.banner);
     const gallery = page.gallery.map(pic).filter(Boolean);
     const facts = page.facts.filter((f) => f.canon !== 'planned' && sees(f)).map(forPlayer);
+    const events = page.events.filter((e) => e.canon !== 'planned' && sees(e)).map(forPlayer);
     const visible = parts(page, roster).filter((p) => p.text.trim() && canSeeAudience(viewer, p.audience));
-    if (!visible.length && !facts.length && !picture && !banner && !gallery.length) return null;
+    if (!visible.length && !facts.length && !events.length && !picture && !banner && !gallery.length) return null;
     const sections = [];
     for (const p of visible) {
       const last = sections.at(-1);
@@ -171,11 +201,11 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
       else sections.push({ ...forPlayer(p.section), text: p.text });
     }
     // Other names can be secrets: a player gets only the title.
-    return { ...page, aliases: [], sections, picture, banner, gallery, facts };
+    return { ...page, aliases: [], sections, picture, banner, gallery, facts, events };
   }
 
   /** What a page's facts and picture captions say, grouped by who they're available to (for search). */
-  function extras(page, roster = []) {
+  function extras(page, roster = [], calendar = null) {
     const ownerName = (id) => { const m = roster.find((r) => r.user_id === id); return m ? m.character_name || m.name : ''; };
     const pageAudience = audienceOf(page.available);
     const groups = new Map();
@@ -189,6 +219,9 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
     const mark = (x) => { const m = canonMarker(x.canon, { owner: ownerName(x.owner) }); return m ? `${m} ` : ''; };
     for (const f of page.facts) add(f, `${mark(f)}${f.label}${f.label && f.value ? ': ' : ''}${unlink(f.value)}`);
     for (const x of [page.picture, page.banner, ...page.gallery]) if (x?.caption) add(x, `${mark(x)}Picture: ${x.caption}`);
+    // Times as the calendar says them, so Ask finds "what happened on Day 12".
+    if (page.when) add({ available: 'all' }, `When: ${whenText(page.when, calendar)}`);
+    for (const e of page.events) add(e, `${mark(e)}${e.when ? `${whenText(e.when, calendar)}: ` : ''}${unlink(e.text)}`);
     return [...groups.values()];
   }
 
@@ -214,10 +247,10 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
         visible_to: p.audience,
       }));
     // The truth beside a falsehood is the DM's alone: a doc of its own nobody else finds.
-    for (const x of [...page.sections, ...page.facts, page.picture, page.banner, ...page.gallery]) {
+    for (const x of [...page.sections, ...page.facts, ...page.events, page.picture, page.banner, ...page.gallery]) {
       if (x?.canon === 'false' && x.truth) docs.push({ title: `${page.title} › The truth`, text: `${page.title}\nThe truth (players believe otherwise): ${x.truth}`, visible_to: [] });
     }
-    for (const g of extras(page, roster)) docs.push({ title: `${page.title} › At a glance`, text: `${page.kind ? `(${page.kind}) ` : ''}${page.title}\n${g.lines.join('\n')}`, visible_to: g.audience });
+    for (const g of extras(page, roster, store.getSettings(cid).calendar)) docs.push({ title: `${page.title} › At a glance`, text: `${page.kind ? `(${page.kind}) ` : ''}${page.title}\n${g.lines.join('\n')}`, visible_to: g.audience });
     if (page.aliases.length) docs.push({ title: page.title, text: `${page.title}\nAlso called: ${page.aliases.join(', ')}`, visible_to: [] });
     await search.replaceDocs(cid, { kind: 'wiki', ref_id: page.id }, docs);
   }
@@ -257,6 +290,35 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
         if (at === page.id || steps > 1000) throw new BadRequestError("A page can't be inside itself.");
       }
     }
+  }
+
+  /**
+   * Work out the in-game times of a page's `when` and events from their text (stage 4b), with the campaign's
+   * calendar and clock as they are now ("300 years ago" is from today). A time whose text didn't change keeps
+   * what was worked out before, so it doesn't drift as the clock moves; one that comes with from and to
+   * (a restored version) keeps them.
+   */
+  function dated(cid, fields, before = null) {
+    const { calendar, clock } = store.getSettings(cid);
+    const date = (w, old) => {
+      if (!w || !String(w.text ?? '').trim()) return null;
+      if ('from' in w) return w;
+      if (old && old.text === String(w.text).trim()) return old;
+      return parseWhen(w.text, calendar, { now: clock });
+    };
+    const out = { ...fields };
+    if ('when' in fields) out.when = date(fields.when, before?.when);
+    if (fields.events) {
+      const was = new Map((before?.events ?? []).map((e) => [e.id, e]));
+      out.events = fields.events.map((e) => {
+        const old = e.id && was.get(e.id);
+        const next = { ...e, when: date(e.when, old?.when) };
+        // An event saved unchanged stays the AI's (as facts do).
+        if (!e.by && old?.by === 'ai' && old.text === String(e.text ?? '').trim()) next.by = 'ai';
+        return next;
+      });
+    }
+    return out;
   }
 
   const wiki = {
@@ -315,7 +377,7 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
     /** A new page: { title, aliases?, kind?, parent?, tags?, available?, sections? }. */
     async create(cid, fields, { by }) {
       const now = new Date().toISOString();
-      const page = normalizeWikiPage({ ...fields, id: crypto.randomBytes(5).toString('hex'), version: 1, created_by: by, created_at: now, updated_by: by, updated_at: now });
+      const page = normalizeWikiPage({ ...dated(cid, fields), id: crypto.randomBytes(5).toString('hex'), version: 1, created_by: by, created_at: now, updated_by: by, updated_at: now });
       check(cid, page);
       write(cid, page);
       await index(cid, page);
@@ -332,6 +394,7 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
       if (version != null && version !== before.version) {
         throw new ArchiveConflictError('This page was changed since you opened it. Open it again to see the changes, then make yours.');
       }
+      fields = dated(cid, fields, before);
       const next = { ...before, ...fields };
       // Who wrote each section: an AI section the DM changes becomes the DM's for good (owner, 2026-10-20); one saved unchanged stays the AI's.
       if (fields.sections) {
@@ -394,9 +457,9 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
     /** Bring back an earlier version, as a new save (nothing is lost: the version it replaces stays in the history). */
     async restore(cid, id, version, { by }) {
       const old = wiki.version(cid, id, version);
-      const { title, aliases, kind, parent, tags, available, sections, picture, banner, gallery, facts } = old;
+      const { title, aliases, kind, parent, tags, available, sections, picture, banner, gallery, facts, when, events } = old;
       const current = wiki.get(cid, id);
-      return wiki.update(cid, id, { title, aliases, kind, parent: parent && rows(cid).some((p) => p.id === parent) ? parent : null, tags, available, sections, picture, banner, gallery, facts }, { by, version: current.version });
+      return wiki.update(cid, id, { title, aliases, kind, parent: parent && rows(cid).some((p) => p.id === parent) ? parent : null, tags, available, sections, picture, banner, gallery, facts, when, events }, { by, version: current.version });
     },
 
     /** Index every page again (after a rebuild wipes the search index, or a restore from the archive). */

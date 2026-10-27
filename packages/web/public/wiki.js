@@ -52,6 +52,8 @@ async function refreshList() {
   state.players = res.players;
   state.proposals = res.proposals ?? 0;
   state.aiRun = res.ai_run ?? null;
+  state.calendar = res.calendar ?? null;
+  state.clock = res.clock ?? 0;
   drawReviewButton();
   drawList();
 }

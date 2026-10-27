@@ -40,11 +40,14 @@ export function registerWiki(app, r) {
     banner: z.object({ id: pictureId, caption: z.string().max(L.caption).default(''), available: available.default('all'), focus: z.number().min(0).max(100).default(50), ...canon }).nullable(),
     gallery: z.array(z.object({ id: pictureId, caption: z.string().max(L.caption).default(''), available: available.default('all'), ...canon })).max(L.gallery),
     facts: z.array(z.object({ label: z.string().max(L.label), value: z.string().max(L.value), available: available.default('all'), tone: z.enum(TONES).nullable().optional(), ...canon, ...sources })).max(L.facts),
+    // In-game times (stage 4b): the text only; the server works out when it is (src/wiki.js `dated`).
+    when: z.object({ text: z.string().max(L.when) }).nullable(),
+    events: z.array(z.object({ id: z.string().regex(/^[a-f0-9]{6}$/).optional(), when: z.object({ text: z.string().max(L.when) }).nullable().default(null), text: z.string().max(L.event), available: available.default('all'), ...canon, ...sources })).max(L.events),
   };
 
   /** Chosen players must be players of this campaign. */
   function checkPlayers(cid, body) {
-    const own = [...(body.sections ?? []), ...(body.facts ?? []), ...(body.gallery ?? []), body.picture, body.banner, body.fact].filter(Boolean).map((x) => x.available);
+    const own = [...(body.sections ?? []), ...(body.facts ?? []), ...(body.events ?? []), ...(body.gallery ?? []), body.picture, body.banner, body.fact].filter(Boolean).map((x) => x.available);
     for (const a of [body.available, body.page_available, body.players, ...own]) {
       if (!Array.isArray(a)) continue;
       for (const id of a) if (auth.membership(cid, id)?.role !== 'player') throw new BadRequestError(`User ${id} isn't a player in this campaign.`);
@@ -62,7 +65,8 @@ export function registerWiki(app, r) {
   app.get('/campaigns/:cid/wiki', async (request) => {
     const { cid } = access(request, { dm: true });
     const players = store.roster(cid).filter((m) => m.role === 'player').map((m) => ({ id: m.user_id, name: m.name, character_name: m.character_name }));
-    return { pages: wiki.list(cid).map(summary), players, proposals: wikiAI.count(cid), ai_run: lastRun(cid) };
+    const { calendar, clock } = store.getSettings(cid);
+    return { pages: wiki.list(cid).map(summary), players, proposals: wikiAI.count(cid), ai_run: lastRun(cid), calendar, clock };
   });
 
   // ---------- the space's views (wiki-views.js), as the DM sees them or ?as= a player ----------
@@ -310,7 +314,7 @@ export function registerWiki(app, r) {
 
   app.post('/campaigns/:cid/wiki', async (request, reply) => {
     const { cid } = access(request, { dm: true });
-    const body = checkPlayers(cid, z.object({ ...fields, aliases: fields.aliases.default([]), kind: fields.kind.default(''), parent: fields.parent.default(null), tags: fields.tags.default([]), available: available.default('dm'), sections: fields.sections.default([]), picture: fields.picture.default(null), banner: fields.banner.default(null), gallery: fields.gallery.default([]), facts: fields.facts.default([]) }).parse(request.body ?? {}));
+    const body = checkPlayers(cid, z.object({ ...fields, aliases: fields.aliases.default([]), kind: fields.kind.default(''), parent: fields.parent.default(null), tags: fields.tags.default([]), available: available.default('dm'), sections: fields.sections.default([]), picture: fields.picture.default(null), banner: fields.banner.default(null), gallery: fields.gallery.default([]), facts: fields.facts.default([]), when: fields.when.default(null), events: fields.events.default([]) }).parse(request.body ?? {}));
     const page = await wiki.create(cid, body, { by: request.user.id });
     reply.status(201);
     return { page, unknown_names: wiki.unknownNames(cid, page) };

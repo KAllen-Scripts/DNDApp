@@ -27,6 +27,8 @@ export const state = {
   proposals: 0, // how many of the AI's changes wait for the DM
   aiRun: null, // the AI's last run for the wiki: { status, message, finished_at }
   poll: null,
+  calendar: null, // the campaign's calendar (shared/calendar.js), for times on pages
+  clock: 0, // the in-game clock now (minutes), for "300 years ago" in the editor's preview
 };
 
 /** Moving between views: set by wiki.js. */

@@ -19,6 +19,7 @@ import { preparedTranscript } from '../pipeline/prepare.js';
 import { fitWhole } from '../fit.js';
 import { creatureKey } from '../creatures.js';
 import { unlink, unpicture, canonMarker } from '@dndapp/shared/wiki.js';
+import { whenText, whenKey } from '@dndapp/shared/wiki-time.js';
 
 const SessionRange = {
   from_session: z.number().int().nullable().describe('Only from this session number, or null'),
@@ -261,8 +262,19 @@ export function createTools({ db, store, kb, search, books, wiki = null, config,
     };
     return [{ page, section: { id: 'facts', heading: 'At a glance', text: page.facts.map(line).join('\n'), available: 'all' } }];
   };
+  // When the page happened and its events (stage 4b), dated by the campaign's calendar, as a section of their own.
+  const calendar = store.getSettings(campaignId).calendar;
+  const eventsSection = (page) => {
+    if (!page.when && !page.events?.length) return [];
+    const line = (e) => {
+      const mark = canonMarker(e.canon, { forDm: viewer.seesAll, truth: e.truth ?? '', owner: wikiNames.get(e.owner) ?? '' });
+      return `${e.when ? whenText(e.when, calendar) : 'Undated'}: ${mark ? `${mark} ` : ''}${e.text}${viewer.seesAll && e.available !== 'all' ? ` [available to ${availableText(e.available, wikiNames)}]` : ''}`;
+    };
+    const lines = [...(page.when ? [`When: ${whenText(page.when, calendar)}`] : []), ...[...(page.events ?? [])].sort((a, b) => whenKey(a.when) - whenKey(b.when)).map(line)];
+    return [{ page, section: { id: 'events', heading: 'Events', text: lines.join('\n'), available: 'all' } }];
+  };
   const wikiSections = (pages) =>
-    pages.flatMap((page) => [...factsSection(page), ...page.sections.filter((s) => s.text.trim()).map((section) => ({ page, section }))]);
+    pages.flatMap((page) => [...factsSection(page), ...eventsSection(page), ...page.sections.filter((s) => s.text.trim()).map((section) => ({ page, section }))]);
   const renderWiki = (x) => renderWikiSection(x.page, x.section, { forDm: viewer.seesAll, names: wikiNames });
   const wikiText = (list, empty) =>
     list.length

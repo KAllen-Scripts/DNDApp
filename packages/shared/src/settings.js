@@ -87,7 +87,8 @@ const pad = (n) => String(n).padStart(2, '0');
  * "3 Mirtul 1492 DR, 18:30 · Full moon".
  */
 export function clockText(minutes, calendar = null) {
-  const time = `${pad(Math.floor((minutes % 1440) / 60))}:${pad(minutes % 60)}`;
+  const m = ((minutes % 1440) + 1440) % 1440;
+  const time = `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
   const moon = calendar ? moonText(minutes, calendar) : '';
   return `${dateText(minutes, calendar)}, ${time}${moon ? ` · ${moon}` : ''}`;
 }
