@@ -1,0 +1,74 @@
+/**
+ * The wiki space's views (src/wiki-views.js, GET …/wiki/wheel and …/wiki/home):
+ * counts, lists and the party, worked out for the DM or as a player, so a
+ * player's version never holds a hidden page, not even in a count.
+ */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { setup } from './helpers.js';
+
+const all = (text) => [{ heading: '', text, available: 'all' }];
+
+async function world(t) {
+  const make = async (body) => (await t.request('POST', `/campaigns/${t.campaign.id}/wiki`, { body })).json().page;
+  const vale = await make({ title: 'The Vale', kind: 'region', available: 'all', sections: all('Green hills.') });
+  const mill = await make({ title: 'Hollow Mill', kind: 'village', parent: vale.id, available: 'all', sections: all('A mill.') });
+  const lady = await make({ title: 'The Grey Lady', kind: 'npc', available: 'all', sections: all('A ghost.') });
+  const hand = await make({ title: 'The Pale Hand', kind: 'cult', parent: vale.id, available: 'dm', sections: all('Secret cult.') });
+  const crypt = await make({ title: 'The Crypt', kind: 'dungeon', parent: hand.id, available: [t.sam.id], sections: all('Under the mill.') });
+  const s1 = await make({ title: 'Session 1', kind: 'session', available: 'all', sections: all('They met the Lady.') });
+  return { vale, mill, lady, hand, crypt, s1 };
+}
+
+test('wiki views: the wheel counts families and kinds; as a player it counts only what they may see', async () => {
+  const t = await setup();
+  try {
+    const { hand, crypt } = await world(t);
+    const base = `/campaigns/${t.campaign.id}/wiki/wheel`;
+    const dm = (await t.request('GET', base)).json();
+    const fam = (res, f) => res.families.find((x) => x.family === f);
+    assert.equal(dm.families.length, 9, 'every family, so the wheel keeps its shape');
+    assert.equal(fam(dm, 'place').count, 3);
+    assert.deepEqual(fam(dm, 'place').kinds, [{ kind: 'dungeon', count: 1 }, { kind: 'region', count: 1 }, { kind: 'village', count: 1 }]);
+    assert.equal(fam(dm, 'faction').count, 1);
+    assert.deepEqual(dm.party.map((p) => p.character_name).sort(), ['Lyra', 'Thorin']);
+    assert.equal(dm.pages.length, 6);
+
+    const sam = (await t.request('GET', `${base}?as=${t.sam.id}`)).json();
+    assert.equal(fam(sam, 'faction').count, 0, 'the hidden cult is not counted');
+    assert.equal(fam(sam, 'place').count, 3, "Thorin's crypt counts for Thorin");
+    const body = JSON.stringify(sam);
+    assert.ok(!body.includes(hand.id) && !body.includes('Pale Hand'), 'no trace of the hidden page');
+    assert.equal(sam.pages.find((p) => p.id === crypt.id).parent, null, 'a hidden parent is left out');
+
+    const alex = (await t.request('GET', `${base}?as=${t.alex.id}`)).json();
+    assert.equal(fam(alex, 'place').count, 2);
+    assert.ok(!JSON.stringify(alex).includes('Crypt'));
+
+    assert.equal((await t.request('GET', `${base}?as=${t.dm.id}`)).statusCode, 400, 'only a player can be viewed as');
+    assert.equal((await t.request('GET', base, { as: t.sam.token })).statusCode, 403);
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('wiki views: the home has the last session, the newest changes and what waits, and as a player none of the hidden pages or the waiting list', async () => {
+  const t = await setup();
+  try {
+    const { s1, hand } = await world(t);
+    const base = `/campaigns/${t.campaign.id}/wiki/home`;
+    const dm = (await t.request('GET', base)).json();
+    assert.equal(dm.count, 6);
+    assert.equal(dm.last_session.id, s1.id);
+    assert.equal(dm.recent[0].id, s1.id, 'newest first');
+    assert.deepEqual(dm.waiting, { proposals: 0 });
+
+    const alex = (await t.request('GET', `${base}?as=${t.alex.id}`)).json();
+    assert.equal(alex.count, 4);
+    assert.equal(alex.waiting, undefined);
+    assert.ok(!JSON.stringify(alex).includes(hand.id));
+    assert.ok(alex.recent.every((p) => !['The Pale Hand', 'The Crypt'].includes(p.title)));
+  } finally {
+    await t.cleanup();
+  }
+});

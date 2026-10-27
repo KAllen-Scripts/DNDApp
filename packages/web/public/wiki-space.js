@@ -30,6 +30,7 @@ const inSpace = () => document.documentElement.dataset.space === 'wiki';
 /** The route of what the wiki shows now. */
 export function currentRoute() {
   if (state.view === 'review') return '#/waiting';
+  if (state.view === 'wheel') return `#/wheel${state.kindFilter ? `/${state.kindFilter}` : ''}`;
   if (!state.open) return '#/home';
   const id = state.open.page.id;
   if (id == null) return '#/new';
@@ -65,13 +66,13 @@ export function setSpace(space, { push = true } = {}) {
 
 /** Draw what the address says (on entering the space from Back, Forward or a reload). */
 export async function routeFromUrl() {
-  const m = /^#\/(home|waiting|new|page\/([a-f0-9]+)(?:\/(edit|history))?)?$/.exec(location.hash) ?? [];
+  const m = /^#\/(home|waiting|new|wheel(?:\/([a-z]+))?|page\/([a-f0-9]+)(?:\/(edit|history))?)?$/.exec(location.hash) ?? [];
   applying = true;
   ready = true;
   try {
-    if (m[2]) {
-      const id = m[2];
-      const view = m[3] ?? 'page';
+    if (m[3]) {
+      const id = m[3];
+      const view = m[4] ?? 'page';
       if (state.open?.page.id === id) {
         state.view = view;
         nav.drawList();
@@ -81,6 +82,13 @@ export async function routeFromUrl() {
       }
     } else if (m[1] === 'new') {
       nav.newPage();
+    } else if (m[1]?.startsWith('wheel')) {
+      state.open = null;
+      state.view = 'wheel';
+      state.kindFilter = m[2] ?? null;
+      state.kindKey = null;
+      nav.drawList();
+      nav.drawMain();
     } else {
       state.open = null;
       state.view = m[1] === 'waiting' ? 'review' : 'page';
@@ -125,6 +133,7 @@ function drawRail() {
   h('span', { class: 'wiki-rail-label' }, label));
   rail.replaceChildren(...[
     item('#/home', '❦', 'Home'),
+    item(route.startsWith('#/wheel') ? route : '#/wheel', '❂', 'Wheel'),
     item('#/new', '✚', 'New page', { onclick: () => nav.newPage() }),
     item('#/waiting', '✎', 'Waiting', { count: state.proposals }),
     h('span', { class: 'wiki-rail-gap' }),
@@ -132,7 +141,8 @@ function drawRail() {
   ].filter(Boolean));
 }
 
-async function go(route) {
+/** Go to a route of the space (a click on a view, a card, a slice of the Home's wheel). */
+export async function go(route) {
   if (location.hash === route) return;
   history.pushState(null, '', address(true, route));
   await routeFromUrl();
@@ -172,6 +182,7 @@ async function showClock() {
 export function initSpace({ table }) {
   toTable = table;
   nav.routed = routed;
+  nav.go = go;
 }
 
 /** Another campaign: a new trail. */

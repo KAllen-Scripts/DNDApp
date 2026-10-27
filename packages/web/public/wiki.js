@@ -24,6 +24,8 @@ import { state, nav, base, status, report, availableText, playerName, pictureImg
 import { pageLink, hidePreview, hero, pageContent, editor } from './wiki-page.js';
 import { drawReview } from './wiki-waiting.js';
 import { resetSpace } from './wiki-space.js';
+import { drawWheel } from './wiki-wheel.js';
+import { drawHub } from './wiki-home.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -31,7 +33,7 @@ export async function loadWiki({ campaignId, guarded }) {
   clearTimeout(state.poll);
   clearPictures();
   resetSpace();
-  Object.assign(state, { campaignId, guarded, pages: [], players: [], filter: '', kindFilter: null, tagFilter: null, open: null, view: 'page', as: null, proposals: 0, aiRun: null, poll: null });
+  Object.assign(state, { campaignId, guarded, pages: [], players: [], filter: '', kindFilter: null, kindKey: null, tagFilter: null, open: null, view: 'page', as: null, proposals: 0, aiRun: null, poll: null });
   $('#wiki-filter').value = '';
   status('');
   await refreshList();
@@ -120,6 +122,55 @@ function drawHome() {
     ));
     return;
   }
+  const hub = h('div', { class: 'wiki-hub' });
+  const grid = h('div', { class: 'wiki-home' });
+  const redraw = () => grid.replaceChildren(...cardGrid(redraw));
+  redraw();
+  main.replaceChildren(hub, grid);
+  drawHub(hub);
+}
+
+/** The Wheel: the families round the party, then the picked family's kinds and pages. */
+async function drawWheelView() {
+  const main = $('#wiki-main');
+  const box = h('div', { class: 'wiki-wheel-view' }, h('p', { class: 'muted small' }, 'Loading…'));
+  main.replaceChildren(box);
+  let data;
+  try {
+    data = await state.guarded(() => api('GET', `${base()}/wheel`));
+  } catch (err) {
+    return report(err);
+  }
+  if (state.view !== 'wheel' || !box.isConnected) return;
+  const redraw = () => {
+    const family = data.families.find((f) => f.family === state.kindFilter);
+    box.replaceChildren(
+      h('div', { class: 'wiki-wheel-box' },
+        drawWheel({ campaignId: state.campaignId, families: data.families, party: data.party, selected: state.kindFilter, onPick: (f) => {
+          state.kindFilter = f;
+          state.kindKey = null;
+          nav.routed();
+          redraw();
+        } }),
+        h('div', { class: 'wiki-wheel-side' },
+          h('h2', {}, family ? `${family.icon} ${family.label}` : 'What is in your world'),
+          h('p', { class: 'muted small' }, family ? `${family.count} page${family.count === 1 ? '' : 's'}` : 'Pick a slice to see its kinds and pages.'),
+          family ? h('div', { class: 'wiki-chips', role: 'group', 'aria-label': 'Kinds' },
+            ...family.kinds.map((k) => {
+              const key = wikiKey(k.kind);
+              const on = state.kindKey === key;
+              return h('button', { type: 'button', class: `wiki-chip wiki-kind fam-${family.family}${on ? ' on' : ''}`, 'aria-pressed': on ? 'true' : 'false', onclick: () => { state.kindKey = on ? null : key; redraw(); } }, `${k.kind || 'no kind'} ${k.count}`);
+            })) : null,
+        ),
+      ),
+      h('div', { class: 'wiki-home' }, ...cardGrid(redraw)),
+    );
+  };
+  redraw();
+}
+
+/** Every page as a card, with chips to show one family or one tag (on the Home and under the Wheel). */
+function cardGrid(redraw) {
   const families = new Map();
   const tags = new Map();
   for (const p of state.pages) {
@@ -127,25 +178,30 @@ function drawHome() {
     for (const t of p.tags) tags.set(t, (tags.get(t) ?? 0) + 1);
   }
   const shown = state.pages
-    .filter((p) => matchesFilter(p) && (!state.kindFilter || fam(p.kind) === state.kindFilter) && (!state.tagFilter || p.tags.some((t) => wikiKey(t) === wikiKey(state.tagFilter))))
+    .filter((p) => matchesFilter(p) && (!state.kindFilter || fam(p.kind) === state.kindFilter) && (!state.kindKey || wikiKey(p.kind ?? '') === state.kindKey) && (!state.tagFilter || p.tags.some((t) => wikiKey(t) === wikiKey(state.tagFilter))))
     .sort((a, b) => a.title.localeCompare(b.title));
   const chip = (label, on, onclick, cls = '') => h('button', { type: 'button', class: `wiki-chip${on ? ' on' : ''}${cls}`, 'aria-pressed': on ? 'true' : 'false', onclick }, label);
-  const redraw = () => drawHome();
-  main.replaceChildren(h('div', { class: 'wiki-home' },
+  const pickFamily = (f) => {
+    state.kindFilter = f;
+    state.kindKey = null;
+    nav.routed();
+    redraw();
+  };
+  return [
     h('div', { class: 'wiki-home-head' },
       h('h2', {}, 'Your wiki'),
       h('span', { class: 'muted small' }, `${state.pages.length} page${state.pages.length === 1 ? '' : 's'}`),
     ),
     h('div', { class: 'wiki-chips', role: 'group', 'aria-label': 'Show kinds' },
-      chip('All', !state.kindFilter, () => { state.kindFilter = null; redraw(); }),
+      chip('All', !state.kindFilter, () => pickFamily(null)),
       ...Object.keys(KIND_FAMILIES).filter((f) => families.has(f)).map((f) =>
-        chip(`${KIND_FAMILIES[f].label} ${families.get(f)}`, state.kindFilter === f, () => { state.kindFilter = state.kindFilter === f ? null : f; redraw(); }, ` wiki-kind fam-${f}`)),
+        chip(`${KIND_FAMILIES[f].label} ${families.get(f)}`, state.kindFilter === f, () => pickFamily(state.kindFilter === f ? null : f), ` wiki-kind fam-${f}`)),
     ),
     tags.size ? h('div', { class: 'wiki-chips wiki-tags', role: 'group', 'aria-label': 'Show tags' },
       ...[...tags.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 16).map(([t]) =>
         chip(`#${t}`, wikiKey(state.tagFilter ?? '') === wikiKey(t), () => { state.tagFilter = wikiKey(state.tagFilter ?? '') === wikiKey(t) ? null : t; redraw(); }))) : null,
     shown.length ? h('div', { class: 'wiki-cards' }, ...shown.map(card)) : h('p', { class: 'muted' }, 'No page matches.'),
-  ));
+  ].filter(Boolean);
 }
 
 // ---------- one page ----------
@@ -179,11 +235,12 @@ function phoneBack() {
 function drawMain() {
   const main = $('#wiki-main');
   hidePreview();
-  const reading = !!state.open || state.view === 'review';
+  const reading = !!state.open || state.view === 'review' || state.view === 'wheel';
   $('#wiki-view').classList.toggle('wiki-reading', reading);
   drawReviewButton();
   nav.routed();
   if (state.view === 'review') return drawReview();
+  if (state.view === 'wheel') return drawWheelView();
   if (reading) queueMicrotask(() => main.prepend(phoneBack()));
   if (!state.open) return drawHome();
   if (state.view === 'edit') return main.replaceChildren(editor(state.open.page));

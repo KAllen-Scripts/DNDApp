@@ -368,6 +368,64 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
   :root:not([data-phone]) .wiki-rail-label { display: none; }
 }
 
+/* The Wheel (wiki-wheel.js): the kind families round the party. */
+.wiki-wheel { display: block; width: 100%; max-width: 26rem; height: auto; }
+.wiki-wheel.small { max-width: 12rem; margin-inline: auto; }
+.wiki-slice { cursor: pointer; outline: none; }
+.wiki-slice path { fill: color-mix(in srgb, var(--kind) 70%, var(--surface)); stroke: var(--surface); stroke-width: 1.5; transition: fill 0.15s; }
+.wiki-slice:hover path, .wiki-slice:focus-visible path { fill: var(--kind); }
+.wiki-slice.on path { fill: var(--kind); stroke: var(--text); }
+.wiki-slice.empty { cursor: default; }
+.wiki-slice.empty path { fill: color-mix(in srgb, var(--kind) 18%, var(--surface)); }
+.wiki-slice text { fill: #fff; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+.wiki-slice.empty text { fill: var(--muted); }
+.wiki-slice-icon { font-size: 15px; }
+.wiki-wheel.small .wiki-slice-icon { font-size: 18px; }
+.wiki-slice-count { font-size: 10px; font-weight: 700; }
+.wiki-wheel-hub { fill: var(--surface-2); stroke: var(--border); }
+.wiki-wheel-member circle { fill: color-mix(in srgb, var(--accent) 25%, var(--surface)); stroke: var(--accent); stroke-width: 1.5; }
+.wiki-wheel-member text { fill: var(--text); font-size: 11px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; }
+.wiki-wheel-view { display: grid; gap: 1rem; }
+.wiki-wheel-box { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: center; }
+.wiki-wheel-box .wiki-wheel { flex: 1 1 16rem; }
+.wiki-wheel-side { flex: 1 1 14rem; display: grid; gap: 0.5rem; align-content: center; }
+.wiki-wheel-side h2 { margin: 0; }
+
+/* The wiki's Home (wiki-home.js): a hub of pictures above every page's card. */
+.wiki-hub { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; margin-bottom: 1.25rem; }
+.wiki-hub:empty { display: none; }
+.wiki-hub h3 { margin: 0 0 0.4rem; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.wiki-hub-hero {
+  position: relative; min-height: 8rem; display: grid; align-items: end; overflow: hidden; border-radius: var(--radius);
+  background: linear-gradient(120deg, #c0632f, #8c3fb0 35%, #2f6fc0 65%, #2f8a5f);
+}
+.wiki-hub-hero-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.wiki-hub-hero-text { position: relative; padding: 1rem 1.25rem; color: #fff; background: linear-gradient(transparent, rgb(0 0 0 / 0.55)); }
+.wiki-hub-hero-text h2 { margin: 0; font-size: 1.6rem; color: #fff; }
+.wiki-hub-hero-text p { margin: 0.2rem 0 0; color: #fff; opacity: 0.9; }
+.wiki-hub-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr)); gap: 1rem; }
+.wiki-hub-grid > section { padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.wiki-last { display: flex; gap: 0.6rem; width: 100%; padding: 0; border: none; background: none; text-align: left; }
+.wiki-last-art, .wiki-mini-art {
+  flex: none; display: grid; place-items: center; overflow: hidden; border-radius: 8px;
+  background: color-mix(in srgb, var(--kind) 22%, var(--surface));
+}
+.wiki-last-art { width: 4.5rem; height: 4.5rem; }
+.wiki-last-art:not(.has-picture)::before, .wiki-mini-art:not(.has-picture)::before { content: var(--kind-icon); color: var(--kind); font-size: 1.4rem; }
+.wiki-last-art img, .wiki-mini-art img { width: 100%; height: 100%; object-fit: cover; }
+.wiki-last-body { display: grid; gap: 0.2rem; align-content: start; min-width: 0; }
+.wiki-tiles { display: grid; gap: 0.4rem; }
+.wiki-tile { display: grid; grid-template-columns: auto 1fr; column-gap: 0.6rem; align-items: center; padding: 0.4rem; border-radius: 8px; background: var(--surface-2); }
+.wiki-tile-art { grid-row: span 2; display: grid; place-items: center; width: 2.2rem; height: 2.2rem; border-radius: 50%; font-size: 1.1rem; background: var(--surface); color: var(--accent); }
+.wiki-tile.soon { opacity: 0.7; }
+.wiki-party { margin: 0 0 0.5rem; padding-left: 1.1rem; }
+.wiki-hub-waiting.waiting { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.wiki-minis { display: flex; gap: 0.6rem; overflow-x: auto; padding-bottom: 0.25rem; }
+.wiki-mini-card { flex: none; display: grid; gap: 0.3rem; justify-items: center; width: 6.5rem; padding: 0.35rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.wiki-mini-card:hover { border-color: var(--kind); }
+.wiki-mini-art { width: 100%; aspect-ratio: 4 / 3; }
+.wiki-mini-title { font-size: 0.8rem; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
 /* Small views (mini-views.js): a map crop, a ring of portraits, a ribbon of moments. */
 .mini { display: block; overflow: visible; }
 .mini-pin, .mini-dot { fill: var(--kind); stroke: var(--bg, #fff); stroke-width: 1.2; }
