@@ -11,6 +11,7 @@ import { openMapAt, fitMap, setTool } from './map.js';
 import { setWikiLayers, pulseWikiPin } from './map-wiki.js';
 import { state as mapState } from './map-state.js';
 import { atlasOrder } from './shared/map.js';
+import { timeSlider } from './wiki-asof.js';
 
 const $ = (sel) => document.querySelector(sel);
 let home = null; // where the map panel lives at the table: a marker left in its place
@@ -28,7 +29,7 @@ export function leaveAtlas() {
   panel.hidden = true;
   delete document.documentElement.dataset.browse;
   $('#wiki-view')?.classList.remove('wiki-atlas-on');
-  setWikiLayers({ forced: false, as: null });
+  setWikiLayers({ forced: false, as: null, at: null });
 }
 
 /** The map the Atlas opens without one named: the one at the top of the world. */
@@ -61,8 +62,10 @@ export async function drawAtlas(main) {
     note.textContent = as ? `Only the places revealed to ${playerName(as)} and the pages they may see. Their fog isn’t shown.` : '';
     setWikiLayers({ forced: true, as });
   });
+  // As it was at the end of a session (stage 11): the pages then, and where the tokens stood.
+  const slider = timeSlider(null, (at) => setWikiLayers({ forced: true, at }));
   const placing = h('div', { class: 'wiki-atlas-placing', role: 'status', hidden: true });
-  const bar = h('div', { class: 'wiki-atlas-bar' }, h('h2', {}, 'Atlas'), viewAs, note, placing);
+  const bar = h('div', { class: 'wiki-atlas-bar' }, ...[h('h2', {}, 'Atlas'), viewAs, slider, note, placing].filter(Boolean));
   if (!home) {
     home = document.createComment('map panel');
     panel.replaceWith(home);
@@ -71,7 +74,7 @@ export async function drawAtlas(main) {
   panel.hidden = false;
   document.documentElement.dataset.browse = '';
   $('#wiki-view')?.classList.add('wiki-atlas-on');
-  setWikiLayers({ forced: true, as: null });
+  setWikiLayers({ forced: true, as: null, at: null });
   await openMapAt(map.id);
   requestAnimationFrame(() => fitMap());
   if (focus?.map_id === map.id) {

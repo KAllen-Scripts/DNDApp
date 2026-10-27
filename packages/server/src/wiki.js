@@ -365,6 +365,9 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
     templates: (cid) => templateRows(cid),
 
     /** The page as a viewer may see it, or null. The DM gets it whole. */
+    /** Any page (an old version too, stage 11) cut to what this viewer may see by its own settings, or null. */
+    filterFor: (cid, page, viewer) => filtered(normalizeWikiPage(page), viewer, players(cid)),
+
     forViewer(cid, page, viewer) {
       if (!viewer || viewer.seesAll) return filtered(page, viewer, players(cid));
       return wiki.listFor(cid, viewer).find((p) => p.id === page.id) ?? null;

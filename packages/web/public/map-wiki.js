@@ -19,6 +19,7 @@ const $ = (sel) => document.querySelector(sel);
 const layer = {
   forced: false, // the Atlas has them on whatever the button says
   as: null, // view as this player (the Atlas's View as)
+  at: null, // the moment shown (the Atlas's As of, stage 11), or null for now
   data: null, // { key, layers }
   loading: null,
   card: null, // what the open card is for: 'pin:<place id>' | 'person:<page id>' | 'quest:<page id>'
@@ -38,12 +39,15 @@ export function pulseWikiPin(placeId) {
 }
 
 const on = () => state.canEdit && (layer.forced || storage.get(KEY) === 'on');
-const keyOf = (map) => `${map.id}|${map.version ?? ''}|${layer.as ?? ''}`;
+const keyOf = (map) => `${map.id}|${map.version ?? ''}|${layer.as ?? ''}|${layer.at ?? ''}`;
 
 /** The Atlas turns the layers on (and View as a player), or back to the button's setting. */
-export function setWikiLayers({ forced = layer.forced, as = layer.as } = {}) {
+export function setWikiLayers({ forced = layer.forced, as = layer.as, at = layer.at } = {}) {
   layer.forced = forced;
   layer.as = as;
+  layer.at = forced ? at : null;
+  // In the past, the live tokens fade and where they stood then shows instead.
+  document.documentElement.classList.toggle('map-asof', !!layer.at);
   layer.data = null;
   renderWikiLayers();
 }
@@ -58,7 +62,7 @@ async function load(map) {
   const key = keyOf(map);
   if (layer.data?.key === key) return layer.data.layers;
   if (layer.loading?.key === key) return layer.loading.promise;
-  const promise = api('GET', `/campaigns/${state.campaignId}/wiki/atlas?map=${encodeURIComponent(map.id)}${layer.as ? `&as=${layer.as}` : ''}`)
+  const promise = api('GET', `/campaigns/${state.campaignId}/wiki/atlas?map=${encodeURIComponent(map.id)}${layer.as ? `&as=${layer.as}` : ''}${layer.at ? `&at=${encodeURIComponent(layer.at)}` : ''}`)
     .then((res) => {
       layer.data = { key, layers: res.layers };
       return res.layers;
@@ -152,6 +156,13 @@ export async function renderWikiLayers() {
     ...layers.pins.map((p) => badge(p, 'place', `pin:${p.place_id}`, spread(p))),
     ...layers.people.map((p) => badge(p, 'person', `person:${p.page.id}`, spread(p))),
     ...layers.quests.map((q) => badge(q, 'quest', `quest:${q.page.id}`, spread(q))),
+    // Where the tokens stood then (stage 11).
+    ...(layer.at ? layers.then_tokens ?? [] : []).map((t) => {
+      const el = h('div', { class: `map-wiki-at map-then-token kind-${t.kind}${t.hidden ? ' hidden-token' : ''}`, title: `${t.name}${t.going_to ? `, on the way to ${t.going_to}` : ''}` },
+        h('span', { class: 'map-then-dot', 'aria-hidden': 'true' }), h('span', { class: 'map-then-name small' }, t.name));
+      el.style.cssText = `left:${t.x}px;top:${t.y}px`;
+      return el;
+    }),
   );
 }
 

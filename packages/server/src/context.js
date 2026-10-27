@@ -14,6 +14,7 @@ import { createHandouts } from './handouts.js';
 import { createWiki } from './wiki.js';
 import { createWikiEmbeds } from './wiki-embeds.js';
 import { createWikiBoards } from './wiki-boards.js';
+import { createWikiAsOf } from './wiki-asof.js';
 import { createWikiAI } from './wiki-ai.js';
 import { createWikiPictures } from './wiki-pictures.js';
 import { linkWikiToMaps } from './wiki-maps.js';
@@ -84,6 +85,8 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   // The AI proposes wiki changes from what the archivist changed; the DM approves them.
   // Boards (stage 10a): the DM's and players' own.
   const wikiBoards = createWikiBoards({ db, archive, store, wiki });
+  // The wiki and the maps as they were at a moment (stage 11), from the archive.
+  const wikiAsOf = createWikiAsOf({ db, wiki, maps, archive, store, config });
   const wikiAI = createWikiAI({ db, archive, store, kb, wiki, wikiPictures, search, llm, config });
   const jobs = createJobs({ db, store, search, pipeline, wiki, wikiAI, config, log });
   const books = createBooks({ dir: config.booksDir, log });
@@ -127,5 +130,5 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   // Changes made while the server was off (or before its last run finished) still reach the archivist.
   for (const { id } of db.prepare('SELECT id FROM campaigns').all()) if (updates.pendingSince(id)) jobs.scheduleUpdates(id);
 
-  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, wiki, wikiAI, wikiPictures, wikiBoards, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, mapStamps, pipeline, jobs, qa, books, editions, spells, forms, sheets, sheetImport, sheetReview, maps, mapReader, designDrafter, statBlocks, creatureFinder, pictures, pictureDescriber, restored };
+  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, wiki, wikiAI, wikiPictures, wikiBoards, wikiAsOf, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, mapStamps, pipeline, jobs, qa, books, editions, spells, forms, sheets, sheetImport, sheetReview, maps, mapReader, designDrafter, statBlocks, creatureFinder, pictures, pictureDescriber, restored };
 }

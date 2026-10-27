@@ -1731,6 +1731,18 @@ details.spell > summary::-webkit-details-marker { display: none; }
 .note-grey { background: #e6e6e6; color: #222; }
 .wiki-board-resize { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, var(--border) 50%); }
 
+/* As of a session (wiki-asof.js, stage 11). */
+.wiki-asof { display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.wiki-asof input[type=range] { width: 10rem; }
+.wiki-asof.past .wiki-asof-text { font-weight: 600; color: var(--accent); }
+.map-asof #map-tokens { opacity: 0.2; pointer-events: none; }
+.map-then-token { pointer-events: none; }
+.map-then-dot { position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); border: 2px solid #fff; box-shadow: 0 1px 4px rgb(0 0 0 / 0.4); }
+.map-then-token.kind-enemy .map-then-dot { background: #c0392b; }
+.map-then-token.kind-npc .map-then-dot { background: #7f8c8d; }
+.map-then-token.hidden-token { opacity: 0.55; }
+.map-then-name { position: absolute; left: 12px; top: -9px; white-space: nowrap; padding: 0 0.3rem; border-radius: 4px; background: rgb(0 0 0 / 0.6); color: #fff; }
+
 /* ---------- maps (map.js) ---------- */
 
 .map-panel { min-height: 0; }
