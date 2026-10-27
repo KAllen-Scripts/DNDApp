@@ -72,7 +72,7 @@ export function calendarSection({ get, save }) {
       const leap = input(m.leap || '', 'Extra days in a leap year', { type: 'number' });
       const fest = h('input', { type: 'checkbox', checked: !!m.festival, 'aria-label': 'A festival day between months' });
       return {
-        el: h('div', { class: 'cal-fields' }, fld('Name', n), fld('Days', d), fld('+ in a leap year', leap), h('label', { class: 'check' }, fest, ' Festival')),
+        el: h('div', { class: 'cal-fields' }, fld('Name', n), fld('Days', d), fld('Leap +', leap), h('label', { class: 'check' }, fest, ' Festival')),
         read: () => ({ name: n.value, days: num(d.value, 30), leap: num(leap.value), festival: fest.checked }),
       };
     }, () => ({ name: '', days: 30 }), 40);

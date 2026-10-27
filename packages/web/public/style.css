@@ -1130,7 +1130,13 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 .cal-list { display: flex; flex-direction: column; gap: 0.35rem; }
 .cal-rows { display: flex; flex-direction: column; gap: 0.35rem; }
 .cal-row { display: flex; gap: 0.4rem; align-items: end; }
-.cal-row > .cal-fields { flex: 1; }
+.cal-row > .cal-fields { flex: 1; flex-wrap: nowrap; min-width: 0; }
+.cal-row .cal-fields > .fld { flex: 1 1 0; min-width: 3.2rem; }
+.cal-row .cal-fields input, .cal-row .cal-fields select { padding-left: 0.4rem; padding-right: 0.3rem; }
+.cal-row .cal-fields > .fld:first-child { flex-grow: 3; }
+.cal-row .cal-fields input { min-width: 0; }
+/* One heading row: the labels say it once, above the first row (each field keeps its aria-label). */
+.cal-row + .cal-row .fld > span { display: none; }
 .cal-list > button { align-self: flex-start; }
 .map-clock-date { align-self: center; }
 .sheet-review { margin: 0.5rem 0; }
