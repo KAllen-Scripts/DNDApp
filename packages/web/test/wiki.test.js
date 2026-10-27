@@ -226,9 +226,14 @@ test('wiki tab: the DM adds pictures in the editor (main picture from the choose
     page.click('[data-tab=wiki]');
     await page.waitFor(() => page.$('.wiki-empty'));
     page.click(page.$$('.wiki-empty button').find((b) => b.textContent === 'Make the first page'));
+    page.type(page.$('.wiki-editor [aria-label=Title]'), 'Mira');
+    page.type(page.$('.wiki-editor [aria-label=Kind]'), 'npc');
+    // A kind brings its template (stage 5a); back to Blank, keeping the title and kind.
+    await page.waitFor(() => page.$('[aria-label="Start from"]').value === 'starter-person');
+    page.type(page.$('[aria-label="Start from"]'), '');
     const form = page.$('.wiki-editor');
-    page.type(form.querySelector('[aria-label=Title]'), 'Mira');
-    page.type(form.querySelector('[aria-label=Kind]'), 'npc');
+    assert.equal(form.querySelector('[aria-label=Title]').value, 'Mira');
+    assert.equal(form.querySelector('[aria-label=Kind]').value, 'npc');
 
     // The usual facts for a person.
     page.click([...form.querySelectorAll('button')].find((b) => b.textContent === '+ The usual for people'));

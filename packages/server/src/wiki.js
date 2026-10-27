@@ -86,10 +86,13 @@ export function normalizeWikiPage(p = {}) {
     title: String(p.title ?? '').trim(),
     aliases: [...new Set(list(p.aliases))],
     kind: String(p.kind ?? '').trim(),
-    parent: p.parent && isWikiId(p.parent) && p.parent !== p.id ? String(p.parent) : null,
+    parent: p.parent && isWikiId(p.parent) && p.parent !== p.id && !p.template ? String(p.parent) : null,
     tags: [...new Set(list(p.tags))],
-    // The whole page: only the DM until the DM shares it.
-    available: normalizeAvailable(p.available, 'dm'),
+    // The whole page: only the DM until the DM shares it. A template (stage 5a) is always the DM's.
+    available: p.template ? 'dm' : normalizeAvailable(p.available, 'dm'),
+    // A template for new pages of its kind (stage 5a): its sections' text and facts' values are writing prompts.
+    // Kept apart from the wiki: never in Ask, the views, the AI's reading or a player's wiki.
+    ...(p.template && { template: true }),
     sections: (Array.isArray(p.sections) ? p.sections : []).map((s) => ({
       id: String(s.id ?? crypto.randomBytes(3).toString('hex')),
       heading: String(s.heading ?? '').trim(),
@@ -144,12 +147,15 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
   // Callers get their own copies, so changing one never changes the kept pages.
   const cache = new Map();
   const events = new EventEmitter();
-  const rows = (cid) => {
+  const all = (cid) => {
     if (!cache.has(cid)) {
       cache.set(cid, db.prepare('SELECT data FROM wiki_pages WHERE campaign_id = ? ORDER BY id').all(cid).map((r) => normalizeWikiPage(JSON.parse(r.data))).filter((p) => !p.removed));
     }
-    return structuredClone(cache.get(cid));
+    return cache.get(cid);
   };
+  // The wiki's pages; templates (stage 5a) are kept apart.
+  const rows = (cid) => structuredClone(all(cid).filter((p) => !p.template));
+  const templateRows = (cid) => structuredClone(all(cid).filter((p) => p.template));
 
   const players = (cid) => store.roster(cid);
 
@@ -181,6 +187,7 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
    */
   function filtered(page, viewer, roster) {
     if (!viewer || viewer.seesAll) return page;
+    if (page.template) return null;
     const pageAudience = audienceOf(page.available);
     if (!canSeeAudience(viewer, pageAudience)) return null;
     // A picture or a fact is available to the narrowest of the page and its own setting.
@@ -238,7 +245,7 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
   };
 
   async function index(cid, page, roster = players(cid)) {
-    if (page.removed) return search.removeDocs(cid, { kind: 'wiki', ref_id: page.id });
+    if (page.removed || page.template) return search.removeDocs(cid, { kind: 'wiki', ref_id: page.id });
     const docs = parts(page, roster)
       .filter((p) => p.text.trim())
       .map((p) => ({
@@ -275,7 +282,7 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
       for (const x of [page.picture, page.banner, ...page.gallery]) if (x && !pictures.has(cid, x.id)) throw new BadRequestError('One of those pictures is missing. Add it again.');
     }
     const taken = new Map();
-    for (const p of rows(cid)) {
+    for (const p of page.template ? templateRows(cid) : rows(cid)) {
       if (p.id === excludeId) continue;
       for (const n of [p.title, ...p.aliases]) taken.set(wikiKey(n), p.title);
     }
@@ -323,16 +330,20 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
 
   const wiki = {
     events,
-    get(cid, id) {
+    /** A page; a template (stage 5a) only with `templates` (the DM editing it), never for Ask, maps or the views. */
+    get(cid, id, { templates = false } = {}) {
       if (!isWikiId(id)) throw new NotFoundError('No such page');
       const r = db.prepare('SELECT data FROM wiki_pages WHERE id = ? AND campaign_id = ?').get(id, cid);
       const page = r && normalizeWikiPage(JSON.parse(r.data));
-      if (!page || page.removed) throw new NotFoundError('No such page');
+      if (!page || page.removed || (page.template && !templates)) throw new NotFoundError('No such page');
       return page;
     },
 
     /** Every page (the DM's list). */
     list: (cid) => rows(cid),
+
+    /** The DM's own templates (stage 5a). */
+    templates: (cid) => templateRows(cid),
 
     /** The page as a viewer may see it, or null. The DM gets it whole. */
     forViewer: (cid, page, viewer) => filtered(page, viewer, players(cid)),
@@ -390,7 +401,7 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
      * title keeps the old one as an alias, so links to it keep working.
      */
     async update(cid, id, fields, { by, version }) {
-      const before = wiki.get(cid, id);
+      const before = wiki.get(cid, id, { templates: true });
       if (version != null && version !== before.version) {
         throw new ArchiveConflictError('This page was changed since you opened it. Open it again to see the changes, then make yours.');
       }
@@ -427,7 +438,7 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
 
     /** Delete a page (the archive keeps every version). Pages inside it move up to its parent. */
     async remove(cid, id, { by }) {
-      const page = wiki.get(cid, id);
+      const page = wiki.get(cid, id, { templates: true });
       const now = new Date().toISOString();
       for (const child of rows(cid).filter((p) => p.parent === id)) {
         write(cid, { ...child, parent: page.parent, version: child.version + 1, updated_by: by, updated_at: now });
@@ -438,7 +449,7 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
 
     /** Every saved version of a page, newest first: { version, updated_at, updated_by, title }. */
     history(cid, id) {
-      wiki.get(cid, id);
+      wiki.get(cid, id, { templates: true });
       return archive
         .readWikiChanges(store.getCampaign(cid).slug, id)
         .map(normalizeWikiPage)
@@ -448,7 +459,7 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
 
     /** One saved version of a page, whole. */
     version(cid, id, version) {
-      wiki.get(cid, id);
+      wiki.get(cid, id, { templates: true });
       const found = archive.readWikiChanges(store.getCampaign(cid).slug, id).map(normalizeWikiPage).findLast((p) => p.version === version);
       if (!found) throw new NotFoundError('No such version');
       return found;
@@ -458,7 +469,7 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
     async restore(cid, id, version, { by }) {
       const old = wiki.version(cid, id, version);
       const { title, aliases, kind, parent, tags, available, sections, picture, banner, gallery, facts, when, events } = old;
-      const current = wiki.get(cid, id);
+      const current = wiki.get(cid, id, { templates: true });
       return wiki.update(cid, id, { title, aliases, kind, parent: parent && rows(cid).some((p) => p.id === parent) ? parent : null, tags, available, sections, picture, banner, gallery, facts, when, events }, { by, version: current.version });
     },
 

@@ -62,6 +62,7 @@ const MODULES = {
   'shared/citations.js': '@dndapp/shared/citations.js',
   'shared/calendar.js': '@dndapp/shared/calendar.js',
   'shared/wiki-time.js': '@dndapp/shared/wiki-time.js',
+  'shared/wiki-templates.js': '@dndapp/shared/wiki-templates.js',
   'vendor/marked.js': 'marked',
   'vendor/purify.js': 'dompurify',
 };

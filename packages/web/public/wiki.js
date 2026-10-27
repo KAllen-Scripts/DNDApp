@@ -26,6 +26,7 @@ import { drawReview } from './wiki-waiting.js';
 import { resetSpace } from './wiki-space.js';
 import { drawWebView, leaveWeb } from './wiki-web.js';
 import { drawTimeline, leaveTimeline } from './wiki-timeline.js';
+import { drawTemplates, saveAsTemplate } from './wiki-templates.js';
 import { drawWheel } from './wiki-wheel.js';
 import { drawHub } from './wiki-home.js';
 import { pageDiff } from './wiki-diff.js';
@@ -244,7 +245,7 @@ function phoneBack() {
 function drawMain() {
   const main = $('#wiki-main');
   hidePreview();
-  const reading = !!state.open || state.view === 'review' || state.view === 'wheel' || state.view === 'atlas' || state.view === 'web' || state.view === 'timeline';
+  const reading = !!state.open || state.view === 'review' || state.view === 'wheel' || state.view === 'atlas' || state.view === 'web' || state.view === 'timeline' || state.view === 'templates';
   $('#wiki-view').classList.toggle('wiki-reading', reading);
   drawReviewButton();
   if (state.view !== 'atlas') leaveAtlas();
@@ -255,10 +256,12 @@ function drawMain() {
   if (state.view === 'atlas') return drawAtlas(main);
   if (state.view === 'web') return drawWebView(main);
   if (state.view === 'timeline') return drawTimeline(main);
+  if (state.view === 'templates') return drawTemplates(main);
   if (state.view === 'review') return drawReview();
   if (state.view === 'wheel') return drawWheelView();
   if (reading) queueMicrotask(() => main.prepend(phoneBack()));
   if (!state.open) return drawHome();
+  if (state.open.page.template) state.view = 'edit'; // a template is only ever edited
   if (state.view === 'edit') return main.replaceChildren(editor(state.open.page));
   if (state.view === 'history') return drawHistory();
   main.replaceChildren(pageView());
@@ -295,6 +298,7 @@ function pageView() {
         h('button', { type: 'button', class: 'primary', onclick: () => { state.view = 'edit'; drawMain(); } }, 'Edit'),
         h('button', { type: 'button', class: 'ghost', onclick: () => { state.view = 'history'; drawMain(); } }, 'History'),
         viewAs,
+        h('button', { type: 'button', class: 'ghost', title: 'Start a template from this page\'s kind, sections and facts', onclick: () => saveAsTemplate(page) }, 'Save as a template'),
         h('button', { type: 'button', class: 'ghost danger', onclick: () => removePage(page) }, 'Delete'),
       ),
     ),

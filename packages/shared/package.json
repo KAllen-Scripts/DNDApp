@@ -8,6 +8,7 @@
     "./sheet.js": "./src/sheet.js",
     "./calendar.js": "./src/calendar.js",
     "./wiki-time.js": "./src/wiki-time.js",
+    "./wiki-templates.js": "./src/wiki-templates.js",
     "./wild-shape.js": "./src/wild-shape.js",
     "./companions.js": "./src/companions.js",
     "./class-features.js": "./src/class-features.js",
