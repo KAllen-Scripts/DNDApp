@@ -1656,6 +1656,7 @@ The owner (2026-10-21 feedback, item 2): "some way of managing attacks and such 
 - **Print**: a Print button on every page, and ticked pages on `#/import`, one a sheet (`#wiki-print`, print CSS in `style.css`), for paper or Save as PDF.
 - `fflate` added to the server (zip in and out).
 - Tests: `server/test/wiki-transfer.test.js` (a vault with links, pictures and folders; the round trip; a player's export; notes and a Word file to the AI), `web/test/wiki-transfer.test.js`.
+- End of stage 9: the regression tests and the full `npm test` pass (server 338, shared 229, web 294).
 
 ### 2026-10-27: The wiki's space, stage 9a: live embeds
 - `[[creature:Name]]`, `[[item:…]]`, `[[merchant:…]]`, `[[handout:…]]` and `[[map:…]]` in a section show the thing itself, live, never a copy (`APP_EMBED_RE`, `appEmbeds` in `shared/src/wiki.js`; they're not links, so never a missing page). The server sends the page's embeds with it (`embeds`, keyed `kind:name`, from `src/wiki-embeds.js`, `wiki.appEmbeds`): a creature's stat block with buttons to roll its attacks and checks, an item's card, a merchant with Open the shop, a handout, a map's picture that opens it. The DM is told when a name matches nothing.
