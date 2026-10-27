@@ -491,7 +491,7 @@ export function registerWiki(app, r) {
       if (!page) throw new NotFoundError('No such page');
       const names = new Set([page.title].map(wikiKey));
       const mentioned = pages.filter((p) => p.id !== page.id && p.sections.some((s) => wikiLinks(s.text).some((n) => names.has(wikiKey(n))))).map((p) => ({ id: p.id, title: p.title }));
-      return { page, mentioned_in: mentioned, as, from_sheet: fromSheet(cid, page, as), embeds: embedsIn(page, pages, openings(cid)) };
+      return { page, mentioned_in: mentioned, as, from_sheet: fromSheet(cid, page, as), embeds: { ...embedsIn(page, pages, openings(cid)), ...live(cid, page, as) } };
     }
     const page = wiki.get(cid, request.params.pid, { templates: true });
     const { as } = z.object({ as: z.coerce.number().int().optional() }).parse(request.query ?? {});
@@ -499,9 +499,18 @@ export function registerWiki(app, r) {
       if (auth.membership(cid, as)?.role !== 'player') throw new BadRequestError("That isn't a player in this campaign.");
       const { pages } = viewerPages(request);
       const seen = pages.find((p) => p.id === page.id) ?? null;
-      return { page: seen, as, from_sheet: seen && fromSheet(cid, seen, as), embeds: seen ? embedsIn(seen, pages, openings(cid)) : {} };
+      return { page: seen, as, from_sheet: seen && fromSheet(cid, seen, as), embeds: seen ? { ...embedsIn(seen, pages, openings(cid)), ...live(cid, seen, as) } : {} };
     }
-    return { page, mentioned_in: wiki.mentionedIn(cid, page), unknown_names: wiki.unknownNames(cid, page), on_maps: pageOnMaps(maps, cid, page.id), from_sheet: fromSheet(cid, page, null), embeds: prepMarks(page, embedsIn(page, wiki.list(cid), openings(cid)), wiki.list(cid)) };
+    return { page, mentioned_in: wiki.mentionedIn(cid, page), unknown_names: wiki.unknownNames(cid, page), on_maps: pageOnMaps(maps, cid, page.id), from_sheet: fromSheet(cid, page, null), embeds: { ...prepMarks(page, embedsIn(page, wiki.list(cid), openings(cid)), wiki.list(cid)), ...live(cid, page, null) } };
+  });
+
+  /** Live embeds (stage 9a) on a page as the DM (`as` null) or a player gets them. */
+  const live = (cid, page, as) => wiki.appEmbeds?.forPage(cid, page, as == null ? { role: 'dm' } : { role: 'player', userId: as }) ?? {};
+
+  /** What the editor's "+ Embed" offers: the DM's creatures, items, merchants, handouts and maps. */
+  app.get('/campaigns/:cid/wiki/embeds', async (request) => {
+    const { cid } = access(request, { dm: true });
+    return { choices: wiki.appEmbeds?.choices(cid) ?? [] };
   });
 
   /** Each page's opening section, for embeds (stage 7a): what an embedded clue shows. */

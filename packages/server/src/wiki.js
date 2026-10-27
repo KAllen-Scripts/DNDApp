@@ -20,7 +20,7 @@ import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { NotFoundError, BadRequestError } from './store.js';
 import { ArchiveConflictError } from './archive.js';
-import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, unpicture, wikiKey, isPictureId, pagePictureIds, normalizeCanon, playerCanon, canonMarker, TONES, LINK_RE, EMBED_RE, PICTURE_RE, normalizeSheetShare } from '@dndapp/shared/wiki.js';
+import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, unpicture, wikiKey, isPictureId, pagePictureIds, normalizeCanon, playerCanon, canonMarker, TONES, LINK_RE, EMBED_RE, APP_EMBED_RE, PICTURE_RE, normalizeSheetShare } from '@dndapp/shared/wiki.js';
 import { normalizeSources } from '@dndapp/shared/citations.js';
 import { parseWhen, whenText } from '@dndapp/shared/wiki-time.js';
 
@@ -265,7 +265,8 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
       .filter((p) => p.text.trim())
       .map((p) => ({
         title: `${page.title}${p.section.heading ? ` › ${p.section.heading}` : ''}`,
-        text: `${page.kind ? `(${page.kind}) ` : ''}${page.title}\n${partMarker(p.section, roster)}${unpicture(unlink(p.text))}`,
+        // A live embed's name (stage 9a) is searchable only in the DM's own parts: players find it per their access.
+        text: `${page.kind ? `(${page.kind}) ` : ''}${page.title}\n${partMarker(p.section, roster)}${unpicture(unlink(Array.isArray(p.audience) && !p.audience.length ? p.text : p.text.replace(APP_EMBED_RE, '')))}`,
         visible_to: p.audience,
       }));
     // The truth beside a falsehood is the DM's alone: a doc of its own nobody else finds.
@@ -404,11 +405,12 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
       // Other names of pages they see link to the title; anything else is just its words.
       const byAlias = new Map(all.filter((p) => ids.has(p.id)).flatMap((p) => p.aliases.map((a) => [wikiKey(a), p.title])));
       // An embed of a page they see stays (by its title); any other vanishes without a trace.
-      const relink = (text) => String(text ?? '').replace(EMBED_RE, (m, name) => {
+      // A live embed (stage 9a) of something they may see stays; any other goes, name and all.
+      const relink = (text) => String(text ?? '').replace(APP_EMBED_RE, (m, kind, name) => (wiki.appEmbeds?.visibleTo(cid, kind.toLowerCase(), name.trim(), viewer.userId) ? m : '')).replace(EMBED_RE, (m, name) => {
         const title = titles.get(wikiKey(name)) ?? byAlias.get(wikiKey(name));
         return title ? `[[!${title}]]` : '';
       }).replace(LINK_RE, (m, name, shown) => {
-        if (name.startsWith('!')) return m; // an embed kept above
+        if (name.startsWith('!') || /^(creature|item|merchant|handout|map):/i.test(name)) return m; // an embed kept above
         const words = (shown ?? name).trim();
         const title = titles.get(wikiKey(name)) ?? byAlias.get(wikiKey(name));
         return title ? `[[${title}${shown || wikiKey(title) !== wikiKey(name) ? `|${words}` : ''}]]` : words;

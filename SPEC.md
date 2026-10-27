@@ -1,6 +1,8 @@
 # DNDApp — Project Spec
 
-> Status: v0.94 (2026-10-27). A Home that thinks: after each session the wiki's AI notes loose threads, a Previously on… recap and contradictions, shown on the DM's Home (§6.11).
+> Status: v0.95 (2026-10-27). Live embeds: a wiki page can show a creature's stat block (with its rolls), an item, a merchant's shop, a handout or a map, live, and each player sees only the ones they could see anyway (§6.11).
+>
+> Previously v0.94 (2026-10-27). A Home that thinks: after each session the wiki's AI notes loose threads, a Previously on… recap and contradictions, shown on the DM's Home (§6.11).
 >
 > Previously v0.93 (2026-10-27). Tidy up: the wiki lists what needs a hand (missing pages, names not linked, places off the map, people with no picture and more), each with a button to fix it (§6.11).
 >
@@ -928,6 +930,7 @@ Owner (2026-10-18): "I want to start work on the DM being able to build a wiki. 
 - **Who knows what and the spoiler check (stage 8b):** `#/knows` shows the DM every page against every player (all, some or none of it); a click shows that player's version, and chosen parts are revealed to them in one go. Before a reveal, a section sent as a handout, or approving a reveal or a player's lore, the server lists what the newly visible words name that those players can't see yet, so the DM doesn't give a secret away by its name.
 - **Tidy up (stage 8c):** `#/tidy` lists what needs a hand, each with a button to fix it: links to missing pages, facts linking deleted pages, names not linked, pages with no links, places not on a map and places with no page, people with no picture, blocks for unknown names, parts planned for three sessions or more, and players' accounts not yet judged.
 - **A Home that thinks (stage 8d):** after each session the wiki's AI also notes loose threads, a Previously on… recap to read aloud, and pages the records contradict. They show on the DM's Home with Open, Dismiss and (for a contradiction) Propose the fix; one dismissed is never raised again.
+- **Live embeds (stage 9a):** `[[creature:Name]]`, `[[item:…]]`, `[[merchant:…]]`, `[[handout:…]]` and `[[map:…]]` in a page's text show the thing as it is now (a stat block with its rolls, an item's card, a shop to open, a handout, a map to open), never a copy. A player gets one only when they could see it anyway (a merchant whose token they see, a handout they got, a map shown to them; never a creature or an item) and loses the rest from the text, names included. The editor's + Embed picks one.
 - **Later:** importing old notes; pictures in players' lore.
 
 ## 7. Security & cost controls

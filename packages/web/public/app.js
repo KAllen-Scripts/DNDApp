@@ -25,7 +25,7 @@ import { markNames } from './wiki-names.js';
 import { nav as wikiNav } from './wiki-data.js';
 import { loadCreatures, initCreatureActions } from './creatures.js';
 import { loadItems, initItemActions } from './items.js';
-import { loadMerchants, initMerchantActions, merchantsOpened } from './merchants.js';
+import { loadMerchants, initMerchantActions, merchantsOpened, openShop } from './merchants.js';
 import { initPhone, phoneMenu, phoneSheet } from './phone.js';
 import { WINDOW_TAB, SHEET_WINDOW, windowCampaign, besidePanel, placeBeside, setSheetCampaign, initSheetPlace } from './sheet-place.js';
 
@@ -838,6 +838,7 @@ initSheetPlace({ onChange: () => showTab(currentTab), currentTab: () => currentT
 initSpace({ table: WINDOW_TAB ? null : () => showTab(tableTab), enter: () => { if (currentTab !== 'wiki') showTab('wiki'); } });
 // The wiki's On the map box opens a map on the Map tab, at the place.
 wikiNav.showMap = WINDOW_TAB ? null : (id, at) => { showTab('map'); return openMapAt(id, at); };
+wikiNav.openShop = WINDOW_TAB ? null : openShop;
 initFind();
 // Back and Forward in and out of the wiki's space, and between its pages.
 window.addEventListener('popstate', async () => {
