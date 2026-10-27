@@ -64,6 +64,20 @@ export const STARTER_TEMPLATES = [
     facts: [f('Found', 'Not yet, or when and by whom', dm), f('Leads to', '[[A page]]', dm)],
   },
   {
+    // The prep page (stage 7b, after Sly Flourish's Lazy DM checklist): what the next session needs, and only that.
+    id: 'starter-session-plan', title: 'Session plan', kind: 'session plan',
+    sections: [
+      s('Strong start', 'How the session opens: straight into something happening.', dm),
+      s('Scenes', 'A few scenes that could happen, not a script.', dm),
+      s('Clues', 'One [[!Clue]] per line: the clues they could find this session (each from a Clue page).', dm),
+      s('People', 'The [[NPCs]] likely to show up.', dm),
+      s('Places', 'The [[places]] they might go.', dm),
+      s('Encounters', 'Fights and other trouble: [[creatures]], maps.', dm),
+      s('Treasure', 'What they could find or earn.', dm),
+    ],
+    facts: [f('Session', 'Which session this is for', dm), f('Arc', '[[An arc]]', dm), f('Played', 'Empty until it\'s played; then when', dm)],
+  },
+  {
     id: 'starter-arc', title: 'Arc', kind: 'arc',
     sections: [s('', 'The story this arc tells, in a line.', dm), s('Beats', 'What could happen, in roughly the order it might.', dm), s('Clues', '[[Clue pages]] that lead the players through it.', dm), s('How it could end', 'The endings you can see, good and bad.', dm)],
     facts: [f('Status', 'Not started, under way, done', dm), f('Villain', '[[Someone]]', dm)],

@@ -172,6 +172,18 @@ export const KIND_FAMILIES = {
   other: { label: 'Other', icon: '❦', words: [], facts: [] },
 };
 
+/**
+ * Session prep (stage 7b): a page of kind "session plan" is a prep page (from the Session plan template). The open
+ * one is the newest whose Played fact is still empty: what the DM is preparing for next. An arc is a page of kind
+ * "arc", with its quests and sessions inside it.
+ */
+export const PREP_KIND = 'session plan';
+export const isPrepPage = (p) => wikiKey(p?.kind) === PREP_KIND;
+export const isArcPage = (p) => wikiKey(p?.kind) === 'arc';
+export const prepPlayed = (p) => (p?.facts ?? []).some((f) => wikiKey(f.label) === 'played' && String(f.value ?? '').trim());
+/** The prep page being prepared now, of the pages given (newest first), or null. */
+export const openPrepPage = (pages) => [...pages].filter((p) => isPrepPage(p) && !prepPlayed(p)).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0] ?? null;
+
 /** The family of a page's kind ("Tavern" -> 'place'). */
 export function kindFamily(kind) {
   const k = wikiKey(kind);

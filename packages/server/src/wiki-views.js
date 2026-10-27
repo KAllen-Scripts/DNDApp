@@ -3,7 +3,7 @@
  * or a player for View as): plain functions of the pages that viewer may see,
  * so nothing hidden reaches the page, not even in a count.
  */
-import { KIND_FAMILIES, kindFamily, wikiKey, wikiPieces, wikiLinks, wikiPictures as picturesIn, unlink, unpicture, embedNames, unembed } from '@dndapp/shared/wiki.js';
+import { KIND_FAMILIES, kindFamily, wikiKey, wikiPieces, wikiLinks, wikiPictures as picturesIn, unlink, unpicture, embedNames, unembed, isPrepPage } from '@dndapp/shared/wiki.js';
 
 /** A page as a card: enough for the cards and the preview shown over a link (its picture and its opening words). */
 export const summary = (p) => ({
@@ -64,7 +64,8 @@ export function wheelFamilies(pages) {
  * ("Session 12"), else the newest session page.
  */
 export function lastSessionPage(pages, number) {
-  const sessions = pages.filter((p) => kindFamily(p.kind) === 'session');
+  // A prep page (stage 7b) is a plan, not a session that happened.
+  const sessions = pages.filter((p) => kindFamily(p.kind) === 'session' && !isPrepPage(p));
   if (number != null) {
     const re = new RegExp(`\\bsession\\s*#?${number}\\b`);
     const named = sessions.find((p) => [p.title, ...p.aliases].some((n) => re.test(wikiKey(n))));

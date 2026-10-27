@@ -19,7 +19,7 @@
  * a page is drawn by wiki-page.js and the AI's changes by wiki-waiting.js.
  */
 import { api, h } from './api.js';
-import { wikiKey, KIND_FAMILIES } from './shared/wiki.js';
+import { wikiKey, KIND_FAMILIES, isPrepPage } from './shared/wiki.js';
 import { state, nav, base, status, report, availableText, playerName, pictureImg, clearPictures, fam, kindBadge, matchesFilter } from './wiki-data.js';
 import { pageLink, hidePreview, hero, pageContent, editor } from './wiki-page.js';
 import { drawReview } from './wiki-waiting.js';
@@ -37,6 +37,7 @@ import { drawAtlas, leaveAtlas, pickAtlasMap } from './wiki-atlas.js';
 import './wiki-handout.js';
 import { drawFromSheet } from './wiki-sheet.js';
 import { drawLore } from './wiki-lore.js';
+import { prepBoard } from './wiki-prep.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -321,6 +322,14 @@ function pageView() {
         h('button', { type: 'button', class: 'primary', onclick: () => { state.view = 'edit'; drawMain(); } }, 'Edit'),
         h('button', { type: 'button', class: 'ghost', onclick: () => { state.view = 'history'; drawMain(); } }, 'History'),
         viewAs,
+        // A prep page (stage 7b): its pages and clues as cards.
+        isPrepPage(page) ? h('button', { type: 'button', class: 'ghost', 'aria-pressed': 'false', onclick: (e) => {
+          const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+          e.currentTarget.setAttribute('aria-pressed', String(on));
+          const article = e.currentTarget.closest('article');
+          article.querySelector('.wiki-prep-board')?.remove();
+          if (on) article.querySelector('.wiki-content').before(prepBoard(page));
+        } }, 'Prep board') : null,
         h('button', { type: 'button', class: 'ghost', title: 'Start a template from this page\'s kind, sections and facts', onclick: () => saveAsTemplate(page) }, 'Save as a template'),
         h('button', { type: 'button', class: 'ghost danger', onclick: () => removePage(page) }, 'Delete'),
       ),

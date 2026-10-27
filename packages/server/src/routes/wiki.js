@@ -10,7 +10,7 @@ import { AuthError } from '../auth.js';
 import { WIKI_LIMITS as L } from '../wiki.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 import { SOURCE_KINDS } from '../wiki-pictures.js';
-import { wikiKey, wikiLinks, wikiPieces, unlink, unpicture, audienceOf, canSeeAudience, CANONS, TONES, SHEET_PARTS, sheetParts } from '@dndapp/shared/wiki.js';
+import { wikiKey, wikiLinks, wikiPieces, unlink, unpicture, audienceOf, canSeeAudience, CANONS, TONES, SHEET_PARTS, sheetParts, openPrepPage } from '@dndapp/shared/wiki.js';
 import { MAX_SOURCES } from '@dndapp/shared/citations.js';
 import { createTools } from '../qa/tools.js';
 import { webGraph } from '../wiki-web.js';
@@ -210,7 +210,8 @@ export function registerWiki(app, r) {
       party: party(cid, pages),
       // The Timeline tile: the latest moments (by in-game time).
       moments: timeline(pages).items.slice(-12).map((x) => ({ at: x.when.from, family: x.family, title: x.type === 'event' ? x.text : x.title })),
-      ...(as == null ? { waiting: { proposals: wikiAI.count(cid) } } : { as }),
+      // For the DM, what waits and the prep page being prepared (stage 7b).
+      ...(as == null ? { waiting: { proposals: wikiAI.count(cid) }, prep: (() => { const p = openPrepPage(pages); return p ? summary(p) : null; })() } : { as }),
     };
   });
 

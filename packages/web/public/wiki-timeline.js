@@ -8,7 +8,7 @@
  */
 import { api, h } from './api.js';
 import { timeTicks, fullMoons, whenText } from './shared/wiki-time.js';
-import { KIND_FAMILIES } from './shared/wiki.js';
+import { KIND_FAMILIES, isArcPage } from './shared/wiki.js';
 import { panZoom } from './pan-zoom.js';
 import { canonBadge } from './wiki-canon.js';
 import { showOnMap } from './wiki-atlas.js';
@@ -167,6 +167,8 @@ function drawBar(data) {
     phone() ? null : h('button', { type: 'button', class: 'ghost small', 'data-now': '' }, 'Now'),
     viewAs,
     addLane,
+    // Group by arc (stage 7b): a lane for each arc page, with its quests and sessions inside it.
+    state.as == null && state.pages.some(isArcPage) ? h('button', { type: 'button', class: 'ghost small', title: 'A lane for each arc: the arc, its quests and sessions, and what links to it', onclick: () => setLanes(state.pages.filter(isArcPage).map((p) => p.id)) }, 'Lanes by arc') : null,
   ].filter(Boolean));
 }
 
