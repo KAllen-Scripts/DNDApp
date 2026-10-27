@@ -20,7 +20,7 @@ const who = (t) => (t.kind === 'pc' ? t.name : `${t.name} (${{ enemy: 'enemy', c
 const down = (t) => t.hp?.current != null && t.hp.current <= 0;
 
 /** The events in one change: before -> after (both normalised maps). */
-function eventsOf(before, after, reason) {
+function eventsOf(before, after, reason, calendar = null) {
   const out = [];
   const on = `on "${after.name}"`;
   if (!before.shown) {
@@ -52,7 +52,7 @@ function eventsOf(before, after, reason) {
     const added = t.conditions.filter((c) => !b.conditions.includes(c));
     if (added.length) out.push(`${who(t)} became ${added.join(', ')} ${on}.`);
   }
-  out.push(...travelEvents(before, after, reason, was));
+  out.push(...travelEvents(before, after, reason, was, calendar));
   const doors = new Map(before.walls.filter((w) => w.door).map((w) => [w.id, w]));
   const opened = after.walls.filter((w) => w.door && w.open && doors.has(w.id) && !doors.get(w.id).open).length;
   if (opened) out.push(`${opened === 1 ? 'A door was' : `${opened} doors were`} opened ${on}.`);
@@ -68,7 +68,7 @@ const joinNames = (list) => (list.length > 1 ? `${list.slice(0, -1).join(', ')} 
  * Journeys on the map (the world's travel): who set off, where to, how far and when they're due, and who
  * arrived or stopped, with the in-game day and time. Those going together are said together.
  */
-function travelEvents(before, after, reason, was) {
+function travelEvents(before, after, reason, was, calendar) {
   const out = [];
   const on = `on "${after.name}"`;
   const groups = new Map();
@@ -84,12 +84,12 @@ function travelEvents(before, after, reason, was) {
       const mode = TRAVEL_BY[j.by] ?? TRAVEL_BY.foot;
       const far = j.miles != null ? `${j.miles} miles${j.road_miles ? `, ${j.road_miles} of them ${mode.water ? 'by river' : 'by road'}` : ''}, ` : '';
       const how = [j.by !== 'foot' ? `by ${mode.name.toLowerCase()}` : '', j.hours > MARCH_HOURS && !mode.water ? `pushing on ${j.hours} hours a day` : '', mode.water ? '' : `at a ${PACES[j.pace].name.toLowerCase()} pace`].filter(Boolean).join(', ');
-      add(`go:${j.to_name}:${j.leaves}:${j.arrives}`, t, (w) => `${w} set off ${j.to_name ? `for ${j.to_name}` : 'on a journey'} ${on} (${far}${durationText(j.arrives - j.leaves)}${how ? ` ${how}` : ''}; left ${clockText(j.leaves)}, due ${clockText(j.arrives)}).`);
+      add(`go:${j.to_name}:${j.leaves}:${j.arrives}`, t, (w) => `${w} set off ${j.to_name ? `for ${j.to_name}` : 'on a journey'} ${on} (${far}${durationText(j.arrives - j.leaves)}${how ? ` ${how}` : ''}; left ${clockText(j.leaves, calendar)}, due ${clockText(j.arrives, calendar)}).`);
     } else if (!j && b.journey) {
       const bj = b.journey;
       const where = bj.to_name ? ` at ${bj.to_name}` : '';
       if (reason === 'journey stopped') add(`stop:${bj.to_name}`, t, (w) => `${w} stopped on the way${bj.to_name ? ` to ${bj.to_name}` : ''} ${on}.`);
-      else if (reason === 'clock' || reason === 'arrived') add(`at:${bj.to_name}:${bj.arrives}`, t, (w) => `${w} arrived${where} ${on}${reason === 'clock' ? ` (${clockText(bj.arrives)})` : ''}.`);
+      else if (reason === 'clock' || reason === 'arrived') add(`at:${bj.to_name}:${bj.arrives}`, t, (w) => `${w} arrived${where} ${on}${reason === 'clock' ? ` (${clockText(bj.arrives, calendar)})` : ''}.`);
     }
   }
   for (const { who: w, text } of groups.values()) out.push(text(joinNames(w)));
@@ -101,7 +101,7 @@ function travelEvents(before, after, reason, was) {
  * @param {{ id: string, entries: object[] }[]} histories  every map's archived change lines
  * @param {{ date: string, rolloverHour: number }} opts  the session's date; changes before rolloverHour count to the day before (as with notes)
  */
-export function mapEvents(histories, { date, rolloverHour }) {
+export function mapEvents(histories, { date, rolloverHour, calendar = null }) {
   const names = new Map();
   const found = [];
   for (const { id, entries } of histories) {
@@ -117,7 +117,7 @@ export function mapEvents(histories, { date, rolloverHour }) {
       if (after.shown_to && !after.shown_to.length) continue;
       if (before.shown_to && !before.shown_to.length) before.shown = false;
       const only = after.shown_to ? ` [seen only by ${after.shown_to.map((u) => `user ${u}`).join(', ')}]` : '';
-      for (const ev of eventsOf(before, after, e.reason)) found.push({ when, ev: !only ? ev : typeof ev === 'string' ? `${ev}${only}` : { ...ev, text: (from) => `${ev.text(from)}${only}` } });
+      for (const ev of eventsOf(before, after, e.reason, calendar)) found.push({ when, ev: !only ? ev : typeof ev === 'string' ? `${ev}${only}` : { ...ev, text: (from) => `${ev.text(from)}${only}` } });
     }
     names.set(id, normalizeMap(raw).name);
   }

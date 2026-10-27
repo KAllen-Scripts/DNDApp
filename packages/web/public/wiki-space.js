@@ -192,8 +192,8 @@ async function showClock() {
   const box = $('#wiki-clock');
   if (!box || state.campaignId == null) return;
   try {
-    const { clock } = await api('GET', `/campaigns/${state.campaignId}/clock`);
-    box.textContent = clock == null ? '' : clockText(clock);
+    const { clock, calendar } = await api('GET', `/campaigns/${state.campaignId}/clock`);
+    box.textContent = clock == null ? '' : clockText(clock, calendar);
   } catch {
     box.textContent = '';
   }

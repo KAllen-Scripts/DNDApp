@@ -65,6 +65,8 @@ export function registerAccounts(app, r) {
       attacks: z.object({ on: z.boolean(), damage: z.enum(Object.keys(ATTACK_DAMAGE)), show_ac: z.boolean() }).partial().strict().optional(),
       // The DM's own backgrounds, the whole list (shared/backgrounds.js cleans each one).
       backgrounds: z.array(z.record(z.string(), z.unknown())).max(MAX_CUSTOM_BACKGROUNDS).optional(),
+      // The campaign's calendar, whole (shared/calendar.js cleans it), or null for "Day N".
+      calendar: z.record(z.string(), z.unknown()).nullable().optional(),
     }).strict().parse(request.body ?? {});
     if (body.attacks) body.attacks = { ...store.getSettings(a.cid).attacks, ...body.attacks };
     // Travel switches change one at a time.

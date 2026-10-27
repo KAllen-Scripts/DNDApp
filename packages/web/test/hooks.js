@@ -60,6 +60,7 @@ const MODULES = {
   'shared/race-features.js': '@dndapp/shared/race-features.js',
   'shared/wild-shape.js': '@dndapp/shared/wild-shape.js',
   'shared/citations.js': '@dndapp/shared/citations.js',
+  'shared/calendar.js': '@dndapp/shared/calendar.js',
   'vendor/marked.js': 'marked',
   'vendor/purify.js': 'dompurify',
 };

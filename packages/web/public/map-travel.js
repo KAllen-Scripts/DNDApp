@@ -14,25 +14,32 @@
 import { api, h } from './api.js';
 import { MARCH_HOURS, PACES, TRAVEL_BY, isPinMap } from './shared/map.js';
 import { clockText, durationText } from './shared/settings.js';
-import { campaignSettings } from './campaign-settings.js';
+import { campaignSettings, onSettings } from './campaign-settings.js';
+import { dateText } from './shared/calendar.js';
 import { base, report, state, status } from './map-state.js';
 import { field } from './map-dm.js';
 import { onMap, select, svgEl } from './map.js';
 
 const $ = (sel) => document.querySelector(sel);
+/** The campaign's calendar (Campaign settings), or null for "Day N". */
+const calendar = () => campaignSettings().calendar;
 
 /** "On the road to Daggerford, due Day 3, 12:00" for a token's journey. */
-export const journeyText = (j) => `On the road${j.to_name ? ` to ${j.to_name}` : ''}, due ${clockText(j.arrives)}`;
+export const journeyText = (j) => `On the road${j.to_name ? ` to ${j.to_name}` : ''}, due ${clockText(j.arrives, calendar())}`;
 
 /** The clock over the map: the day and time (the DM's opens the clock to move it on). */
 export function renderClock() {
   const el = $('#map-clock');
+  if (!el) return;
   el.hidden = state.clock == null;
   if (state.clock == null) return;
-  el.textContent = clockText(state.clock);
+  el.textContent = clockText(state.clock, calendar());
   el.disabled = !state.canEdit;
   el.title = state.canEdit ? 'The in-game clock: move it on (journeys move with it)' : 'The in-game day and time';
 }
+
+// A new calendar (Campaign settings) renames the days.
+onSettings(() => renderClock());
 
 /** The DM moved the clock (live). */
 export function onClock({ clock }) {
@@ -55,11 +62,16 @@ export function clockDialog() {
   const road = h('ul', { class: 'small map-road' });
   const day = h('input', { type: 'number', min: '1', step: '1', class: 'map-num', 'aria-label': 'Day' });
   const time = h('input', { type: 'time', 'aria-label': 'Time of day' });
+  // With a calendar, the day number says which date it is.
+  const date = h('span', { class: 'muted small map-clock-date' });
+  const sayDate = () => { date.textContent = calendar() ? dateText((Math.max(1, Math.round(Number(day.value) || 1)) - 1) * 1440, calendar()) : ''; };
+  day.addEventListener('input', sayDate);
   const draw = () => {
-    now.textContent = clockText(state.clock);
+    now.textContent = clockText(state.clock, calendar());
     day.value = String(Math.floor(state.clock / 1440) + 1);
     const m = state.clock % 1440;
     time.value = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    sayDate();
     const list = onTheRoad();
     road.replaceChildren(...(list.length ? list.map(({ token, map }) => h('li', {}, `${token.name} (${map.name}): ${journeyText(token.journey)}`)) : [h('li', { class: 'muted' }, 'Nobody is on the road.')]));
     next.disabled = !list.some(({ token }) => token.journey.arrives > state.clock);
@@ -74,7 +86,7 @@ export function clockDialog() {
       for (const m of maps) onMap(m);
       onClock(res);
       const met = res.notes?.find((n) => n.kind === 'encounter' && n.at === res.clock);
-      result.textContent = met ? `Stopped at ${clockText(res.clock)} for a random encounter: run it, then move the clock on.` : said ?? `It's now ${clockText(res.clock)}.`;
+      result.textContent = met ? `Stopped at ${clockText(res.clock, calendar())} for a random encounter: run it, then move the clock on.` : said ?? `It's now ${clockText(res.clock, calendar())}.`;
       showNotes(notes, res.notes);
       draw();
     } catch (err) {
@@ -93,7 +105,7 @@ export function clockDialog() {
   now,
   h('div', { class: 'map-row' }, step(60, '+1 hour'), step(8 * 60, '+8 hours'), step(1440, '+1 day'), next),
   h('p', { class: 'muted small' }, 'Everyone on the road moves along as the clock goes, and arrives when it reaches their time. A rest can move it on too (in Rest).'),
-  h('div', { class: 'map-row' }, field('Day', day), field('Time', time), h('button', { class: 'ghost', type: 'submit' }, 'Set')),
+  h('div', { class: 'map-row' }, field('Day', day), field('Time', time), h('button', { class: 'ghost', type: 'submit' }, 'Set'), date),
   h('label', { class: 'check', title: 'When a random encounter comes up, the clock stops there so you can run it' }, stop, ' Stop for random encounters'),
   h('h3', {}, 'On the road'),
   road,
@@ -107,7 +119,7 @@ export function clockDialog() {
 /** What happened on the road (random encounters, forced marches, merchants restocking), for the DM. */
 export function showNotes(list, notes = []) {
   const said = { encounter: 'Random encounter', march: 'Forced march', restock: 'Restocked' };
-  list.replaceChildren(...notes.map((n) => h('li', { class: `map-road-note ${n.kind}` }, h('strong', {}, `${said[n.kind] ?? 'On the road'}, ${clockText(n.at)}: `), n.text)));
+  list.replaceChildren(...notes.map((n) => h('li', { class: `map-road-note ${n.kind}` }, h('strong', {}, `${said[n.kind] ?? 'On the road'}, ${clockText(n.at, calendar())}: `), n.text)));
 }
 
 /**
@@ -222,7 +234,7 @@ function travelDialog(token, spot = null, placeId = null) {
     ].filter(Boolean).join(', ');
     const far = plan.miles != null ? `${plan.miles} miles${how ? ` (${how})` : ''}: ` : '';
     const pacing = minutesTyped() == null && !TRAVEL_BY[plan.by].water ? ` at a ${PACES[pace.value].name.toLowerCase()} pace` : '';
-    const when = travel.time === 'clock' ? `arriving ${clockText(state.clock + minutes)}` : travel.time === 'skip' ? `skipped: they get there at once and the clock jumps on to ${clockText(state.clock + minutes)}` : 'skipped: they get there at once';
+    const when = travel.time === 'clock' ? `arriving ${clockText(state.clock + minutes, calendar())}` : travel.time === 'skip' ? `skipped: they get there at once and the clock jumps on to ${clockText(state.clock + minutes, calendar())}` : 'skipped: they get there at once';
     says.textContent = `${far}${durationText(minutes)}${pacing}, ${when}.`;
   };
   where.addEventListener('change', () => {
@@ -253,7 +265,7 @@ function travelDialog(token, spot = null, placeId = null) {
   march,
   own,
   says,
-  h('p', { class: 'muted small' }, timed ? `It's ${clockText(state.clock)}. They move along the map as the DM moves the clock on.` : `It's ${clockText(state.clock)}.`),
+  h('p', { class: 'muted small' }, timed ? `It's ${clockText(state.clock, calendar())}. They move along the map as the DM moves the clock on.` : `It's ${clockText(state.clock, calendar())}.`),
   h('div', { class: 'map-dialog-actions' }, h('span', { class: 'spacer' }), h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel'), h('button', { class: 'primary' }, 'Set off'))));
   draw();
   if (!dialog.open) dialog.showModal();

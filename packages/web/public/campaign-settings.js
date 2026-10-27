@@ -7,6 +7,7 @@ import { api, h } from './api.js';
 import { ATTACK_DAMAGE, EDITIONS, TRAVEL_PARTS, TRAVEL_TIME, WEIGHT_RULES, normalizeSettings } from './shared/settings.js';
 import { setSheetSettings } from './sheet.js';
 import { backgroundsSection } from './campaign-backgrounds.js';
+import { calendarSection } from './campaign-calendar.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -18,11 +19,17 @@ const WEIGHT_HELP = {
   ignore: 'No weight limits: carry anything. Weights are still added up on the Inventory tab.',
 };
 
+const listeners = [];
+/** Call `fn` whenever the settings change (the map's clock reads the calendar). */
+export const onSettings = (fn) => listeners.push(fn);
+const tell = () => { for (const fn of listeners) fn(state.settings); };
+
 /** Enter a campaign with its settings (from /me): the DM gets the Settings button. */
 export function setSettingsCampaign({ campaignId, guarded, isDm, settings }) {
   Object.assign(state, { campaignId, guarded, isDm, settings: normalizeSettings(settings) });
   $('#settings-open').hidden = !isDm;
   setSheetSettings(state.settings);
+  tell();
 }
 
 /** The campaign's settings as they are now (the map's travel follows `travel`). */
@@ -32,6 +39,7 @@ export const campaignSettings = () => state.settings;
 export function settingsHeard(settings) {
   state.settings = normalizeSettings(settings);
   setSheetSettings(state.settings);
+  tell();
 }
 
 const EDITION_HELP = 'Rests, Ask’s rules answers and lookups in your books (spells, stat blocks, items) follow it. The character sheet still works itself out with the 2014 rules.';
@@ -88,6 +96,8 @@ function openDialog() {
   attackDamage.addEventListener('change', () => save({ attacks: { damage: attackDamage.value } }, attackSaved));
   attackAc.addEventListener('change', () => save({ attacks: { show_ac: attackAc.checked } }, attackSaved));
   // The DM's own backgrounds (campaign-backgrounds.js): every player's sheet suggests them.
+  // The calendar (campaign-calendar.js): what the clock's days are called, everywhere.
+  const calendar = calendarSection({ get: () => state.settings, save });
   const backgrounds = backgroundsSection({ list: () => state.settings.backgrounds, save: (list, done) => save({ backgrounds: list }, done) });
   dialog.replaceChildren(
     h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => e.preventDefault() },
@@ -100,6 +110,7 @@ function openDialog() {
       h('label', { class: 'fld' }, h('span', {}, 'Travel time'), time),
       ...parts,
       h('p', { class: 'muted small' }, 'Switch off whatever your table would rather skip. Journeys already on the road keep going as they set off.'),
+      calendar.el,
       h('h3', {}, 'Attacks from the map'),
       h('label', { class: 'check' }, attackOn, ' Players and I can attack and cast spells from the map (pick an enemy, then Attack)'),
       h('label', { class: 'fld' }, h('span', {}, 'Damage from players\u2019 attacks lands'), attackDamage),
