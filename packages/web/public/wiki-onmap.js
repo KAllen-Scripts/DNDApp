@@ -3,11 +3,12 @@
  * page, as a crop of that map with a pin, its map's name and whether players
  * see it. A click opens the map there. A hidden place on a page that's shared
  * offers Also reveal it on the map (the two stay separate settings). The links
- * are made from the map (the place's or token's Wiki page row); the Atlas
- * (stage 2c) adds putting a page on a map from here.
+ * are made from the map (the place's or token's Wiki page row), or from here
+ * with Put it on a map (wiki-atlas.js).
  */
 import { api, h, fileUrl } from './api.js';
 import { state, nav, report, status } from './wiki-data.js';
+import { state as mapState } from './map-state.js';
 
 const mapsBase = () => `/campaigns/${state.campaignId}/maps`;
 
@@ -18,9 +19,12 @@ function cropImg(o) {
   return img;
 }
 
-/** The box, or null when the page is on no map. `onMaps` comes with the page (GET …/wiki/:pid). */
+/** The box (with Put it on a map, when there are maps). `onMaps` comes with the page (GET …/wiki/:pid). */
 export function drawOnMap(page, onMaps, { reload }) {
-  if (!onMaps?.length) return null;
+  const put = nav.putOnMap && mapState.maps.length
+    ? h('button', { type: 'button', class: 'ghost small', title: 'Choose a map, then click where it goes', onclick: () => nav.putOnMap(page) }, 'Put it on a map')
+    : null;
+  if (!onMaps?.length) return put ? h('section', { class: 'wiki-onmap', 'aria-label': 'On the map' }, h('h3', {}, 'On the map'), h('p', { class: 'muted small' }, 'It isn’t on a map yet. ', put)) : null;
   const reveal = async (o) => {
     try {
       const to = page.available === 'all' ? null : page.available;
@@ -32,7 +36,7 @@ export function drawOnMap(page, onMaps, { reload }) {
     }
   };
   return h('section', { class: 'wiki-onmap', 'aria-label': 'On the map' },
-    h('h3', {}, 'On the map'),
+    h('div', { class: 'wiki-onmap-head' }, h('h3', {}, 'On the map'), put),
     h('div', { class: 'wiki-onmap-grid' }, ...onMaps.map((o) => {
       const pin = h('span', { class: `wiki-onmap-pin ${o.kind}`, style: `left: ${(((o.x - o.crop.x) / o.crop.w) * 100).toFixed(2)}%; top: ${(((o.y - o.crop.y) / o.crop.h) * 100).toFixed(2)}%`, 'aria-hidden': 'true' });
       const open = h('button', { type: 'button', class: 'wiki-onmap-open', title: nav.showMap ? `Open ${o.map_name} here` : o.map_name, disabled: !nav.showMap, onclick: () => nav.showMap?.(o.map_id, { x: o.x, y: o.y }) },

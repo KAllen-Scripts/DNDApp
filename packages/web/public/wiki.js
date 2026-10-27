@@ -29,6 +29,7 @@ import { drawHub } from './wiki-home.js';
 import { pageDiff } from './wiki-diff.js';
 import { drawCompass } from './wiki-compass.js';
 import { drawOnMap } from './wiki-onmap.js';
+import { drawAtlas, leaveAtlas, pickAtlasMap } from './wiki-atlas.js';
 import './wiki-handout.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -239,10 +240,13 @@ function phoneBack() {
 function drawMain() {
   const main = $('#wiki-main');
   hidePreview();
-  const reading = !!state.open || state.view === 'review' || state.view === 'wheel';
+  const reading = !!state.open || state.view === 'review' || state.view === 'wheel' || state.view === 'atlas';
   $('#wiki-view').classList.toggle('wiki-reading', reading);
   drawReviewButton();
+  if (state.view !== 'atlas') leaveAtlas();
+  else pickAtlasMap();
   nav.routed();
+  if (state.view === 'atlas') return drawAtlas(main);
   if (state.view === 'review') return drawReview();
   if (state.view === 'wheel') return drawWheelView();
   if (reading) queueMicrotask(() => main.prepend(phoneBack()));
@@ -274,7 +278,7 @@ function pageView() {
   });
   return h('article', { class: `wiki-page fam-${fam(page.kind)}` },
     hero(page),
-    drawCompass(page),
+    drawCompass(page, { onMaps }),
     h('div', { class: 'wiki-page-head' },
       h('p', { class: 'wiki-meta muted small' },
         [page.kind, parent && `in ${parent.title}`, page.aliases.length && `also called ${page.aliases.join(', ')}`, page.tags.length && `tags: ${page.tags.join(', ')}`].filter(Boolean).join(' · '),

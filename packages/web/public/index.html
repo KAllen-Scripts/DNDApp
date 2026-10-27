@@ -322,6 +322,7 @@
         <button id="map-place-groups" class="ghost map-needs-map" title="Which groups of places to show on the map (only on your screen)" hidden>Places</button>
         <button id="map-bring" class="ghost dm-only map-main">Show players this map</button>
         <button id="map-clock" class="ghost map-clock" type="button" hidden></button>
+        <button id="map-wiki-layers" class="ghost dm-only map-needs-map" aria-pressed="false" title="The wiki on this map: places with pages, faction lands, people and quests (only you see them)" hidden>Wiki</button>
         <button id="map-party" class="ghost dm-only map-play-tool" title="Where every character is (each is on one map at a time), with Bring here">Party</button>
         <span id="map-status" class="muted small" role="status"></span>
         <label class="map-check small" data-tool="grid"><input type="checkbox" id="map-show-grid"> Grid</label>
@@ -432,6 +433,8 @@
           <div id="map-places" class="map-places"></div>
           <div id="map-links" class="map-links"></div>
           <div id="map-pins" class="map-pins"></div>
+          <svg id="map-wiki-lands" class="map-wiki-lands" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <div id="map-wiki" class="map-wiki"></div>
         </div>
         <p id="map-empty" class="map-empty muted" hidden></p>
         <nav id="map-trail" class="map-trail" aria-label="Where this map is in the world" hidden></nav>

@@ -6,7 +6,9 @@
  * the DM. Its numbers come from the server (GET …/wiki/home). Below it,
  * wiki.js draws every page as a card.
  */
-import { api, h } from './api.js';
+import { api, h, fileUrl } from './api.js';
+import { atlasOrder } from './shared/map.js';
+import { state as mapState } from './map-state.js';
 import { state, nav, base, report, pictureImg, fam, kindBadge } from './wiki-data.js';
 import { drawWheel } from './wiki-wheel.js';
 
@@ -24,10 +26,20 @@ export async function drawHub(box) {
   const mini = (p) => h('button', { type: 'button', class: `wiki-mini-card fam-${fam(p.kind)}`, title: p.title, onclick: () => open(p) },
     h('span', { class: `wiki-mini-art${p.picture ? ' has-picture' : ''}`, 'aria-hidden': 'true' }, p.picture ? pictureImg(p.picture, { size: 'thumb' }) : null),
     h('span', { class: 'wiki-mini-title' }, p.title));
-  const tile = (icon, title, text) => h('div', { class: 'wiki-tile soon', title: `${title}: coming soon` },
+  const tile = (icon, title, text, to = null) => h(to ? 'button' : 'div', to ? { type: 'button', class: 'wiki-tile', onclick: () => nav.go(to) } : { class: 'wiki-tile soon', title: `${title}: coming soon` },
     h('span', { class: 'wiki-tile-art', 'aria-hidden': 'true' }, icon),
     h('strong', {}, title),
     h('span', { class: 'muted small' }, text));
+  // The Atlas tile shows the map at the top of the world, small.
+  const atlasTile = (el) => {
+    const top = atlasOrder(mapState.maps)[0]?.map;
+    if (!top) return el;
+    const { width: w, height: hh } = top.image;
+    fileUrl(`/campaigns/${state.campaignId}/maps/${top.id}/image?crop=0,0,${w},${hh}&size=200`).then((src) => {
+      el.querySelector('.wiki-tile-art')?.replaceWith(h('img', { class: 'wiki-tile-map', src, alt: '' }));
+    }, () => {});
+    return el;
+  };
   const last = data.last_session;
   const waiting = data.waiting?.proposals ?? 0;
   box.replaceChildren(...[
@@ -54,7 +66,7 @@ export async function drawHub(box) {
       h('section', { class: 'wiki-hub-tiles' },
         h('h3', {}, 'Ways in'),
         h('div', { class: 'wiki-tiles' },
-          tile('⌖', 'Atlas', 'Where: your maps, with their pages'),
+          atlasTile(tile('⌖', 'Atlas', 'Where: your maps, with their pages', '#/atlas')),
           tile('⁂', 'Web', 'Who: people and how they are tied'),
           tile('⟿', 'Timeline', 'When: what happened, in order'),
         ),

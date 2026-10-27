@@ -20,7 +20,8 @@ export const state = {
   kindKey: null, // one kind in that family (wikiKey), or null for all of them
   tagFilter: null,
   open: null, // { page, mentioned_in, unknown_names } of the page shown
-  view: 'page', // 'page' | 'edit' | 'history' | 'review' | 'wheel'
+  view: 'page', // 'page' | 'edit' | 'history' | 'review' | 'wheel' | 'atlas'
+  atlasMap: null, // the map the Atlas shows (wiki-atlas.js)
   as: null, // a player's id while viewing as them
   proposals: 0, // how many of the AI's changes wait for the DM
   aiRun: null, // the AI's last run for the wiki: { status, message, finished_at }
@@ -39,8 +40,10 @@ export const nav = {
   routed: () => {}, // after each draw: the address and the trail follow (wiki-space.js)
   go: async () => {}, // to a route of the space (wiki-space.js)
   enter: () => {}, // into the wiki's space from the table (app.js)
+  closeDrawer: null, // close the drawer (wiki-drawer.js)
   drawer: async () => {}, // show a page in the drawer, over either space (wiki-drawer.js)
   sendHandout: null, // send part of a page as a handout (wiki-handout.js)
+  putOnMap: null, // choose a map and put the page on it in the Atlas (wiki-atlas.js)
   showMap: null, // open a map at a point on the Map tab (app.js; none in a popped-out window)
 };
 

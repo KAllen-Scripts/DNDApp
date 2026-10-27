@@ -14,6 +14,7 @@ import { api, h } from './api.js';
 import { clockText } from './shared/settings.js';
 import { state, nav, pictureImg, fam } from './wiki-data.js';
 import { openFind } from './wiki-find.js';
+import { leaveAtlas } from './wiki-atlas.js';
 
 const $ = (sel) => document.querySelector(sel);
 const TRAIL_MAX = 8;
@@ -32,6 +33,7 @@ const inSpace = () => document.documentElement.dataset.space === 'wiki';
 export function currentRoute() {
   if (state.view === 'review') return '#/waiting';
   if (state.view === 'wheel') return `#/wheel${state.kindFilter ? `/${state.kindFilter}` : ''}`;
+  if (state.view === 'atlas') return `#/atlas${state.atlasMap ? `/${state.atlasMap}` : ''}`;
   if (!state.open) return '#/home';
   const id = state.open.page.id;
   if (id == null) return '#/new';
@@ -51,6 +53,7 @@ function address(space, route = '') {
  * the browser's history (not when it came from Back or a reload).
  */
 export function setSpace(space, { push = true } = {}) {
+  if (space !== 'wiki') leaveAtlas();
   document.documentElement.dataset.space = space;
   if (push) ready = true;
   if (space === 'wiki') {
@@ -67,7 +70,7 @@ export function setSpace(space, { push = true } = {}) {
 
 /** Draw what the address says (on entering the space from Back, Forward or a reload). */
 export async function routeFromUrl() {
-  const m = /^#\/(home|waiting|new|wheel(?:\/([a-z]+))?|page\/([a-f0-9]+)(?:\/(edit|history))?)?$/.exec(location.hash) ?? [];
+  const m = /^#\/(home|waiting|new|wheel(?:\/([a-z]+))?|page\/([a-f0-9]+)(?:\/(edit|history))?|atlas(?:\/([A-Za-z0-9_-]+))?)?$/.exec(location.hash) ?? [];
   applying = true;
   ready = true;
   try {
@@ -83,6 +86,12 @@ export async function routeFromUrl() {
       }
     } else if (m[1] === 'new') {
       nav.newPage();
+    } else if (m[1]?.startsWith('atlas')) {
+      state.open = null;
+      state.view = 'atlas';
+      state.atlasMap = m[5] ?? null;
+      nav.drawList();
+      nav.drawMain();
     } else if (m[1]?.startsWith('wheel')) {
       state.open = null;
       state.view = 'wheel';
@@ -135,6 +144,7 @@ function drawRail() {
   rail.replaceChildren(...[
     item('#/home', '❦', 'Home'),
     item(route.startsWith('#/wheel') ? route : '#/wheel', '❂', 'Wheel'),
+    item(route.startsWith('#/atlas') ? route : '#/atlas', '⌖', 'Atlas'),
     item('#find', '⌕', 'Find', { onclick: () => openFind() }),
     item('#/new', '✚', 'New page', { onclick: () => nav.newPage() }),
     item('#/waiting', '✎', 'Waiting', { count: state.proposals }),

@@ -2285,3 +2285,54 @@ button.busy:disabled { opacity: 1; }
 .wiki-ho-to { display: grid; gap: 0.3rem; }
 .map-wiki-field .map-row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
 .map-wiki-field input { flex: 1 1 10rem; min-width: 0; }
+
+/* The wiki's layers on a map (map-wiki.js): pins with the page's picture, faction lands, people and quests. */
+.map-wiki-lands { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.map-wiki-land { fill: color-mix(in srgb, var(--kind) 28%, transparent); stroke: var(--kind); stroke-width: 3px; vector-effect: non-scaling-stroke; }
+.map-wiki { position: absolute; inset: 0; pointer-events: none; }
+.map-wiki-at { position: absolute; width: 0; height: 0; transform: scale(var(--unzoom, 1)) rotate(var(--unturn, 0rad)); z-index: 1; }
+.map-wiki-at:has(.map-wiki-card) { z-index: 3; }
+.map-wiki-pin {
+  position: absolute; left: calc(-17px + var(--dx, 0px)); top: -52px; width: 34px; height: 34px; padding: 0; border-radius: 50%; overflow: hidden;
+  display: grid; place-items: center; border: 3px solid var(--kind, #8a6d3b); background: var(--surface); color: var(--kind); font-size: 16px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.5); pointer-events: auto; cursor: pointer;
+}
+.map-wiki-pin img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.map-wiki-pin.person { top: -17px; width: 28px; height: 28px; left: calc(-14px + var(--dx, 0px)); border-width: 2px; }
+.map-wiki-pin.quest { top: -17px; border-radius: 30%; }
+.map-wiki-card {
+  position: absolute; left: 22px; top: -40px; width: 15rem; display: grid; grid-template-columns: auto 1fr; gap: 0.6rem;
+  padding: 0.6rem; border-radius: var(--radius); background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  border-top: 4px solid var(--kind); box-shadow: var(--shadow); pointer-events: auto; text-align: left;
+}
+.map-wiki-card-art img { width: 4rem; height: 4rem; object-fit: cover; border-radius: calc(var(--radius) - 2px); display: block; }
+.map-wiki-card-body { display: grid; gap: 0.2rem; min-width: 0; }
+.map-wiki-card-body p { margin: 0; }
+.map-wiki-card-kind { color: var(--kind); text-transform: capitalize; }
+.map-wiki-card-actions { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.2rem; }
+.map-wiki-none { position: absolute; left: 1rem; top: 1rem; }
+
+/* The Atlas (wiki-atlas.js): the table's map moved into the wiki, its play tools hidden. */
+#wiki-view.wiki-atlas-on { grid-template-columns: minmax(0, 1fr); align-items: stretch; overflow: hidden; }
+#wiki-view.wiki-atlas-on .wiki-side { display: none; }
+#wiki-view.wiki-atlas-on #wiki-main { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.wiki-atlas { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.wiki-atlas-bar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.wiki-atlas-bar h2 { margin: 0; }
+.wiki-atlas > #tab-map { flex: 1; min-height: 0; max-width: none; padding: 0 0 0.75rem; }
+.wiki-atlas > #tab-map .map-view { min-height: 14rem; }
+:root[data-browse] #tab-map :is(#map-bring, #map-party, #map-pin, #map-ping, #map-draw, #map-template, #map-attacks-log, #map-combat-open, #map-add-companion,
+  #map-beside, #map-full, #map-more, #map-sheet-window, #map-add-token, #map-fog-open, #map-variant, #map-edit, #map-new, #map-fog-tools, #map-wall-tools, #map-combat) { display: none !important; }
+.wiki-onmap-head { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.wiki-onmap-head h3 { margin: 0; }
+.wiki-atlas-placing { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.6rem; border-radius: 999px; background: color-mix(in srgb, var(--accent) 15%, var(--surface)); }
+.wiki-atlas-placing[hidden] { display: none; }
+.wiki-atlas-bar select { width: auto; max-width: 100%; }
+/* Zooming through the maps in the Atlas: a short zoom as the next map comes in. */
+.map-view.zoom-in .map-stage { animation: map-zoom-in 0.35s ease-out; }
+.map-view.zoom-out .map-stage { animation: map-zoom-out 0.35s ease-out; }
+@keyframes map-zoom-in { from { opacity: 0; scale: 0.6; } to { opacity: 1; scale: 1; } }
+@keyframes map-zoom-out { from { opacity: 0; scale: 1.6; } to { opacity: 1; scale: 1; } }
+.wiki-compass-map { padding: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); line-height: 0; }
+.wiki-tile-map { grid-row: span 2; width: 4.5rem; height: 3rem; border-radius: 6px; object-fit: cover; }
+button.wiki-tile { text-align: left; border: 1px solid var(--border); color: inherit; cursor: pointer; }
