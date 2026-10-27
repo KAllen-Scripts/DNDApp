@@ -10,6 +10,7 @@
  */
 import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from './api.js';
 import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, EFFORTS, playersMap, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, distanceToWall, inTemplate, snapTemplatePoint, groundAt, tokenTall, bridgeAt, isUnder, isPinMap, snapRoadPoint } from './shared/map.js';
+import { nav as wikiNav } from './wiki-data.js';
 import { PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, WALLS_EFFORT_KEY, base, downloadUvtt, report, state, status } from './map-state.js';
 import { canChangeTemplate, placeTemplate, renderTemplates, selectTemplate, templateControls, templateDialog, templateMove, templateUp } from './map-templates.js';
 import { openShop } from './merchants.js';
@@ -1302,6 +1303,7 @@ export function renderSelection() {
     editable ? h('label', { class: 'map-check small' }, 'Light ', lightSelect(token)) : null,
     ...(editable ? heightInputs(token) : []),
     state.canEdit && token.record ? h('button', { class: 'ghost', title: `What the campaign's records say about ${token.record.title}`, onclick: () => recordDialog(token) }, 'Record') : null,
+    state.canEdit && token.page && wikiNav.drawer ? h('button', { class: 'ghost', title: `Wiki: ${token.page.title}`, onclick: () => wikiNav.drawer(token.page.id) }, 'Wiki') : null,
     myCompanion(token) && !state.canEdit && !token.stats ? h('button', { class: 'ghost', title: 'Look up its stat block, hit points and size with the AI', onclick: () => fillStats(token) }, 'Stat block (AI)') : null,
     myCompanion(token) && !state.canEdit ? h('button', { class: 'ghost danger', onclick: () => dismissCompanion(token) }, 'Dismiss') : null,
     state.canEdit && !token.stats && token.kind !== 'pc' ? h('button', { class: 'ghost', title: 'Fill in its stat block, hit points and size with the AI', onclick: () => fillStats(token) }, 'Stat block (AI)') : null,
@@ -1394,6 +1396,15 @@ const areaMiddle = (a) => {
   const ys = a.points.map((p) => p[1]);
   return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
 };
+
+/** Open a map (from the wiki's On the map box) with this point in the middle, if it's one this viewer has. */
+export async function openMapAt(id, at = null) {
+  const map = state.maps.find((m) => m.id === id);
+  if (!map) return false;
+  if (state.current?.id !== id) await show(map);
+  if (at) requestAnimationFrame(() => centerOn(at));
+  return true;
+}
 
 /** Move the view so this point of the map is in the middle of it (same zoom and turn). */
 function centerOn(at) {

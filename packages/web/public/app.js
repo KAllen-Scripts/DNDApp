@@ -12,7 +12,7 @@ import { markdownFragment } from './markdown.js';
 import { CITATION_RE } from './shared/citations.js';
 import { initLook } from './look.js';
 import { initDice, setDiceCampaign } from './dice.js';
-import { loadMaps, initMapActions, stopMaps } from './map.js';
+import { loadMaps, initMapActions, stopMaps, openMapAt } from './map.js';
 import { placeCreature, placeMerchant } from './map-dm.js';
 import { loadTable, stopTable, handoutsOpened } from './table.js';
 import { setRestsCampaign, initRests } from './rests.js';
@@ -22,6 +22,7 @@ import { loadWiki } from './wiki.js';
 import { setSpace, spaceInUrl, routeFromUrl, initSpace } from './wiki-space.js';
 import { initFind } from './wiki-find.js';
 import { markNames } from './wiki-names.js';
+import { nav as wikiNav } from './wiki-data.js';
 import { loadCreatures, initCreatureActions } from './creatures.js';
 import { loadItems, initItemActions } from './items.js';
 import { loadMerchants, initMerchantActions, merchantsOpened } from './merchants.js';
@@ -835,6 +836,8 @@ phoneMenu($('.sheet-bar'), { label: 'Sheet: review, upload, download, print, pop
 phoneMenu($('#gear-add'), { label: 'More ways to add', keep: '#gear-kind, #gear-name, #dl-gear, button[type=submit], #gear-status' });
 initSheetPlace({ onChange: () => showTab(currentTab), currentTab: () => currentTab });
 initSpace({ table: WINDOW_TAB ? null : () => showTab(tableTab), enter: () => { if (currentTab !== 'wiki') showTab('wiki'); } });
+// The wiki's On the map box opens a map on the Map tab, at the place.
+wikiNav.showMap = WINDOW_TAB ? null : (id, at) => { showTab('map'); return openMapAt(id, at); };
 initFind();
 // Back and Forward in and out of the wiki's space, and between its pages.
 window.addEventListener('popstate', async () => {

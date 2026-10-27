@@ -2269,3 +2269,19 @@ button.busy:disabled { opacity: 1; }
   /* On a phone the picked token's bar floats at the bottom: the cards go to the top. */
   .map-attack-cards { left: 0.25rem; right: 3rem; width: auto; top: 0.25rem; bottom: auto; flex-direction: column; }
 }
+
+/* A page's On the map box (wiki-onmap.js): crops of the maps it's on, each with a pin. */
+.wiki-onmap { margin-top: 1rem; }
+.wiki-onmap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(11rem, 100%), 1fr)); gap: 0.75rem; }
+.wiki-onmap-card { margin: 0; display: grid; gap: 0.3rem; align-content: start; }
+.wiki-onmap-open { padding: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface-2, var(--surface)); cursor: pointer; }
+.wiki-onmap-open:disabled { cursor: default; }
+.wiki-onmap-crop { position: relative; display: block; }
+.wiki-onmap-crop img { display: block; width: 100%; height: auto; }
+.wiki-onmap-pin { position: absolute; width: 0.9rem; height: 0.9rem; margin: -0.45rem 0 0 -0.45rem; border-radius: 50%; background: var(--accent); border: 2px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5); }
+.wiki-onmap-pin.token { border-radius: 30%; }
+.wiki-send { justify-self: start; margin-top: 0.25rem; }
+.wiki-ho-players { display: grid; gap: 0.2rem; padding-left: 1.2rem; }
+.wiki-ho-to { display: grid; gap: 0.3rem; }
+.map-wiki-field .map-row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.map-wiki-field input { flex: 1 1 10rem; min-width: 0; }

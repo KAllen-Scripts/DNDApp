@@ -12,6 +12,7 @@ import { atlasOrder, isPinMap, mapTrail } from './shared/map.js';
 import { campaignSettings } from './campaign-settings.js';
 import { base, report, state, status } from './map-state.js';
 import { campaignPlayers, field, recordDialog } from './map-dm.js';
+import { wikiPageField, offerShareAfterReveal } from './map-wiki-link.js';
 import { onMap, show, svgEl } from './map.js';
 import { travelPicked } from './map-travel.js';
 
@@ -305,11 +306,22 @@ export function placeDialog({ at = null, place = null }) {
   // An area on a world or region map can have its own random encounters (a forest, the marshes).
   const area = !!(place?.points ?? at?.points) && isPinMap(map);
   const enc = area ? encounterFields(place?.encounters ?? null, { what: 'in this area (instead of the map’s)' }) : null;
+  const wikiLink = wikiPageField(place?.page ?? null, place ? { kind: 'place', id: place.id } : null);
   const save = async () => {
     const r = who.read();
-    const body = { name: name.value.trim(), group: group.value.trim(), to: opens.value || null, revealed: r.shown, revealed_to: r.to, ...(enc && { encounters: enc.read() }) };
+    let page;
+    try {
+      page = wikiLink.read();
+    } catch (err) {
+      report(err);
+      return null;
+    }
+    const body = { name: name.value.trim(), group: group.value.trim(), to: opens.value || null, revealed: r.shown, revealed_to: r.to, page, ...(enc && { encounters: enc.read() }) };
     const saved = place ? await places({ set: { id: place.id, ...body } }) : await places({ add: { ...at, ...body } });
     if (saved) status(`${body.name}: ${!r.shown ? 'hidden from the players' : r.to ? `revealed to ${r.to.length} player${r.to.length === 1 ? '' : 's'}` : 'revealed to every player'}.`);
+    // Revealing a linked place offers to share its page too (they stay separate settings).
+    const newly = r.shown && (!place?.revealed || JSON.stringify(place.revealed_to) !== JSON.stringify(r.to));
+    if (saved && page && newly) await offerShareAfterReveal(page.id, r.to, wikiLink.pages()).catch(report);
     return saved;
   };
   dialog.replaceChildren(
@@ -327,6 +339,7 @@ export function placeDialog({ at = null, place = null }) {
       who.el,
       h('p', { class: 'muted small' }, 'Players also need to be shown the map it opens to go in. Under fog, they see it only where they can see its spot.'),
       record,
+      wikiLink.el,
       enc ? h('h3', {}, 'Random encounters') : null,
       enc?.el,
       h('div', { class: 'map-dialog-actions' },

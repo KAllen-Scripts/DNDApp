@@ -11,6 +11,7 @@ import { markdownBox } from './markdown.js';
 import { showStatBlock, statsFound } from './stat-block.js';
 import { openCreator } from './map-creator.js';
 import { encounterFields, whoField } from './map-places.js';
+import { wikiPageField } from './map-wiki-link.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -362,8 +363,10 @@ export async function tokenDialog(token = null) {
   });
   sync();
 
+  const wikiLink = wikiPageField(token?.page ?? null, token ? { kind: 'token', id: token.id } : null);
   const save = async () => {
     const { type, id } = picked();
+    const page = wikiLink.read();
     const body = {
       kind: type === 'p' ? (companion.checked ? 'companion' : 'pc') : kind.value,
       name: name.value.trim(),
@@ -376,6 +379,7 @@ export async function tokenDialog(token = null) {
     // Picking a player keeps whatever record the token was already linked to.
     const recordId = type === 'r' ? id : type === 'p' ? token?.record?.id ?? null : null;
     if (recordId !== (token?.record?.id ?? null)) body.record = recordId ? { id: recordId } : null;
+    if ((page?.id ?? null) !== (token?.page?.id ?? null)) body.page = page;
     const max = Number(hpMax.value) > 0 ? Math.round(Number(hpMax.value)) : null;
     if (!token?.hp_sheet && max !== (token?.hp?.max ?? null)) {
       // A new maximum: keep the damage taken so far, or start at full.
@@ -406,6 +410,7 @@ export async function tokenDialog(token = null) {
       h('div', { class: 'map-row' }, field('Size', size), field('Colour', color), field('Max HP', hpMax), field(`Darkvision (${map.scale?.unit ?? 'ft'})`, darkvision)),
       h('label', { class: 'map-check' }, hidden, ' Hidden from players (an ambush, someone lurking)'),
       lookUpField,
+      wikiLink.el,
       token ? null : h('p', { class: 'muted small' }, 'It appears in the middle of what you can see; drag it into place.'),
       h('div', { class: 'map-dialog-actions' },
         h('span', { class: 'spacer' }),
