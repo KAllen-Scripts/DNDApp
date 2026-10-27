@@ -9,6 +9,7 @@ import { api, h } from './api.js';
 import { showToast } from './dice.js';
 import { restCalled } from './sheet.js';
 import { clockText } from './shared/settings.js';
+import { campaignSettings } from './campaign-settings.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -59,7 +60,7 @@ async function openDialog() {
       result.textContent = `${kind === 'long' ? 'Long' : 'Short'} rest done for ${rest.user_ids.map(nameOf).join(', ')}.${skipped.length ? ` ${skipped.join(', ')} ${skipped.length === 1 ? 'was' : 'were'} at 0 hit points and got nothing from it.` : ''}`;
       list.prepend(restItem(rest));
       const said = { encounter: 'Random encounter', march: 'Forced march', restock: 'Restocked' };
-      notes.replaceChildren(...(rest.notes ?? []).map((n) => h('li', { class: `map-road-note ${n.kind}` }, h('strong', {}, `${said[n.kind] ?? 'On the road'}, ${clockText(n.at)}: `), n.text)));
+      notes.replaceChildren(...(rest.notes ?? []).map((n) => h('li', { class: `map-road-note ${n.kind}` }, h('strong', {}, `${said[n.kind] ?? 'On the road'}, ${clockText(n.at, campaignSettings().calendar)}: `), n.text)));
     } catch (err) {
       result.textContent = `Couldn't do that: ${err.message}`;
     }

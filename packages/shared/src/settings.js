@@ -1,4 +1,5 @@
 import { normalizeCustomBackgrounds } from './backgrounds.js';
+import { dateText, moonText, normalizeCalendar } from './calendar.js';
 
 /**
  * A campaign's settings, chosen by its DM and used by the server and the page.
@@ -15,6 +16,8 @@ import { normalizeCustomBackgrounds } from './backgrounds.js';
  *
  * backgrounds: the DM's own backgrounds (backgrounds.js `normalizeCustomBackground`),
  * suggested on every player's sheet beside the books' ones.
+ *
+ * calendar: what the in-game clock's days are called (calendar.js), or null for "Day 1, Day 2…" as before.
  */
 export const WEIGHT_RULES = { capacity: 'Carrying capacity (PHB)', variant: 'Variant encumbrance (PHB)', ignore: 'Ignore weight limits' };
 
@@ -61,7 +64,7 @@ export const normalizeAttackSettings = (a = {}) => ({
   damage: a && a.damage in ATTACK_DAMAGE ? a.damage : DEFAULT_ATTACKS.damage,
   show_ac: typeof a?.show_ac === 'boolean' ? a.show_ac : DEFAULT_ATTACKS.show_ac,
 });
-export const DEFAULT_SETTINGS = Object.freeze({ weight: 'capacity', edition: null, clock: START_CLOCK, travel: DEFAULT_TRAVEL, attacks: DEFAULT_ATTACKS, backgrounds: Object.freeze([]) });
+export const DEFAULT_SETTINGS = Object.freeze({ weight: 'capacity', edition: null, clock: START_CLOCK, travel: DEFAULT_TRAVEL, attacks: DEFAULT_ATTACKS, backgrounds: Object.freeze([]), calendar: null });
 /** The clock goes at most this far (about 27,000 years of days), so it stays a plain number. */
 export const MAX_CLOCK = 1440 * 10_000_000;
 
@@ -74,12 +77,20 @@ export function normalizeSettings(s = {}) {
     travel: normalizeTravel(s?.travel),
     attacks: normalizeAttackSettings(s?.attacks),
     backgrounds: normalizeCustomBackgrounds(s?.backgrounds),
+    calendar: normalizeCalendar(s?.calendar),
   };
 }
 
 const pad = (n) => String(n).padStart(2, '0');
-/** The clock as people say it: "Day 14, 18:30". */
-export const clockText = (minutes) => `Day ${Math.floor(minutes / 1440) + 1}, ${pad(Math.floor((minutes % 1440) / 60))}:${pad(minutes % 60)}`;
+/**
+ * The clock as people say it: "Day 14, 18:30", or with the campaign's calendar (calendar.js)
+ * "3 Mirtul 1492 DR, 18:30 · Full moon".
+ */
+export function clockText(minutes, calendar = null) {
+  const time = `${pad(Math.floor((minutes % 1440) / 60))}:${pad(minutes % 60)}`;
+  const moon = calendar ? moonText(minutes, calendar) : '';
+  return `${dateText(minutes, calendar)}, ${time}${moon ? ` · ${moon}` : ''}`;
+}
 /** A stretch of time as people say it: "2 days 5 hours", "40 minutes". */
 export function durationText(minutes) {
   const m = Math.max(0, Math.round(minutes));

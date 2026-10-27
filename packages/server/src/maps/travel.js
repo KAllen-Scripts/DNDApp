@@ -280,4 +280,4 @@ export function onTheWay(maps, from, to, { random, stop = true, encounters = tru
 }
 
 /** "Day 2, 03:00: …" for a note. */
-export const noteText = (n) => `${clockText(n.at)}: ${n.text}`;
+export const noteText = (n, calendar = null) => `${clockText(n.at, calendar)}: ${n.text}`;

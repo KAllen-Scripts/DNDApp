@@ -94,6 +94,7 @@ const CONTENT_TYPES = {
 // the citation format, markdown + HTML sanitising, and the 3D dice (Three.js and the physics are bundled into that one file).
 const WEB_MODULES = {
   '/shared/sheet.js': '@dndapp/shared/sheet.js',
+  '/shared/calendar.js': '@dndapp/shared/calendar.js',
   '/shared/wild-shape.js': '@dndapp/shared/wild-shape.js',
   '/shared/companions.js': '@dndapp/shared/companions.js',
   '/shared/class-features.js': '@dndapp/shared/class-features.js',

@@ -238,7 +238,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
 
     /** What happened on the maps players saw on a session date, for the archivist (see mapEvents). */
     eventsOn(campaignId, date, rolloverHour) {
-      return mapEvents(maps.allIds(campaignId).map((id) => ({ id, entries: maps.history(campaignId, id) })), { date, rolloverHour });
+      return mapEvents(maps.allIds(campaignId).map((id) => ({ id, entries: maps.history(campaignId, id) })), { date, rolloverHour, calendar: store.getSettings(campaignId).calendar });
     },
 
     /** Every map ever made in the campaign, removed ones too. */

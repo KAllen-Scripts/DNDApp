@@ -104,7 +104,10 @@ export function registerMaps(app, r) {
   }
 
   /** The clock (anyone in the campaign): { clock } (minutes since day 1 began). */
-  app.get('/campaigns/:cid/clock', async (request) => ({ clock: store.getSettings(access(request).cid).clock }));
+  app.get('/campaigns/:cid/clock', async (request) => {
+    const { clock, calendar } = store.getSettings(access(request).cid);
+    return { clock, calendar };
+  });
 
   /**
    * Move the in-game clock (DM): { add?: minutes (negative goes back), set?: minutes, next_arrival?: true (to
