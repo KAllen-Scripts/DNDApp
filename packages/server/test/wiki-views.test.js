@@ -46,7 +46,7 @@ test('wiki views: the wheel counts families and kinds; as a player it counts onl
     assert.ok(!JSON.stringify(alex).includes('Crypt'));
 
     assert.equal((await t.request('GET', `${base}?as=${t.dm.id}`)).statusCode, 400, 'only a player can be viewed as');
-    assert.equal((await t.request('GET', base, { as: t.sam.token })).statusCode, 403);
+    assert.deepEqual((await t.request('GET', base, { as: t.alex.token })).json(), alex, 'a player gets their own (stage 6a)');
   } finally {
     await t.cleanup();
   }

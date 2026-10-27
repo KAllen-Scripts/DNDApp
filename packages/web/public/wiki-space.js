@@ -77,6 +77,8 @@ export async function routeFromUrl() {
   const m = /^#\/(home|waiting|new|templates|wheel(?:\/([a-z]+))?|page\/([a-f0-9]+)(?:\/(edit|history))?|atlas(?:\/([A-Za-z0-9_-]+))?|web(?:\/([a-f0-9]{10}))?|timeline(?:\/([a-f0-9]{10}))?)?$/.exec(location.hash) ?? [];
   applying = true;
   ready = true;
+  // A player only reads: the DM's tools (new, templates, waiting, edit, history) open the Home instead.
+  if (!state.dm && (['new', 'templates', 'waiting'].includes(m[1]) || m[4])) m[1] = m[3] = m[4] = undefined;
   try {
     if (m[3]) {
       const id = m[3];
@@ -169,9 +171,10 @@ function drawRail() {
     item(route.startsWith('#/web') ? route : '#/web', '⁂', 'Web'),
     item(route.startsWith('#/timeline') ? route : '#/timeline', '⟿', 'Timeline'),
     item('#find', '⌕', 'Find', { onclick: () => openFind() }),
-    item('#/new', '✚', 'New page', { onclick: () => nav.newPage() }),
-    item('#/templates', '▤', 'Templates'),
-    item('#/waiting', '✎', 'Waiting', { count: state.proposals }),
+    // The DM's own tools; a player only reads (stage 6a).
+    state.dm && item('#/new', '✚', 'New page', { onclick: () => nav.newPage() }),
+    state.dm && item('#/templates', '▤', 'Templates'),
+    state.dm && item('#/waiting', '✎', 'Waiting', { count: state.proposals }),
     h('span', { class: 'wiki-rail-gap' }),
     toTable && item('#table', '⌂', 'The table', { onclick: () => toTable(), cls: ' wiki-to-table' }),
   ].filter(Boolean));

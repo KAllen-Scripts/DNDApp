@@ -14,6 +14,7 @@ const $ = (sel) => document.querySelector(sel);
 let timer = null;
 let asked = 0;
 
+// Anyone with the wiki (the DM's, or a player's own version since stage 6a).
 const isDm = () => state.campaignId != null && !$('[data-tab=wiki]')?.hidden;
 
 function dialog() {
@@ -23,7 +24,7 @@ function dialog() {
   const results = h('div', { class: 'wiki-find-results', role: 'list' });
   d = h('dialog', { id: 'wiki-find', class: 'map-dialog wiki-find', 'aria-label': 'Find a page' },
     h('div', { class: 'wiki-find-bar' }, input,
-      h('button', { type: 'button', class: 'ghost small wiki-ai-btn', title: 'The AI makes up an NPC, a tavern, a shop, a rumour or a name that fits the wiki', onclick: () => {
+      state.dm && h('button', { type: 'button', class: 'ghost small wiki-ai-btn', title: 'The AI makes up an NPC, a tavern, a shop, a rumour or a name that fits the wiki', onclick: () => {
         d.close();
         openMakeUp(input.value.trim());
       } }, '✦ Make up…'),

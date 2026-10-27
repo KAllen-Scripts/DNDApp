@@ -1,5 +1,5 @@
 /**
- * The DM's Wiki tab on the page: only the DM has it; the DM makes a page with
+ * The Wiki tab on the page: a player reads their own version; the DM makes a page with
  * a section for one player and a block only for the DM, follows a [[link]],
  * views it as a player, edits it and brings an earlier version back.
  */
@@ -9,10 +9,42 @@ import { withPage, addDm, createFakeLLM } from './helpers.js';
 
 const button = (page, scope, text) => page.$$(`${scope} button`).find((b) => b.textContent.trim() === text);
 
-test('wiki tab: only the DM has it', async () => {
-  await withPage({ page: (t) => ({ as: t.sam }) }, async (page) => {
-    assert.ok(!page.visible('[data-tab=wiki]'));
-    assert.ok(!page.requests.some((r) => r.path.includes('/wiki')), "a player's page never asks for the wiki");
+test('wiki tab: a player reads their own wiki, with none of the DM\'s tools', async () => {
+  await withPage({
+    before: async (t) => {
+      const dana = await addDm(t);
+      const make = async (title, sections, extra = {}) => (await t.request('POST', `/campaigns/${t.campaign.id}/wiki`, { as: dana.token, body: { title, kind: 'npc', available: 'all', sections, ...extra } })).json().page;
+      const lady = await make('The Grey Lady', [
+        { heading: '', text: 'She runs the inn. She drinks at [[Secret Lair|the old den]].', available: 'all' },
+        { heading: 'Plans', text: 'She works for the cult.', available: 'dm' },
+      ]);
+      const lair = await make('Secret Lair', [{ heading: '', text: 'Under the mill.', available: 'all' }], { available: 'dm' });
+      return { lady, lair };
+    },
+    page: (t) => ({ as: t.sam }),
+  }, async (page, t, { lady, lair }) => {
+    assert.ok(page.visible('[data-tab=wiki]'), 'players get the Wiki too');
+    page.click('[data-tab=wiki]');
+    await page.waitFor(() => page.document.documentElement.dataset.space === 'wiki');
+    const rail = page.text('#wiki-rail');
+    for (const tool of ['New page', 'Templates', 'Waiting']) assert.ok(!rail.includes(tool), `no ${tool} for a player`);
+    for (const id of ['#wiki-new', '#wiki-review', '#wiki-truth']) assert.ok(!page.visible(id), `${id} is hidden`);
+    assert.ok(!page.text('#wiki-list').includes('Secret Lair'), 'a page only for the DM is not listed');
+
+    page.click(page.$$('#wiki-list button').find((b) => b.textContent.includes('The Grey Lady')));
+    await page.waitFor(() => page.text('#wiki-main').includes('She runs the inn.'));
+    const main = page.text('#wiki-main');
+    assert.ok(main.includes('the old den') && !main.includes('Secret Lair'), 'a link to a hidden page is just its words');
+    assert.ok(!main.includes('works for the cult'), "the DM's section isn't there");
+    assert.ok(!button(page, '#wiki-main', 'Edit') && !button(page, '#wiki-main', 'History'), 'no Edit or History');
+    assert.ok(!page.$('#wiki-main select[aria-label="View as"]'), 'no View as');
+    assert.ok(!page.requests.some((r) => r.path.includes(lair.id)), 'the hidden page is never asked for');
+
+    // The DM's addresses don't open the DM's tools.
+    page.window.location.hash = `#/page/${lady.id}/edit`;
+    page.window.dispatchEvent(new page.window.HashChangeEvent('hashchange'));
+    await page.settle();
+    assert.ok(!page.$('#wiki-main form'), 'no editor for a player');
   });
 });
 
@@ -50,7 +82,9 @@ test('wiki tab: the DM makes a page, links it, sees it as a player, edits it and
     await page.waitFor(() => page.text('#wiki-main').includes('What Ask can tell Lyra'));
     assert.doesNotMatch(page.text('#wiki-main'), /millstone|full moon/);
 
-    // A link to a page that doesn't exist yet offers to make it.
+    // A link to a page that doesn't exist yet offers to make it (as the DM: a player gets just the words).
+    page.type('#wiki-main select[aria-label="View as"]', '');
+    await page.waitFor(() => page.$('#wiki-main button.wiki-link.missing'));
     page.click(page.$('#wiki-main button.wiki-link.missing'));
     form = page.$('.wiki-editor');
     assert.equal(form.querySelector('[aria-label=Title]').value, 'Hollow Mill');

@@ -217,8 +217,8 @@ async function enterCampaign(campaign) {
   const isDm = campaign.role === 'dm';
   // The Archivist tab is the DM's; a player who was on it goes back to the first tab.
   $('[data-tab=archivist]').hidden = !isDm;
-  // So is the Wiki: players reach it only through Ask.
-  $('[data-tab=wiki]').hidden = !isDm;
+  // Everyone gets the Wiki: a player reads their own version of it, filtered on the server.
+  $('[data-tab=wiki]').hidden = false;
   // The DM gets Creatures (enemies and NPCs to put on maps) instead of a character sheet.
   $('[data-tab=sheet]').hidden = isDm;
   $('[data-tab=inventory]').hidden = isDm;
@@ -273,13 +273,13 @@ async function enterCampaign(campaign) {
     loadMaps({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
     loadTable({ campaignId: campaign.id, guarded }),
     isDm ? loadArchivist({ campaignId: campaign.id, guarded }) : null,
-    isDm ? loadWiki({ campaignId: campaign.id, guarded }) : null,
+    loadWiki({ campaignId: campaign.id, guarded, isDm, userId: state.me.user.id }),
     isDm ? loadCreatures({ campaignId: campaign.id, guarded }) : null,
     isDm ? loadItems({ campaignId: campaign.id, guarded }) : null,
     loadMerchants({ campaignId: campaign.id, guarded, isDm }),
   ]);
   // Reloaded in the wiki's space (or a popped-out wiki): back to the page the address names.
-  if (isDm && (spaceInUrl() || WINDOW_TAB === 'wiki')) {
+  if (spaceInUrl() || WINDOW_TAB === 'wiki') {
     if (!WINDOW_TAB) showTab('wiki', { push: false });
     await routeFromUrl();
   }

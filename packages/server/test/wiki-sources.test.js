@@ -53,7 +53,8 @@ test('wiki sources: kept through edits, history and restore; approving copies th
     assert.match(dm[0].excerpt, /old mill alone/);
     const alex = (await t.request('GET', `${base}/evidence${q}&as=${t.alex.id}`)).json().evidence;
     assert.deepEqual(alex.map((e) => e.source), ['S1 00:01:30', 'S1']);
-    assert.equal((await t.request('GET', `${base}/evidence${q}`, { as: t.sam.token })).statusCode, 403);
+    // A player gets their own (stage 6a), whatever ?as= says.
+    assert.deepEqual((await t.request('GET', `${base}/evidence${q}&as=${t.sam.id}`, { as: t.alex.token })).json().evidence, alex);
 
     // The AI's change: approving it copies the records' citations (their sources, then their text).
     const { id: rec } = await t.kb.create(cid, 'test', { kind: 'npc', title: 'Brother Hall', body: 'Innkeeper of Brindle [S1 00:00:40].', sources: ['S1 00:00:20', 'note S1 Sam'] });

@@ -52,11 +52,11 @@ export async function drawAtlas(main) {
       h('p', { class: 'muted' }, 'No maps yet. Import one on the Map tab; its places can then link to pages here.')));
     return;
   }
-  const viewAs = h('select', { 'aria-label': 'View as', title: 'Show the layers as a player would get them' },
+  const viewAs = !state.dm ? null : h('select', { 'aria-label': 'View as', title: 'Show the layers as a player would get them' },
     h('option', { value: '' }, 'As you see it'),
     ...state.players.map((p) => h('option', { value: String(p.id) }, `As ${p.character_name || p.name}`)));
   const note = h('span', { class: 'muted small' });
-  viewAs.addEventListener('change', () => {
+  viewAs?.addEventListener('change', () => {
     const as = viewAs.value ? Number(viewAs.value) : null;
     note.textContent = as ? `Only the places revealed to ${playerName(as)} and the pages they may see. Their fog isn’t shown.` : '';
     setWikiLayers({ forced: true, as });

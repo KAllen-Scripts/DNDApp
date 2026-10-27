@@ -81,7 +81,7 @@ test('wiki timeline: a player gets only what they may see, places included', asy
     assert.doesNotMatch(JSON.stringify(alex), new RegExp(`${masked.id}|Masked|DM knows|Cultists|Sam saw|available`));
     const sam = (await t.request('GET', `${base}/timeline?as=${t.sam.id}`)).json();
     assert.ok(sam.items.some((x) => x.text === 'Sam saw a light.'));
-    assert.equal((await t.request('GET', `${base}/timeline`, { as: t.sam.token })).statusCode, 403);
+    assert.deepEqual((await t.request('GET', `${base}/timeline?as=${t.alex.id}`, { as: t.sam.token })).json(), sam, 'a player gets their own (stage 6a)');
 
     const home = (await t.request('GET', `${base}/home?as=${t.alex.id}`)).json();
     assert.deepEqual(home.moments.map((m) => m.title), ['The wheel stopped.', 'Hidden tower']);

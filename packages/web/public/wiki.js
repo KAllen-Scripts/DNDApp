@@ -38,11 +38,14 @@ import './wiki-handout.js';
 
 const $ = (sel) => document.querySelector(sel);
 
-export async function loadWiki({ campaignId, guarded }) {
+export async function loadWiki({ campaignId, guarded, isDm = true, userId = null }) {
   clearTimeout(state.poll);
   clearPictures();
   resetSpace();
-  Object.assign(state, { campaignId, guarded, pages: [], players: [], filter: '', kindFilter: null, kindKey: null, tagFilter: null, open: null, view: 'page', as: null, proposals: 0, aiRun: null, poll: null });
+  // A player reads their own version (stage 6a): everything is drawn as them, and the DM's tools are left out.
+  Object.assign(state, { campaignId, guarded, dm: isDm, me: userId, pages: [], players: [], filter: '', kindFilter: null, kindKey: null, tagFilter: null, open: null, view: 'page', as: isDm ? null : userId, proposals: 0, aiRun: null, poll: null });
+  $('#tab-wiki')?.toggleAttribute('data-player', !isDm);
+  for (const id of ['#wiki-new', '#wiki-review', '#wiki-truth']) if ($(id)) $(id).hidden = !isDm;
   $('#wiki-filter').value = '';
   status('');
   await refreshList();
@@ -81,7 +84,7 @@ function drawList() {
   }
   const list = $('#wiki-list');
   if (!state.pages.length) {
-    list.replaceChildren(h('p', { class: 'muted small' }, 'No pages yet. Pages are yours: players never see this tab, but Ask answers them from the parts you make available to them.'));
+    list.replaceChildren(h('p', { class: 'muted small' }, state.dm ? 'No pages yet. Pages are yours: players see only the parts you make available to them, here and in Ask.' : 'No pages yet.'));
     return;
   }
   list.replaceChildren(...[
@@ -126,10 +129,12 @@ function drawHome() {
   if (!state.pages.length) {
     main.replaceChildren(h('div', { class: 'wiki-empty' },
       h('div', { class: 'wiki-empty-art', 'aria-hidden': 'true' }, '❦'),
-      h('h2', {}, 'Your wiki'),
-      h('p', {}, 'Write pages about your world: people, places, factions, secrets and plans, with pictures. Only you see this tab.'),
-      h('p', { class: 'muted small' }, 'Each page and each section says who it\'s available to. When you ask a question, Ask uses all of it. When a player asks, Ask uses only the parts available to them.'),
-      h('button', { type: 'button', class: 'primary', onclick: () => newPage() }, 'Make the first page'),
+      h('h2', {}, state.dm ? 'Your wiki' : 'The wiki'),
+      ...(state.dm ? [
+        h('p', {}, 'Write pages about your world: people, places, factions, secrets and plans, with pictures. Players see only the parts you make available to them.'),
+        h('p', { class: 'muted small' }, 'Each page and each section says who it\'s available to. When you ask a question, Ask uses all of it. When a player asks, Ask uses only the parts available to them.'),
+        h('button', { type: 'button', class: 'primary', onclick: () => newPage() }, 'Make the first page'),
+      ] : [h('p', {}, 'Nothing here is available to you yet. As the DM shares pages about the world, they show here.')]),
     ));
     return;
   }
@@ -222,8 +227,8 @@ async function openPage(id, { view = 'page' } = {}) {
   try {
     await state.guarded(async () => {
       state.open = await api('GET', `${base()}/${id}`);
-      state.view = view;
-      state.as = null;
+      state.view = state.dm ? view : 'page';
+      state.as = state.dm ? null : state.me;
       drawList();
       drawMain();
       $('#wiki-main')?.scrollIntoView?.({ block: 'start' });
@@ -263,16 +268,27 @@ function drawMain() {
   if (reading) queueMicrotask(() => main.prepend(phoneBack()));
   if (!state.open) return drawHome();
   if (state.open.page.template) state.view = 'edit'; // a template is only ever edited
+  if (!state.dm) state.view = 'page'; // a player only reads
   if (state.view === 'edit') return main.replaceChildren(editor(state.open.page));
   if (state.view === 'history') return drawHistory();
   const article = pageView();
   main.replaceChildren(article);
-  linkHints(article, state.open.page);
+  if (state.dm) linkHints(article, state.open.page);
 }
 
 function pageView() {
   const { page, mentioned_in: mentioned = [], unknown_names: unknown = [], on_maps: onMaps = [] } = state.open;
   const parent = page.parent && state.pages.find((p) => p.id === page.parent);
+  // A player reads the page as the server gave it to them: no tools, nothing about who else it's for.
+  if (!state.dm) {
+    return h('article', { class: `wiki-page fam-${fam(page.kind)}` },
+      hero(page),
+      drawCompass(page, { onMaps: [] }),
+      h('div', { class: 'wiki-page-head' }, h('p', { class: 'wiki-meta muted small' }, [page.kind, parent && `in ${parent.title}`].filter(Boolean).join(' · '))),
+      h('div', { class: 'wiki-content' }, ...pageContent(page, { dm: false, me: state.me })),
+      mentioned.length ? h('p', { class: 'wiki-mentioned muted small' }, 'Mentioned in: ', ...mentioned.flatMap((m, i) => [i ? ', ' : null, pageLink(m.title, m.title)])) : null,
+    );
+  }
   const viewAs = h('select', { 'aria-label': 'View as', title: 'See this page as a player would get it in Ask' },
     h('option', { value: '' }, 'As you see it'),
     ...state.players.map((p) => h('option', { value: String(p.id) }, `As ${p.character_name || p.name} would get it`)),

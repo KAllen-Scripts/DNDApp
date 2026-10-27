@@ -1,7 +1,7 @@
 /**
  * The wiki's space (wiki-space.js): the Wiki button leaves the table for a
  * space of its own on the same page, whose address follows the page shown, so
- * Back, Forward and reload land in the right place. Players never get it.
+ * Back, Forward and reload land in the right place. A player gets their own version.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -83,12 +83,12 @@ test('wiki space: a reload in the space opens the page the address names; a popp
   }
 });
 
-test("wiki space: a player sent to the wiki's address stays at the table and never asks for the wiki", async () => {
-  await withPage({ page: (t) => ({ as: t.sam, path: '/?space=wiki#/home' }) }, async (page) => {
-    assert.equal(page.document.documentElement.dataset.space, 'table');
-    assert.equal(page.window.location.search, '');
-    assert.ok(!page.visible('#tab-wiki'));
-    assert.ok(!page.requests.some((r) => r.path.includes('/wiki')));
+test("wiki space: a player sent to the wiki's address lands in their own wiki, and the DM's addresses open its Home", async () => {
+  await withPage({ page: (t) => ({ as: t.sam, path: '/?space=wiki#/waiting' }) }, async (page) => {
+    await page.waitFor(() => page.document.documentElement.dataset.space === 'wiki');
+    assert.ok(page.visible('#tab-wiki'));
+    assert.ok(!page.text('#wiki-rail').includes('Waiting'));
+    assert.ok(!page.requests.some((r) => r.path.includes('/wiki/proposals')), 'never asks for what waits for the DM');
   });
 });
 
@@ -168,7 +168,7 @@ test("wiki space: a page's compass shows where it sits; History shows what chang
 });
 
 
-test('wiki space: names in an answer open the drawer; Ctrl K finds a page by what its text says; a player gets no names', async () => {
+test('wiki space: names in an answer open the drawer; Ctrl K finds a page by what its text says; a player gets names only for what they can see', async () => {
   await withPage({
     before: async (t) => {
       const dana = await addDm(t);
@@ -215,8 +215,9 @@ test('wiki space: names in an answer open the drawer; Ctrl K finds a page by wha
     const answer = page.document.createElement('div');
     answer.textContent = 'You met the Grey Lady near Millbrook.';
     markNames(answer);
-    assert.equal(answer.querySelectorAll('.wiki-name').length, 0);
+    assert.equal(answer.querySelectorAll('.wiki-name').length, 0, 'no pages are available to them yet');
     page.document.dispatchEvent(new page.window.KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
-    assert.ok(!page.$('#wiki-find'));
+    assert.ok(page.$('#wiki-find').open, 'Find works on their own wiki');
+    assert.ok(!page.text('#wiki-find').includes('Make up'), "no Make up… for a player");
   });
 });

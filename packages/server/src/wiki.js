@@ -346,7 +346,37 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
     templates: (cid) => templateRows(cid),
 
     /** The page as a viewer may see it, or null. The DM gets it whole. */
-    forViewer: (cid, page, viewer) => filtered(page, viewer, players(cid)),
+    forViewer(cid, page, viewer) {
+      if (!viewer || viewer.seesAll) return filtered(page, viewer, players(cid));
+      return wiki.listFor(cid, viewer).find((p) => p.id === page.id) ?? null;
+    },
+
+    /**
+     * Every page as a viewer may see it (stage 6a). For a player: no hidden parent, and a link to a page they can't
+     * see becomes its words (a link's target is a page's name, which can be a secret).
+     */
+    listFor(cid, viewer) {
+      const roster = players(cid);
+      const all = rows(cid);
+      if (!viewer || viewer.seesAll) return all;
+      const pages = all.map((p) => filtered(p, viewer, roster)).filter(Boolean);
+      const ids = new Set(pages.map((p) => p.id));
+      const titles = new Map(pages.map((p) => [wikiKey(p.title), p.title]));
+      // Other names of pages they see link to the title; anything else is just its words.
+      const byAlias = new Map(all.filter((p) => ids.has(p.id)).flatMap((p) => p.aliases.map((a) => [wikiKey(a), p.title])));
+      const relink = (text) => String(text ?? '').replace(LINK_RE, (m, name, shown) => {
+        const words = (shown ?? name).trim();
+        const title = titles.get(wikiKey(name)) ?? byAlias.get(wikiKey(name));
+        return title ? `[[${title}${shown || wikiKey(title) !== wikiKey(name) ? `|${words}` : ''}]]` : words;
+      });
+      return pages.map((p) => ({
+        ...p,
+        parent: p.parent && ids.has(p.parent) ? p.parent : null,
+        sections: p.sections.map((s) => ({ ...s, text: relink(s.text) })),
+        facts: p.facts.map((f) => ({ ...f, value: relink(f.value) })),
+        events: p.events.map((e) => ({ ...e, text: relink(e.text) })),
+      }));
+    },
 
     /**
      * May this viewer see this picture? The DM sees every one; a player only
