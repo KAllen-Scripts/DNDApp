@@ -20,7 +20,7 @@ import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { NotFoundError, BadRequestError } from './store.js';
 import { ArchiveConflictError } from './archive.js';
-import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, unpicture, wikiKey, isPictureId, pagePictureIds, normalizeCanon, playerCanon, canonMarker, TONES, LINK_RE, PICTURE_RE, normalizeSheetShare } from '@dndapp/shared/wiki.js';
+import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, unpicture, wikiKey, isPictureId, pagePictureIds, normalizeCanon, playerCanon, canonMarker, TONES, LINK_RE, EMBED_RE, PICTURE_RE, normalizeSheetShare } from '@dndapp/shared/wiki.js';
 import { normalizeSources } from '@dndapp/shared/citations.js';
 import { parseWhen, whenText } from '@dndapp/shared/wiki-time.js';
 
@@ -382,7 +382,12 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
       const titles = new Map(pages.map((p) => [wikiKey(p.title), p.title]));
       // Other names of pages they see link to the title; anything else is just its words.
       const byAlias = new Map(all.filter((p) => ids.has(p.id)).flatMap((p) => p.aliases.map((a) => [wikiKey(a), p.title])));
-      const relink = (text) => String(text ?? '').replace(LINK_RE, (m, name, shown) => {
+      // An embed of a page they see stays (by its title); any other vanishes without a trace.
+      const relink = (text) => String(text ?? '').replace(EMBED_RE, (m, name) => {
+        const title = titles.get(wikiKey(name)) ?? byAlias.get(wikiKey(name));
+        return title ? `[[!${title}]]` : '';
+      }).replace(LINK_RE, (m, name, shown) => {
+        if (name.startsWith('!')) return m; // an embed kept above
         const words = (shown ?? name).trim();
         const title = titles.get(wikiKey(name)) ?? byAlias.get(wikiKey(name));
         return title ? `[[${title}${shown || wikiKey(title) !== wikiKey(name) ? `|${words}` : ''}]]` : words;
@@ -390,7 +395,8 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
       return pages.map((p) => ({
         ...p,
         parent: p.parent && ids.has(p.parent) ? p.parent : null,
-        sections: p.sections.map((s) => ({ ...s, text: relink(s.text) })),
+        // A section that was only an embed they can't see goes too.
+        sections: p.sections.map((s) => ({ ...s, text: relink(s.text) })).filter((s) => s.text.trim()),
         facts: p.facts.map((f) => ({ ...f, value: relink(f.value) })),
         events: p.events.map((e) => ({ ...e, text: relink(e.text) })),
       }));

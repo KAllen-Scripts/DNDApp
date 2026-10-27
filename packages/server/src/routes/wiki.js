@@ -17,7 +17,7 @@ import { webGraph } from '../wiki-web.js';
 import { pageOnMaps, makePageFor, atlasLayers, pagePlaces, shownToViewer } from '../wiki-maps.js';
 import { timeline } from '../wiki-timeline.js';
 import { STARTER_TEMPLATES } from '@dndapp/shared/wiki-templates.js';
-import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass } from '../wiki-views.js';
+import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass, embedsIn } from '../wiki-views.js';
 
 export function registerWiki(app, r) {
   const { access, auth, store, wiki, wikiAI, wikiPictures, jobs, pictures, search, maps, handouts, sheets, db, kb, config } = r;
@@ -479,17 +479,21 @@ export function registerWiki(app, r) {
       if (!page) throw new NotFoundError('No such page');
       const names = new Set([page.title].map(wikiKey));
       const mentioned = pages.filter((p) => p.id !== page.id && p.sections.some((s) => wikiLinks(s.text).some((n) => names.has(wikiKey(n))))).map((p) => ({ id: p.id, title: p.title }));
-      return { page, mentioned_in: mentioned, as, from_sheet: fromSheet(cid, page, as) };
+      return { page, mentioned_in: mentioned, as, from_sheet: fromSheet(cid, page, as), embeds: embedsIn(page, pages, openings(cid)) };
     }
     const page = wiki.get(cid, request.params.pid, { templates: true });
     const { as } = z.object({ as: z.coerce.number().int().optional() }).parse(request.query ?? {});
     if (as != null) {
       if (auth.membership(cid, as)?.role !== 'player') throw new BadRequestError("That isn't a player in this campaign.");
-      const seen = wiki.forViewer(cid, page, { userId: as, seesAll: false });
-      return { page: seen, as, from_sheet: seen && fromSheet(cid, seen, as) };
+      const { pages } = viewerPages(request);
+      const seen = pages.find((p) => p.id === page.id) ?? null;
+      return { page: seen, as, from_sheet: seen && fromSheet(cid, seen, as), embeds: seen ? embedsIn(seen, pages, openings(cid)) : {} };
     }
-    return { page, mentioned_in: wiki.mentionedIn(cid, page), unknown_names: wiki.unknownNames(cid, page), on_maps: pageOnMaps(maps, cid, page.id), from_sheet: fromSheet(cid, page, null) };
+    return { page, mentioned_in: wiki.mentionedIn(cid, page), unknown_names: wiki.unknownNames(cid, page), on_maps: pageOnMaps(maps, cid, page.id), from_sheet: fromSheet(cid, page, null), embeds: embedsIn(page, wiki.list(cid), openings(cid)) };
   });
+
+  /** Each page's opening section, for embeds (stage 7a): what an embedded clue shows. */
+  const openings = (cid) => new Map(wiki.list(cid).map((p) => [p.id, p.sections[0]?.id]));
 
   /** A page for a player's character (stage 6b, Waiting's one click) `{player}`: named after the character, with their token picture, for the whole party. */
   app.post('/campaigns/:cid/wiki/characters', async (request, reply) => {

@@ -2560,3 +2560,9 @@ button.wiki-tile { text-align: left; border: 1px solid var(--border); color: inh
 .wiki-lore-edit { display: grid; gap: 0.4rem; }
 .wiki-lore-change { margin-top: 0.3rem; }
 .wiki-lore-canon { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin: 0.4rem 0; }
+
+/* An embedded page (a clue, stage 7a): its opening words where it's written. */
+.wiki-embed { display: block; margin: 0.5rem 0; padding: 0.45rem 0.75rem; border-left: 3px solid var(--kind, var(--accent)); background: color-mix(in srgb, var(--kind, var(--accent)) 7%, var(--surface)); border-radius: 0 var(--radius) var(--radius) 0; }
+.wiki-embed.missing { border-left-style: dashed; }
+.wiki-embed-head { display: block; margin-bottom: 0.2rem; }
+.wiki-embed-text > :last-child { margin-bottom: 0; }

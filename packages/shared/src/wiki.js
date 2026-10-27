@@ -17,6 +17,15 @@
 
 export const LINK_RE = /\[\[([^\]|\n]+)(?:\|([^\]\n]+))?\]\]/g;
 
+/**
+ * `[[!Clue title]]` puts a page's text (a clue, stage 7a) where it's written. Who sees it is the clue page's own
+ * business, so revealing the clue once reveals it everywhere it's embedded; a viewer who can't see it gets nothing.
+ */
+export const EMBED_RE = /\[\[!([^\]|\n]+)\]\]/g;
+export const embedNames = (text) => [...new Set([...String(text ?? '').matchAll(EMBED_RE)].map((m) => m[1].trim()))];
+/** A text without its embeds (search, the AI, excerpts: the embedded page speaks for itself). */
+export const unembed = (text) => String(text ?? '').replace(EMBED_RE, '');
+
 const OPEN_RE = /^\s*:::\s*(for|dm)\b(.*)$/i;
 const CLOSE_RE = /^\s*:::\s*$/;
 
@@ -96,11 +105,12 @@ export function unknownBlockNames(texts, roster) {
 
 /** The page names a text links to, as written (no duplicates). */
 export function wikiLinks(text) {
-  return [...new Set([...String(text ?? '').matchAll(LINK_RE)].map((m) => m[1].trim()))];
+  // An embed ([[!Clue]]) links its page too.
+  return [...new Set([...String(text ?? '').matchAll(LINK_RE)].map((m) => m[1].trim().replace(/^!\s*/, '')))];
 }
 
 /** A text with its [[links]] as plain words (for the AI and for search). */
-export const unlink = (text) => String(text ?? '').replace(LINK_RE, (_, name, shown) => (shown ?? name).trim());
+export const unlink = (text) => unembed(text).replace(LINK_RE, (_, name, shown) => (shown ?? name).trim());
 
 /** Lower case with spaces squeezed, for matching page titles and aliases. */
 export const wikiKey = (s) => String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
