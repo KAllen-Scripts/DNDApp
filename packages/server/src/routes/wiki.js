@@ -10,11 +10,13 @@ import { WIKI_LIMITS as L } from '../wiki.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 import { SOURCE_KINDS } from '../wiki-pictures.js';
 import { wikiKey } from '@dndapp/shared/wiki.js';
+import { pageOnMaps } from '../wiki-maps.js';
 import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass } from '../wiki-views.js';
 
 export function registerWiki(app, r) {
-  const { access, auth, store, wiki, wikiAI, wikiPictures, jobs, pictures, search } = r;
+  const { access, auth, store, wiki, wikiAI, wikiPictures, jobs, pictures, search, maps } = r;
 
+  const crop = z.object({ x: z.number().min(0), y: z.number().min(0), w: z.number().positive(), h: z.number().positive() });
   const pictureId = z.string().regex(/^[a-f0-9]{10}$/);
   const available = z.union([z.literal('all'), z.literal('dm'), z.array(z.number().int()).max(100)]);
   const fields = {
@@ -148,13 +150,14 @@ export function registerWiki(app, r) {
   /**
    * Add a picture (DM): { filename, data (base64) } for an upload, a paste or
    * a drop, or { from: { kind, id } } for a copy of a creature's, item's,
-   * merchant's, map's, handout's or token's picture.
+   * merchant's, map's, handout's or token's picture. A map's can be a
+   * `crop` of it ({ x, y, w, h } in the map's pixels), such as one room.
    */
   app.post('/campaigns/:cid/wiki/pictures', pictureBody, async (request, reply) => {
     const { cid } = access(request, { dm: true });
     const body = z.union([
       z.object({ filename: z.string().max(200).default(''), data: z.string().min(1) }),
-      z.object({ from: z.object({ kind: z.enum(SOURCE_KINDS), id: z.string().max(40) }) }),
+      z.object({ from: z.object({ kind: z.enum(SOURCE_KINDS), id: z.string().max(40), crop: crop.optional() }) }),
     ]).parse(request.body ?? {});
     const x = body.from
       ? await wikiPictures.copy(cid, body.from, { by: request.user.id })
@@ -240,7 +243,7 @@ export function registerWiki(app, r) {
       if (auth.membership(cid, as)?.role !== 'player') throw new BadRequestError("That isn't a player in this campaign.");
       return { page: wiki.forViewer(cid, page, { userId: as, seesAll: false }), as };
     }
-    return { page, mentioned_in: wiki.mentionedIn(cid, page), unknown_names: wiki.unknownNames(cid, page) };
+    return { page, mentioned_in: wiki.mentionedIn(cid, page), unknown_names: wiki.unknownNames(cid, page), on_maps: pageOnMaps(maps, cid, page.id) };
   });
 
   app.post('/campaigns/:cid/wiki', async (request, reply) => {

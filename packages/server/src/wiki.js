@@ -17,6 +17,7 @@
  * Deleting a page marks it removed; the archive keeps it.
  */
 import crypto from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { NotFoundError, BadRequestError } from './store.js';
 import { ArchiveConflictError } from './archive.js';
 import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, unpicture, wikiKey, isPictureId, pagePictureIds } from '@dndapp/shared/wiki.js';
@@ -89,6 +90,7 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
   // Every page, read once per campaign and kept until the next write (the space's views read them often).
   // Callers get their own copies, so changing one never changes the kept pages.
   const cache = new Map();
+  const events = new EventEmitter();
   const rows = (cid) => {
     if (!cache.has(cid)) {
       cache.set(cid, db.prepare('SELECT data FROM wiki_pages WHERE campaign_id = ? ORDER BY id').all(cid).map((r) => normalizeWikiPage(JSON.parse(r.data))).filter((p) => !p.removed));
@@ -181,12 +183,16 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
   }
 
   function write(cid, page) {
+    const prev = db.prepare('SELECT data FROM wiki_pages WHERE id = ? AND campaign_id = ?').get(page.id, cid);
+    const before = prev ? normalizeWikiPage(JSON.parse(prev.data)) : null;
     archive.appendWikiPage(store.getCampaign(cid).slug, page.id, page);
     db.prepare(
       `INSERT INTO wiki_pages (id, campaign_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
        ON CONFLICT (id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
     ).run(page.id, cid, JSON.stringify(page), page.created_at, page.updated_at);
     cache.delete(cid);
+    // Maps keep a linked page's title (wiki-maps.js): they hear when it changes or the page goes.
+    if (before && !before.removed && (page.removed || before.title !== page.title)) events.emit(page.removed ? 'removed' : 'renamed', { cid, page, before });
     return page;
   }
 
@@ -214,6 +220,7 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
   }
 
   const wiki = {
+    events,
     get(cid, id) {
       if (!isWikiId(id)) throw new NotFoundError('No such page');
       const r = db.prepare('SELECT data FROM wiki_pages WHERE id = ? AND campaign_id = ?').get(id, cid);

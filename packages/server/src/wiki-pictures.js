@@ -23,6 +23,24 @@ import { isPictureId, wikiKey } from '@dndapp/shared/wiki.js';
 export const WIKI_PICTURE_PX = { thumb: 480, full: 1800 };
 const SOURCE_THUMB_PX = 320;
 const MAP_COPY_PX = 2400;
+
+const cropBox = ({ x, y, w, h }) => ({ x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) });
+
+/**
+ * A map picture (or a part of it: `crop` is { x, y, w, h } in the map's
+ * pixels, kept inside the picture) no bigger than `px` on its longer side, as webp.
+ */
+export async function mapCrop(buf, crop, px) {
+  let img = sharp(buf, { limitInputPixels: false }).rotate();
+  if (crop) {
+    const { width, height } = await sharp(buf, { limitInputPixels: false }).rotate().metadata();
+    const c = cropBox(crop);
+    const left = Math.min(c.x, width - 1);
+    const top = Math.min(c.y, height - 1);
+    img = sharp(await img.extract({ left, top, width: Math.max(1, Math.min(c.w, width - left)), height: Math.max(1, Math.min(c.h, height - top)) }).toBuffer());
+  }
+  return img.resize({ width: px, height: px, fit: 'inside', withoutEnlargement: true }).webp({ quality: 86 }).toBuffer();
+}
 export const SOURCE_KINDS = ['creature', 'item', 'merchant', 'map', 'handout', 'token'];
 
 export function createWikiPictures({ archive, store, creatures, items, merchants, maps, handouts, pictures }) {
@@ -93,14 +111,14 @@ export function createWikiPictures({ archive, store, creatures, items, merchants
     upload: (cid, buf, { by, name }) => keep(cid, buf, { by, name }),
 
     /** A copy of a picture the app already has, for the wiki: { kind, id }. */
-    async copy(cid, { kind, id }, { by }) {
+    async copy(cid, { kind, id, crop = null }, { by }) {
       if (!SOURCE_KINDS.includes(kind)) throw new BadRequestError('No such kind of picture.');
       const src = sourceFile(cid, kind, String(id));
       if (!src || !fs.existsSync(src.path)) throw new NotFoundError('That has no picture.');
       let buf = fs.readFileSync(src.path);
       // A map can be enormous: the wiki keeps a smaller copy. Anything that isn't a picture the wiki takes is turned into one.
-      if (src.map) buf = await sharp(buf, { limitInputPixels: false }).rotate().resize({ width: MAP_COPY_PX, height: MAP_COPY_PX, fit: 'inside', withoutEnlargement: true }).webp({ quality: 86 }).toBuffer();
-      return keep(cid, buf, { by, name: src.name, from: { kind, id: String(id), name: src.name } });
+      if (src.map) buf = await mapCrop(buf, crop, MAP_COPY_PX);
+      return keep(cid, buf, { by, name: src.name, from: { kind, id: String(id), name: src.name, ...(src.map && crop ? { crop: cropBox(crop) } : {}) } });
     },
 
     /** What the page gets to show: smaller copies, made on the server ('thumb' or 'full'). */

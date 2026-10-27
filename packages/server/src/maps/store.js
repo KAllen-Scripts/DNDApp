@@ -388,9 +388,9 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         // The party's own (characters, companions and summons) show their hit points; a companion's stat block
         // goes to the player who controls it, so they can roll for it. Anyone else's hit points only as how hurt they look.
         tokens: tokens.map((t) => ({ ...t, follows: visible.has(t.follows) ? t.follows : null, journey: t.journey && !ownToken(t, userId) ? { ...t.journey, to_name: '' } : t.journey })).map((t) => {
-          if (t.kind === 'pc') return { ...t, stats: null, record: null };
-          if (t.kind === 'companion') return { ...t, stats: t.user_id === userId ? t.stats : null, record: null };
-          return { ...t, hp: null, health: healthOf(t.hp), stats: null, record: null };
+          if (t.kind === 'pc') return { ...t, stats: null, record: null, page: null };
+          if (t.kind === 'companion') return { ...t, stats: t.user_id === userId ? t.stats : null, record: null, page: null };
+          return { ...t, hp: null, health: healthOf(t.hp), stats: null, record: null, page: null };
         }),
         // Links to maps they're shown, where they can see the link; variants by name only.
         links: links
@@ -400,7 +400,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         // only if they're shown that map; never the DM's record or who else it's revealed to.
         places: places
           .filter((p) => placeRevealedTo(p, userId) && [[p.x, p.y], ...(p.points ?? [])].some(([x, y]) => canSee(map, seen.polygons, x, y)))
-          .map(({ target: m, record: _r, revealed_to: _t, encounters: _e, ...p }) => (shownTo(m, userId) ? { ...p, record: null, revealed_to: null, to_name: m.name } : { ...p, to: null, record: null, revealed_to: null, to_name: null })),
+          .map(({ target: m, record: _r, revealed_to: _t, encounters: _e, ...p }) => (shownTo(m, userId) ? { ...p, record: null, page: null, revealed_to: null, to_name: m.name } : { ...p, to: null, record: null, page: null, revealed_to: null, to_name: null })),
         shown_to: null,
         // Roads and rivers only shape the way journeys go (the server works that out); random encounters are the DM's.
         roads: [],

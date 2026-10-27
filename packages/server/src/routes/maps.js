@@ -14,12 +14,13 @@ import { BadRequestError, NotFoundError } from '../store.js';
 import { MAX_PICTURE_BYTES, createImageCache, inspectMapImage, inspectPicture } from '../images.js';
 import { RateLimitError } from '../qa/agent.js';
 import { isMapId, newTokenId } from '../maps/store.js';
+import { mapCrop } from '../wiki-pictures.js';
 import { isPdf, renderPdfPage } from '../maps/pdf.js';
 import { onTheWay, planJourney } from '../maps/travel.js';
 import { isUvtt, readUvtt, toUvtt, uvttImage, uvttContents } from '../maps/uvtt.js';
 
 export function registerMaps(app, r) {
-  const { access, archive, auth, config, db, kb, mapReader, maps, merchants, openLiveStream, publicMessage, sheets, statBlocks, store, upload } = r;
+  const { access, archive, auth, config, db, kb, mapReader, maps, merchants, openLiveStream, publicMessage, sheets, statBlocks, store, upload, wiki } = r;
 
   // ---------- maps (the DM imports them; players see shown maps and move their own token) ----------
 
@@ -549,10 +550,21 @@ export function registerMaps(app, r) {
 
   app.get('/campaigns/:cid/maps/:mid', async (request) => viewableMap(request).view);
 
-  /** The map's image (the picture showing now). Players get it as it is too: their page draws the fog over it. */
+  /**
+   * The map's image (the picture showing now). Players get it as it is too: their page draws the fog over it.
+   * The DM can ask for a part of it, made small (?crop=x,y,w,h in the map's pixels, &size= up to 2400), for a wiki page's view of a room.
+   */
   app.get('/campaigns/:cid/maps/:mid/image', async (request, reply) => {
-    const { cid, map } = viewableMap(request);
+    const { cid, map, role } = viewableMap(request);
     const { path: file, type } = maps.imagePath(cid, map.id);
+    const q = z.object({ crop: z.string().regex(/^\d+(\.\d+)?(,\d+(\.\d+)?){3}$/).optional(), size: z.coerce.number().int().min(32).max(2400).default(480) }).parse(request.query ?? {});
+    if (q.crop) {
+      if (role !== 'dm') throw new AuthError('Only the DM can do that.', 403);
+      const [x, y, w, h] = q.crop.split(',').map(Number);
+      if (!w || !h) throw new BadRequestError('A crop needs a width and a height.');
+      const buf = await mapCrop(fs.readFileSync(file), { x, y, w, h }, q.size);
+      return reply.type('image/webp').header('X-Content-Type-Options', 'nosniff').header('Cache-Control', 'private, max-age=300').send(buf);
+    }
     // The file behind a key never changes (a new picture gets a new key), so the browser can keep it.
     return reply.type(type).header('X-Content-Type-Options', 'nosniff').header('Cache-Control', 'private, max-age=31536000, immutable').send(fs.createReadStream(file));
   });
@@ -688,6 +700,7 @@ export function registerMaps(app, r) {
       group: z.string().trim().max(40),
       to: z.string().nullable(),
       record: z.object({ id: z.string() }).nullable(),
+      page: z.object({ id: z.string() }).nullable(),
       revealed: z.boolean(),
       revealed_to: WHO,
       encounters: ENCOUNTERS.nullable(),
@@ -716,10 +729,11 @@ export function registerMaps(app, r) {
       }
       checkPlayers(a.cid, place.revealed_to);
       linkRecord(a.cid, place);
+      linkPage(a.cid, place);
     }
     const clean = ({ points, ...p }) => ({ ...p, ...(points !== undefined && { points: points ?? undefined }) });
     const saved = maps.change(a.cid, map.id, (m) => {
-      if (body.add) m.places.push({ group: '', to: null, record: null, revealed: false, revealed_to: null, ...clean(body.add), id: newTokenId() });
+      if (body.add) m.places.push({ group: '', to: null, record: null, page: null, revealed: false, revealed_to: null, ...clean(body.add), id: newTokenId() });
       if (body.set) {
         const p = m.places.find((x) => x.id === body.set.id);
         Object.assign(p, clean(body.set));
@@ -1181,6 +1195,7 @@ export function registerMaps(app, r) {
     conditions: z.array(z.enum(CONDITIONS)).max(CONDITIONS.length),
     hidden: z.boolean(),
     record: z.object({ id: z.number().int().positive(), title: z.string().max(200).optional() }).nullable(),
+    page: z.object({ id: z.string() }).nullable(),
     stats: z.object({ text: z.string().max(8000), ac: z.number().int().nullable().optional(), hp_formula: z.string().max(40).optional(), speed: z.string().max(120).optional(), challenge: z.string().max(40).optional() }).nullable(),
     light: z.object(RADII).nullable(),
     darkvision: z.number().min(0).max(10_000),
@@ -1209,6 +1224,13 @@ export function registerMaps(app, r) {
     body.record = { id: r.id, title: r.title };
   };
 
+  /** A place or token linked to a wiki page gets that page's current title (the DM only sends the id). */
+  const linkPage = (cid, body) => {
+    if (!body.page) return;
+    const p = wiki.get(cid, body.page.id);
+    body.page = { id: p.id, title: p.title };
+  };
+
   /** A player character's or companion's token belongs to someone in this campaign. */
   const checkTokenOwner = (cid, token) => {
     if (PLAYER_KINDS.includes(token.kind) && token.user_id != null && !auth.membership(cid, token.user_id)) {
@@ -1231,6 +1253,7 @@ export function registerMaps(app, r) {
     if (map.tokens.length >= MAX_TOKENS) throw new BadRequestError(`A map can have at most ${MAX_TOKENS} tokens.`);
     checkTokenOwner(a.cid, body);
     linkRecord(a.cid, body);
+    linkPage(a.cid, body);
     // A player character is on one map at a time: adding them where they aren't brings their token (and
     // whoever follows them) over from the map they're on (the party panel's Bring here).
     if (body.kind === 'pc' && body.user_id != null) {
@@ -1319,6 +1342,7 @@ export function registerMaps(app, r) {
     }
     checkTokenOwner(a.cid, { ...token, ...body });
     linkRecord(a.cid, body);
+    linkPage(a.cid, body);
     // Following someone this viewer can see on this map, and not round in a circle.
     if (body.follows != null) {
       if (!view.tokens.some((t) => t.id === body.follows) || body.follows === token.id) throw new NotFoundError('No such token');

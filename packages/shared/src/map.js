@@ -112,6 +112,8 @@ export function normalizeToken(t = {}, map) {
     // The archivist's record this token stands for (the DM's; players only get the name).
     // The title is kept too: record ids can change when the knowledge base is rebuilt.
     record: normalizeRecordLink(t.record),
+    // The wiki page it stands for (the DM's): maps own where things are, the wiki what they are.
+    page: normalizePageLink(t.page),
     // A light the token carries (a torch: 20 ft bright, 20 ft more dim), in the map's unit; null for none.
     light: normalizeLightRadii(t.light),
     // How far it sees in the dark (darkvision), in the map's unit; 0 for none.
@@ -259,6 +261,7 @@ export function normalizePlaces(list, image = {}) {
       group: str(p.group, 40),
       to: /^[a-f0-9]{10}$/.test(String(p.to)) ? String(p.to) : null,
       record: normalizeRecordLink(p.record),
+      page: normalizePageLink(p.page),
       revealed: p.revealed === true,
       revealed_to: normalizeUserIds(p.revealed_to),
       // Its own random encounters for travellers inside its area (a forest, the marshes); the DM's alone.
@@ -664,6 +667,13 @@ export function normalizeRecordLink(r) {
   const id = Number(r.id);
   const title = str(r.title, 200);
   return Number.isInteger(id) && id > 0 && title ? { id, title } : null;
+}
+
+/** A link from a place or token to a wiki page: { id, title } or null (the title is kept for showing it). */
+export function normalizePageLink(p) {
+  if (!p || typeof p !== 'object') return null;
+  const id = String(p.id ?? '');
+  return /^[a-f0-9]{10}$/.test(id) ? { id, title: str(p.title, 200) } : null;
 }
 
 /** Record kinds that sound like someone you could put on a map (the archivist names kinds freely). */
