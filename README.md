@@ -299,6 +299,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/wiki/atlas?map=` | The Atlas's wiki layers on a map (the top one without `map`): `{layers: {map, pins, lands, people, quests}}` (`?as=`: only what that player may see; `layers: null` if they can't see the map) (DM only) |
 | POST | `/campaigns/:cid/wiki/from-map` | A new page for a map place or token, linked to it `{map_id, kind: "place" \| "token", id}` → `{page, made}` (the page it has if it's linked already) (DM only) |
 | POST | `/campaigns/:cid/wiki/:pid/handout` | Send part of a page as a handout `{part: {section} \| {picture} \| {glance: true}, to: "everyone" \| [player ids], share?}` → `{handout, page, page_hidden}` (DM only) |
+| GET | `/campaigns/:cid/wiki/web` | The Web: `{around, nodes: [{id, title, kind, family, picture, x, y, r}], lines: [{from, to, labels, tone, canon, by, kind, available?}], bubbles}` (`?around=<page id>&steps=1-3&families=a,b&mentions=1&preset=factions\|family&truth=1&as=`) (DM only) |
 | GET | `/campaigns/:cid/wiki/evidence` | The transcript lines behind sources `?s=S12 01:02:03` (once per source) → `{evidence: [{source, excerpt}]}` (`?as=`: only sessions that player was at) (DM only) |
 | GET | `/campaigns/:cid/wiki/:pid/compass` | A page's compass: `{family, chain, children, links_to, linked_from}` (`?as=`: as that player; `compass: null` if they can't see the page) (DM only) |
 | GET | `/campaigns/:cid/wiki/:pid/history` (`/:version`) | Every version of a page / one version (DM only) |

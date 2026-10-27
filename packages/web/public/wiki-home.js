@@ -67,7 +67,7 @@ export async function drawHub(box) {
         h('h3', {}, 'Ways in'),
         h('div', { class: 'wiki-tiles' },
           atlasTile(tile('⌖', 'Atlas', 'Where: your maps, with their pages', '#/atlas')),
-          tile('⁂', 'Web', 'Who: people and how they are tied'),
+          tile('⁂', 'Web', 'Who: people and how they are tied', '#/web'),
           tile('⟿', 'Timeline', 'When: what happened, in order'),
         ),
       ),
