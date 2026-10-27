@@ -13,6 +13,7 @@
 import { api, h } from './api.js';
 import { clockText } from './shared/settings.js';
 import { state, nav, pictureImg, fam } from './wiki-data.js';
+import { openFind } from './wiki-find.js';
 
 const $ = (sel) => document.querySelector(sel);
 const TRAIL_MAX = 8;
@@ -134,6 +135,7 @@ function drawRail() {
   rail.replaceChildren(...[
     item('#/home', '❦', 'Home'),
     item(route.startsWith('#/wheel') ? route : '#/wheel', '❂', 'Wheel'),
+    item('#find', '⌕', 'Find', { onclick: () => openFind() }),
     item('#/new', '✚', 'New page', { onclick: () => nav.newPage() }),
     item('#/waiting', '✎', 'Waiting', { count: state.proposals }),
     h('span', { class: 'wiki-rail-gap' }),
@@ -178,9 +180,10 @@ async function showClock() {
   }
 }
 
-/** Set up the space. `table()` goes back to the table (app.js's last tab); null in a popped-out wiki window. */
-export function initSpace({ table }) {
+/** Set up the space. `table()` goes back to the table (app.js's last tab), null in a popped-out wiki window; `enter()` goes into the space. */
+export function initSpace({ table, enter }) {
   toTable = table;
+  nav.enter = enter;
   nav.routed = routed;
   nav.go = go;
 }

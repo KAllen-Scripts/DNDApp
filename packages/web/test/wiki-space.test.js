@@ -167,3 +167,56 @@ test("wiki space: a page's compass shows where it sits; History shows what chang
   });
 });
 
+
+test('wiki space: names in an answer open the drawer; Ctrl K finds a page by what its text says; a player gets no names', async () => {
+  await withPage({
+    before: async (t) => {
+      const dana = await addDm(t);
+      const { mill, lady } = await twoPages(t);
+      await t.request('POST', `/campaigns/${t.campaign.id}/wiki`, { body: { title: 'Rennick', kind: 'npc', sections: [{ heading: '', text: 'A smuggler with an eyepatch who knows [[The Grey Lady]].', available: 'all' }] } });
+      return { dana, mill, lady };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t, { mill, lady }) => {
+    const { markNames } = await page.module('wiki-names.js');
+    const answer = page.document.createElement('div');
+    answer.innerHTML = '<p>You met <strong>the grey lady</strong> near Millbrook. <code>Millbrook</code></p>';
+    page.$('#thread').append(answer);
+    markNames(answer);
+    assert.deepEqual([...answer.querySelectorAll('.wiki-name')].map((b) => b.textContent), ['the grey lady', 'Millbrook'], 'any case, whole names, never in code');
+
+    // The drawer: the page, its compass, a link inside opens there too, Escape closes it.
+    page.click(answer.querySelector('.wiki-name'));
+    await page.waitFor(() => page.visible('#wiki-drawer') && page.text('#wiki-drawer h2') === 'The Grey Lady');
+    assert.equal(page.document.documentElement.dataset.space, 'table', 'still at the table');
+    page.key('#wiki-drawer', 'Escape');
+    assert.ok(!page.visible('#wiki-drawer'));
+    page.click(answer.querySelectorAll('.wiki-name')[1]);
+    await page.waitFor(() => page.visible('#wiki-drawer') && page.text('#wiki-drawer h2') === 'Millbrook');
+    page.click(page.$$('#wiki-drawer button').find((b) => b.textContent === 'Open in the wiki'));
+    await page.waitFor(() => page.window.location.hash === `#/page/${mill.id}`);
+    assert.equal(page.document.documentElement.dataset.space, 'wiki');
+    assert.ok(!page.visible('#wiki-drawer'));
+
+    // Ctrl K: found by its text; in the wiki a card opens the page.
+    page.document.dispatchEvent(new page.window.KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+    assert.ok(page.$('#wiki-find').open);
+    page.type('#wiki-find input', 'eyepatch');
+    await page.waitFor(() => page.$('#wiki-find .wiki-find-card'));
+    assert.match(page.text(page.$('#wiki-find .wiki-find-card')), /Rennick.*found in its text/);
+    page.key('#wiki-find input', 'Enter');
+    await page.waitFor(() => page.text('#wiki-main h2') === 'Rennick');
+    assert.ok(!page.$('#wiki-find').open);
+    assert.ok(lady);
+    assert.equal(page.errors.length, 0, page.errors.join('\n'));
+  });
+  await withPage({ page: (t) => ({ as: t.sam }) }, async (page) => {
+    const { markNames } = await page.module('wiki-names.js');
+    const answer = page.document.createElement('div');
+    answer.textContent = 'You met the Grey Lady near Millbrook.';
+    markNames(answer);
+    assert.equal(answer.querySelectorAll('.wiki-name').length, 0);
+    page.document.dispatchEvent(new page.window.KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+    assert.ok(!page.$('#wiki-find'));
+  });
+});

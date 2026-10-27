@@ -38,6 +38,8 @@ export const nav = {
   phoneBack: () => null,
   routed: () => {}, // after each draw: the address and the trail follow (wiki-space.js)
   go: async () => {}, // to a route of the space (wiki-space.js)
+  enter: () => {}, // into the wiki's space from the table (app.js)
+  drawer: async () => {}, // show a page in the drawer, over either space (wiki-drawer.js)
 };
 
 /** Forget the pictures fetched for the last campaign. */
