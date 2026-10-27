@@ -6,7 +6,7 @@
  */
 import { api, h } from './api.js';
 import { markdownFragment } from './markdown.js';
-import { wikiPieces, wikiKey, LINK_RE, PICTURE_RE, pictureAlt, KIND_FAMILIES, TONES, guessTone, factLinks, factTone } from './shared/wiki.js';
+import { wikiPieces, wikiKey, LINK_RE, EMBED_RE, PICTURE_RE, pictureAlt, KIND_FAMILIES, TONES, guessTone, factLinks, factTone } from './shared/wiki.js';
 import { sourceChips, sourcesEditor } from './wiki-sources.js';
 import { parseWhen, whenText, whenKey } from './shared/wiki-time.js';
 import { canonBadge, canonClass, truthNote, canonPicker } from './wiki-canon.js';
@@ -22,11 +22,19 @@ function figure({ id, caption, place }) {
   );
 }
 
-/** Markdown with [[links]] as buttons that open the page (or offer to make it), and pictures in place. */
-export function richText(text, cls = 'wiki-text') {
+/**
+ * Markdown with [[links]] as buttons that open the page (or offer to make it), pictures in place, and embedded
+ * pages ([[!Clue]], stage 7a) from `embeds` (what the server sent with the page for this viewer).
+ */
+export function richText(text, cls = 'wiki-text', { embeds = null, dm = false } = {}) {
   const targets = [];
   const pictures = [];
+  const embedded = [];
   const marked = text
+    .replace(EMBED_RE, (_, name) => {
+      embedded.push(name.trim());
+      return '<span class="wiki-embed-slot"></span>';
+    })
     .replace(PICTURE_RE, (_, alt, id) => {
       pictures.push({ id, ...pictureAlt(alt) });
       return '<span class="wiki-pic-slot"></span>';
@@ -39,7 +47,22 @@ export function richText(text, cls = 'wiki-text') {
   box.append(markdownFragment(marked));
   box.querySelectorAll('span.wiki-pic-slot').forEach((span, i) => (pictures[i] ? span.replaceWith(figure(pictures[i])) : span.remove()));
   box.querySelectorAll('span.wiki-link').forEach((span, i) => span.replaceWith(pageLink(targets[i], span.textContent)));
+  box.querySelectorAll('span.wiki-embed-slot').forEach((span, i) => {
+    const el = embedBox(embedded[i], embeds, dm);
+    if (el) span.replaceWith(el);
+    else span.remove();
+  });
   return box;
+}
+
+/** An embedded page's opening words (a clue), boxed, with its title as a link; the DM also sees who has it. */
+function embedBox(name, embeds, dm) {
+  const e = name && embeds?.[wikiKey(name)];
+  if (!e) return dm ? h('span', { class: 'wiki-embed missing muted small' }, `No page called "${name}" to put here yet. `, pageLink(name, 'Make it')) : null;
+  const who = e.section_available && e.section_available !== 'all' ? e.section_available : e.available;
+  return h('span', { class: `wiki-embed fam-${fam(e.kind)}` },
+    h('span', { class: 'wiki-embed-head small' }, pageLink(e.title, `${e.kind && wikiKey(e.kind) === 'clue' ? 'Clue' : 'From'}: ${e.title}`), dm ? h('span', { class: 'muted' }, ` · ${availableText(who)}`) : null),
+    richText(e.text, 'wiki-embed-text'));
 }
 
 /** A link to a page by name: opens it, shows a preview of it on hover, or offers to make it. */
@@ -93,11 +116,11 @@ export function hidePreview() {
 const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 /** A section's text: plain parts as they are, blocks in a box that says who they're for. */
-export function sectionBody(text) {
+export function sectionBody(text, embeds = null) {
   return wikiPieces(text).map((p) => {
-    if (!p.block) return richText(p.text);
+    if (!p.block) return richText(p.text, 'wiki-text', { embeds, dm: true });
     const who = p.block.dm ? 'Only you' : `Only for ${p.block.names.join(', ') || 'nobody yet'}`;
-    return h('div', { class: 'wiki-block' }, h('div', { class: 'wiki-block-label muted small' }, who), richText(p.text));
+    return h('div', { class: 'wiki-block' }, h('div', { class: 'wiki-block-label muted small' }, who), richText(p.text, 'wiki-text', { embeds, dm: true }));
   });
 }
 
@@ -193,20 +216,20 @@ function eventsList(page, { dm, me = null }) {
 }
 
 /** What's on a page below its banner: the at-a-glance box beside the sections, then the events and the gallery. */
-export function pageContent(page, { dm, me = null }) {
+export function pageContent(page, { dm, me = null, embeds = null }) {
   const box = infobox(page, { dm, me });
-  const body = h('div', { class: 'wiki-body' }, ...sections(page, { dm, me }), eventsList(page, { dm, me }), gallery(page, { dm, me }));
+  const body = h('div', { class: 'wiki-body' }, ...sections(page, { dm, me, embeds }), eventsList(page, { dm, me }), gallery(page, { dm, me }));
   return [h('div', { class: `wiki-layout${box ? ' with-box' : ''}` }, box, body)];
 }
 
-function sections(page, { dm, me = null }) {
+function sections(page, { dm, me = null, embeds = null }) {
   if (!page.sections.length) return [h('p', { class: 'muted' }, dm ? 'This page is empty. Press Edit to write it.' : 'No text on this page is available.')];
   return page.sections.map((s) => h('section', { class: `wiki-section${canonClass(s)}`, 'data-section': s.id },
     s.heading || canonClass(s) ? h('h3', {}, canonBadge(s, { me }), s.heading) : null,
     dm ? truthNote(s) : null,
     dm && s.by === 'ai' ? h('p', { class: 'wiki-by-ai muted small' }, 'Written by the AI. It keeps this section up to date (with your approval) until you change it.') : null,
     dm && s.available !== 'all' ? h('p', { class: 'wiki-available small' }, `Available to ${availableText(s.available, { section: true })}.`) : null,
-    h('div', { class: 'wiki-canon-text' }, ...(dm ? sectionBody(s.text) : [richText(s.text)])),
+    h('div', { class: 'wiki-canon-text' }, ...(dm ? sectionBody(s.text, embeds) : [richText(s.text, 'wiki-text', { embeds })])),
     sourceChips(s.sources, { as: me }),
     s.id ? sendButton(page, { section: s.id }, s.heading ? `The section "${s.heading}"` : 'A section', dm) : null,
     // A player's own lore (stage 6c): they can change it.
@@ -475,7 +498,7 @@ export function editor(page) {
 
   const addSection = (s = { heading: '', text: '', available: 'all' }) => {
     const heading = h('input', { value: s.heading, maxLength: 200, placeholder: 'Heading (optional)', 'aria-label': 'Section heading' });
-    const text = h('textarea', { rows: s.prompt ? 4 : 8, 'aria-label': template ? 'Writing prompt' : 'Section text', placeholder: template ? 'The writing prompt a new page shows here: what to write in this section.' : s.prompt || 'Markdown. [[Page name]] links a page. A block between ":::for Thorin" and ":::" is only for Thorin; ":::dm" is only for you. Paste or drop a picture to put it here.' });
+    const text = h('textarea', { rows: s.prompt ? 4 : 8, 'aria-label': template ? 'Writing prompt' : 'Section text', placeholder: template ? 'The writing prompt a new page shows here: what to write in this section.' : s.prompt || 'Markdown. [[Page name]] links a page; [[!Clue name]] puts a clue\'s words here (whoever can see the clue sees them). A block between ":::for Thorin" and ":::" is only for Thorin; ":::dm" is only for you. Paste or drop a picture to put it here.' });
     text.value = s.text;
     const addPictures = async (files) => {
       try {

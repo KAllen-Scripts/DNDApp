@@ -279,7 +279,7 @@ function drawMain() {
 }
 
 function pageView() {
-  const { page, mentioned_in: mentioned = [], unknown_names: unknown = [], on_maps: onMaps = [], from_sheet: fromSheet = null } = state.open;
+  const { page, mentioned_in: mentioned = [], unknown_names: unknown = [], on_maps: onMaps = [], from_sheet: fromSheet = null, embeds = {} } = state.open;
   const parent = page.parent && state.pages.find((p) => p.id === page.parent);
   // A player reads the page as the server gave it to them: no tools, nothing about who else it's for.
   if (!state.dm) {
@@ -289,7 +289,7 @@ function pageView() {
       h('div', { class: 'wiki-page-head' }, h('p', { class: 'wiki-meta muted small' }, [page.kind, parent && `in ${parent.title}`].filter(Boolean).join(' · '))),
       drawFromSheet(fromSheet, page),
       drawLore(page),
-      h('div', { class: 'wiki-content' }, ...pageContent(page, { dm: false, me: state.me })),
+      h('div', { class: 'wiki-content' }, ...pageContent(page, { dm: false, me: state.me, embeds })),
       mentioned.length ? h('p', { class: 'wiki-mentioned muted small' }, 'Mentioned in: ', ...mentioned.flatMap((m, i) => [i ? ', ' : null, pageLink(m.title, m.title)])) : null,
     );
   }
@@ -297,14 +297,14 @@ function pageView() {
     h('option', { value: '' }, 'As you see it'),
     ...state.players.map((p) => h('option', { value: String(p.id) }, `As ${p.character_name || p.name} would get it`)),
   );
-  const content = h('div', { class: 'wiki-content' }, ...[drawFromSheet(fromSheet, page), ...pageContent(page, { dm: true })].filter(Boolean));
+  const content = h('div', { class: 'wiki-content' }, ...[drawFromSheet(fromSheet, page), ...pageContent(page, { dm: true, embeds })].filter(Boolean));
   viewAs.addEventListener('change', async () => {
     const as = viewAs.value ? Number(viewAs.value) : null;
-    if (as == null) return content.replaceChildren(...[drawFromSheet(fromSheet, page), ...pageContent(page, { dm: true })].filter(Boolean));
+    if (as == null) return content.replaceChildren(...[drawFromSheet(fromSheet, page), ...pageContent(page, { dm: true, embeds })].filter(Boolean));
     try {
       const res = await state.guarded(() => api('GET', `${base()}/${page.id}?as=${as}`));
       content.replaceChildren(...(res.page
-        ? [h('p', { class: 'wiki-as muted small' }, `What ${playerName(as)} gets from this page:`), drawFromSheet(res.from_sheet && { ...res.from_sheet, mine: false }, res.page), ...pageContent(res.page, { dm: false, me: as })].filter(Boolean)
+        ? [h('p', { class: 'wiki-as muted small' }, `What ${playerName(as)} gets from this page:`), drawFromSheet(res.from_sheet && { ...res.from_sheet, mine: false }, res.page), ...pageContent(res.page, { dm: false, me: as, embeds: res.embeds })].filter(Boolean)
         : [h('p', { class: 'wiki-as muted' }, `Nothing on this page is available to ${playerName(as)}.`)]));
     } catch (err) {
       report(err);

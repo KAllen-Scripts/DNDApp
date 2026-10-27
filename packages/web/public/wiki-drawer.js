@@ -27,8 +27,9 @@ export async function openDrawer(id) {
   const box = drawerBox();
   let page;
   let onMaps = [];
+  let embeds = {};
   try {
-    ({ page, on_maps: onMaps = [] } = await state.guarded(() => api('GET', `${base()}/${id}`)));
+    ({ page, on_maps: onMaps = [], embeds = {} } = await state.guarded(() => api('GET', `${base()}/${id}`)));
   } catch (err) {
     return report(err);
   }
@@ -49,7 +50,7 @@ export async function openDrawer(id) {
       state.dm ? h('button', { type: 'button', class: 'ghost', onclick: () => go('edit') }, 'Edit') : null,
     ),
     drawCompass(page, { onMaps }),
-    h('div', { class: 'wiki-drawer-body wiki-content' }, ...pageContent(page, { dm: state.dm, me: state.me })),
+    h('div', { class: 'wiki-drawer-body wiki-content' }, ...pageContent(page, { dm: state.dm, me: state.me, embeds })),
   );
   box.hidden = false;
   box.querySelector('.wiki-drawer-close').focus({ preventScroll: true });

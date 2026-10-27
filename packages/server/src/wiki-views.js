@@ -3,7 +3,7 @@
  * or a player for View as): plain functions of the pages that viewer may see,
  * so nothing hidden reaches the page, not even in a count.
  */
-import { KIND_FAMILIES, kindFamily, wikiKey, wikiPieces, wikiLinks, wikiPictures as picturesIn, unlink, unpicture } from '@dndapp/shared/wiki.js';
+import { KIND_FAMILIES, kindFamily, wikiKey, wikiPieces, wikiLinks, wikiPictures as picturesIn, unlink, unpicture, embedNames, unembed } from '@dndapp/shared/wiki.js';
 
 /** A page as a card: enough for the cards and the preview shown over a link (its picture and its opening words). */
 export const summary = (p) => ({
@@ -12,6 +12,28 @@ export const summary = (p) => ({
   excerpt: excerpt(p),
   ...(p.player && { player: p.player }),
 });
+
+/**
+ * The pages a page embeds (`[[!Clue]]`, stage 7a), from the pages this viewer may see, by name (lower case):
+ * { id, title, kind, available, section, text, canon }. An embed is the page's opening section (a clue's "what the
+ * players find"; `opening` maps each page id to its first section's id, from the DM's pages), and reaches a player
+ * only when they may see that section. Embeds inside it aren't followed (no clue inside a clue).
+ */
+export function embedsIn(page, pages, opening) {
+  const names = new Set(page.sections.flatMap((s) => embedNames(s.text)).map(wikiKey));
+  if (!names.size) return {};
+  const out = {};
+  for (const p of pages) {
+    const key = [p.title, ...(p.aliases ?? [])].map(wikiKey).find((k) => names.has(k));
+    if (!key || p.id === page.id) continue;
+    const first = p.sections.find((s) => s.id === opening.get(p.id));
+    if (!first?.text.trim()) continue;
+    for (const k of [p.title, ...(p.aliases ?? [])].map(wikiKey).filter((x) => names.has(x))) {
+      out[k] = { id: p.id, title: p.title, kind: p.kind, available: p.available, section: first.id, section_available: first.available, text: unembed(first.text), canon: first.canon ?? 'true' };
+    }
+  }
+  return out;
+}
 
 function excerpt(p) {
   const plain = (p.sections.map((s) => wikiPieces(s.text).filter((x) => !x.block).map((x) => x.text).join(' ')).find((t) => t.trim()) ?? '');
