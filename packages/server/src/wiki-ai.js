@@ -24,7 +24,7 @@ import { z } from 'zod';
 import { renderRecord } from './kb/store.js';
 import { BadRequestError, NotFoundError } from './store.js';
 import { WIKI_LIMITS as L } from './wiki.js';
-import { narrowest, audienceOf, canSeeAudience, wikiKey, wikiPictures as picturesIn, PICTURE_RE } from '@dndapp/shared/wiki.js';
+import { narrowest, audienceOf, canSeeAudience, wikiKey, wikiPictures as picturesIn, PICTURE_RE, TONES } from '@dndapp/shared/wiki.js';
 import { json } from './db/index.js';
 import { CITATION_RE, normalizeSources } from '@dndapp/shared/citations.js';
 
@@ -44,11 +44,21 @@ const SectionSchema = z.object({
   sources: z.array(z.number().int()).describe('Ids of the records this section is written from (every fact in it must come from one of them)'),
 });
 
+// A relationship (stage 3e): a fact on a page, labelled with the tie, linking the other page. The AI never makes a
+// part planned or a player's account; it can only say the records call it a rumour.
+const FactSchema = z.object({
+  label: z.string().describe('The tie, from this page\'s side: Rival, Ally, Mother, Member of, Owes money to, Lives in…'),
+  value: z.string().describe('The other page as a [[link]], e.g. "[[Lord Vex]]", with a few words if needed'),
+  tone: z.enum(TONES).nullable().describe('friendly, neutral or hostile; null to let the label decide'),
+  canon: z.enum(['true', 'rumour']).describe('rumour when the records call it a rumour, unconfirmed or hearsay; true otherwise'),
+  sources: z.array(z.number().int()).describe('Ids of the records this tie comes from'),
+});
+
 export const ChangesSchema = z.object({
   changes: z.array(
     z.object({
-      action: z.enum(['new_page', 'update_section', 'add_section', 'reveal']),
-      page_id: z.string().nullable().describe('The existing page (update_section, add_section, reveal); null for new_page'),
+      action: z.enum(['new_page', 'update_section', 'add_section', 'reveal', 'set_fact']),
+      page_id: z.string().nullable().describe('The existing page (update_section, add_section, reveal, set_fact); null for new_page'),
       section_id: z.string().nullable().describe('The existing section (update_section, reveal); null otherwise'),
       new_page: z
         .object({
@@ -57,10 +67,12 @@ export const ChangesSchema = z.object({
           aliases: z.array(z.string()).describe('Other names and spellings'),
           parent_title: z.string().nullable().describe('An existing page this one belongs inside (a tavern inside its town), or null'),
           sections: z.array(SectionSchema),
+          facts: z.array(FactSchema).default([]).describe('Ties to other pages, as on set_fact'),
         })
         .nullable()
         .describe('Only for new_page'),
       section: SectionSchema.nullable().describe('The whole new section (update_section: it replaces the old text; add_section: a new one)'),
+      fact: FactSchema.nullable().default(null).describe('set_fact: a tie on the page (one with the same label is replaced); null otherwise'),
       players: z.array(z.number().int()).describe('reveal: the player user ids to make the section available to; [] otherwise'),
       sources: z.array(z.number().int()).describe('reveal: the records showing those players now know it; [] otherwise'),
       reason: z.string().describe('One sentence for the DM: why this change'),
@@ -83,6 +95,7 @@ Changes:
 - new_page: a page with its sections.
 - update_section: rewrite a section with what the records now say (give the whole new section). Sections marked "by dm" are the DM's own writing: only propose a change to one when the records contradict it, and say so in the reason.
 - add_section: a new section on an existing page.
+- set_fact: a relationship as a fact on an existing page: label it with the tie from that page's side (Rival, Ally, Mother, Member of, Serves, Owes money to, Lives in) and link the other page in the value ("[[Lord Vex]]"). One tie per fact; a fact with the same label is replaced. Set canon to rumour when the records call it a rumour, unconfirmed or hearsay. Give the records in sources. A new page can carry its ties in its facts.
 - reveal: when a record's known_by now includes players who can't yet see a section holding that same knowledge (its "available to" leaves them out), propose making it available to them. Name only players in that record's known_by, and the record in sources.
 
 Don't propose what's already waiting for the DM, or anything the DM rejected before unless the records have changed since. Return no changes if nothing needs changing.`;
@@ -194,7 +207,8 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
     const secs = page.sections.map(
       (s) => `<section id="${s.id}" heading="${s.heading}" by="${s.by}" available="${s.available === 'all' ? 'as the page' : renderAvailable(s.available, names)}">\n${s.text}\n</section>`,
     );
-    return [head, ...secs, '</page>'].join('\n');
+    const facts = page.facts.map((f) => `<fact label="${f.label}" by="${f.by ?? 'dm'}"${f.canon !== 'true' ? ` canon="${f.canon}"` : ''}>${f.value}</fact>`);
+    return [head, ...facts, ...secs, '</page>'].join('\n');
   }
 
   const describe = (p) =>
@@ -202,6 +216,8 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
       ? `new page "${p.title}"`
       : p.action === 'reveal'
         ? `reveal "${p.page_title} › ${p.section_heading}" to ${p.players.join(', ')}`
+        : p.action === 'set_fact'
+          ? `tie on "${p.page_title}": ${p.fact.label}: ${p.fact.value}`
         : `${p.action === 'add_section' ? 'new section' : 'change to'} "${p.page_title} › ${p.sections[0]?.heading ?? ''}"`;
 
   /** Pages the changed records seem to be about: named in them, or found by searching the wiki for each record. */
@@ -241,6 +257,23 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
   // ---------- turning the AI's answer into proposals ----------
 
   const clean = (s, max) => String(s ?? '').trim().slice(0, max);
+  /** One of the AI's ties, cleaned: { label, value, tone, canon, available, records }, or null. `available(audience)` narrows it. */
+  const cleanFact = (cid, playerIds, f, available) => {
+    const label = clean(f?.label, L.label);
+    const value = clean(f?.value, L.value);
+    if (!label || !value) return null;
+    const records = recordIds(f.sources);
+    return { label, value, tone: TONES.includes(f.tone) ? f.tone : null, canon: f.canon === 'rumour' ? 'rumour' : 'true', available: available(audienceFrom(cid, records, playerIds)), records };
+  };
+  /** An approved tie as the page keeps it: the records' citations copied, marked as the AI's. */
+  const factOf = (cid, f) => ({ label: f.label, value: f.value, ...(f.tone && { tone: f.tone }), canon: f.canon, available: f.available, sources: citationsFrom(cid, f.records), by: 'ai' });
+  const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
+
+  /** A part's "available to" inside a page: 'all' (as the page) when it's as wide as the page. */
+  const asPart = (pageAudience, audience) => {
+    const n = narrowest(pageAudience, audience);
+    return JSON.stringify(availableOf(n)) === JSON.stringify(availableOf(pageAudience)) ? 'all' : availableOf(n);
+  };
   const recordIds = (ids) => [...new Set((Array.isArray(ids) ? ids : []).map(Number).filter(Number.isInteger))].slice(0, 50);
   const cleanSection = (s) => ({ heading: clean(s.heading, L.heading), text: String(s.text ?? '').slice(0, L.text).trim() });
 
@@ -269,6 +302,7 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
         parent: parent?.id ?? null,
         page_available: availableOf(pageAudience),
         // A section as wide as the page is "as the page".
+        facts: (n.facts ?? []).map((f) => cleanFact(cid, playerIds, f, (a) => asPart(pageAudience, a))).filter(Boolean),
         sections: sections.map((s) => ({ heading: s.heading, text: s.text, records: s.records, available: JSON.stringify(availableOf(s.audience)) === JSON.stringify(availableOf(pageAudience)) ? 'all' : availableOf(s.audience) })),
       };
     }
@@ -283,6 +317,14 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
       const who = [...new Set(c.players.map(Number))].filter((id) => playerIds.includes(id) && (know == null || know.includes(id)) && !canSeeAudience({ userId: id }, now));
       if (!who.length) return null;
       return { ...base, ...pageBits, action: 'reveal', key: `reveal:${page.id}:${section.id}`, section_id: section.id, section_heading: section.heading, players: who.sort((a, b) => a - b), sections: [] };
+    }
+    if (c.action === 'set_fact') {
+      const pageAudience = audienceOf(page.available);
+      const was = page.facts.find((f) => wikiKey(f.label) === wikiKey(c.fact?.label));
+      // A change never widens: an existing fact keeps the narrowest of what it was and what the records say.
+      const fact = cleanFact(cid, playerIds, c.fact, (a) => asPart(pageAudience, was ? narrowest(audienceOf(was.available), a) : a));
+      if (!fact || (was && sameText(was.value, fact.value) && (was.tone ?? null) === fact.tone)) return null;
+      return { ...base, ...pageBits, action: 'set_fact', key: `${page.id}:fact:${wikiKey(fact.label)}`, fact, sections: [] };
     }
     if (!c.section) return null;
     const s = { ...cleanSection(c.section), records: recordIds(c.section.sources) };
@@ -310,7 +352,7 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
 
   /** Save a new proposal; it replaces one still waiting for the same thing. Skipped if the DM already rejected the same. */
   function add(cid, p) {
-    const same = (a) => (p.action === 'reveal' ? JSON.stringify(a.players) === JSON.stringify(p.players) : a.sections.length === p.sections.length && a.sections.every((s, i) => sameText(s.text, p.sections[i].text)));
+    const same = (a) => (p.action === 'reveal' ? JSON.stringify(a.players) === JSON.stringify(p.players) : p.action === 'set_fact' ? sameText(a.fact?.value, p.fact.value) : a.sections.length === p.sections.length && a.sections.every((s, i) => sameText(s.text, p.sections[i].text)));
     if (list(cid, 'rejected').some((r) => r.key === p.key && same(r))) return null;
     const now = new Date().toISOString();
     for (const old of list(cid, 'pending').filter((x) => x.key === p.key)) write(cid, { ...old, status: 'replaced', updated_at: now });
@@ -341,6 +383,10 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
         try {
           page = wiki.get(cid, p.page_id);
         } catch {}
+        if (p.action === 'set_fact') {
+          const now = page?.facts.find((f) => wikiKey(f.label) === wikiKey(p.fact.label)) ?? null;
+          return { ...p, page_title: page?.title ?? p.page_title, current_fact: now, page_available: page?.available ?? null, gone: !page };
+        }
         const section = page?.sections.find((s) => s.id === p.section_id) ?? null;
         return { ...p, page_title: page?.title ?? p.page_title, current: section && { heading: section.heading, text: section.text, available: section.available, by: section.by }, page_available: page?.available ?? null, gone: !page || (p.section_id != null && !section) };
       });
@@ -410,11 +456,21 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
         const parent = p.parent && wiki.list(cid).some((x) => x.id === p.parent) ? p.parent : null;
         const suggested = edits.use_picture === false ? null : suggestPicture(cid, p);
         const picture = suggested ? { id: (await wikiPictures.copy(cid, suggested, { by })).id, caption: '', available: 'all' } : null;
-        page = await wiki.create(cid, { title: edits.title ?? p.title, kind: edits.kind ?? p.kind, aliases: p.aliases, parent, available: edits.page_available ?? p.page_available, sections, picture }, { by });
+        page = await wiki.create(cid, { title: edits.title ?? p.title, kind: edits.kind ?? p.kind, aliases: p.aliases, parent, available: edits.page_available ?? p.page_available, sections, picture, facts: (p.facts ?? []).map((f) => factOf(cid, f)) }, { by });
       } else {
         const current = wiki.get(cid, p.page_id);
         let fields;
-        if (p.action === 'reveal') {
+        if (p.action === 'set_fact') {
+          // The DM's edits, if any; an existing fact the DM marked (a rumour, false, planned, an account) stays marked so.
+          const e = edits.fact ?? {};
+          const changed = ['label', 'value', 'tone'].some((k) => e[k] !== undefined && e[k] !== p.fact[k]);
+          const fact = { ...factOf(cid, p.fact), ...pick(e, ['label', 'value', 'available']), ...(e.tone !== undefined && { tone: e.tone }), ...(changed && { by: 'dm' }) };
+          const i = current.facts.findIndex((f) => wikiKey(f.label) === wikiKey(p.fact.label));
+          const facts = [...current.facts];
+          if (i < 0) facts.push(fact);
+          else facts[i] = { ...fact, ...(facts[i].canon !== 'true' && { canon: facts[i].canon }), ...(facts[i].truth != null && { truth: facts[i].truth }), ...(facts[i].owner != null && { owner: facts[i].owner }), sources: normalizeSources([...fact.sources, ...(facts[i].sources ?? [])]) };
+          fields = { facts };
+        } else if (p.action === 'reveal') {
           if (!current.sections.some((s) => s.id === p.section_id)) throw new BadRequestError('That section is gone from the page.');
           const who = (edits.players ?? p.players).map(Number).filter((uid) => p.players.includes(uid));
           if (!who.length) throw new BadRequestError('Choose at least one player.');

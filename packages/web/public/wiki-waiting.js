@@ -5,7 +5,8 @@
  */
 import { api, h } from './api.js';
 import { state, nav, base, status, report, availableText, playerName, sourceImg, SOURCE_NOUN } from './wiki-data.js';
-import { sectionBody, availablePicker } from './wiki-page.js';
+import { sectionBody, availablePicker, richText } from './wiki-page.js';
+import { TONES } from './shared/wiki.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -97,13 +98,13 @@ async function approveAll() {
 /** Who a proposed or current section is available to, in a line. */
 const sectionAvailable = (a) => h('p', { class: 'wiki-available small' }, a === 'all' ? 'Available as the page.' : `Available to ${availableText(a)}.`);
 
-const TAGS = { new_page: 'New page', update_section: 'Change', add_section: 'New section', reveal: 'Reveal' };
+const TAGS = { new_page: 'New page', update_section: 'Change', add_section: 'New section', reveal: 'Reveal', set_fact: 'Tie' };
 
 /** One of the AI's changes: what's there now beside what it proposes, and Approve, Edit, Reject. */
 function proposalCard(p) {
   const card = h('div', { class: 'wiki-proposal card' });
   const tag = p.dm_section ? 'Suggestion for your section' : TAGS[p.action];
-  const where = p.action === 'new_page' ? p.title : `${p.page_title}${p.action === 'reveal' ? ` › ${p.section_heading || '(opening section)'}` : p.action === 'update_section' && p.current?.heading ? ` › ${p.current.heading}` : ''}`;
+  const where = p.action === 'new_page' ? p.title : p.action === 'set_fact' ? `${p.page_title} › ${p.fact.label}` : `${p.page_title}${p.action === 'reveal' ? ` › ${p.section_heading || '(opening section)'}` : p.action === 'update_section' && p.current?.heading ? ` › ${p.current.heading}` : ''}`;
   const edits = { sections: p.sections.map(() => null) };
   const done = async (path, body, message) => {
     try {
@@ -122,9 +123,23 @@ function proposalCard(p) {
   let pagePicker = null;
   let playerBoxes = [];
   let usePicture = null;
+  let factEdit = null;
+  const factLine = (f) => h('div', { class: 'wiki-proposed-fact' }, h('strong', {}, `${f.label}: `), richText(f.value, 'wiki-fact-value'), f.canon && f.canon !== 'true' ? h('span', { class: 'muted small' }, ` (${f.canon})`) : null, sectionAvailable(f.available ?? 'all'));
   const draw = (editing) => {
     const parts = [];
-    if (p.action === 'reveal') {
+    if (p.action === 'set_fact') {
+      // A tie (stage 3e): what the page says now beside the AI's, and when editing, its words, tone and who it's for.
+      const label = h('input', { value: p.fact.label, maxLength: 60, 'aria-label': 'Proposed tie' });
+      const value = h('input', { value: p.fact.value, maxLength: 500, 'aria-label': 'Proposed tie to' });
+      const tone = h('select', { 'aria-label': 'How they feel' }, h('option', { value: '' }, 'From the label'), ...TONES.map((x) => h('option', { value: x, selected: p.fact.tone === x }, x[0].toUpperCase() + x.slice(1))));
+      const picker = availablePicker(p.fact.available, { section: true, label: 'Proposed tie available to' });
+      factEdit = editing ? { label, value, tone, picker } : null;
+      const proposed = editing ? h('div', { class: 'wiki-proposed wiki-fact-row' }, label, value, tone, picker.el) : h('div', { class: 'wiki-proposed' }, factLine(p.fact));
+      parts.push(p.current_fact
+        ? h('div', { class: 'wiki-compare' }, h('div', { class: 'wiki-now' }, h('div', { class: 'muted small' }, 'Now'), factLine(p.current_fact)), h('div', {}, h('div', { class: 'muted small' }, 'Proposed'), proposed))
+        : proposed);
+      if (p.current_fact && p.current_fact.canon !== 'true') parts.push(h('p', { class: 'muted small' }, `It stays marked ${p.current_fact.canon}, as you set it.`));
+    } else if (p.action === 'reveal') {
       playerBoxes = p.players.map((id) => h('label', {}, h('input', { type: 'checkbox', value: String(id), checked: true }), ` ${playerName(id)}`));
       parts.push(h('p', {}, 'Make this section available to ', ...playerBoxes, '?'));
       parts.push(h('p', { class: 'muted small' }, 'The records say they know it now. Nothing else on the page changes for them.'));
@@ -137,6 +152,7 @@ function proposalCard(p) {
         }
         parts.push(h('p', { class: 'muted small' }, [p.kind, p.aliases?.length && `also called ${p.aliases.join(', ')}`, p.parent && `inside ${state.pages.find((x) => x.id === p.parent)?.title ?? 'another page'}`].filter(Boolean).join(' · ')));
         parts.push(h('label', { class: 'small' }, 'Page available to ', pagePicker.el));
+        if (p.facts?.length) parts.push(h('div', { class: 'wiki-proposed-facts' }, h('div', { class: 'muted small' }, 'Ties'), ...p.facts.map(factLine)));
       }
       p.sections.forEach((s, i) => {
         const now = p.action === 'update_section' ? p.current : null;
@@ -166,6 +182,7 @@ function proposalCard(p) {
     const out = {};
     if (pagePicker) out.page_available = pagePicker.value();
     if (usePicture && !usePicture.checked) out.use_picture = false;
+    if (factEdit) out.fact = { label: factEdit.label.value.trim(), value: factEdit.value.value.trim(), tone: factEdit.tone.value || null, available: factEdit.picker.value() };
     if (edits.sections.some(Boolean)) out.sections = edits.sections.map((e) => (e ? { heading: e.heading.value.trim(), text: e.text.value, available: e.picker.value() } : {}));
     if (p.action === 'reveal') {
       out.players = playerBoxes.map((b) => b.querySelector('input')).filter((i) => i.checked).map((i) => Number(i.value));

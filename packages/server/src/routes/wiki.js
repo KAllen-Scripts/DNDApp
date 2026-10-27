@@ -44,7 +44,7 @@ export function registerWiki(app, r) {
 
   /** Chosen players must be players of this campaign. */
   function checkPlayers(cid, body) {
-    const own = [...(body.sections ?? []), ...(body.facts ?? []), ...(body.gallery ?? []), body.picture, body.banner].filter(Boolean).map((x) => x.available);
+    const own = [...(body.sections ?? []), ...(body.facts ?? []), ...(body.gallery ?? []), body.picture, body.banner, body.fact].filter(Boolean).map((x) => x.available);
     for (const a of [body.available, body.page_available, body.players, ...own]) {
       if (!Array.isArray(a)) continue;
       for (const id of a) if (auth.membership(cid, id)?.role !== 'player') throw new BadRequestError(`User ${id} isn't a player in this campaign.`);
@@ -274,6 +274,7 @@ export function registerWiki(app, r) {
       sections: z.array(z.object({ heading: fields.sections.element.shape.heading.optional(), text: z.string().max(L.text).optional(), available: available.optional() })).max(L.sections).optional(),
       players: z.array(z.number().int()).max(100).optional(),
       use_picture: z.boolean().optional(),
+      fact: z.object({ label: z.string().trim().min(1).max(L.label).optional(), value: z.string().trim().min(1).max(L.value).optional(), tone: z.enum(TONES).nullable().optional(), available: available.optional() }).optional(),
     }).parse(request.body ?? {}));
     const page = await wikiAI.approve(cid, request.params.id, edits, { by: request.user.id });
     return { page, proposals: wikiAI.count(cid) };

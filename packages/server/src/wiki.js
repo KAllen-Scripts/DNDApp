@@ -93,7 +93,7 @@ export function normalizeWikiPage(p = {}) {
     gallery: (Array.isArray(p.gallery) ? p.gallery : []).map((x) => normalizePicture(x)).filter(Boolean).slice(0, WIKI_LIMITS.gallery),
     // At a glance (an infobox): short facts like "Race: Half-elf", each with who it's available to ('all' = as the page).
     facts: (Array.isArray(p.facts) ? p.facts : [])
-      .map((f) => ({ label: String(f?.label ?? '').trim().slice(0, WIKI_LIMITS.label), value: String(f?.value ?? '').trim().slice(0, WIKI_LIMITS.value), available: normalizeAvailable(f?.available, 'all'), ...canonOf(f), ...sourcesOf(f), ...(TONES.includes(f?.tone) && { tone: f.tone }) }))
+      .map((f) => ({ label: String(f?.label ?? '').trim().slice(0, WIKI_LIMITS.label), value: String(f?.value ?? '').trim().slice(0, WIKI_LIMITS.value), available: normalizeAvailable(f?.available, 'all'), ...canonOf(f), ...sourcesOf(f), ...(TONES.includes(f?.tone) && { tone: f.tone }), ...(f?.by === 'ai' && { by: 'ai' }) }))
       .filter((f) => f.label || f.value)
       .slice(0, WIKI_LIMITS.facts),
     version: Number(p.version) || 1,
@@ -340,6 +340,14 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
           if (s.by) return s;
           const old = s.id && was.get(s.id);
           return { ...s, by: old?.by === 'ai' && old.text === s.text && old.heading === (s.heading ?? '').trim() ? 'ai' : 'dm' };
+        });
+      }
+      // The same for facts (a tie the AI added, stage 3e): one saved unchanged stays the AI's.
+      if (fields.facts) {
+        next.facts = fields.facts.map((f) => {
+          if (f.by) return f;
+          const old = before.facts.find((o) => o.by === 'ai' && wikiKey(o.label) === wikiKey(f.label) && o.value === String(f.value ?? '').trim());
+          return old ? { ...f, by: 'ai' } : f;
         });
       }
       if (fields.title != null && wikiKey(fields.title) !== wikiKey(before.title)) {
