@@ -10,7 +10,7 @@ import { WIKI_LIMITS as L } from '../wiki.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 import { SOURCE_KINDS } from '../wiki-pictures.js';
 import { wikiKey, wikiPieces, unlink, unpicture, audienceOf, canSeeAudience } from '@dndapp/shared/wiki.js';
-import { pageOnMaps, makePageFor } from '../wiki-maps.js';
+import { pageOnMaps, makePageFor, atlasLayers } from '../wiki-maps.js';
 import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass } from '../wiki-views.js';
 
 export function registerWiki(app, r) {
@@ -106,6 +106,20 @@ export function registerWiki(app, r) {
    * whose text means something like it (the search index's wiki parts, only
    * those the viewer may see), so "the guy with the eyepatch" finds Rennick.
    */
+  /**
+   * The Atlas's wiki layers on one map (`?map=`; without it, the first map at the top of the world): pins, faction
+   * lands, people and quests, from the pages the viewer may see. `?as=` a player: only what they may see, and only
+   * places revealed to them (their fog isn't recreated). `layers: null` when they can't see that map.
+   */
+  app.get('/campaigns/:cid/wiki/atlas', async (request) => {
+    const { cid, as, pages } = viewerPages(request);
+    const { map: mapId } = z.object({ map: z.string().max(40).optional() }).parse(request.query ?? {});
+    const all = maps.list(cid);
+    const map = mapId ? maps.get(cid, mapId) : all.find((m) => !all.some((o) => o.places.some((p) => p.to === m.id))) ?? all[0];
+    if (!map) return { layers: null, maps: [] };
+    return { layers: atlasLayers(map, pages, { as }), as };
+  });
+
   app.get('/campaigns/:cid/wiki/find', async (request) => {
     const { cid, as, pages } = viewerPages(request);
     const q = z.object({ q: z.string().trim().max(200).default('') }).parse(request.query ?? {}).q;

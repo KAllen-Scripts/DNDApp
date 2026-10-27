@@ -296,6 +296,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/wiki/wheel` | The Wheel: every kind family with its count and kinds, the party, and the pages as cards `{families, party, pages}` (`?as=<user id>`: only what that player may see) (DM only) |
 | GET | `/campaigns/:cid/wiki/home` | The Home: `{count, hero, last_session, families, recent, party, waiting}` (`?as=`: as that player, without `waiting`) (DM only) |
 | GET | `/campaigns/:cid/wiki/find?q=` | Find pages (Ctrl K): names first, then pages whose text matches `{pages: [{…, found_by: "name" \| "text"}]}` (`?as=`: only what that player may see) (DM only) |
+| GET | `/campaigns/:cid/wiki/atlas?map=` | The Atlas's wiki layers on a map (the top one without `map`): `{layers: {map, pins, lands, people, quests}}` (`?as=`: only what that player may see; `layers: null` if they can't see the map) (DM only) |
 | POST | `/campaigns/:cid/wiki/from-map` | A new page for a map place or token, linked to it `{map_id, kind: "place" \| "token", id}` → `{page, made}` (the page it has if it's linked already) (DM only) |
 | POST | `/campaigns/:cid/wiki/:pid/handout` | Send part of a page as a handout `{part: {section} \| {picture} \| {glance: true}, to: "everyone" \| [player ids], share?}` → `{handout, page, page_hidden}` (DM only) |
 | GET | `/campaigns/:cid/wiki/:pid/compass` | A page's compass: `{family, chain, children, links_to, linked_from}` (`?as=`: as that player; `compass: null` if they can't see the page) (DM only) |

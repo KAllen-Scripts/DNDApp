@@ -164,3 +164,38 @@ test('wiki handouts: a section goes as a handout without its DM and :::for block
     await t.cleanup();
   }
 });
+
+test("wiki atlas: a map's layers have pins with counts, faction lands, people and quests, and as a player only what they may see", async () => {
+  const t = await setup();
+  try {
+    const { map, base, mill, lady } = await world(t);
+    const make = async (body) => (await t.request('POST', `/campaigns/${t.campaign.id}/wiki`, { body })).json().page;
+    const hand = await make({ title: 'The Pale Hand', kind: 'cult', available: 'dm', sections: all('Secret.') });
+    const bess = await make({ title: 'Old Bess', kind: 'npc', available: 'all', sections: all('Miller.'), facts: [{ label: 'Where they are', value: '[[Hollow Mill]]', available: 'all' }] });
+    await make({ title: 'Find the flour', kind: 'quest', available: 'all', sections: all('Flour is missing.'), facts: [{ label: 'Given by', value: '[[Old Bess]]', available: 'all' }] });
+    await make({ title: 'The cellar', kind: 'building', parent: mill.id, available: 'dm', sections: all('Dark.') });
+    await t.request('PATCH', `${base}/places`, { body: { add: { name: 'Hollow Mill', x: 100, y: 100, revealed: true, page: { id: mill.id } } } });
+    await t.request('PATCH', `${base}/places`, { body: { add: { name: 'Marsh', x: 300, y: 300, points: [[250, 250], [350, 250], [350, 350]], page: { id: hand.id } } } });
+    await t.request('POST', `${base}/tokens`, { body: { kind: 'npc', name: 'Ghost', x: 200, y: 200, hidden: true, page: { id: lady.id } } });
+
+    const dm = (await t.request('GET', `/campaigns/${t.campaign.id}/wiki/atlas?map=${map.id}`)).json().layers;
+    const mill_pin = dm.pins.find((p) => p.page.id === mill.id);
+    assert.deepEqual(mill_pin.counts, { inside: 1, people: 1, quests: 1 });
+    assert.deepEqual(dm.lands.map((l) => l.page.title), ['The Pale Hand']);
+    assert.deepEqual(dm.people.map((p) => [p.page.title, p.from]).sort(), [['Old Bess', 'place'], ['The Grey Lady', 'token']]);
+    assert.deepEqual(dm.quests.map((q) => [q.page.title, q.from]), [['Find the flour', 'given_by']]);
+    assert.deepEqual((await t.request('GET', `/campaigns/${t.campaign.id}/wiki/atlas`)).json().layers.map.id, map.id, 'the top map without ?map');
+
+    const sam = (await t.request('GET', `/campaigns/${t.campaign.id}/wiki/atlas?map=${map.id}&as=${t.sam.id}`)).json().layers;
+    assert.deepEqual(sam.pins.map((p) => p.page.title), ['Hollow Mill'], 'the hidden place and the cult are left out');
+    assert.deepEqual(sam.pins[0].counts, { inside: 0, people: 1, quests: 1 }, 'the cellar is not counted');
+    assert.deepEqual(sam.lands, []);
+    assert.deepEqual(sam.people.map((p) => p.page.title), ['Old Bess'], 'not the hidden token');
+    assert.ok(!JSON.stringify(sam).includes(hand.id));
+
+    await t.request('PATCH', base, { body: { shown: false } });
+    assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/wiki/atlas?map=${map.id}&as=${t.sam.id}`)).json().layers, null, 'a map they cannot see');
+  } finally {
+    await t.cleanup();
+  }
+});

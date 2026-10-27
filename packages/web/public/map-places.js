@@ -285,7 +285,9 @@ export function placeDialog({ at = null, place = null }) {
   const map = state.current;
   if (!map) return;
   const dialog = $('#map-dialog');
-  const name = h('input', { value: place?.name ?? '', maxLength: 80, required: true, placeholder: 'Millbrook' });
+  // Put on the map from a wiki page (the Atlas): named after it and linked to it.
+  const forPage = !place ? state.placeFor : null;
+  const name = h('input', { value: place?.name ?? forPage?.title?.slice(0, 80) ?? '', maxLength: 80, required: true, placeholder: 'Millbrook' });
   const groups = [...new Set(state.maps.flatMap((m) => (m.places ?? []).map((p) => p.group)).filter(Boolean))].sort();
   const group = h('input', { value: place?.group ?? '', maxLength: 40, placeholder: 'Towns', list: 'map-place-group-list' });
   const groupList = h('datalist', { id: 'map-place-group-list' }, ...groups.map((g) => new Option(g, g)));
@@ -306,7 +308,7 @@ export function placeDialog({ at = null, place = null }) {
   // An area on a world or region map can have its own random encounters (a forest, the marshes).
   const area = !!(place?.points ?? at?.points) && isPinMap(map);
   const enc = area ? encounterFields(place?.encounters ?? null, { what: 'in this area (instead of the map’s)' }) : null;
-  const wikiLink = wikiPageField(place?.page ?? null, place ? { kind: 'place', id: place.id } : null);
+  const wikiLink = wikiPageField(place?.page ?? forPage ?? null, place ? { kind: 'place', id: place.id } : null);
   const save = async () => {
     const r = who.read();
     let page;
@@ -350,7 +352,7 @@ export function placeDialog({ at = null, place = null }) {
       ),
     ),
   );
-  dialog.onclose = null;
+  dialog.onclose = forPage ? () => state.placeForDone?.() : null;
   dialog.showModal();
   if (!place) name.focus();
 }

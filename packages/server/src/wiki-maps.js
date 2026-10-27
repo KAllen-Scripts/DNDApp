@@ -1,4 +1,6 @@
 import { NotFoundError } from './store.js';
+import { kindFamily, wikiKey, wikiLinks } from '@dndapp/shared/wiki.js';
+import { summary } from './wiki-views.js';
 
 /**
  * Where the wiki meets the maps. Maps own the geography and the wiki owns the
@@ -91,4 +93,62 @@ export async function makePageFor({ wiki, maps, wikiPictures }, cid, { map_id, k
     if (x) x.page = { id: page.id, title: page.title };
   }, { by, reason: 'wiki page made' });
   return { page, made: true };
+}
+
+/** The family colour key of a page, and what the Atlas needs to draw it. */
+const atlasPage = (p) => ({ ...summary(p), family: kindFamily(p.kind) });
+
+const shownToViewer = (thing, uid, { revealed = 'revealed', to = 'revealed_to' } = {}) => !!thing[revealed] && (thing[to] == null || thing[to].includes(uid));
+
+/**
+ * The Atlas's wiki layers for one map, from the pages this viewer may see (`pages`, filtered already) and, as a
+ * player (`as`), only the places revealed to them and tokens not hidden (their fog isn't recreated):
+ * - pins: places with a page, each with counts of what's inside it, the people there and its quests;
+ * - lands: areas whose page is a faction's;
+ * - people: tokens with a person's page, and people whose "Where they are" names a place pinned here;
+ * - quests: quests whose "Where" names a place pinned here, or whose "Given by" names someone shown here.
+ * Returns null when the viewer can't see the map.
+ */
+export function atlasLayers(map, pages, { as = null } = {}) {
+  if (as != null && !shownToViewer(map, as, { revealed: 'shown', to: 'shown_to' })) return null;
+  const byId = new Map(pages.map((p) => [p.id, p]));
+  const byName = new Map();
+  for (const p of pages) for (const n of [p.title, ...(as == null ? p.aliases : [])]) if (!byName.has(wikiKey(n))) byName.set(wikiKey(n), p);
+  const linked = (p, labels) => p.facts.filter((f) => labels.includes(wikiKey(f.label))).flatMap((f) => wikiLinks(f.value)).map((n) => byName.get(wikiKey(n))).filter(Boolean);
+  const places = map.places.filter((p) => p.page && byId.has(p.page.id) && (as == null || shownToViewer(p, as)));
+  const at = new Map(places.map((p) => [p.page.id, p]));
+  const people = [];
+  for (const t of map.tokens) {
+    const page = t.page && byId.get(t.page.id);
+    if (!page || kindFamily(page.kind) !== 'person' || (as != null && t.hidden)) continue;
+    people.push({ x: t.x, y: t.y, from: 'token', token_id: t.id, page: atlasPage(page) });
+  }
+  const placed = new Set(people.map((x) => x.page.id));
+  for (const p of pages) {
+    if (kindFamily(p.kind) !== 'person' || placed.has(p.id)) continue;
+    const where = linked(p, ['where they are', 'where', 'location']).map((x) => at.get(x.id)).find(Boolean);
+    if (where) {
+      people.push({ x: where.x, y: where.y, from: 'place', place_id: where.id, page: atlasPage(p) });
+      placed.add(p.id);
+    }
+  }
+  const personAt = new Map(people.map((x) => [x.page.id, x]));
+  const quests = [];
+  for (const p of pages) {
+    if (kindFamily(p.kind) !== 'quest') continue;
+    const where = linked(p, ['where', 'location']).map((x) => at.get(x.id)).find(Boolean);
+    const giver = !where && linked(p, ['given by']).map((x) => personAt.get(x.id)).find(Boolean);
+    if (where) quests.push({ x: where.x, y: where.y, from: 'where', place_id: where.id, page: atlasPage(p) });
+    else if (giver) quests.push({ x: giver.x, y: giver.y, from: 'given_by', place_id: giver.place_id ?? null, page: atlasPage(p) });
+  }
+  const count = (list, placeId) => list.filter((x) => x.place_id === placeId).length;
+  const pins = places.map((pl) => {
+    const page = byId.get(pl.page.id);
+    return {
+      place_id: pl.id, name: pl.name, x: pl.x, y: pl.y, points: pl.points ?? null, to: pl.to ?? null, page: atlasPage(page),
+      counts: { inside: pages.filter((x) => x.parent === page.id).length, people: count(people, pl.id), quests: count(quests, pl.id) },
+    };
+  });
+  const lands = pins.filter((x) => x.points && x.page.family === 'faction').map((x) => ({ place_id: x.place_id, points: x.points, page: x.page }));
+  return { map: { id: map.id, name: map.name }, pins, lands, people, quests };
 }

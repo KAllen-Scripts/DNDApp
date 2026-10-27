@@ -9,8 +9,9 @@
  * the server decides where a token really ends up.
  */
 import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from './api.js';
-import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, EFFORTS, playersMap, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, distanceToWall, inTemplate, snapTemplatePoint, groundAt, tokenTall, bridgeAt, isUnder, isPinMap, snapRoadPoint } from './shared/map.js';
+import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, EFFORTS, playersMap, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, distanceToWall, inTemplate, snapTemplatePoint, groundAt, tokenTall, bridgeAt, isUnder, isPinMap, snapRoadPoint, parentOf } from './shared/map.js';
 import { nav as wikiNav } from './wiki-data.js';
+import { renderWikiLayers, initWikiLayers } from './map-wiki.js';
 import { PICK_KEY, SHOW_GRID_KEY, SHOW_WALLS_KEY, WALLS_EFFORT_KEY, base, downloadUvtt, report, state, status } from './map-state.js';
 import { canChangeTemplate, placeTemplate, renderTemplates, selectTemplate, templateControls, templateDialog, templateMove, templateUp } from './map-templates.js';
 import { openShop } from './merchants.js';
@@ -148,6 +149,7 @@ export async function show(map) {
   state.ruler = null;
   state.fitted = false;
   if (map) storage.set(PICK_KEY(), map.id);
+  document.dispatchEvent(new CustomEvent('dndmapshown', { detail: { id: map?.id ?? null } }));
   renderPicker();
   render();
   if (!map) return;
@@ -242,6 +244,7 @@ export function render() {
     $('#map-links').replaceChildren();
     renderRoutes();
     renderPlaces();
+    renderWikiLayers();
     $('#map-templates').replaceChildren();
     $('#map-ruler-line').replaceChildren();
     renderSelection();
@@ -271,6 +274,7 @@ export function render() {
   renderLinks();
   renderPlaces();
   renderPins();
+  renderWikiLayers();
   renderSelection();
   renderFogTools();
   renderWallDraft();
@@ -1406,6 +1410,9 @@ export async function openMapAt(id, at = null) {
   return true;
 }
 
+/** Fit the map on screen again (the wiki's Atlas moves the map into a box of another size). */
+export const fitMap = () => state.current && fit();
+
 /** Move the view so this point of the map is in the middle of it (same zoom and turn). */
 function centerOn(at) {
   const box = $('#map-view').getBoundingClientRect();
@@ -1581,9 +1588,49 @@ function zoomAt(px, py, factor) {
   const box = $('#map-view').getBoundingClientRect();
   const min = Math.min(box.width / map.image.width, box.height / map.image.height) / 2;
   const k = Math.min(MAX_ZOOM, Math.max(min, state.view.k * factor));
+  if ('browse' in document.documentElement.dataset && zoomThrough(px, py, factor, k, min * 2)) return;
   const f = k / state.view.k;
   state.view = { ...state.view, k, x: px - (px - state.view.x) * f, y: py - (py - state.view.y) * f };
   applyView();
+}
+
+/**
+ * In the wiki's Atlas, zoom goes through the maps: far enough into a place that opens a map goes into that map,
+ * and out past the whole map goes up to the one it's inside, zoomed in on its place. True when it went.
+ */
+let throughAt = 0;
+function zoomThrough(px, py, factor, k, fitK) {
+  const map = state.current;
+  if (Date.now() - throughAt < 700) return true;
+  const go = (to, after) => {
+    throughAt = Date.now();
+    const view = $('#map-view');
+    view.classList.remove('zoom-in', 'zoom-out');
+    void view.offsetWidth;
+    view.classList.add(factor > 1 ? 'zoom-in' : 'zoom-out');
+    show(to).then(after);
+    return true;
+  };
+  if (factor > 1 && k >= Math.min(MAX_ZOOM * 0.9, fitK * 5)) {
+    const { x, y } = toImage(px + $('#map-view').getBoundingClientRect().left, py + $('#map-view').getBoundingClientRect().top);
+    const place = (map.places ?? []).find((p) => p.to && (p.points ? pointInPolygon(x, y, p.points) : Math.hypot(p.x - x, p.y - y) * state.view.k < 40));
+    const target = place && state.maps.find((m) => m.id === place.to);
+    if (target) return go(target, () => {});
+  }
+  if (factor < 1 && state.view.k <= fitK / 2 + 1e-9) {
+    const up = parentOf(state.maps, map.id);
+    const target = up && state.maps.find((m) => m.id === up.map.id);
+    if (target) {
+      return go(target, () => {
+        if (state.current !== target) return;
+        const box = $('#map-view').getBoundingClientRect();
+        const kk = Math.min(MAX_ZOOM * 0.8, Math.min(box.width / target.image.width, box.height / target.image.height) * 3);
+        state.view = { ...state.view, k: kk };
+        centerOn(up.place.points ? areaMiddle(up.place) : up.place);
+      });
+    }
+  }
+  return false;
 }
 
 /** Turn the map by `angle` (radians, clockwise) around a point of the view (a player's own view, like zoom). */
@@ -2132,6 +2179,7 @@ export function stopMaps() {
 }
 
 export function initMapActions() {
+  initWikiLayers();
   const view = $('#map-view');
   view.addEventListener('pointerdown', viewDown);
   view.addEventListener('pointermove', viewMove);
