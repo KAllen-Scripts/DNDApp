@@ -23,12 +23,14 @@ import { wikiKey, KIND_FAMILIES } from './shared/wiki.js';
 import { state, nav, base, status, report, availableText, playerName, pictureImg, clearPictures, fam, kindBadge, matchesFilter } from './wiki-data.js';
 import { pageLink, hidePreview, hero, pageContent, editor } from './wiki-page.js';
 import { drawReview } from './wiki-waiting.js';
+import { resetSpace } from './wiki-space.js';
 
 const $ = (sel) => document.querySelector(sel);
 
 export async function loadWiki({ campaignId, guarded }) {
   clearTimeout(state.poll);
   clearPictures();
+  resetSpace();
   Object.assign(state, { campaignId, guarded, pages: [], players: [], filter: '', kindFilter: null, tagFilter: null, open: null, view: 'page', as: null, proposals: 0, aiRun: null, poll: null });
   $('#wiki-filter').value = '';
   status('');
@@ -178,8 +180,9 @@ function drawMain() {
   const main = $('#wiki-main');
   hidePreview();
   const reading = !!state.open || state.view === 'review';
-  $('#tab-wiki').classList.toggle('wiki-reading', reading);
+  $('#wiki-view').classList.toggle('wiki-reading', reading);
   drawReviewButton();
+  nav.routed();
   if (state.view === 'review') return drawReview();
   if (reading) queueMicrotask(() => main.prepend(phoneBack()));
   if (!state.open) return drawHome();

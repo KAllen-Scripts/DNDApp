@@ -19,6 +19,7 @@ import { setRestsCampaign, initRests } from './rests.js';
 import { setSettingsCampaign, initSettings } from './campaign-settings.js';
 import { loadArchivist, initArchivistActions } from './archivist.js';
 import { loadWiki } from './wiki.js';
+import { setSpace, spaceInUrl, routeFromUrl, initSpace } from './wiki-space.js';
 import { loadCreatures, initCreatureActions } from './creatures.js';
 import { loadItems, initItemActions } from './items.js';
 import { loadMerchants, initMerchantActions, merchantsOpened } from './merchants.js';
@@ -274,6 +275,11 @@ async function enterCampaign(campaign) {
     isDm ? loadItems({ campaignId: campaign.id, guarded }) : null,
     loadMerchants({ campaignId: campaign.id, guarded, isDm }),
   ]);
+  // Reloaded in the wiki's space (or a popped-out wiki): back to the page the address names.
+  if (isDm && (spaceInUrl() || WINDOW_TAB === 'wiki')) {
+    if (!WINDOW_TAB) showTab('wiki', { push: false });
+    await routeFromUrl();
+  }
 }
 
 const base = () => `/campaigns/${state.campaign.id}`;
@@ -312,11 +318,21 @@ for (const button of document.querySelectorAll('.logout')) {
 // ---------- tabs ----------
 
 // The tab to open on: chosen under Look (look-boot.js), Ask unless changed.
-let currentTab = window.dndLook.get().startTab;
+// An address in the wiki's space (a reload, a link) opens there.
+let currentTab = spaceInUrl() && !WINDOW_TAB ? 'wiki' : window.dndLook.get().startTab;
 
-/** Show a tab. On the map, another panel can be beside it too (sheet-place.js). */
-function showTab(name) {
+// The table's tab to go back to from the wiki's space.
+let tableTab = currentTab === 'wiki' ? 'ask' : currentTab;
+
+/**
+ * Show a tab. On the map, another panel can be beside it too (sheet-place.js).
+ * The Wiki is a space of its own (wiki-space.js): `push` puts going in or out
+ * of it in the browser's history, so Back returns (not when Back brought us here).
+ */
+function showTab(name, { push = true } = {}) {
   currentTab = name;
+  if (name !== 'wiki') tableTab = name;
+  setSpace(name === 'wiki' ? 'wiki' : 'table', { push: push && !WINDOW_TAB });
   const beside = name === 'map' ? besidePanel() : null; // never a tab this person doesn't have (sheet-place.js)
   for (const t of document.querySelectorAll('[data-tab]')) {
     const on = t.dataset.tab === name;
@@ -814,6 +830,18 @@ initSheetActions();
 phoneMenu($('.sheet-bar'), { label: 'Sheet: review, upload, download, print, pop out', keep: '#sheet-status, .sheet-modes' });
 phoneMenu($('#gear-add'), { label: 'More ways to add', keep: '#gear-kind, #gear-name, #dl-gear, button[type=submit], #gear-status' });
 initSheetPlace({ onChange: () => showTab(currentTab), currentTab: () => currentTab });
+initSpace({ table: WINDOW_TAB ? null : () => showTab(tableTab) });
+// Back and Forward in and out of the wiki's space, and between its pages.
+window.addEventListener('popstate', async () => {
+  if (WINDOW_TAB && WINDOW_TAB !== 'wiki') return;
+  if (!spaceInUrl() && !WINDOW_TAB) {
+    if (currentTab === 'wiki') showTab(tableTab, { push: false });
+    return;
+  }
+  if ($('[data-tab=wiki]').hidden) return;
+  if (currentTab !== 'wiki') showTab('wiki', { push: false });
+  await guarded(routeFromUrl).catch(() => {});
+});
 showTab(currentTab);
 initMapActions();
 phoneSheet($('#map-main-bar'), $('#map-more')); // on a phone, ⋯ opens all the map's tools from the bottom

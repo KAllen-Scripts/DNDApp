@@ -20,7 +20,7 @@ const MIN_WIDTH = 320; // px
 const MIN_MAP = 320; // the map keeps at least this much
 const DEFAULT_WIDTH = 540;
 const PANELS = ['sheet', 'inventory', 'creatures', 'items', 'merchants', 'ask', 'notes', 'handouts', 'archivist'];
-const TABS = [...PANELS, 'map'];
+const TABS = [...PANELS, 'map', 'wiki'];
 
 const params = new URLSearchParams(location.search);
 /** The tab this page shows on its own when it is a popped-out window, or null. */
