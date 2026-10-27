@@ -223,3 +223,43 @@ export function guessTone(label) {
 
 /** The tone a fact is drawn with: the DM's choice, or the guess. */
 export const factTone = (fact) => (TONES.includes(fact?.tone) ? fact.tone : guessTone(fact?.label));
+
+/**
+ * A player character's page (stage 6b) shows parts of its player's sheet, drawn live from the sheet and never
+ * copied into the wiki. The sheet is private to its player: the DM and the player always see these parts; the
+ * other players only the ones the player shares (`sheet_share` on the page).
+ */
+export const SHEET_PARTS = [
+  { key: 'basics', label: 'Race, class and level' },
+  { key: 'appearance', label: 'Appearance' },
+  { key: 'backstory', label: 'Backstory' },
+  { key: 'allies', label: 'Allies and organisations' },
+];
+const SHEET_KEYS = SHEET_PARTS.map((p) => p.key);
+
+export const normalizeSheetShare = (v) => SHEET_KEYS.filter((k) => Array.isArray(v) && v.includes(k));
+
+/** The parts of a sheet for its character's page, only `keys`: { facts: [{ part, label, value }], sections: [{ part, heading, text }] }. */
+export function sheetParts(sheet, keys = SHEET_KEYS) {
+  const want = new Set(keys);
+  const facts = [];
+  const sections = [];
+  const text = (v) => String(v ?? '').trim();
+  if (want.has('basics')) {
+    const classes = (sheet?.classes ?? []).filter((c) => text(c.name));
+    if (text(sheet?.race)) facts.push({ part: 'basics', label: 'Race', value: text(sheet.race) });
+    if (classes.length) {
+      facts.push({ part: 'basics', label: classes.length > 1 ? 'Classes' : 'Class', value: classes.map((c) => `${text(c.name)}${text(c.subclass) ? ` (${text(c.subclass)})` : ''}${classes.length > 1 ? ` ${c.level || 1}` : ''}`).join(', ') });
+      facts.push({ part: 'basics', label: 'Level', value: String(classes.reduce((n, c) => n + (Number(c.level) || 1), 0)) });
+    }
+  }
+  if (want.has('appearance')) {
+    const looks = [['Age', 'age'], ['Height', 'height'], ['Weight', 'weight'], ['Eyes', 'eyes'], ['Skin', 'skin'], ['Hair', 'hair']]
+      .filter(([, k]) => text(sheet?.[k])).map(([label, k]) => ({ part: 'appearance', label, value: text(sheet[k]) }));
+    facts.push(...looks);
+    if (text(sheet?.appearance)) sections.push({ part: 'appearance', heading: 'Appearance', text: text(sheet.appearance) });
+  }
+  if (want.has('backstory') && text(sheet?.backstory)) sections.push({ part: 'backstory', heading: 'Backstory', text: text(sheet.backstory) });
+  if (want.has('allies') && text(sheet?.allies)) sections.push({ part: 'allies', heading: 'Allies and organisations', text: text(sheet.allies) });
+  return { facts, sections };
+}

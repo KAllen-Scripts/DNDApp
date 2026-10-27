@@ -24,7 +24,7 @@ function matcher() {
 
 /** Make the names of pages in `root`'s text into links (not inside links, buttons or code). */
 export function markNames(root) {
-  // Only in a campaign where this person is the DM (the list stays loaded after switching to another campaign).
+  // Only where the wiki is loaded: the DM's, or a player's own version (only the pages they may see).
   if (!state.pages?.length || !root || document.querySelector('[data-tab=wiki]')?.hidden) return;
   const { re, byKey } = matcher();
   if (!re) return;

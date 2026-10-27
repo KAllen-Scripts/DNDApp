@@ -56,7 +56,7 @@ test('wiki canon: the DM marks a part false with its truth, the Truth toggle and
 
     // As a player: the falsehood is a rumour, the truth and the planned fact are gone.
     page.type('#wiki-main select[aria-label="View as"]', String(t.alex.id));
-    await page.waitFor(() => page.text('#wiki-main').includes('What Ask can tell'));
+    await page.waitFor(() => page.text('#wiki-main').includes('gets from this page'));
     const content = page.$('#wiki-main .wiki-content');
     assert.equal(content.querySelectorAll('.canon-false').length, 0);
     assert.equal(content.querySelectorAll('.wiki-section.canon-rumour').length, 2);

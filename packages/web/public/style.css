@@ -2537,3 +2537,16 @@ button.wiki-tile { text-align: left; border: 1px solid var(--border); color: inh
 #tab-wiki[data-player] #wiki-new,
 #tab-wiki[data-player] #wiki-review,
 #tab-wiki[data-player] select[aria-label="View as"] { display: none; }
+
+/* A character's page (stage 6b): their sheet's parts, drawn live, and what the other players see. */
+.wiki-from-sheet { border: 1px solid var(--border); border-radius: var(--radius); padding: 0.6rem 0.9rem; margin: 0 0 0.9rem; background: var(--surface); }
+.wiki-from-sheet h3 { margin: 0 0 6px; font-size: 1rem; }
+.wiki-from-sheet h4 { margin: 10px 0 2px; font-size: .9rem; }
+.wiki-sheet-facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
+.wiki-sheet-facts dt { color: var(--muted); }
+.wiki-sheet-facts dd { margin: 0; }
+.wiki-sheet-text { white-space: pre-wrap; margin: 0; }
+.wiki-sheet-share { border: 0; padding: 8px 0 0; margin: 8px 0 0; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.wiki-sheet-share legend { padding: 0; color: var(--muted); }
+.wiki-character-offers { margin: 0 0 14px; }
+.wiki-wheel-member.has-page { cursor: pointer; }

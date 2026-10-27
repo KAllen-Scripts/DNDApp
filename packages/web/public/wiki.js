@@ -35,6 +35,7 @@ import { drawCompass } from './wiki-compass.js';
 import { drawOnMap } from './wiki-onmap.js';
 import { drawAtlas, leaveAtlas, pickAtlasMap } from './wiki-atlas.js';
 import './wiki-handout.js';
+import { drawFromSheet } from './wiki-sheet.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -277,7 +278,7 @@ function drawMain() {
 }
 
 function pageView() {
-  const { page, mentioned_in: mentioned = [], unknown_names: unknown = [], on_maps: onMaps = [] } = state.open;
+  const { page, mentioned_in: mentioned = [], unknown_names: unknown = [], on_maps: onMaps = [], from_sheet: fromSheet = null } = state.open;
   const parent = page.parent && state.pages.find((p) => p.id === page.parent);
   // A player reads the page as the server gave it to them: no tools, nothing about who else it's for.
   if (!state.dm) {
@@ -285,6 +286,7 @@ function pageView() {
       hero(page),
       drawCompass(page, { onMaps: [] }),
       h('div', { class: 'wiki-page-head' }, h('p', { class: 'wiki-meta muted small' }, [page.kind, parent && `in ${parent.title}`].filter(Boolean).join(' · '))),
+      drawFromSheet(fromSheet, page),
       h('div', { class: 'wiki-content' }, ...pageContent(page, { dm: false, me: state.me })),
       mentioned.length ? h('p', { class: 'wiki-mentioned muted small' }, 'Mentioned in: ', ...mentioned.flatMap((m, i) => [i ? ', ' : null, pageLink(m.title, m.title)])) : null,
     );
@@ -293,14 +295,14 @@ function pageView() {
     h('option', { value: '' }, 'As you see it'),
     ...state.players.map((p) => h('option', { value: String(p.id) }, `As ${p.character_name || p.name} would get it`)),
   );
-  const content = h('div', { class: 'wiki-content' }, ...pageContent(page, { dm: true }));
+  const content = h('div', { class: 'wiki-content' }, ...[drawFromSheet(fromSheet, page), ...pageContent(page, { dm: true })].filter(Boolean));
   viewAs.addEventListener('change', async () => {
     const as = viewAs.value ? Number(viewAs.value) : null;
-    if (as == null) return content.replaceChildren(...pageContent(page, { dm: true }));
+    if (as == null) return content.replaceChildren(...[drawFromSheet(fromSheet, page), ...pageContent(page, { dm: true })].filter(Boolean));
     try {
       const res = await state.guarded(() => api('GET', `${base()}/${page.id}?as=${as}`));
       content.replaceChildren(...(res.page
-        ? [h('p', { class: 'wiki-as muted small' }, `What Ask can tell ${playerName(as)} from this page:`), ...pageContent(res.page, { dm: false, me: as })]
+        ? [h('p', { class: 'wiki-as muted small' }, `What ${playerName(as)} gets from this page:`), drawFromSheet(res.from_sheet && { ...res.from_sheet, mine: false }, res.page), ...pageContent(res.page, { dm: false, me: as })].filter(Boolean)
         : [h('p', { class: 'wiki-as muted' }, `Nothing on this page is available to ${playerName(as)}.`)]));
     } catch (err) {
       report(err);
