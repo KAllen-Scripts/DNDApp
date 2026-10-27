@@ -12,6 +12,7 @@ import { state as mapState } from './map-state.js';
 import { state, nav, base, report, pictureImg, fam, kindBadge } from './wiki-data.js';
 import { drawWheel } from './wiki-wheel.js';
 import { miniRibbon } from './mini-views.js';
+import { openMakeUp } from './wiki-write.js';
 
 /** Draw the hub into `box` (it fills in when the server answers). */
 export async function drawHub(box) {
@@ -75,6 +76,10 @@ export async function drawHub(box) {
           atlasTile(tile('⌖', 'Atlas', 'Where: your maps, with their pages', '#/atlas')),
           tile('⁂', 'Web', 'Who: people and how they are tied', '#/web'),
           timelineTile(tile('⟿', 'Timeline', 'When: what happened, in order', '#/timeline')),
+          data.waiting ? h('button', { type: 'button', class: 'wiki-tile', onclick: () => openMakeUp() },
+            h('span', { class: 'wiki-tile-art', 'aria-hidden': 'true' }, '✦'),
+            h('strong', {}, 'Make up…'),
+            h('span', { class: 'muted small' }, 'An NPC, a tavern, a rumour, a name: fitting your world')) : null,
         ),
       ),
       h('section', { class: 'wiki-hub-party' },

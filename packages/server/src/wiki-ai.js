@@ -116,6 +116,36 @@ Changes:
 
 Don't propose what's already waiting for the DM, or anything the DM rejected before unless the records have changed since. Return no changes if nothing needs changing.`;
 
+// ---------- the AI as a writing partner (stage 5b): on the DM's button, one call each, as proposals ----------
+
+const DraftSchema = z.object({
+  sections: z.array(SectionSchema).describe('The page\'s sections, under the headings asked for where the records have something for them'),
+  facts: z.array(FactSchema).default([]).describe('At a glance facts and ties, as on set_fact'),
+  when: z.string().nullable().default(null).describe('When it happened in the game\'s time, or null'),
+  events: z.array(EventSchema).default([]).describe('Dated lines, as on add_event'),
+  reason: z.string().describe('One sentence for the DM: what the records gave you, and what they lacked'),
+});
+const ExpandSchema = z.object({ section: SectionSchema, reason: z.string().describe('One sentence for the DM: what you added, from which records') });
+const TidySchema = z.object({ heading: z.string(), text: z.string(), reason: z.string().describe('One sentence for the DM: what you changed') });
+const MakeUpSchema = z.object({
+  title: z.string(),
+  kind: z.string().describe('npc, tavern, shop, rumour, lore, …'),
+  aliases: z.array(z.string()).default([]),
+  sections: z.array(z.object({ heading: z.string(), text: z.string() })),
+  facts: z.array(z.object({ label: z.string(), value: z.string(), tone: z.enum(TONES).nullable().default(null) })).default([]),
+  reason: z.string().describe('One sentence for the DM: what it fits with in the wiki'),
+});
+
+const DRAFT_SYSTEM = `You help a Dungeon Master write their campaign wiki. The DM pressed a button and you do that one thing. What you write waits for the DM's approval.
+
+Write clear, readable Markdown for the DM. Link other pages with [[Page title]] (pages that exist). Never write :::for or :::dm blocks.
+
+When you write from the records (Draft, Expand): use only what the campaign's records (the knowledge base) say, in the names they use, and list the records each section is written from in its sources. The server makes each section available only to the players who know every record in its sources, so keep things different players know in different sections. A heading the records have nothing for is left out.
+
+When you make something up (Make up): invent it, fitting what the wiki already says (its people, places, tone and names), and say nothing that contradicts it. It is the DM's prep, kept from the players until the DM shares it.
+
+When you tidy: improve the wording only. Keep every fact, name, link, picture and block exactly; add and remove nothing.`;
+
 /**
  * @param {object} o
  * @param {object} o.wiki   src/wiki.js
@@ -508,7 +538,7 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
         const sources = citationsFrom(cid, records);
         if (!e) return { ...s, sources, by: p.dm_section ? 'dm' : 'ai' };
         const changed = !sameText(e.text, s.text) || (e.heading ?? s.heading).trim() !== s.heading;
-        return { heading: (e.heading ?? s.heading).trim(), text: e.text ?? s.text, available: e.available ?? s.available, sources, by: changed || p.dm_section ? 'dm' : 'ai' };
+        return { heading: (e.heading ?? s.heading).trim(), text: e.text ?? s.text, available: e.available ?? s.available, ...(s.canon && { canon: s.canon }), sources, by: changed || p.dm_section ? 'dm' : 'ai' };
       });
       let page;
       if (p.action === 'new_page') {
@@ -566,6 +596,93 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
       if (p.status !== 'pending') throw new BadRequestError('This proposal was already dealt with.');
       const now = new Date().toISOString();
       write(cid, { ...p, status: 'rejected', decided_by: by, decided_at: now, updated_at: now });
+    },
+
+    /**
+     * The AI as a writing partner (stage 5b), on the DM's button: one call, its result as proposals under Waiting.
+     * `mode`: 'draft' (fill a page, saved or new { title, kind, sections: [{ heading, prompt }] }, from the
+     * records), 'expand' or 'tidy' (a section), 'make_up' (a new planned page: `what` and the DM's `notes`).
+     * Returns the proposals made.
+     */
+    async draft(cid, { mode, page_id = null, section_id = null, page: asked = null, what = '', notes = '' }) {
+      const playerIds = players(cid).map((m) => m.user_id);
+      const roster = players(cid);
+      const names = new Map(roster.map((m) => [m.user_id, m.character_name ? `${m.character_name} (user ${m.user_id})` : `${m.name} (user ${m.user_id})`]));
+      const pages = wiki.list(cid);
+      const page = page_id ? wiki.get(cid, page_id) : null;
+      const section = page && section_id ? page.sections.find((s) => s.id === section_id) : null;
+      if (page_id && !page) throw new NotFoundError('No such page');
+      if ((mode === 'expand' || mode === 'tidy') && !section) throw new NotFoundError('No such section');
+      if (mode === 'draft' && !page && !clean(asked?.title, L.title)) throw new BadRequestError('Give the page a title first.');
+      if (mode === 'make_up' && !clean(what, 200) && !clean(notes, 2000)) throw new BadRequestError('Say what to make up.');
+      const about = page ? [page.title, ...page.aliases].join(', ') : mode === 'draft' ? asked.title : `${what}\n${notes}`;
+      // The records and pages it's about, found by search (no AI).
+      const records = mode === 'tidy' || mode === 'make_up' ? [] : (await search.search(cid, `${about}\n${section?.text ?? ''}`.slice(0, 2000), { kinds: ['kb'], limit: 25 }))
+        .map((hit) => kb.get(cid, hit.ref_id)).filter((r) => r && r.kind !== '_guide');
+      const relatedIds = new Set((await search.search(cid, about.slice(0, 2000), { kinds: ['wiki'], limit: 8 })).map((x) => x.ref_id));
+      const related = pages.filter((p) => relatedIds.has(p.id) && p.id !== page?.id).slice(0, 8);
+      const { calendar, clock } = store.getSettings(cid);
+      const context = [
+        `<in_game_time>It is now ${clockText(clock, calendar)} in the game.</in_game_time>`,
+        `<players>\n${roster.map((m) => `user ${m.user_id}: ${m.character_name || '(no character)'}, played by ${m.name}`).join('\n') || '(none)'}\n</players>`,
+        `<wiki_pages>\n${pages.map((p) => `${p.title} | ${p.kind || '-'}`).join('\n') || '(the wiki is empty)'}\n</wiki_pages>`,
+        related.length ? `<related_pages>\n${related.map((p) => renderPage(p, names)).join('\n\n')}\n</related_pages>` : '',
+        records.length ? `<records>\n${records.map(renderRecord).join('\n\n')}\n</records>` : '',
+      ];
+      const call = (schema, ask) => llm.structured({ task: 'wiki_draft', purpose: `wiki:${mode}`, system: DRAFT_SYSTEM, prompt: [...context, ask].filter(Boolean).join('\n\n'), schema, campaignId: cid });
+      const made = [];
+      const keep = (p) => {
+        const saved = p && add(cid, p);
+        if (saved) made.push(saved);
+      };
+      const run = { draft: 'Draft from the records', expand: 'Expand', tidy: 'Tidy', make_up: 'Make up' }[mode];
+
+      if (mode === 'draft') {
+        const shape = page ? page.sections.map((s) => s.heading).filter(Boolean) : (asked.sections ?? []).map((s) => `${s.heading}${s.prompt ? ` (${s.prompt})` : ''}`);
+        const out = await call(DraftSchema, [
+          page ? `<page_to_fill>\n${renderPage(page, names)}\n</page_to_fill>` : `<new_page title="${asked.title}" kind="${asked.kind ?? ''}" />`,
+          shape.length ? `<headings>\n${shape.map((x) => `- ${x}`).join('\n')}\n</headings>` : '',
+          `Draft this page from the records: its sections${shape.length ? ' under these headings' : ''}, its facts and ties, its time and events.${page ? ' A section that already has text is rewritten whole with what the records add; leave out one the records add nothing to.' : ''}`,
+        ].filter(Boolean).join('\n\n'));
+        if (!page) {
+          keep(proposalOf(cid, { action: 'new_page', new_page: { title: asked.title, kind: asked.kind ?? '', aliases: [], parent_title: null, sections: out.sections, facts: out.facts, when: out.when, events: out.events }, reason: out.reason }, run, playerIds));
+        } else {
+          for (const s of out.sections) {
+            const same = page.sections.find((x) => wikiKey(x.heading) === wikiKey(s.heading));
+            keep(proposalOf(cid, same ? { action: 'update_section', page_id: page.id, section_id: same.id, section: s, reason: out.reason } : { action: 'add_section', page_id: page.id, section: s, reason: out.reason }, run, playerIds));
+          }
+          for (const f of out.facts) keep(proposalOf(cid, { action: 'set_fact', page_id: page.id, fact: f, reason: out.reason }, run, playerIds));
+          if (out.when) keep(proposalOf(cid, { action: 'set_when', page_id: page.id, when: out.when, reason: out.reason }, run, playerIds));
+          for (const e of out.events) keep(proposalOf(cid, { action: 'add_event', page_id: page.id, event: e, reason: out.reason }, run, playerIds));
+        }
+      } else if (mode === 'expand') {
+        const out = await call(ExpandSchema, `<page>\n${renderPage(page, names)}\n</page>\n\nExpand the section "${section.heading || '(the opening section)'}" (id ${section.id}) with more from the records: give the whole section, its text kept and added to.`);
+        keep(proposalOf(cid, { action: 'update_section', page_id: page.id, section_id: section.id, section: { ...out.section, heading: section.heading, sources: [...out.section.sources] }, reason: out.reason }, run, playerIds));
+      } else if (mode === 'tidy') {
+        const out = await call(TidySchema, `<section heading="${section.heading}">\n${section.text}\n</section>\n\nTidy this section's wording on the page "${page.title}". Keep every fact, name, [[link]], picture and :::block exactly.`);
+        const text = String(out.text ?? '').slice(0, L.text).trim();
+        // The same parts, so it stays available to whoever it was; the DM's own section stays theirs.
+        if (text && !sameText(text, section.text)) {
+          keep({ reason: clean(out.reason, 1000), run, page_id: page.id, page_title: page.title, action: 'update_section', key: `${page.id}:${section.id}`, section_id: section.id, dm_section: section.by === 'dm', sections: [{ heading: section.heading, text, records: [], available: section.available }] });
+        }
+      } else if (mode === 'make_up') {
+        const out = await call(MakeUpSchema, `Make up ${clean(what, 200) || 'something'} for this campaign${clean(notes, 2000) ? `. The DM says: ${clean(notes, 2000)}` : ''}. Give it a page: a title not already in the wiki, its kind, sections and at a glance facts (ties to existing pages as [[links]]).`);
+        const title = clean(out.title, L.title);
+        const taken = new Set(pages.flatMap((p) => [p.title, ...p.aliases]).map(wikiKey));
+        const sections = (out.sections ?? []).map((s) => ({ heading: clean(s.heading, L.heading), text: String(s.text ?? '').slice(0, L.text).trim(), records: [], available: 'all', canon: 'planned' })).filter((s) => s.text);
+        if (title && !taken.has(wikiKey(title)) && sections.length) {
+          keep({
+            reason: clean(out.reason, 1000), run, action: 'new_page', key: `new:${wikiKey(title)}`, title, kind: clean(out.kind, L.kind),
+            aliases: [...new Set((out.aliases ?? []).map((a) => clean(a, L.alias)).filter((a) => a && !taken.has(wikiKey(a)) && wikiKey(a) !== wikiKey(title)))].slice(0, L.aliases),
+            parent: null, page_available: 'dm', made_up: true,
+            facts: (out.facts ?? []).map((f) => ({ label: clean(f.label, L.label), value: clean(f.value, L.value), tone: f.tone ?? null, canon: 'planned', available: 'all', records: [] })).filter((f) => f.label && f.value),
+            when: null, events: [], sections,
+          });
+        }
+      } else {
+        throw new BadRequestError('Unknown way to write.');
+      }
+      return made;
     },
 
     /** Approve everything waiting, as it is. Returns { approved, failed: [{ id, error }] }. */

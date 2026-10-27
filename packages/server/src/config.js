@@ -18,7 +18,7 @@ const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
  * Bump this whenever chunking, prompts, schemas or the memory design change.
  * Every generated output is tagged with it so we know which approach made it.
  */
-export const PIPELINE_VERSION = 32;
+export const PIPELINE_VERSION = 33;
 
 const DEFAULT_MODEL = env.MODEL || 'claude-opus-5-5';
 
@@ -78,6 +78,8 @@ export const config = {
       design: { model: env.MODEL_DESIGN || env.MODEL_MAPS || DEFAULT_MODEL, effort: env.EFFORT_DESIGN || 'high' },
       // The DM's wiki: proposing pages and changes from what the archivist recorded (waits for the DM's approval).
       wiki: { model: env.MODEL_WIKI || DEFAULT_MODEL, effort: env.EFFORT_WIKI || 'medium' },
+      // The DM's wiki: the AI as a writing partner on the DM's button (Draft from the records, Expand, Tidy, Make up).
+      wiki_draft: { model: env.MODEL_WIKI_DRAFT || env.MODEL_WIKI || DEFAULT_MODEL, effort: env.EFFORT_WIKI_DRAFT || 'medium' },
     },
     // API provider only: re-run refused requests on Anthropic's recommended fallback model.
     fallbacks: env.LLM_FALLBACKS !== 'off',

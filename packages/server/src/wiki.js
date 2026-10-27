@@ -20,7 +20,7 @@ import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { NotFoundError, BadRequestError } from './store.js';
 import { ArchiveConflictError } from './archive.js';
-import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, unpicture, wikiKey, isPictureId, pagePictureIds, normalizeCanon, playerCanon, canonMarker, TONES } from '@dndapp/shared/wiki.js';
+import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, unpicture, wikiKey, isPictureId, pagePictureIds, normalizeCanon, playerCanon, canonMarker, TONES, LINK_RE, PICTURE_RE } from '@dndapp/shared/wiki.js';
 import { normalizeSources } from '@dndapp/shared/citations.js';
 import { parseWhen, whenText } from '@dndapp/shared/wiki-time.js';
 
@@ -380,6 +380,45 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
       return rows(cid)
         .filter((p) => p.id !== page.id && p.sections.some((s) => wikiLinks(s.text).some((n) => names.has(wikiKey(n)))))
         .map((p) => ({ id: p.id, title: p.title }));
+    },
+
+    /**
+     * Names in a page's sections that match another page but aren't linked (stage 5b, no AI): [{ section_id, name,
+     * page_id, title }], the first of each name per section. Words inside [[links]], pictures and :::blocks' first
+     * lines don't count; nor do the page's own names or pages the section already links.
+     */
+    linkSuggestions(cid, page) {
+      const own = new Set([page.title, ...page.aliases].map(wikiKey));
+      const names = rows(cid).filter((p) => p.id !== page.id).flatMap((p) => [p.title, ...p.aliases].map((n) => ({ n, p })))
+        .filter(({ n }) => n.length >= 3 && !own.has(wikiKey(n)))
+        .sort((a, b) => b.n.length - a.n.length); // the longest name first ("Lord Vex" before "Vex")
+      const out = [];
+      for (const s of page.sections) {
+        // Blank out what can't be linked, keeping the positions.
+        let text = s.text.replace(LINK_RE, (m) => ' '.repeat(m.length)).replace(PICTURE_RE, (m) => ' '.repeat(m.length)).replace(/^:::.*$/gm, (m) => ' '.repeat(m.length));
+        // A page this section already links isn't offered again.
+        const linked = new Set(wikiLinks(s.text).map(wikiKey));
+        const seen = new Set(names.filter(({ n }) => linked.has(wikiKey(n))).map(({ p }) => p.id));
+        for (const { n, p } of names) {
+          const re = new RegExp(`(?<![\\p{L}\\p{N}])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'iu');
+          const m = re.exec(text);
+          if (!m || seen.has(p.id)) continue;
+          seen.add(p.id);
+          out.push({ section_id: s.id, name: m[0], page_id: p.id, title: p.title, at: m.index });
+          text = text.slice(0, m.index) + ' '.repeat(m[0].length) + text.slice(m.index + m[0].length);
+        }
+      }
+      return out.slice(0, 100);
+    },
+
+    /** Link it: the first unlinked mention of a page in a section becomes a [[link]] (keeping the words shown). */
+    async linkIt(cid, pageId, sectionId, targetId, { by, version }) {
+      const page = wiki.get(cid, pageId);
+      const s = wiki.linkSuggestions(cid, page).find((x) => x.section_id === sectionId && x.page_id === targetId);
+      if (!s) throw new BadRequestError('There is nothing to link there now.');
+      const link = s.name === s.title ? `[[${s.title}]]` : `[[${s.title}|${s.name}]]`;
+      const sections = page.sections.map((x) => (x.id === sectionId ? { ...x, text: x.text.slice(0, s.at) + link + x.text.slice(s.at + s.name.length) } : x));
+      return wiki.update(cid, pageId, { sections }, { by, version });
     },
 
     /** Names in `:::for` blocks that match no player, so the editor can say so. */

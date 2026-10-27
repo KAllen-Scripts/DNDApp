@@ -8,6 +8,7 @@
 import { api, h } from './api.js';
 import { state, nav, base, pictureImg, fam, kindBadge } from './wiki-data.js';
 import { openDrawer } from './wiki-drawer.js';
+import { openMakeUp } from './wiki-write.js';
 
 const $ = (sel) => document.querySelector(sel);
 let timer = null;
@@ -21,7 +22,12 @@ function dialog() {
   const input = h('input', { type: 'search', placeholder: 'Find a page: a name, or what it\'s about…', 'aria-label': 'Find a page', autocomplete: 'off' });
   const results = h('div', { class: 'wiki-find-results', role: 'list' });
   d = h('dialog', { id: 'wiki-find', class: 'map-dialog wiki-find', 'aria-label': 'Find a page' },
-    h('div', { class: 'wiki-find-bar' }, input, h('button', { type: 'button', class: 'ghost icon-btn', 'aria-label': 'Close', onclick: () => d.close() }, '✕')),
+    h('div', { class: 'wiki-find-bar' }, input,
+      h('button', { type: 'button', class: 'ghost small wiki-ai-btn', title: 'The AI makes up an NPC, a tavern, a shop, a rumour or a name that fits the wiki', onclick: () => {
+        d.close();
+        openMakeUp(input.value.trim());
+      } }, '✦ Make up…'),
+      h('button', { type: 'button', class: 'ghost icon-btn', 'aria-label': 'Close', onclick: () => d.close() }, '✕')),
     results);
   input.addEventListener('input', () => {
     clearTimeout(timer);
