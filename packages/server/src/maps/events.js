@@ -128,3 +128,64 @@ export function mapEvents(histories, { date, rolloverHour, calendar = null }) {
   const out = lines.filter((l, i) => i === 0 || l.slice(8) !== lines[i - 1].slice(8));
   return out.length > MAX_MAP_EVENTS ? [...out.slice(0, MAX_MAP_EVENTS), `(and ${out.length - MAX_MAP_EVENTS} more)`] : out;
 }
+
+export const MAX_JOURNEYS = 300;
+
+/**
+ * Past and current journeys on the maps (the Timeline's bars, wiki space stage 4d), worked out from the archived
+ * change lines and never stored twice: who set off, where to, when they left and arrived (in clock minutes).
+ * Those going together are one journey. `forUser`: a player's id, so only maps shown to them when the journey
+ * began and tokens not hidden then; null for the DM (every token).
+ * @param {{ id: string, entries: object[] }[]} histories  every map's archived change lines
+ * @returns {{ id, map_id, map_name, who: string[], to_name, from: {x,y}, to: {x,y}, leaves, arrives, by, done, stopped }[]}
+ */
+export function mapJourneys(histories, { forUser = null } = {}) {
+  const out = [];
+  for (const { id, entries } of histories) {
+    let raw = {};
+    let before = normalizeMap({});
+    const open = new Map(); // journey key -> journey
+    for (const e of entries) {
+      raw = applyJson(raw, e.changes);
+      const after = normalizeMap(structuredClone(raw));
+      const seen = forUser == null || (after.shown && (!after.shown_to || after.shown_to.includes(forUser)));
+      const was = new Map(before.tokens.map((t) => [t.id, t]));
+      for (const t of after.tokens) {
+        const b = was.get(t.id);
+        const j = t.journey;
+        const bj = b?.journey;
+        if (j && (!bj || bj.leaves !== j.leaves || bj.arrives !== j.arrives)) {
+          if (!seen || (forUser != null && t.hidden)) continue;
+          const key = `${j.to_name}:${j.leaves}:${j.arrives}`;
+          if (!open.has(key)) {
+            const journey = { id: `${id}:${j.leaves}:${out.length}`, map_id: id, map_name: after.name, who: [], tokens: new Set(), to_name: j.to_name ?? '', from: j.from, to: j.to, leaves: j.leaves, arrives: j.arrives, by: j.by, done: false, stopped: false };
+            open.set(key, journey);
+            out.push(journey);
+          }
+          const g = open.get(key);
+          g.who.push(who(t));
+          g.tokens.add(t.id);
+        } else if (!j && bj) {
+          const g = open.get(`${bj.to_name}:${bj.leaves}:${bj.arrives}`);
+          if (!g || !g.tokens.has(t.id)) continue;
+          g.tokens.delete(t.id);
+          if (e.reason === 'journey stopped') g.stopped = true;
+          if (!g.tokens.size) g.done = true;
+        }
+      }
+      // A token taken off the map mid-journey ends its part in it.
+      for (const [key, g] of open) {
+        for (const tid of g.tokens) if (!after.tokens.some((t) => t.id === tid)) g.tokens.delete(tid);
+        if (!g.tokens.size) {
+          g.done = true;
+          open.delete(key);
+        }
+      }
+      before = after;
+    }
+    const name = normalizeMap(raw).name;
+    for (const g of out) if (g.map_id === id) g.map_name = name;
+  }
+  out.sort((a, b) => a.leaves - b.leaves);
+  return out.slice(-MAX_JOURNEYS).map(({ tokens: _t, ...g }) => g);
+}

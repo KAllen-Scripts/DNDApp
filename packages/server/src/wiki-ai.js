@@ -27,6 +27,8 @@ import { WIKI_LIMITS as L } from './wiki.js';
 import { narrowest, audienceOf, canSeeAudience, wikiKey, wikiPictures as picturesIn, PICTURE_RE, TONES } from '@dndapp/shared/wiki.js';
 import { json } from './db/index.js';
 import { CITATION_RE, normalizeSources } from '@dndapp/shared/citations.js';
+import { parseWhen, whenText, whenKey } from '@dndapp/shared/wiki-time.js';
+import { clockText } from '@dndapp/shared/settings.js';
 
 const isProposalId = (id) => /^[a-f0-9]{10}$/.test(String(id));
 
@@ -54,11 +56,19 @@ const FactSchema = z.object({
   sources: z.array(z.number().int()).describe('Ids of the records this tie comes from'),
 });
 
+// A dated line on a page (stage 4d): what happened, when, in the game's own time.
+const EventSchema = z.object({
+  when: z.string().describe('When it happened in the game\'s time, as the records give it ("Day 12", "Day 12 night", "3 Mirtul 1492", "300 years ago"); "" when they don\'t say'),
+  text: z.string().describe('What happened, in a sentence. Link other pages with [[Page title]].'),
+  canon: z.enum(['true', 'rumour']).describe('rumour when the records call it a rumour, unconfirmed or hearsay; true otherwise'),
+  sources: z.array(z.number().int()).describe('Ids of the records this event comes from'),
+});
+
 export const ChangesSchema = z.object({
   changes: z.array(
     z.object({
-      action: z.enum(['new_page', 'update_section', 'add_section', 'reveal', 'set_fact']),
-      page_id: z.string().nullable().describe('The existing page (update_section, add_section, reveal, set_fact); null for new_page'),
+      action: z.enum(['new_page', 'update_section', 'add_section', 'reveal', 'set_fact', 'set_when', 'add_event']),
+      page_id: z.string().nullable().describe('The existing page (update_section, add_section, reveal, set_fact, set_when, add_event); null for new_page'),
       section_id: z.string().nullable().describe('The existing section (update_section, reveal); null otherwise'),
       new_page: z
         .object({
@@ -68,11 +78,15 @@ export const ChangesSchema = z.object({
           parent_title: z.string().nullable().describe('An existing page this one belongs inside (a tavern inside its town), or null'),
           sections: z.array(SectionSchema),
           facts: z.array(FactSchema).default([]).describe('Ties to other pages, as on set_fact'),
+          when: z.string().nullable().default(null).describe('When it happened, as on set_when, or null'),
+          events: z.array(EventSchema).default([]).describe('Dated lines, as on add_event'),
         })
         .nullable()
         .describe('Only for new_page'),
       section: SectionSchema.nullable().describe('The whole new section (update_section: it replaces the old text; add_section: a new one)'),
       fact: FactSchema.nullable().default(null).describe('set_fact: a tie on the page (one with the same label is replaced); null otherwise'),
+      when: z.string().nullable().default(null).describe('set_when: when the page happened in the game\'s time; null otherwise'),
+      event: EventSchema.nullable().default(null).describe('add_event: the dated line; null otherwise'),
       players: z.array(z.number().int()).describe('reveal: the player user ids to make the section available to; [] otherwise'),
       sources: z.array(z.number().int()).describe('reveal: the records showing those players now know it; [] otherwise'),
       reason: z.string().describe('One sentence for the DM: why this change'),
@@ -96,6 +110,8 @@ Changes:
 - update_section: rewrite a section with what the records now say (give the whole new section). Sections marked "by dm" are the DM's own writing: only propose a change to one when the records contradict it, and say so in the reason.
 - add_section: a new section on an existing page.
 - set_fact: a relationship as a fact on an existing page: label it with the tie from that page's side (Rival, Ally, Mother, Member of, Serves, Owes money to, Lives in) and link the other page in the value ("[[Lord Vex]]"). One tie per fact; a fact with the same label is replaced. Set canon to rumour when the records call it a rumour, unconfirmed or hearsay. Give the records in sources. A new page can carry its ties in its facts.
+- set_when: when a page happened in the game's own time: a session page gets the in-game span it covered ("Day 3 to Day 5"); a battle, a birth, a founding, a journey get theirs. Write it as the records give it, in the campaign's calendar (see <in_game_time>): "Day 12", "Day 12 night", "3 Mirtul 1492", "1489 DR", "300 years ago". Never a real-world date (the session's date is not the game's).
+- add_event: a dated line, for each thing worth remembering, on the page it's most about, linking the others with [[Page title]] ("[[Vex]] burned the [[Hollow Mill]]" goes on the mill's page). Its when as on set_when ("" when the records give none). Set canon to rumour as for facts. Give the records in sources. Don't repeat an event the page already has. A new page can carry its when and events.
 - reveal: when a record's known_by now includes players who can't yet see a section holding that same knowledge (its "available to" leaves them out), propose making it available to them. Name only players in that record's known_by, and the record in sources.
 
 Don't propose what's already waiting for the DM, or anything the DM rejected before unless the records have changed since. Return no changes if nothing needs changing.`;
@@ -208,7 +224,10 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
       (s) => `<section id="${s.id}" heading="${s.heading}" by="${s.by}" available="${s.available === 'all' ? 'as the page' : renderAvailable(s.available, names)}">\n${s.text}\n</section>`,
     );
     const facts = page.facts.map((f) => `<fact label="${f.label}" by="${f.by ?? 'dm'}"${f.canon !== 'true' ? ` canon="${f.canon}"` : ''}>${f.value}</fact>`);
-    return [head, ...facts, ...secs, '</page>'].join('\n');
+    const when = page.when ? [`<when>${page.when.text}</when>`] : [];
+    const events = [...(page.events ?? [])].sort((a, b) => whenKey(a.when) - whenKey(b.when))
+      .map((e) => `<event when="${e.when?.text ?? ''}" by="${e.by ?? 'dm'}"${e.canon !== 'true' ? ` canon="${e.canon}"` : ''}>${e.text}</event>`);
+    return [head, ...when, ...facts, ...events, ...secs, '</page>'].join('\n');
   }
 
   const describe = (p) =>
@@ -218,6 +237,10 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
         ? `reveal "${p.page_title} › ${p.section_heading}" to ${p.players.join(', ')}`
         : p.action === 'set_fact'
           ? `tie on "${p.page_title}": ${p.fact.label}: ${p.fact.value}`
+        : p.action === 'set_when'
+          ? `time of "${p.page_title}": ${p.when.text}`
+        : p.action === 'add_event'
+          ? `event on "${p.page_title}": ${p.event.when?.text ? `${p.event.when.text}: ` : ''}${p.event.text}`
         : `${p.action === 'add_section' ? 'new section' : 'change to'} "${p.page_title} › ${p.sections[0]?.heading ?? ''}"`;
 
   /** Pages the changed records seem to be about: named in them, or found by searching the wiki for each record. */
@@ -239,7 +262,10 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
     const related = await relatedPages(cid, batch, pages);
     const pending = list(cid, 'pending');
     const rejected = list(cid, 'rejected').slice(-30);
+    const { calendar, clock } = store.getSettings(cid);
+    const days = calendar ? `The calendar: ${calendar.name || 'the DM\'s own'}; months ${calendar.months.map((m) => m.name).join(', ')}${calendar.era ? `; years end in ${calendar.era}` : ''}.` : 'Days are counted Day 1, Day 2… from the start of the campaign.';
     return [
+      `<in_game_time>It is now ${clockText(clock, calendar)} in the game. ${days}</in_game_time>`,
       `<players>\n${roster.map((m) => `user ${m.user_id}: ${m.character_name || '(no character)'}, played by ${m.name}`).join('\n') || '(none)'}\n</players>`,
       `<changed_by>${runs.join(', ') || 'the DM asked'}</changed_by>`,
       `<wiki_pages>\n${pages.map((p) => `${p.id} | ${p.title} | ${p.kind || '-'}${p.aliases.length ? ` | also: ${p.aliases.join(', ')}` : ''}`).join('\n') || '(the wiki is empty)'}\n</wiki_pages>`,
@@ -268,6 +294,23 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
   /** An approved tie as the page keeps it: the records' citations copied, marked as the AI's. */
   const factOf = (cid, f) => ({ label: f.label, value: f.value, ...(f.tone && { tone: f.tone }), canon: f.canon, available: f.available, sources: citationsFrom(cid, f.records), by: 'ai' });
   const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
+
+  /** One of the AI's events, cleaned: { when: { text } | null, text, canon, available, records }, or null. */
+  const cleanEvent = (cid, playerIds, e, available) => {
+    const text = clean(e?.text, L.event);
+    if (!text) return null;
+    const records = recordIds(e.sources);
+    const when = clean(e.when, L.when);
+    return { when: when ? { text: when } : null, text, canon: e.canon === 'rumour' ? 'rumour' : 'true', available: available(audienceFrom(cid, records, playerIds)), records };
+  };
+  /** An approved event as the page keeps it (the server dates it on saving). */
+  const eventOf = (cid, e) => ({ when: e.when, text: e.text, canon: e.canon, available: e.available, sources: citationsFrom(cid, e.records), by: 'ai' });
+  /** What a time reads as now, for the DM's card. */
+  const reads = (cid, text) => {
+    const { calendar, clock } = store.getSettings(cid);
+    const w = parseWhen(text, calendar, { now: clock });
+    return w?.from == null ? null : whenText(w, calendar);
+  };
 
   /** A part's "available to" inside a page: 'all' (as the page) when it's as wide as the page. */
   const asPart = (pageAudience, audience) => {
@@ -303,6 +346,8 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
         page_available: availableOf(pageAudience),
         // A section as wide as the page is "as the page".
         facts: (n.facts ?? []).map((f) => cleanFact(cid, playerIds, f, (a) => asPart(pageAudience, a))).filter(Boolean),
+        when: clean(n.when, L.when) ? { text: clean(n.when, L.when), reads: reads(cid, n.when) } : null,
+        events: (n.events ?? []).map((e) => cleanEvent(cid, playerIds, e, (a) => asPart(pageAudience, a))).filter(Boolean),
         sections: sections.map((s) => ({ heading: s.heading, text: s.text, records: s.records, available: JSON.stringify(availableOf(s.audience)) === JSON.stringify(availableOf(pageAudience)) ? 'all' : availableOf(s.audience) })),
       };
     }
@@ -325,6 +370,17 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
       const fact = cleanFact(cid, playerIds, c.fact, (a) => asPart(pageAudience, was ? narrowest(audienceOf(was.available), a) : a));
       if (!fact || (was && sameText(was.value, fact.value) && (was.tone ?? null) === fact.tone)) return null;
       return { ...base, ...pageBits, action: 'set_fact', key: `${page.id}:fact:${wikiKey(fact.label)}`, fact, sections: [] };
+    }
+    if (c.action === 'set_when') {
+      const text = clean(c.when, L.when);
+      if (!text || sameText(page.when?.text, text)) return null;
+      return { ...base, ...pageBits, action: 'set_when', key: `${page.id}:when`, when: { text, reads: reads(cid, text) }, sections: [] };
+    }
+    if (c.action === 'add_event') {
+      const event = cleanEvent(cid, playerIds, c.event, (a) => asPart(audienceOf(page.available), a));
+      if (!event || page.events.some((e) => sameText(e.text, event.text))) return null;
+      if (event.when) event.when.reads = reads(cid, event.when.text);
+      return { ...base, ...pageBits, action: 'add_event', key: `${page.id}:event:${wikiKey(event.text).slice(0, 120)}`, event, sections: [] };
     }
     if (!c.section) return null;
     const s = { ...cleanSection(c.section), records: recordIds(c.section.sources) };
@@ -352,7 +408,7 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
 
   /** Save a new proposal; it replaces one still waiting for the same thing. Skipped if the DM already rejected the same. */
   function add(cid, p) {
-    const same = (a) => (p.action === 'reveal' ? JSON.stringify(a.players) === JSON.stringify(p.players) : p.action === 'set_fact' ? sameText(a.fact?.value, p.fact.value) : a.sections.length === p.sections.length && a.sections.every((s, i) => sameText(s.text, p.sections[i].text)));
+    const same = (a) => (p.action === 'reveal' ? JSON.stringify(a.players) === JSON.stringify(p.players) : p.action === 'set_fact' ? sameText(a.fact?.value, p.fact.value) : p.action === 'set_when' ? sameText(a.when?.text, p.when.text) : p.action === 'add_event' ? sameText(a.event?.when?.text, p.event.when?.text) : a.sections.length === p.sections.length && a.sections.every((s, i) => sameText(s.text, p.sections[i].text)));
     if (list(cid, 'rejected').some((r) => r.key === p.key && same(r))) return null;
     const now = new Date().toISOString();
     for (const old of list(cid, 'pending').filter((x) => x.key === p.key)) write(cid, { ...old, status: 'replaced', updated_at: now });
@@ -383,6 +439,9 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
         try {
           page = wiki.get(cid, p.page_id);
         } catch {}
+        if (p.action === 'set_when' || p.action === 'add_event') {
+          return { ...p, page_title: page?.title ?? p.page_title, ...(p.action === 'set_when' && { current_when: page?.when ?? null }), page_available: page?.available ?? null, gone: !page };
+        }
         if (p.action === 'set_fact') {
           const now = page?.facts.find((f) => wikiKey(f.label) === wikiKey(p.fact.label)) ?? null;
           return { ...p, page_title: page?.title ?? p.page_title, current_fact: now, page_available: page?.available ?? null, gone: !page };
@@ -437,7 +496,7 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
 
     /**
      * Approve a proposal, with the DM's edits if any:
-     * { title?, kind?, page_available?, sections?: [{ heading, text, available }], players?, use_picture? }.
+     * { title?, kind?, page_available?, sections?: [{ heading, text, available }], players?, use_picture?, fact?, when?, event? }.
      * A new page takes the picture suggested for it unless use_picture is false.
      * A section the DM edited is the DM's. Returns the page.
      */
@@ -456,7 +515,12 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
         const parent = p.parent && wiki.list(cid).some((x) => x.id === p.parent) ? p.parent : null;
         const suggested = edits.use_picture === false ? null : suggestPicture(cid, p);
         const picture = suggested ? { id: (await wikiPictures.copy(cid, suggested, { by })).id, caption: '', available: 'all' } : null;
-        page = await wiki.create(cid, { title: edits.title ?? p.title, kind: edits.kind ?? p.kind, aliases: p.aliases, parent, available: edits.page_available ?? p.page_available, sections, picture, facts: (p.facts ?? []).map((f) => factOf(cid, f)) }, { by });
+        page = await wiki.create(cid, {
+          title: edits.title ?? p.title, kind: edits.kind ?? p.kind, aliases: p.aliases, parent, available: edits.page_available ?? p.page_available, sections, picture,
+          facts: (p.facts ?? []).map((f) => factOf(cid, f)),
+          when: p.when ? { text: p.when.text } : null,
+          events: (p.events ?? []).map((e) => eventOf(cid, { ...e, when: e.when && { text: e.when.text } })),
+        }, { by });
       } else {
         const current = wiki.get(cid, p.page_id);
         let fields;
@@ -470,6 +534,14 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
           if (i < 0) facts.push(fact);
           else facts[i] = { ...fact, ...(facts[i].canon !== 'true' && { canon: facts[i].canon }), ...(facts[i].truth != null && { truth: facts[i].truth }), ...(facts[i].owner != null && { owner: facts[i].owner }), sources: normalizeSources([...fact.sources, ...(facts[i].sources ?? [])]) };
           fields = { facts };
+        } else if (p.action === 'set_when') {
+          fields = { when: { text: (edits.when ?? p.when.text).trim() } };
+        } else if (p.action === 'add_event') {
+          const e = edits.event ?? {};
+          const changed = ['when', 'text'].some((k) => e[k] !== undefined && e[k] !== (k === 'when' ? p.event.when?.text ?? '' : p.event.text));
+          const when = e.when !== undefined ? (e.when.trim() ? { text: e.when.trim() } : null) : p.event.when && { text: p.event.when.text };
+          const event = { ...eventOf(cid, p.event), when, ...pick(e, ['text', 'available']), ...(changed && { by: 'dm' }) };
+          fields = { events: [...current.events, event] };
         } else if (p.action === 'reveal') {
           if (!current.sections.some((s) => s.id === p.section_id)) throw new BadRequestError('That section is gone from the page.');
           const who = (edits.players ?? p.players).map(Number).filter((uid) => p.players.includes(uid));

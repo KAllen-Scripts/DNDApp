@@ -188,7 +188,7 @@ function itemEl(x, onclick) {
       h('span', { class: `wiki-tl-art${x.picture ? ' has-picture' : ''}`, 'aria-hidden': 'true' }, x.picture ? pictureImg(x.picture, { size: 'thumb' }) : null),
       h('span', { class: 'wiki-tl-title' }, x.title));
   }
-  return h('button', { type: 'button', class: cls, title: `${when}: ${x.text} (${x.title})`, 'data-no-pan': '', onclick },
+  return h('button', { type: 'button', class: cls, title: `${when}: ${x.text} (${x.type === 'journey' ? `on ${x.title}` : x.title})`, 'data-no-pan': '', onclick },
     h('span', { class: 'wiki-tl-bar', 'aria-hidden': 'true' }),
     h('span', { class: 'wiki-tl-label' }, label(x)));
 }
@@ -200,11 +200,13 @@ function openCard(card, x, data) {
     h('button', { type: 'button', class: 'ghost icon-btn wiki-web-close', 'aria-label': 'Close', onclick: () => { card.hidden = true; } }, '✕'),
     x.picture ? pictureImg(x.picture, { size: 'thumb', cls: 'wiki-web-card-pic' }) : null,
     h('p', { class: 'muted small' }, whenText(x.when, data.calendar) || 'Undated'),
-    h('h3', {}, x.type === 'event' ? x.text : x.title),
-    x.type === 'event' ? h('p', { class: 'small' }, canonBadge(x), ` On ${x.title}`) : h('p', { class: 'muted small' }, KIND_FAMILIES[x.family]?.label ?? ''),
+    h('h3', {}, x.type === 'page' ? x.title : x.text),
+    x.type === 'event' ? h('p', { class: 'small' }, canonBadge(x), ` On ${x.title}`)
+      : x.type === 'journey' ? h('p', { class: 'muted small' }, `A journey on the map "${x.title}"${x.done ? '' : ', still on the way'}`)
+      : h('p', { class: 'muted small' }, KIND_FAMILIES[x.family]?.label ?? ''),
     x.available && x.available !== 'all' ? h('p', { class: 'wiki-available small' }, x.available === 'dm' ? 'Only you' : `Only ${x.available.map(playerName).join(', ')}`) : null,
     h('div', { class: 'wiki-web-actions' },
-      h('button', { type: 'button', class: 'primary', onclick: () => nav.go(`#/page/${x.page_id}`) }, 'Open page'),
+      x.page_id ? h('button', { type: 'button', class: 'primary', onclick: () => nav.go(`#/page/${x.page_id}`) }, 'Open page') : null,
       x.place ? h('button', { type: 'button', class: 'ghost', onclick: () => showOnMap(x.place) }, `Show on the map (${x.place.map_name})`) : null),
   ].filter(Boolean));
 }

@@ -20,7 +20,7 @@ import { activeForm, formHasHp, setFormHp } from '@dndapp/shared/wild-shape.js';
 import { companionTokenStats, setCompanionHp } from '@dndapp/shared/companions.js';
 import { attackLogFor } from '@dndapp/shared/attacks.js';
 import { createSight } from './sight.js';
-import { mapEvents } from './events.js';
+import { mapEvents, mapJourneys } from './events.js';
 import { diffJson, applyJson } from '../sheets/store.js';
 import { NotFoundError } from '../store.js';
 
@@ -126,6 +126,7 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
     return map;
   }
 
+  const journeyCache = new Map(); // the Timeline's journeys, per campaign and viewer
   const maps = {
     events,
 
@@ -239,6 +240,22 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
     /** What happened on the maps players saw on a session date, for the archivist (see mapEvents). */
     eventsOn(campaignId, date, rolloverHour) {
       return mapEvents(maps.allIds(campaignId).map((id) => ({ id, entries: maps.history(campaignId, id) })), { date, rolloverHour, calendar: store.getSettings(campaignId).calendar });
+    },
+
+    /**
+     * The journeys on the maps (mapJourneys), for the wiki's Timeline: for the DM (`forUser` null) or one player.
+     * Worked out again only when a map has new change lines.
+     */
+    journeys(campaignId, { forUser = null } = {}) {
+      const ids = maps.allIds(campaignId);
+      const key = `${campaignId}:${forUser ?? 'dm'}`;
+      const histories = ids.map((id) => ({ id, entries: maps.history(campaignId, id) }));
+      const stamp = histories.map((x) => `${x.id}:${x.entries.length}`).join(',');
+      const hit = journeyCache.get(key);
+      if (hit?.stamp === stamp) return hit.journeys;
+      const journeys = mapJourneys(histories, { forUser });
+      journeyCache.set(key, { stamp, journeys });
+      return journeys;
     },
 
     /** Every map ever made in the campaign, removed ones too. */

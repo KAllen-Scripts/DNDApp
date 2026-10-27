@@ -320,6 +320,7 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
 .fam-quest { --kind: #2f6fc0; --kind-icon: "✦"; }
 .fam-session { --kind: #5a5fa8; --kind-icon: "☾"; }
 .fam-lore { --kind: #8a6a3a; --kind-icon: "❧"; }
+.fam-journey { --kind: #6b7f8e; --kind-icon: "➶"; }
 .fam-other { --kind: var(--accent); --kind-icon: "❦"; }
 /* The wiki's space (wiki-space.js): the top bar gives way to the wiki's own rail of views and bar (the trail, the clock). */
 :root[data-space="wiki"]:not([data-phone]) #app-view > .topbar { display: none; }
@@ -2493,6 +2494,7 @@ button.wiki-tile { text-align: left; border: 1px solid var(--border); color: inh
 .wiki-tl-item.canon-rumour .wiki-tl-bar { background: none; border: 2px dotted var(--kind); }
 .wiki-tl-item.canon-false .wiki-tl-bar, .wiki-tl-item.canon-planned .wiki-tl-bar { opacity: 0.45; }
 .wiki-tl-item.canon-rumour .wiki-tl-label { font-style: italic; }
+.wiki-tl-item.journey .wiki-tl-bar { height: 10px; border-radius: 5px; background: repeating-linear-gradient(90deg, var(--kind) 0 14px, transparent 14px 18px); } /* a journey on the maps */
 .wiki-tl-label { color: var(--text); text-shadow: 0 0 3px var(--surface), 0 0 3px var(--surface); }
 .wiki-tl-item:hover .wiki-tl-label, .wiki-tl-item:focus-visible .wiki-tl-label { text-decoration: underline; }
 .wiki-tl-item.focus { outline: 3px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; border-radius: 15px; }

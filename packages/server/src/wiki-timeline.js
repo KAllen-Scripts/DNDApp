@@ -5,7 +5,8 @@
  * Items are pages with a `when` and every event on a page. Lanes: the DM's own (`wiki.lanes` in the campaign's
  * settings: a page, the pages inside it and the pages linking to it), then History (anything that began before
  * Day 1) and The campaign. An item goes in the first lane that claims it. Undated ones, and session pages with no
- * time, wait in trays.
+ * time, wait in trays. Journeys on the maps (stage 4d, worked out from the maps' archived changes) are bars on
+ * The campaign.
  */
 import { kindFamily, wikiKey, wikiLinks, normalizeCanon } from '@dndapp/shared/wiki.js';
 import { summary } from './wiki-views.js';
@@ -20,10 +21,10 @@ const sessionNumber = (p) => Number(/\bsession\s*#?(\d+)/i.exec(p.title)?.[1] ??
 
 /**
  * The Timeline for one viewer. `pages`: the ones they may see; `places`: pagePlaces() for them; `lanes`: the DM's
- * lane page ids; `truth`: the DM's Truth toggle (no rumours or falsehoods); `forDm`: keep who each event is for.
+ * lane page ids; `truth`: the DM's Truth toggle (no rumours or falsehoods); `forDm`: keep who each event is for; `journeys`: mapJourneys() for the viewer.
  * Returns { lanes: [{ id, title, family?, picture?, page? }], items, undated, sessions, capped }.
  */
-export function timeline(pages, { places = new Map(), lanes = [], truth = false, forDm = false } = {}) {
+export function timeline(pages, { places = new Map(), lanes = [], truth = false, forDm = false, journeys = [] } = {}) {
   const byId = new Map(pages.map((p) => [p.id, p]));
   const byName = new Map();
   for (const p of pages) for (const n of [p.title, ...p.aliases]) if (!byName.has(wikiKey(n))) byName.set(wikiKey(n), p);
@@ -56,6 +57,14 @@ export function timeline(pages, { places = new Map(), lanes = [], truth = false,
       if (e.when?.from == null) undated.push(item);
       else items.push({ ...item, lane: laneOf(p, e.when.from) });
     }
+  }
+  for (const j of journeys) {
+    items.push({
+      id: `journey:${j.id}`, type: 'journey', page_id: null, title: j.map_name, family: 'journey', picture: null,
+      text: `${j.who.join(', ')} ${j.done ? (j.stopped ? 'set off' : 'went') : 'on the way'} ${j.to_name ? `to ${j.to_name}` : 'on a journey'}${j.stopped ? ' (stopped on the way)' : ''}`,
+      place: { map_id: j.map_id, map_name: j.map_name, x: j.to.x, y: j.to.y },
+      when: { text: '', from: j.leaves, to: j.arrives }, canon: 'true', by: 'map', lane: 'campaign', done: j.done, stopped: j.stopped, by_way: j.by,
+    });
   }
   items.sort((a, b) => a.when.from - b.when.from || a.when.to - b.when.to || a.title.localeCompare(b.title));
   const sessions = pages.filter((p) => kindFamily(p.kind) === 'session' && p.when?.from == null)

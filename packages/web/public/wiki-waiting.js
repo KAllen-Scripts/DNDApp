@@ -98,13 +98,13 @@ async function approveAll() {
 /** Who a proposed or current section is available to, in a line. */
 const sectionAvailable = (a) => h('p', { class: 'wiki-available small' }, a === 'all' ? 'Available as the page.' : `Available to ${availableText(a)}.`);
 
-const TAGS = { new_page: 'New page', update_section: 'Change', add_section: 'New section', reveal: 'Reveal', set_fact: 'Tie' };
+const TAGS = { new_page: 'New page', update_section: 'Change', add_section: 'New section', reveal: 'Reveal', set_fact: 'Tie', set_when: 'Time', add_event: 'Event' };
 
 /** One of the AI's changes: what's there now beside what it proposes, and Approve, Edit, Reject. */
 function proposalCard(p) {
   const card = h('div', { class: 'wiki-proposal card' });
   const tag = p.dm_section ? 'Suggestion for your section' : TAGS[p.action];
-  const where = p.action === 'new_page' ? p.title : p.action === 'set_fact' ? `${p.page_title} › ${p.fact.label}` : `${p.page_title}${p.action === 'reveal' ? ` › ${p.section_heading || '(opening section)'}` : p.action === 'update_section' && p.current?.heading ? ` › ${p.current.heading}` : ''}`;
+  const where = p.action === 'new_page' ? p.title : p.action === 'set_fact' ? `${p.page_title} › ${p.fact.label}` : p.action === 'set_when' || p.action === 'add_event' ? p.page_title : `${p.page_title}${p.action === 'reveal' ? ` › ${p.section_heading || '(opening section)'}` : p.action === 'update_section' && p.current?.heading ? ` › ${p.current.heading}` : ''}`;
   const edits = { sections: p.sections.map(() => null) };
   const done = async (path, body, message) => {
     try {
@@ -124,10 +124,29 @@ function proposalCard(p) {
   let playerBoxes = [];
   let usePicture = null;
   let factEdit = null;
+  let timeEdit = null;
+  // A time as the AI wrote it, and what the calendar reads it as.
+  const timeLine = (w) => h('span', {}, w?.text || 'No time', w?.reads && w.reads !== w.text ? h('span', { class: 'muted small' }, ` (reads as ${w.reads})`) : null);
+  const eventLine = (e) => h('div', { class: 'wiki-proposed-event' }, e.when?.text ? h('strong', {}, timeLine(e.when), ': ') : null, richText(e.text, 'wiki-event-text'), e.canon && e.canon !== 'true' ? h('span', { class: 'muted small' }, ` (${e.canon})`) : null, sectionAvailable(e.available ?? 'all'));
   const factLine = (f) => h('div', { class: 'wiki-proposed-fact' }, h('strong', {}, `${f.label}: `), richText(f.value, 'wiki-fact-value'), f.canon && f.canon !== 'true' ? h('span', { class: 'muted small' }, ` (${f.canon})`) : null, sectionAvailable(f.available ?? 'all'));
   const draw = (editing) => {
     const parts = [];
-    if (p.action === 'set_fact') {
+    if (p.action === 'set_when') {
+      // A page's time (stage 4d): what it says now beside the AI's.
+      const input = h('input', { value: p.when.text, maxLength: 200, 'aria-label': 'Proposed time' });
+      timeEdit = editing ? { when: input } : null;
+      const proposed = h('div', { class: 'wiki-proposed' }, editing ? input : timeLine(p.when));
+      parts.push(p.current_when
+        ? h('div', { class: 'wiki-compare' }, h('div', { class: 'wiki-now' }, h('div', { class: 'muted small' }, 'Now'), timeLine(p.current_when)), h('div', {}, h('div', { class: 'muted small' }, 'Proposed'), proposed))
+        : proposed);
+    } else if (p.action === 'add_event') {
+      const when = h('input', { value: p.event.when?.text ?? '', maxLength: 200, placeholder: 'When (optional)', 'aria-label': 'Proposed event time' });
+      const text = h('textarea', { rows: 3, maxLength: 2000, 'aria-label': 'Proposed event' });
+      text.value = p.event.text;
+      const picker = availablePicker(p.event.available, { section: true, label: 'Proposed event available to' });
+      timeEdit = editing ? { when, text, picker } : null;
+      parts.push(editing ? h('div', { class: 'wiki-proposed wiki-event-edit' }, when, text, h('label', { class: 'small' }, 'Available to ', picker.el)) : h('div', { class: 'wiki-proposed' }, eventLine(p.event)));
+    } else if (p.action === 'set_fact') {
       // A tie (stage 3e): what the page says now beside the AI's, and when editing, its words, tone and who it's for.
       const label = h('input', { value: p.fact.label, maxLength: 60, 'aria-label': 'Proposed tie' });
       const value = h('input', { value: p.fact.value, maxLength: 500, 'aria-label': 'Proposed tie to' });
@@ -152,6 +171,8 @@ function proposalCard(p) {
         }
         parts.push(h('p', { class: 'muted small' }, [p.kind, p.aliases?.length && `also called ${p.aliases.join(', ')}`, p.parent && `inside ${state.pages.find((x) => x.id === p.parent)?.title ?? 'another page'}`].filter(Boolean).join(' · ')));
         parts.push(h('label', { class: 'small' }, 'Page available to ', pagePicker.el));
+        if (p.when) parts.push(h('p', { class: 'small' }, h('span', { class: 'muted' }, 'When: '), timeLine(p.when)));
+        if (p.events?.length) parts.push(h('div', { class: 'wiki-proposed-events' }, h('div', { class: 'muted small' }, 'Events'), ...p.events.map(eventLine)));
         if (p.facts?.length) parts.push(h('div', { class: 'wiki-proposed-facts' }, h('div', { class: 'muted small' }, 'Ties'), ...p.facts.map(factLine)));
       }
       p.sections.forEach((s, i) => {
@@ -183,6 +204,14 @@ function proposalCard(p) {
     if (pagePicker) out.page_available = pagePicker.value();
     if (usePicture && !usePicture.checked) out.use_picture = false;
     if (factEdit) out.fact = { label: factEdit.label.value.trim(), value: factEdit.value.value.trim(), tone: factEdit.tone.value || null, available: factEdit.picker.value() };
+    if (timeEdit && p.action === 'set_when') {
+      if (!timeEdit.when.value.trim()) return status('Give it a time, or reject it.', true);
+      out.when = timeEdit.when.value.trim();
+    }
+    if (timeEdit && p.action === 'add_event') {
+      if (!timeEdit.text.value.trim()) return status('Say what happened, or reject it.', true);
+      out.event = { when: timeEdit.when.value.trim(), text: timeEdit.text.value.trim(), available: timeEdit.picker.value() };
+    }
     if (edits.sections.some(Boolean)) out.sections = edits.sections.map((e) => (e ? { heading: e.heading.value.trim(), text: e.text.value, available: e.picker.value() } : {}));
     if (p.action === 'reveal') {
       out.players = playerBoxes.map((b) => b.querySelector('input')).filter((i) => i.checked).map((i) => Number(i.value));
