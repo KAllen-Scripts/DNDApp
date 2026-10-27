@@ -9,7 +9,7 @@ import { BadRequestError, NotFoundError } from '../store.js';
 import { WIKI_LIMITS as L } from '../wiki.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 import { SOURCE_KINDS } from '../wiki-pictures.js';
-import { wikiKey, wikiPieces, unlink, unpicture, audienceOf, canSeeAudience } from '@dndapp/shared/wiki.js';
+import { wikiKey, wikiPieces, unlink, unpicture, audienceOf, canSeeAudience, CANONS } from '@dndapp/shared/wiki.js';
 import { pageOnMaps, makePageFor, atlasLayers } from '../wiki-maps.js';
 import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass } from '../wiki-views.js';
 
@@ -19,6 +19,8 @@ export function registerWiki(app, r) {
   const crop = z.object({ x: z.number().min(0), y: z.number().min(0), w: z.number().positive(), h: z.number().positive() });
   const pictureId = z.string().regex(/^[a-f0-9]{10}$/);
   const available = z.union([z.literal('all'), z.literal('dm'), z.array(z.number().int()).max(100)]);
+  // Truth and rumour on each part: its canon, the truth beside a falsehood (the DM's), and an account's teller.
+  const canon = { canon: z.enum(CANONS).default('true'), truth: z.string().max(L.truth).optional(), owner: z.number().int().nullable().optional() };
   const fields = {
     title: z.string().trim().min(1).max(L.title),
     aliases: z.array(z.string().trim().min(1).max(L.alias)).max(L.aliases),
@@ -27,12 +29,12 @@ export function registerWiki(app, r) {
     tags: z.array(z.string().trim().min(1).max(L.tag)).max(L.tags),
     available,
     sections: z
-      .array(z.object({ id: z.string().regex(/^[a-f0-9]{6}$/).optional(), heading: z.string().trim().max(L.heading), text: z.string().max(L.text), available }))
+      .array(z.object({ id: z.string().regex(/^[a-f0-9]{6}$/).optional(), heading: z.string().trim().max(L.heading), text: z.string().max(L.text), available, ...canon }))
       .max(L.sections),
-    picture: z.object({ id: pictureId, caption: z.string().max(L.caption).default(''), available: available.default('all') }).nullable(),
-    banner: z.object({ id: pictureId, caption: z.string().max(L.caption).default(''), available: available.default('all'), focus: z.number().min(0).max(100).default(50) }).nullable(),
-    gallery: z.array(z.object({ id: pictureId, caption: z.string().max(L.caption).default(''), available: available.default('all') })).max(L.gallery),
-    facts: z.array(z.object({ label: z.string().max(L.label), value: z.string().max(L.value), available: available.default('all') })).max(L.facts),
+    picture: z.object({ id: pictureId, caption: z.string().max(L.caption).default(''), available: available.default('all'), ...canon }).nullable(),
+    banner: z.object({ id: pictureId, caption: z.string().max(L.caption).default(''), available: available.default('all'), focus: z.number().min(0).max(100).default(50), ...canon }).nullable(),
+    gallery: z.array(z.object({ id: pictureId, caption: z.string().max(L.caption).default(''), available: available.default('all'), ...canon })).max(L.gallery),
+    facts: z.array(z.object({ label: z.string().max(L.label), value: z.string().max(L.value), available: available.default('all'), ...canon })).max(L.facts),
   };
 
   /** Chosen players must be players of this campaign. */

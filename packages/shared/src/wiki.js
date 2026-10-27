@@ -170,3 +170,29 @@ export function kindFamily(kind) {
   for (const [family, f] of Object.entries(KIND_FAMILIES)) if (f.words.some((w) => k.split(/[\s/-]+/).includes(w))) return family;
   return 'other';
 }
+
+/**
+ * Truth and rumour (docs/notes/wiki-space.md): every section, fact and picture caption has a canon.
+ * 'true' (the default) it's so; 'rumour' heard, not confirmed; 'false' the players believe it but it isn't so (the DM
+ * can write the truth beside it); 'planned' the DM's prep, never a player's, whatever it's available to; 'told' a
+ * player's account (their character's lore) until the DM confirms or denies it.
+ */
+export const CANONS = ['true', 'rumour', 'false', 'planned', 'told'];
+
+export const normalizeCanon = (c) => (CANONS.includes(c) ? c : 'true');
+
+/** What a player is told a part's canon is: a falsehood is only ever a rumour to them. */
+export const playerCanon = (c) => (c === 'false' ? 'rumour' : normalizeCanon(c));
+
+/**
+ * The marker Ask and search put before a part: '' for a true one. `forDm` adds the truth of a falsehood and marks
+ * planned parts; `owner` is the account's teller's name.
+ */
+export function canonMarker(canon, { forDm = false, truth = '', owner = '' } = {}) {
+  const c = forDm ? normalizeCanon(canon) : playerCanon(canon);
+  if (c === 'rumour') return '[rumour]';
+  if (c === 'told') return `[${owner ? `${owner}'s` : "a player's"} account]`;
+  if (c === 'false') return `[false: the players believe this. Truth: ${truth.trim() || '(not written)'}]`;
+  if (c === 'planned') return "[planned: the DM's prep, not yet in play]";
+  return '';
+}

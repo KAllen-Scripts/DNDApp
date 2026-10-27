@@ -7,6 +7,7 @@
 import { api, h } from './api.js';
 import { markdownFragment } from './markdown.js';
 import { wikiPieces, wikiKey, LINK_RE, PICTURE_RE, pictureAlt, KIND_FAMILIES } from './shared/wiki.js';
+import { canonBadge, canonClass, truthNote, canonPicker } from './wiki-canon.js';
 import { state, nav, base, status, report, availableText, pictureImg, showPicture, uploadPictures, imageFiles, choosePicture, dropTarget, fam, kindBadge, byName } from './wiki-data.js';
 
 /** A picture in the text: ![caption|place](picture:id). */
@@ -129,8 +130,15 @@ const sendButton = (page, part, label, dm) => (dm && page.id && nav.sendHandout
 
 const ownAvailable = (x, dm) => (dm && x.available !== 'all' ? h('span', { class: 'wiki-available small' }, ` (${availableText(x.available)})`) : null);
 
+/** A picture's caption with its canon (a planned picture's caption never reaches a player) and who it's available to. */
+function captionOf(pic, dm, me = null) {
+  const marked = canonClass(pic);
+  if (!pic.caption && !(dm && (pic.available !== 'all' || marked))) return null;
+  return h('figcaption', { class: marked.trim() || null }, canonBadge(pic, { me }), h('span', { class: 'wiki-canon-text' }, pic.caption), dm ? truthNote(pic) : null, ownAvailable(pic, dm));
+}
+
 /** The "at a glance" box: the page's picture, its facts, where it is and what's inside it. */
-function infobox(page, { dm }) {
+function infobox(page, { dm, me = null }) {
   const children = dm ? state.pages.filter((p) => p.parent === page.id).sort((a, b) => a.title.localeCompare(b.title)) : [];
   const parent = page.parent && state.pages.find((p) => p.id === page.parent);
   if (!page.picture && !page.facts?.length && !children.length && !(dm && parent)) return null;
@@ -138,9 +146,9 @@ function infobox(page, { dm }) {
     h('div', { class: 'wiki-infobox-title' }, page.title),
     page.picture ? h('figure', { class: 'wiki-infobox-picture' },
       h('button', { type: 'button', class: 'wiki-figure-open', title: 'Show it bigger', onclick: () => showPicture(page.picture.id, page.picture.caption) }, pictureImg(page.picture.id, { alt: page.picture.caption || page.title })),
-      page.picture.caption || (dm && page.picture.available !== 'all') ? h('figcaption', {}, page.picture.caption, ownAvailable(page.picture, dm)) : null) : null,
+      captionOf(page.picture, dm, me)) : null,
     page.facts?.length || (dm && parent) ? h('dl', { class: 'wiki-facts' },
-      ...(page.facts ?? []).flatMap((f) => [h('dt', {}, f.label), h('dd', {}, richText(f.value, 'wiki-fact-value'), ownAvailable(f, dm))]),
+      ...(page.facts ?? []).flatMap((f) => [h('dt', { class: canonClass(f).trim() || null }, f.label), h('dd', { class: canonClass(f).trim() || null }, canonBadge(f, { me }), richText(f.value, 'wiki-fact-value'), dm ? truthNote(f) : null, ownAvailable(f, dm))]),
       ...(dm && parent ? [h('dt', {}, 'Inside'), h('dd', {}, pageLink(parent.title, parent.title))] : []),
     ) : null,
     children.length ? h('div', { class: 'wiki-children' },
@@ -150,31 +158,32 @@ function infobox(page, { dm }) {
   );
 }
 
-function gallery(page, { dm }) {
+function gallery(page, { dm, me = null }) {
   if (!page.gallery?.length) return null;
   return h('section', { class: 'wiki-gallery' },
     h('h3', {}, 'Gallery'),
     h('div', { class: 'wiki-gallery-grid' }, ...page.gallery.map((g) => h('figure', {},
       h('button', { type: 'button', class: 'wiki-figure-open', title: 'Show it bigger', onclick: () => showPicture(g.id, g.caption) }, pictureImg(g.id, { size: 'thumb', alt: g.caption })),
-      g.caption || (dm && g.available !== 'all') ? h('figcaption', {}, g.caption, ownAvailable(g, dm)) : null,
+      captionOf(g, dm, me),
       sendButton(page, { picture: g.id }, 'A picture', dm)))),
   );
 }
 
 /** What's on a page below its banner: the at-a-glance box beside the sections, then the gallery. */
-export function pageContent(page, { dm }) {
-  const box = infobox(page, { dm });
-  const body = h('div', { class: 'wiki-body' }, ...sections(page, { dm }), gallery(page, { dm }));
+export function pageContent(page, { dm, me = null }) {
+  const box = infobox(page, { dm, me });
+  const body = h('div', { class: 'wiki-body' }, ...sections(page, { dm, me }), gallery(page, { dm, me }));
   return [h('div', { class: `wiki-layout${box ? ' with-box' : ''}` }, box, body)];
 }
 
-function sections(page, { dm }) {
+function sections(page, { dm, me = null }) {
   if (!page.sections.length) return [h('p', { class: 'muted' }, dm ? 'This page is empty. Press Edit to write it.' : 'No text on this page is available.')];
-  return page.sections.map((s) => h('section', { class: 'wiki-section' },
-    s.heading ? h('h3', {}, s.heading) : null,
+  return page.sections.map((s) => h('section', { class: `wiki-section${canonClass(s)}` },
+    s.heading || canonClass(s) ? h('h3', {}, canonBadge(s, { me }), s.heading) : null,
+    dm ? truthNote(s) : null,
     dm && s.by === 'ai' ? h('p', { class: 'wiki-by-ai muted small' }, 'Written by the AI. It keeps this section up to date (with your approval) until you change it.') : null,
     dm && s.available !== 'all' ? h('p', { class: 'wiki-available small' }, `Available to ${availableText(s.available, { section: true })}.`) : null,
-    ...(dm ? sectionBody(s.text) : [richText(s.text)]),
+    h('div', { class: 'wiki-canon-text' }, ...(dm ? sectionBody(s.text) : [richText(s.text)])),
     s.id ? sendButton(page, { section: s.id }, s.heading ? `The section "${s.heading}"` : 'A section', dm) : null,
   ));
 }
@@ -222,9 +231,11 @@ function pictureSlot(label, current, { banner = false } = {}) {
   let caption;
   let picker;
   let focus;
+  let canon;
   const draw = () => {
     caption = h('input', { value: pic?.caption ?? '', maxLength: 300, placeholder: 'Caption (optional)', 'aria-label': `${label} caption` });
     picker = availablePicker(pic?.available ?? 'all', { section: true, label: `${label} available to` });
+    canon = canonPicker(pic, { label: `${label} caption` });
     focus = banner ? h('input', { type: 'range', min: 0, max: 100, value: String(pic?.focus ?? 50), 'aria-label': 'Banner position' }) : null;
     const thumb = pic ? pictureImg(pic.id, { size: 'thumb', alt: '', style: banner ? `object-position: 50% ${pic.focus ?? 50}%` : null }) : h('span', { class: 'wiki-slot-empty' }, 'No picture');
     focus?.addEventListener('input', () => { thumb.style.objectPosition = `50% ${focus.value}%`; });
@@ -243,6 +254,7 @@ function pictureSlot(label, current, { banner = false } = {}) {
       pic ? caption : null,
       pic && banner ? h('label', { class: 'small' }, 'Show from top to bottom ', focus) : null,
       pic ? h('label', { class: 'small' }, 'Available to ', picker.el) : null,
+      pic ? h('label', { class: 'small' }, 'Caption is ', canon.el) : null,
     ].filter(Boolean));
   };
   draw();
@@ -257,7 +269,7 @@ function pictureSlot(label, current, { banner = false } = {}) {
   });
   return {
     el,
-    value: () => (pic ? { id: pic.id, caption: caption.value.trim(), available: picker.value(), ...(banner && { focus: Number(focus.value) }) } : null),
+    value: () => (pic ? { id: pic.id, caption: caption.value.trim(), available: picker.value(), ...canon.value(), ...(banner && { focus: Number(focus.value) }) } : null),
   };
 }
 
@@ -268,11 +280,13 @@ function galleryEditor(items) {
   const add = (g) => {
     const caption = h('input', { value: g.caption ?? '', maxLength: 300, placeholder: 'Caption', 'aria-label': 'Gallery caption' });
     const picker = availablePicker(g.available ?? 'all', { section: true, label: 'Gallery picture available to' });
-    const row = { id: g.id, caption, picker };
+    const canon = canonPicker(g, { label: 'Gallery caption' });
+    const row = { id: g.id, caption, picker, canon };
     row.el = h('div', { class: 'wiki-gallery-item card' },
       pictureImg(g.id, { size: 'thumb' }),
       caption,
       picker.el,
+      canon.el,
       h('button', { type: 'button', class: 'ghost icon-btn danger', title: 'Take it out of the gallery', 'aria-label': 'Remove from gallery', onclick: () => {
         rows.splice(rows.indexOf(row), 1);
         row.el.remove();
@@ -297,7 +311,7 @@ function galleryEditor(items) {
       report(err);
     }
   });
-  return { el, value: () => rows.map((r) => ({ id: r.id, caption: r.caption.value.trim(), available: r.picker.value() })) };
+  return { el, value: () => rows.map((r) => ({ id: r.id, caption: r.caption.value.trim(), available: r.picker.value(), ...r.canon.value() })) };
 }
 
 /** The "at a glance" facts in the editor, with the usual ones for the page's kind a click away. { el, value(), kindChanged() }. */
@@ -308,8 +322,9 @@ function factsEditor(facts, kindInput) {
     const label = h('input', { value: f.label ?? '', maxLength: 60, placeholder: 'Race, Region, Leader…', 'aria-label': 'Fact' });
     const value = h('input', { value: f.value ?? '', maxLength: 500, placeholder: 'What it is. [[Links]] work.', 'aria-label': 'Fact value' });
     const picker = availablePicker(f.available ?? 'all', { section: true, label: 'Fact available to' });
-    const row = { label, value, picker };
-    row.el = h('div', { class: 'wiki-fact-row' }, label, value, picker.el,
+    const canon = canonPicker(f, { label: 'Fact' });
+    const row = { label, value, picker, canon };
+    row.el = h('div', { class: 'wiki-fact-row' }, label, value, picker.el, canon.el,
       h('button', { type: 'button', class: 'ghost icon-btn danger', title: 'Remove this fact', 'aria-label': 'Remove fact', onclick: () => {
         rows.splice(rows.indexOf(row), 1);
         row.el.remove();
@@ -336,7 +351,7 @@ function factsEditor(facts, kindInput) {
       list,
       h('div', { class: 'wiki-edit-foot' }, h('button', { type: 'button', class: 'ghost', onclick: () => add({ label: '', value: '' }) }, '+ Add a fact'), usual),
     ),
-    value: () => rows.map((r) => ({ label: r.label.value.trim(), value: r.value.value.trim(), available: r.picker.value() })).filter((f) => f.value), // a fact left empty (the usual ones not filled in) isn't kept
+    value: () => rows.map((r) => ({ label: r.label.value.trim(), value: r.value.value.trim(), available: r.picker.value(), ...r.canon.value() })).filter((f) => f.value), // a fact left empty (the usual ones not filled in) isn't kept
   };
 }
 
@@ -379,7 +394,8 @@ export function editor(page) {
     });
     dropTarget(text, addPictures);
     const picker = availablePicker(s.available, { section: true, label: 'Section available to' });
-    const row = { id: s.id, heading, text, picker };
+    const canon = canonPicker(s, { label: 'Section' });
+    const row = { id: s.id, heading, text, picker, canon };
     const move = (d) => {
       const i = rows.indexOf(row);
       const j = i + d;
@@ -399,6 +415,7 @@ export function editor(page) {
       ),
       h('div', { class: 'wiki-text-tools' },
         h('label', { class: 'small' }, 'Available to ', picker.el),
+        h('label', { class: 'small' }, 'It is ', canon.el),
         h('button', { type: 'button', class: 'ghost small', 'aria-label': 'Put a picture in this section', onclick: async () => {
           const id = await choosePicture('Put a picture in the text');
           if (id) insertAt(text, `![](picture:${id})`);
@@ -456,7 +473,7 @@ export function editor(page) {
       banner: banner.value(),
       gallery: galleryEd.value(),
       facts: factsEd.value(),
-      sections: rows.map((r) => ({ ...(r.id ? { id: r.id } : {}), heading: r.heading.value.trim(), text: r.text.value, available: r.picker.value() })),
+      sections: rows.map((r) => ({ ...(r.id ? { id: r.id } : {}), heading: r.heading.value.trim(), text: r.text.value, available: r.picker.value(), ...r.canon.value() })),
     };
     save.disabled = true;
     try {

@@ -10,6 +10,7 @@
  * #/new and #/waiting. More views join the rail as they're built
  * (docs/notes/wiki-space.md).
  */
+import { initTruthToggle } from './wiki-canon.js';
 import { api, h } from './api.js';
 import { clockText } from './shared/settings.js';
 import { state, nav, pictureImg, fam } from './wiki-data.js';
@@ -196,6 +197,7 @@ export function initSpace({ table, enter }) {
   nav.enter = enter;
   nav.routed = routed;
   nav.go = go;
+  initTruthToggle();
 }
 
 /** Another campaign: a new trail. */
