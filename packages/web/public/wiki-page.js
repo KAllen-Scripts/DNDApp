@@ -6,7 +6,7 @@
  */
 import { api, h } from './api.js';
 import { markdownFragment } from './markdown.js';
-import { wikiPieces, wikiKey, LINK_RE, PICTURE_RE, pictureAlt, KIND_FAMILIES } from './shared/wiki.js';
+import { wikiPieces, wikiKey, LINK_RE, PICTURE_RE, pictureAlt, KIND_FAMILIES, TONES, guessTone, factLinks, factTone } from './shared/wiki.js';
 import { sourceChips, sourcesEditor } from './wiki-sources.js';
 import { canonBadge, canonClass, truthNote, canonPicker } from './wiki-canon.js';
 import { state, nav, base, status, report, availableText, pictureImg, showPicture, uploadPictures, imageFiles, choosePicture, dropTarget, fam, kindBadge, byName } from './wiki-data.js';
@@ -149,7 +149,7 @@ function infobox(page, { dm, me = null }) {
       h('button', { type: 'button', class: 'wiki-figure-open', title: 'Show it bigger', onclick: () => showPicture(page.picture.id, page.picture.caption) }, pictureImg(page.picture.id, { alt: page.picture.caption || page.title })),
       captionOf(page.picture, dm, me)) : null,
     page.facts?.length || (dm && parent) ? h('dl', { class: 'wiki-facts' },
-      ...(page.facts ?? []).flatMap((f) => [h('dt', { class: canonClass(f).trim() || null }, f.label), h('dd', { class: canonClass(f).trim() || null }, canonBadge(f, { me }), richText(f.value, 'wiki-fact-value'), dm ? truthNote(f) : null, ownAvailable(f, dm), sourceChips(f.sources, { as: me }))]),
+      ...(page.facts ?? []).flatMap((f) => [h('dt', { class: canonClass(f).trim() || null }, f.label), h('dd', { class: `${canonClass(f)}${factLinks(f).length ? ` wiki-tie tone-${factTone(f)}` : ''}`.trim() || null }, canonBadge(f, { me }), richText(f.value, 'wiki-fact-value'), dm ? truthNote(f) : null, ownAvailable(f, dm), sourceChips(f.sources, { as: me }))]),
       ...(dm && parent ? [h('dt', {}, 'Inside'), h('dd', {}, pageLink(parent.title, parent.title))] : []),
     ) : null,
     children.length ? h('div', { class: 'wiki-children' },
@@ -316,6 +316,25 @@ function galleryEditor(items) {
   return { el, value: () => rows.map((r) => ({ id: r.id, caption: r.caption.value.trim(), available: r.picker.value(), ...r.canon.value() })) };
 }
 
+/**
+ * A relationship's tone (stage 3c), on a fact that links a page: guessed from the label unless the DM picks one.
+ * Hidden while the fact links nothing. { el, value() }.
+ */
+function toneSelect(f, label, value) {
+  const guessed = h('option', { value: '' });
+  const el = h('select', { class: 'wiki-tone-pick', 'aria-label': 'How they feel' }, guessed,
+    ...TONES.map((t) => h('option', { value: t }, t[0].toUpperCase() + t.slice(1))));
+  el.value = TONES.includes(f.tone) ? f.tone : '';
+  const show = () => {
+    guessed.textContent = `${guessTone(label.value)[0].toUpperCase()}${guessTone(label.value).slice(1)} (from the label)`;
+    el.hidden = !factLinks({ value: value.value }).length;
+  };
+  label.addEventListener('input', show);
+  value.addEventListener('input', show);
+  show();
+  return { el, value: () => (!el.hidden && el.value ? { tone: el.value } : {}) };
+}
+
 /** The "at a glance" facts in the editor, with the usual ones for the page's kind a click away. { el, value(), kindChanged() }. */
 function factsEditor(facts, kindInput) {
   const rows = [];
@@ -326,8 +345,9 @@ function factsEditor(facts, kindInput) {
     const picker = availablePicker(f.available ?? 'all', { section: true, label: 'Fact available to' });
     const canon = canonPicker(f, { label: 'Fact' });
     const sources = sourcesEditor(f.sources);
-    const row = { label, value, picker, canon, sources };
-    row.el = h('div', { class: 'wiki-fact-row' }, label, value, picker.el, canon.el, sources.el,
+    const tone = toneSelect(f, label, value);
+    const row = { label, value, picker, canon, sources, tone };
+    row.el = h('div', { class: 'wiki-fact-row' }, label, value, picker.el, canon.el, tone.el, sources.el,
       h('button', { type: 'button', class: 'ghost icon-btn danger', title: 'Remove this fact', 'aria-label': 'Remove fact', onclick: () => {
         rows.splice(rows.indexOf(row), 1);
         row.el.remove();
@@ -354,7 +374,7 @@ function factsEditor(facts, kindInput) {
       list,
       h('div', { class: 'wiki-edit-foot' }, h('button', { type: 'button', class: 'ghost', onclick: () => add({ label: '', value: '' }) }, '+ Add a fact'), usual),
     ),
-    value: () => rows.map((r) => ({ label: r.label.value.trim(), value: r.value.value.trim(), available: r.picker.value(), ...r.canon.value(), ...r.sources.value() })).filter((f) => f.value), // a fact left empty (the usual ones not filled in) isn't kept
+    value: () => rows.map((r) => ({ label: r.label.value.trim(), value: r.value.value.trim(), available: r.picker.value(), ...r.canon.value(), ...r.sources.value(), ...r.tone.value() })).filter((f) => f.value), // a fact left empty (the usual ones not filled in) isn't kept
   };
 }
 

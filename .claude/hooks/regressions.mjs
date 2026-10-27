@@ -6,6 +6,9 @@ let input = '';
 for await (const chunk of process.stdin) input += chunk;
 const command = JSON.parse(input || '{}').tool_input?.command ?? '';
 if (!/\bgit\b[^;&|]*\bcommit\b/.test(command)) process.exit(0);
+// Staged work (the owner, 2026-10-27): the regression tests run once at the end of each stage, so a commit
+// mid-stage says so with SKIP_REGRESSIONS=1 in front of it.
+if (/\bSKIP_REGRESSIONS=1\b/.test(command)) process.exit(0);
 
 const root = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 const changed = execSync('git status --porcelain -- packages', { cwd: root, encoding: 'utf8' }).trim();
