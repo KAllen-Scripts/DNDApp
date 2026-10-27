@@ -321,6 +321,53 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
 .fam-session { --kind: #5a5fa8; --kind-icon: "☾"; }
 .fam-lore { --kind: #8a6a3a; --kind-icon: "❧"; }
 .fam-other { --kind: var(--accent); --kind-icon: "❦"; }
+/* The wiki's space (wiki-space.js): the top bar gives way to the wiki's own rail of views and bar (the trail, the clock). */
+:root[data-space="wiki"]:not([data-phone]) #app-view > .topbar { display: none; }
+#app-view > #tab-wiki.wiki-space {
+  max-width: none; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+  gap: 0 1rem; padding-top: 0; padding-left: 0;
+}
+.wiki-rail {
+  grid-row: 1 / -1; display: flex; flex-direction: column; gap: 0.25rem; padding: 0.6rem 0.4rem;
+  background: var(--surface-2); border-right: 1px solid var(--border); overflow-y: auto;
+}
+.wiki-rail-btn {
+  display: grid; justify-items: center; gap: 0.2rem; width: 4.6rem; padding: 0.45rem 0.2rem;
+  border: none; border-radius: 10px; background: transparent; color: var(--muted); font-size: 0.72rem;
+}
+.wiki-rail-btn:hover { background: var(--surface); color: var(--text); }
+.wiki-rail-btn.current { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }
+.wiki-rail-art {
+  position: relative; display: grid; place-items: center; width: 2.4rem; height: 2.4rem; border-radius: 50%;
+  font-size: 1.25rem; background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--accent);
+}
+.wiki-rail-count {
+  position: absolute; top: -0.2rem; right: -0.4rem; min-width: 1.1rem; padding: 0 0.25rem; border-radius: 999px;
+  background: var(--accent); color: var(--surface); font-size: 0.66rem; font-weight: 700; line-height: 1.1rem;
+}
+.wiki-rail-gap { flex: 1; }
+.wiki-space-bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0; min-width: 0; }
+.wiki-trail { flex: 1; min-width: 0; display: flex; gap: 0.35rem; overflow-x: auto; }
+.wiki-trail-chip {
+  display: inline-flex; align-items: center; gap: 0.35rem; max-width: 12rem; padding: 0.2rem 0.65rem 0.2rem 0.2rem;
+  border: 1px solid color-mix(in srgb, var(--kind) 45%, var(--border)); border-radius: 999px; background: var(--surface);
+  font-size: 0.8rem; white-space: nowrap;
+}
+.wiki-trail-chip.current { background: color-mix(in srgb, var(--kind) 14%, var(--surface)); font-weight: 600; }
+.wiki-trail-art {
+  flex: none; display: grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 50%; overflow: hidden;
+  background: color-mix(in srgb, var(--kind) 25%, var(--surface));
+}
+.wiki-trail-art:not(.has-picture)::before { content: var(--kind-icon); color: var(--kind); font-size: 0.85rem; }
+.wiki-trail-art img { width: 100%; height: 100%; object-fit: cover; }
+.wiki-trail-title { overflow: hidden; text-overflow: ellipsis; }
+.wiki-clock { white-space: nowrap; }
+/* A narrower window: the rail keeps only its pictures (the names are in their tooltips). */
+@media (max-width: 900px) {
+  :root:not([data-phone]) .wiki-rail-btn { width: auto; }
+  :root:not([data-phone]) .wiki-rail-label { display: none; }
+}
+
 /* Small views (mini-views.js): a map crop, a ring of portraits, a ribbon of moments. */
 .mini { display: block; overflow: visible; }
 .mini-pin, .mini-dot { fill: var(--kind); stroke: var(--bg, #fff); stroke-width: 1.2; }

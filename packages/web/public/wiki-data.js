@@ -35,6 +35,7 @@ export const nav = {
   refreshList: async () => {},
   drawReviewButton: () => {},
   phoneBack: () => null,
+  routed: () => {}, // after each draw: the address and the trail follow (wiki-space.js)
 };
 
 /** Forget the pictures fetched for the last campaign. */

@@ -86,8 +86,15 @@ export function normalizeWikiPage(p = {}) {
  * @param {object} [o.pictures]  the wiki's pictures (src/wiki-pictures.js): a page's main picture, banner and gallery must be among them
  */
 export function createWiki({ db, archive, store, search, pictures = null }) {
-  const rows = (cid) =>
-    db.prepare('SELECT data FROM wiki_pages WHERE campaign_id = ? ORDER BY id').all(cid).map((r) => normalizeWikiPage(JSON.parse(r.data))).filter((p) => !p.removed);
+  // Every page, read once per campaign and kept until the next write (the space's views read them often).
+  // Callers get their own copies, so changing one never changes the kept pages.
+  const cache = new Map();
+  const rows = (cid) => {
+    if (!cache.has(cid)) {
+      cache.set(cid, db.prepare('SELECT data FROM wiki_pages WHERE campaign_id = ? ORDER BY id').all(cid).map((r) => normalizeWikiPage(JSON.parse(r.data))).filter((p) => !p.removed));
+    }
+    return structuredClone(cache.get(cid));
+  };
 
   const players = (cid) => store.roster(cid);
 
@@ -179,6 +186,7 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
       `INSERT INTO wiki_pages (id, campaign_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
        ON CONFLICT (id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
     ).run(page.id, cid, JSON.stringify(page), page.created_at, page.updated_at);
+    cache.delete(cid);
     return page;
   }
 

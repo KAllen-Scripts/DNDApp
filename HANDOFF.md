@@ -97,7 +97,7 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 0. **Ask speed (2026-10-21; the owner asked): built.** The owner times his Bag of Tricks question before and after (VS Code list) and sends the `Ask answered` log lines. If general lookups are still slow: his call on a faster model for the quick way only (`MODEL_QA_QUICK`, docs/notes/ask-speed.md). Tune `qa/route.js` if real questions go the wrong way (the log's `why` says which rule sent them).
 0. **Real-browser checks:** `scripts/browser.js` (Playwright, the installed Chrome, a copy of the data, fake AI); see AGENTS.md. Use it instead of asking the owner for checks that only need a desktop browser.
 0. **The DM's wiki (2026-10-21; the owner asked): stage 1, the AI's changes and the visual overhaul (2026-10-22) built.** The owner tries it with the real AI (VS Code list): on his campaign, press Read the records now and look at what it proposes; tune the prompt in `src/wiki-ai.js` from that (bump `PIPELINE_VERSION`). Later, from the research: the AI as a writing partner on demand (draft a page, expand, import notes, check for contradictions); players reading their available parts directly if the owner wants.
-0. **The wiki as its own space (2026-10-27; the owner asked): being built** from [docs/notes/wiki-space.md](docs/notes/wiki-space.md), one PR at a time, merged when green. Stage 0 (the split, pan and zoom, mini views) is done; next is stage 1 (the space shell, the Wheel and the Home). The plan adds `d3-force` and `d3-hierarchy` to the server in the PR that first uses them (the Web, stage 3).
+0. **The wiki as its own space (2026-10-27; the owner asked): being built** from [docs/notes/wiki-space.md](docs/notes/wiki-space.md), one PR at a time, merged when green. Stage 0 (the split, pan and zoom, mini views) and 1a (the space: rail, trail, clock, addresses for Back and reload) are done; next is 1b (the Wheel and the Home). The plan adds `d3-force` and `d3-hierarchy` to the server in the PR that first uses them (the Web, stage 3).
 0. **Show players this map (2026-10-20; the owner asked): built and merged.** The owner tries it (VS Code list). He also saw a red console error that evening that couldn't be reproduced here (two headless Chrome runs on a copy of the data found none): ask him for the text if it comes back.
 0. **Checking heights and bridges (2026-10-18; the owner asked): built.** The owner tries it (VS Code list). Next if wanted: bridges in the map creator, too-tall creatures not fitting under a bridge.
 0. **Maps not read on import; AI walls draws live (2026-10-16; the owner asked): built.** The owner tries it (VS Code list).
@@ -161,6 +161,8 @@ When you change the web page, add or update a test in `packages/web/test/` (READ
 
 
 ## Checks to run in VS Code
+
+- **The wiki's space (2026-10-27, stage 1a):** open the Wiki on the PC and the phone, in a light and a dark theme: the rail down the side (a row along the top on the phone), the trail and the clock in the bar, Back and reload on a page, and The table going back. (The cloud session had no Chrome or data to check it in a real browser.)
 
 Checks that only the owner's machine can do (a real browser or GPU, his book PDFs, the real AI), added by any session that needs one. **A VS Code session:** run each check, report what happened, and take it off this list (log the result in the change log). Don't run them again until someone adds them back. Keep each to one line: what to do, what should happen, and why it's here.
 
@@ -1616,3 +1618,9 @@ The owner (2026-10-21 feedback, item 2): "some way of managing attacks and such 
 - The owner: the wiki is "far too big to be just a page"; it gets a space of its own with visual navigation. The plan is [docs/notes/wiki-space.md](docs/notes/wiki-space.md) (35 PRs in stages 0 to 11, every item from the gaps research folded in, the truth/rumour switch and players' lore about their characters included).
 - `web/public/wiki.js` is split: `wiki-data.js` (the state, pictures, kinds and `nav`, the moves between views that wiki.js fills in), `wiki-page.js` (a page drawn and edited) and `wiki-waiting.js` (the AI's changes). wiki.js keeps the tab: the list, the front page and which view shows.
 - New `web/public/pan-zoom.js` (drag, wheel and pinch for the big views; the maths is plain functions) and `web/public/mini-views.js` (a map crop with pins, a ring of portraits, a ribbon of moments, for the compass, the Home and the rail), with `web/test/pan-zoom.test.js` and `web/test/mini-views.test.js`.
+
+### 2026-10-27: The wiki's space, stage 1a: a space of its own
+- The Wiki button now leaves the table for the wiki's own space on the same page (`web/public/wiki-space.js`, `<html data-space>`): the top bar gives way to a rail (Home, New page, Waiting with its count, The table) and a bar (the trail of the last 8 pages opened as picture chips, and the in-game time). The map stream, dice and Ask keep running behind it.
+- The address follows what's shown (`?space=wiki#/home`, `#/page/<id>`, `/edit`, `/history`, `#/new`, `#/waiting`), so Back, Forward and reload land there; a player sent to it stays at the table and never asks for the wiki. The wiki can now be popped out (`sheet-place.js` `TABS` lacked it). On a phone the rail is a row along the top.
+- `src/wiki.js` keeps each campaign's pages in memory until the next write (callers get copies).
+- Tests: `web/test/wiki-space.test.js` (3). SPEC §6.11 has "The wiki's space".

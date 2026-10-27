@@ -210,8 +210,15 @@
       <ol id="dm-corrections" class="dm-corrections"></ol>
     </section>
 
-    <!-- The DM's wiki (wiki.js): pages about the world; players reach only what's available to them, through Ask. -->
-    <section id="tab-wiki" class="panel wiki-panel" hidden>
+    <!-- The DM's wiki: a space of its own (wiki-space.js), with its own rail and bar instead of the top bar; the
+         pages are wiki.js. Players reach only what's available to them, through Ask. -->
+    <section id="tab-wiki" class="panel wiki-space" hidden>
+      <nav id="wiki-rail" class="wiki-rail" aria-label="The wiki"></nav>
+      <div id="wiki-bar" class="wiki-space-bar">
+        <nav id="wiki-trail" class="wiki-trail" aria-label="Pages you've opened"></nav>
+        <span id="wiki-clock" class="wiki-clock muted small" title="The in-game time"></span>
+      </div>
+      <div id="wiki-view" class="wiki-panel">
       <aside class="wiki-side" aria-label="Wiki pages">
         <div class="wiki-bar">
           <button id="wiki-new" type="button" class="primary">New page</button>
@@ -222,6 +229,7 @@
         <nav id="wiki-list" class="wiki-list"></nav>
       </aside>
       <div id="wiki-main" class="wiki-main"></div>
+      </div>
       <dialog id="wiki-dialog" class="map-dialog wiki-dialog" aria-label="Pictures"></dialog>
     </section>
 
