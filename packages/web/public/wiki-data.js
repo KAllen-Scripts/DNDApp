@@ -20,10 +20,11 @@ export const state = {
   kindKey: null, // one kind in that family (wikiKey), or null for all of them
   tagFilter: null,
   open: null, // { page, mentioned_in, unknown_names } of the page shown
-  view: 'page', // 'page' | 'edit' | 'history' | 'review' | 'wheel' | 'atlas' | 'web' | 'timeline' | 'templates' | 'quests' | 'knows' | 'tidy'
+  view: 'page', // 'page' | 'edit' | 'history' | 'review' | 'wheel' | 'atlas' | 'web' | 'timeline' | 'templates' | 'quests' | 'knows' | 'tidy' | 'import' | 'boards'
   atlasMap: null, // the map the Atlas shows (wiki-atlas.js)
   webAround: null, // the page in the middle of the Web (wiki-web.js), or null for the whole web
   timelineFocus: null, // the page whose times the Timeline shows first (wiki-timeline.js), or null
+  boardId: null, // the board shown (wiki-boards.js), or null for the list of boards
   as: null, // a player's id while viewing as them (a player's own, always, when the reader is a player)
   dm: true, // the DM's wiki; false: a player reading their own version (stage 6a)
   me: null, // the reader's user id

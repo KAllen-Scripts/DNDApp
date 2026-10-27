@@ -1702,6 +1702,35 @@ details.spell > summary::-webkit-details-marker { display: none; }
   #wiki-print .wiki-section, #wiki-print .wiki-infobox, #wiki-print figure { break-inside: avoid; }
 }
 
+/* Boards (wiki-boards.js, stage 10). */
+.wiki-boards { display: grid; gap: 0.8rem; max-width: 60rem; }
+.wiki-board-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.6rem; }
+.wiki-board-tile { display: grid; gap: 0.2rem; text-align: left; cursor: pointer; }
+.wiki-board-view { display: flex; flex-direction: column; gap: 0.5rem; height: 100%; min-height: 70vh; }
+.wiki-board-tools { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.wiki-board-title { margin-right: 0.5rem; }
+.wiki-board-frame { position: relative; flex: 1; min-height: 60vh; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: radial-gradient(circle, color-mix(in srgb, var(--text) 12%, transparent) 1px, transparent 1px) 0 0 / 24px 24px, var(--surface); touch-action: none; cursor: grab; }
+.wiki-board-frame.drawing-arrow, .wiki-board-frame.drawing-arrow .wiki-board-card { cursor: crosshair; }
+.wiki-board-canvas { position: absolute; left: 0; top: 0; width: 1px; height: 1px; }
+.wiki-board-arrows { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.wiki-board-arrows line { stroke: var(--muted, #888); stroke-width: 2; }
+.wiki-board-arrows path { fill: var(--muted, #888); }
+.wiki-board-arrows text { fill: var(--text); font-size: 13px; text-anchor: middle; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
+.wiki-board-card { position: absolute; box-sizing: border-box; display: flex; flex-direction: column; gap: 0.2rem; padding: 0.45rem 0.55rem; overflow: hidden; border: 1px solid var(--border); border-top: 3px solid var(--kind, var(--accent)); border-radius: var(--radius); background: var(--bg, #fff); box-shadow: 0 2px 6px rgb(0 0 0 / 0.12); cursor: pointer; user-select: none; }
+.wiki-board-card.selected { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wiki-board-card.gone { border-style: dashed; background: var(--surface); }
+.wiki-board-card .wiki-board-pic { width: 100%; flex: 1; min-height: 0; object-fit: cover; border-radius: calc(var(--radius) / 2); }
+.wiki-board-card.kind-picture { padding: 0.25rem; border-top-width: 1px; }
+.wiki-board-card.kind-note { border-top-width: 1px; }
+.wiki-board-note-text { flex: 1; width: 100%; border: 0; background: transparent; resize: none; font: inherit; color: inherit; }
+.note-yellow { background: #fff6b3; color: #222; }
+.note-pink { background: #ffd6e5; color: #222; }
+.note-blue { background: #d6ebff; color: #222; }
+.note-green { background: #d9f5d6; color: #222; }
+.note-purple { background: #e7dcff; color: #222; }
+.note-grey { background: #e6e6e6; color: #222; }
+.wiki-board-resize { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, var(--border) 50%); }
+
 /* ---------- maps (map.js) ---------- */
 
 .map-panel { min-height: 0; }

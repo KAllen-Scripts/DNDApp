@@ -341,7 +341,7 @@ export function createStore({ db, archive, config }) {
           }
         }
         for (const entry of archive.readAll()) {
-          const { campaign, sessions, members, speakers, settings = null, glossary, corrections, playerNotes, sheets = [], characterLists = [], maps = [], characters = [], handouts = [], creatures = [], rests = [], items = [], merchants = [], mapAssets = [], mapStamps = [], wiki = [], wikiProposals = [] } = entry;
+          const { campaign, sessions, members, speakers, settings = null, glossary, corrections, playerNotes, sheets = [], characterLists = [], maps = [], characters = [], handouts = [], creatures = [], rests = [], items = [], merchants = [], mapAssets = [], mapStamps = [], wiki = [], wikiProposals = [], wikiBoards = [] } = entry;
           if (db.prepare('SELECT 1 FROM campaigns WHERE slug = ?').get(campaign.slug)) continue;
           const cid = Number(
             db
@@ -425,6 +425,8 @@ export function createStore({ db, archive, config }) {
           for (const x of mapStamps.map(normalizeMapStamp)) insStamp.run(x.id, cid, JSON.stringify(x), x.created_at, x.updated_at);
           const insPage = db.prepare('INSERT OR IGNORE INTO wiki_pages (id, campaign_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)');
           for (const x of wiki.map(normalizeWikiPage)) insPage.run(x.id, cid, JSON.stringify(x), x.created_at, x.updated_at);
+          const insBoard = db.prepare('INSERT OR IGNORE INTO wiki_boards (id, campaign_id, owner, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)');
+          for (const x of wikiBoards.filter((b) => b?.id)) insBoard.run(String(x.id), cid, Number(x.owner) || 0, JSON.stringify(x), String(x.created_at ?? ''), String(x.updated_at ?? ''));
           const insProposal = db.prepare('INSERT OR IGNORE INTO wiki_proposals (id, campaign_id, status, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)');
           for (const x of wikiProposals.filter((p) => p?.id)) insProposal.run(String(x.id), cid, String(x.status ?? 'pending'), JSON.stringify(x), String(x.created_at ?? ''), String(x.updated_at ?? x.created_at ?? ''));
           const insRest = db.prepare('INSERT OR IGNORE INTO rests (id, campaign_id, kind, at, data) VALUES (?, ?, ?, ?, ?)');

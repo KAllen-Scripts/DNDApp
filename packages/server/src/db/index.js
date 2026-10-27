@@ -9,7 +9,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // v11 added handouts, rolls and archivist_marks (created by schema.sql), and edited_at/deleted_at to player_notes.
 // v12 added creatures, v13 rests, v14 items and merchants, v15 campaign_settings, v16 map_assets, v17 map_stamps, v18 wiki_pages, v19 wiki_proposals and wiki_chronicle (all created by schema.sql).
 // v20: players have several characters (character_sheets and character_pictures get a character number; migrateV19).
-const SCHEMA_VERSION = 20;
+// v21 added wiki_boards (created by schema.sql).
+const SCHEMA_VERSION = 21;
 
 /**
  * @param {string} file  path to the SQLite file, or ':memory:'

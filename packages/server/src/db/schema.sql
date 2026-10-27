@@ -449,6 +449,18 @@ CREATE TABLE IF NOT EXISTS wiki_proposals (
 );
 CREATE INDEX IF NOT EXISTS wiki_proposals_campaign ON wiki_proposals(campaign_id, status);
 
+-- Boards (wiki space stage 10a): the DM's and players' own canvases of cards and arrows.
+-- Archived whole after each save as wiki/boards/<id>/changes.jsonl. Schema v21.
+CREATE TABLE IF NOT EXISTS wiki_boards (
+  id           TEXT PRIMARY KEY,  -- random, also the archive folder name
+  campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  owner        INTEGER NOT NULL,  -- the user who made it
+  data         TEXT NOT NULL,     -- JSON; see normalizeBoard in src/wiki-boards.js
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS wiki_boards_campaign ON wiki_boards(campaign_id);
+
 -- How far the AI has read the archivist's journal for the wiki (derived: a rebuild moves it to the end).
 CREATE TABLE IF NOT EXISTS wiki_chronicle (
   campaign_id  INTEGER PRIMARY KEY REFERENCES campaigns(id) ON DELETE CASCADE,

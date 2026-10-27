@@ -257,6 +257,10 @@ export function createArchive(root) {
     /** What the AI proposed for the wiki: the whole proposal after each change (made, approved, rejected). */
     appendWikiProposal: (slug, entry) => appendLine(path.join(campaignDir(slug), 'wiki', 'proposals.jsonl'), entry),
 
+    /** A board (wiki space stage 10a): the whole board after each save. */
+    appendWikiBoard: (slug, id, entry) => appendLine(path.join(campaignDir(slug), 'wiki', 'boards', mapDir(id), 'changes.jsonl'), entry),
+    readWikiBoard: (slug, id) => readLines(path.join(campaignDir(slug), 'wiki', 'boards', mapDir(id), 'changes.jsonl')),
+
     /** Every saved version of a wiki page, oldest first. */
     readWikiChanges: (slug, id) => readLines(path.join(campaignDir(slug), 'wiki', mapDir(id), 'changes.jsonl')),
 
@@ -419,6 +423,7 @@ export function createArchive(root) {
           mapAssets: lastOfEach('map_assets'),
           mapStamps: lastOfEach('map_stamps'),
           wiki: lastOfEach('wiki'),
+          wikiBoards: lastOfEach(path.join('wiki', 'boards')),
           // The last line for each proposal is where it stands.
           wikiProposals: [...new Map(readLines(path.join(campaignDir(slug), 'wiki', 'proposals.jsonl')).map((p) => [p.id, p])).values()],
           rests: readLines(path.join(campaignDir(slug), 'rests.jsonl')),
