@@ -8,6 +8,7 @@ import { api, h } from './api.js';
 import { markdownFragment } from './markdown.js';
 import { wikiPieces, wikiKey, LINK_RE, PICTURE_RE, pictureAlt, KIND_FAMILIES, TONES, guessTone, factLinks, factTone } from './shared/wiki.js';
 import { sourceChips, sourcesEditor } from './wiki-sources.js';
+import { parseWhen, whenText, whenKey } from './shared/wiki-time.js';
 import { canonBadge, canonClass, truthNote, canonPicker } from './wiki-canon.js';
 import { state, nav, base, status, report, availableText, pictureImg, showPicture, uploadPictures, imageFiles, choosePicture, dropTarget, fam, kindBadge, byName } from './wiki-data.js';
 
@@ -119,6 +120,7 @@ export function hero(page) {
       chain.length ? h('nav', { class: 'wiki-crumbs small', 'aria-label': 'Inside' }, ...chain.flatMap((p, i) => [i ? h('span', { 'aria-hidden': 'true' }, ' › ') : null, h('button', { type: 'button', class: 'link', onclick: () => nav.openPage(p.id) }, p.title)])) : null,
       kindBadge(page.kind, ' on-hero'),
       h('h2', {}, page.title),
+      page.when ? h('p', { class: 'wiki-when small', title: page.when.from == null ? 'Not a time the Timeline can place' : page.when.text }, h('span', { 'aria-hidden': 'true' }, '◷ '), whenText(page.when, state.calendar)) : null,
     ),
   );
 }
@@ -170,10 +172,28 @@ function gallery(page, { dm, me = null }) {
   );
 }
 
-/** What's on a page below its banner: the at-a-glance box beside the sections, then the gallery. */
+/** The page's events (stage 4b), in order of when they happened; undated ones last. */
+function eventsList(page, { dm, me = null }) {
+  if (!page.events?.length) return null;
+  const sorted = [...page.events].sort((a, b) => whenKey(a.when) - whenKey(b.when));
+  return h('section', { class: 'wiki-events' },
+    h('h3', {}, 'Events'),
+    h('ol', { class: 'wiki-event-list' }, ...sorted.map((e) => h('li', { class: `wiki-event${canonClass(e)}` },
+      h('span', { class: `wiki-event-when${e.when?.from == null ? ' undated' : ''}` }, e.when ? whenText(e.when, state.calendar) : 'Undated'),
+      h('div', { class: 'wiki-event-body' },
+        canonBadge(e, { me }),
+        h('div', { class: 'wiki-canon-text' }, richText(e.text, 'wiki-event-text')),
+        dm ? truthNote(e) : null,
+        ownAvailable(e, dm),
+        sourceChips(e.sources, { as: me })),
+    ))),
+  );
+}
+
+/** What's on a page below its banner: the at-a-glance box beside the sections, then the events and the gallery. */
 export function pageContent(page, { dm, me = null }) {
   const box = infobox(page, { dm, me });
-  const body = h('div', { class: 'wiki-body' }, ...sections(page, { dm, me }), gallery(page, { dm, me }));
+  const body = h('div', { class: 'wiki-body' }, ...sections(page, { dm, me }), eventsList(page, { dm, me }), gallery(page, { dm, me }));
   return [h('div', { class: `wiki-layout${box ? ' with-box' : ''}` }, box, body)];
 }
 
@@ -378,6 +398,49 @@ function factsEditor(facts, kindInput) {
   };
 }
 
+/** A time box with what it reads as underneath, live (the server works it out again when it's saved). { el, input } */
+function whenInput(value, label) {
+  const input = h('input', { value: value?.text ?? '', maxLength: 200, placeholder: 'Day 12 night, 3 Mirtul 1492, 300 years ago…', 'aria-label': label });
+  const says = h('span', { class: 'muted small wiki-when-says' });
+  const show = () => {
+    const w = parseWhen(input.value, state.calendar, { now: state.clock });
+    says.textContent = !w ? '' : w.from == null ? 'Kept as written (not a time the Timeline can place)' : `Reads as ${whenText(w, state.calendar)}`;
+  };
+  input.addEventListener('input', show);
+  show();
+  return { input, says };
+}
+
+/** The page's events in the editor: when, what happened, who it's for, true or rumour, how we know. { el, value() } */
+function eventsEditor(events) {
+  const rows = [];
+  const list = h('div', { class: 'wiki-events-edit' });
+  const add = (e) => {
+    const when = whenInput(e.when, 'When it happened');
+    const text = h('input', { value: e.text ?? '', maxLength: 2000, placeholder: 'What happened. [[Links]] work.', 'aria-label': 'What happened' });
+    const picker = availablePicker(e.available ?? 'all', { section: true, label: 'Event available to' });
+    const canon = canonPicker(e, { label: 'Event' });
+    const sources = sourcesEditor(e.sources);
+    const row = { id: e.id, when, text, picker, canon, sources };
+    row.el = h('div', { class: 'wiki-event-row' }, when.input, text, picker.el, canon.el,
+      h('button', { type: 'button', class: 'ghost icon-btn danger', title: 'Remove this event', 'aria-label': 'Remove event', onclick: () => {
+        rows.splice(rows.indexOf(row), 1);
+        row.el.remove();
+      } }, '✕'),
+      when.says, sources.el);
+    rows.push(row);
+    list.append(row.el);
+  };
+  for (const e of events) add(e);
+  return {
+    el: h('div', { class: 'wiki-edit-events' },
+      h('div', { class: 'wiki-slot-head' }, h('strong', { class: 'small' }, 'Events'), h('span', { class: 'muted small' }, ' dated lines: what happened here, and when')),
+      list,
+      h('div', { class: 'wiki-edit-foot' }, h('button', { type: 'button', class: 'ghost', onclick: () => add({ text: '' }) }, '+ Add an event'))),
+    value: () => rows.map((r) => ({ ...(r.id ? { id: r.id } : {}), when: r.when.input.value.trim() ? { text: r.when.input.value.trim() } : null, text: r.text.value.trim(), available: r.picker.value(), ...r.canon.value(), ...r.sources.value() })).filter((e) => e.text),
+  };
+}
+
 export function editor(page) {
   const isNew = !page.id;
   const title = h('input', { value: page.title, maxLength: 200, required: true, 'aria-label': 'Title' });
@@ -395,6 +458,8 @@ export function editor(page) {
   const banner = pictureSlot('Banner', page.banner, { banner: true });
   const galleryEd = galleryEditor(page.gallery ?? []);
   const factsEd = factsEditor(page.facts ?? [], kind);
+  const when = whenInput(page.when, 'When');
+  const eventsEd = eventsEditor(page.events ?? []);
   const list = h('div', { class: 'wiki-edit-sections' });
   const rows = [];
 
@@ -465,6 +530,7 @@ export function editor(page) {
       h('label', {}, 'Inside', parent),
       h('label', {}, 'Tags', tags),
       h('label', {}, 'Page available to', available.el),
+      h('label', {}, 'When (if it happened at a time)', when.input, when.says),
     ),
     h('p', { class: 'muted small' }, 'A new page is only yours until you choose otherwise. Each section, fact, picture and block can narrow it further, never widen it. Other names are never shown to players.'),
     h('fieldset', { class: 'wiki-edit-pictures' },
@@ -473,6 +539,7 @@ export function editor(page) {
       galleryEd.el,
     ),
     h('fieldset', { class: 'wiki-edit-box' }, h('legend', {}, 'At a glance'), factsEd.el),
+    h('fieldset', { class: 'wiki-edit-box' }, h('legend', {}, 'Events'), eventsEd.el),
     list,
     h('div', { class: 'wiki-edit-foot' },
       h('button', { type: 'button', class: 'ghost', onclick: () => addSection() }, '+ Add section'),
@@ -498,6 +565,8 @@ export function editor(page) {
       banner: banner.value(),
       gallery: galleryEd.value(),
       facts: factsEd.value(),
+      when: when.input.value.trim() ? { text: when.input.value.trim() } : null,
+      events: eventsEd.value(),
       sections: rows.map((r) => ({ ...(r.id ? { id: r.id } : {}), heading: r.heading.value.trim(), text: r.text.value, available: r.picker.value(), ...r.canon.value(), ...r.sources.value() })),
     };
     save.disabled = true;
