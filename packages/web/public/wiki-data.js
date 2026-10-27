@@ -20,7 +20,7 @@ export const state = {
   kindKey: null, // one kind in that family (wikiKey), or null for all of them
   tagFilter: null,
   open: null, // { page, mentioned_in, unknown_names } of the page shown
-  view: 'page', // 'page' | 'edit' | 'history' | 'review' | 'wheel' | 'atlas' | 'web' | 'timeline' | 'templates' | 'quests' | 'knows'
+  view: 'page', // 'page' | 'edit' | 'history' | 'review' | 'wheel' | 'atlas' | 'web' | 'timeline' | 'templates' | 'quests' | 'knows' | 'tidy'
   atlasMap: null, // the map the Atlas shows (wiki-atlas.js)
   webAround: null, // the page in the middle of the Web (wiki-web.js), or null for the whole web
   timelineFocus: null, // the page whose times the Timeline shows first (wiki-timeline.js), or null

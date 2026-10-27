@@ -249,3 +249,53 @@ export function spoilers(text, pages, visible, except = []) {
   }
   return out;
 }
+
+/** Tidy up's rules (stage 8c), in the order shown, each with what fixes it on the page. */
+export const TIDY_RULES = [
+  { rule: 'missing_link', label: 'Links to pages that don\'t exist', fix: 'make_page' },
+  { rule: 'dead_fact', label: 'Facts linking deleted pages', fix: 'edit' },
+  { rule: 'unlinked', label: 'Names written out but not linked', fix: 'link' },
+  { rule: 'no_links', label: 'Pages with no links in or out', fix: 'open' },
+  { rule: 'place_not_on_map', label: 'Places not on a map', fix: 'map' },
+  { rule: 'place_no_page', label: 'Places on maps with no page', fix: 'make_place' },
+  { rule: 'no_picture', label: 'People with no picture', fix: 'picture' },
+  { rule: 'unknown_for', label: 'Blocks for names that match no player', fix: 'edit' },
+  { rule: 'still_planned', label: 'Planned for a while: still planned?', fix: 'edit' },
+  { rule: 'told', label: 'Accounts waiting for you to say if they\'re true', fix: 'open' },
+];
+
+/**
+ * Tidy up (stage 8c): what in the DM's wiki needs a hand, by rule. `ctx`: { onMaps: Set of page ids pinned on a map,
+ * placesWithoutPage: [{ map_id, map_name, place_id, name }], removed: Set of deleted pages' names (lower case),
+ * suggestions: (page) => unlinked mentions, unknown: (page) => unknown block names, sessionsSince: (iso) => how many
+ * sessions were played since, plannedAfter (sessions, default 3) }. Each item: { rule, page?, text, … }.
+ */
+export function tidyItems(pages, ctx) {
+  const live = pages.filter((p) => !p.template);
+  const names = new Set(live.flatMap((p) => [p.title, ...p.aliases]).map(wikiKey));
+  const linkedTo = new Set(live.flatMap(linksOf).map((n) => wikiKey(n.replace(/^!/, ''))));
+  const items = [];
+  const add = (rule, page, text, more = {}) => items.push({ rule, ...(page && { page: summary(page) }), text, ...more });
+  for (const p of live) {
+    const own = linksOf(p).map((n) => n.replace(/^!/, ''));
+    const missing = [...new Set(own.filter((n) => !names.has(wikiKey(n)) && !ctx.removed.has(wikiKey(n))))];
+    for (const n of missing) add('missing_link', p, `${p.title} links "${n}", which has no page.`, { name: n });
+    const dead = p.facts.filter((f) => wikiLinks(f.value).some((n) => ctx.removed.has(wikiKey(n)) && !names.has(wikiKey(n))));
+    for (const f of dead) add('dead_fact', p, `${p.title}'s ${f.label} links a deleted page.`, { label: f.label });
+    const sugg = ctx.suggestions(p);
+    if (sugg.length) add('unlinked', p, `${p.title} names ${[...new Set(sugg.map((s) => s.title))].slice(0, 4).join(', ')} without linking.`, { count: sugg.length });
+    if (!own.length && ![p.title, ...p.aliases].some((n) => linkedTo.has(wikiKey(n))) && !p.parent && !live.some((x) => x.parent === p.id)) add('no_links', p, `Nothing links ${p.title}, and it links nothing.`);
+    if (kindFamily(p.kind) === 'place' && !ctx.onMaps.has(p.id)) add('place_not_on_map', p, `${p.title} isn't on a map.`);
+    if (kindFamily(p.kind) === 'person' && !p.picture && !p.banner && !p.gallery.length && !p.sections.some((s) => picturesIn(s.text).length)) add('no_picture', p, `${p.title} has no picture.`);
+    const unknown = ctx.unknown(p);
+    if (unknown.length) add('unknown_for', p, `${p.title} has a block for ${unknown.join(', ')}, who isn't a player.`, { names: unknown });
+    const planned = [...p.sections, ...p.facts, ...(p.events ?? [])].filter((x) => x.canon === 'planned').length;
+    const since = ctx.sessionsSince(p.updated_at);
+    if (planned && !isPrepPage(p) && since >= (ctx.plannedAfter ?? 3)) add('still_planned', p, `${p.title} has ${planned} planned part${planned === 1 ? '' : 's'}, unchanged for ${since} sessions.`, { sessions: since });
+    const told = [...p.sections, ...p.facts, ...(p.events ?? [])].filter((x) => x.canon === 'told').length;
+    if (told) add('told', p, `${p.title} has ${told} account${told === 1 ? '' : 's'} not yet marked true or false.`);
+  }
+  for (const x of ctx.placesWithoutPage) add('place_no_page', null, `"${x.name}" on ${x.map_name} has no page.`, { map_id: x.map_id, place_id: x.place_id, name: x.name });
+  const order = new Map(TIDY_RULES.map((r, i) => [r.rule, i]));
+  return items.sort((a, b) => order.get(a.rule) - order.get(b.rule));
+}
