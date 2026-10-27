@@ -51,6 +51,7 @@ export const nav = {
   sendHandout: null, // send part of a page as a handout (wiki-handout.js)
   putOnMap: null, // choose a map and put the page on it in the Atlas (wiki-atlas.js)
   showMap: null, // open a map at a point on the Map tab (app.js; none in a popped-out window)
+  openShop: null, // open a merchant's shop (app.js; none in a popped-out window)
 };
 
 /** Forget the pictures fetched for the last campaign. */

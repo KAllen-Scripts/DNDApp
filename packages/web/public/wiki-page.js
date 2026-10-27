@@ -6,12 +6,13 @@
  */
 import { api, h } from './api.js';
 import { markdownFragment } from './markdown.js';
-import { wikiPieces, wikiKey, LINK_RE, EMBED_RE, PICTURE_RE, pictureAlt, KIND_FAMILIES, TONES, guessTone, factLinks, factTone } from './shared/wiki.js';
+import { wikiPieces, wikiKey, LINK_RE, EMBED_RE, APP_EMBED_RE, PICTURE_RE, pictureAlt, KIND_FAMILIES, TONES, guessTone, factLinks, factTone } from './shared/wiki.js';
 import { sourceChips, sourcesEditor } from './wiki-sources.js';
 import { parseWhen, whenText, whenKey } from './shared/wiki-time.js';
 import { canonBadge, canonClass, truthNote, canonPicker } from './wiki-canon.js';
 import { templateChooser } from './wiki-templates.js';
 import { askWriter } from './wiki-write.js';
+import { appEmbedBox, chooseEmbed } from './wiki-app-embeds.js';
 import { state, nav, base, status, report, availableText, pictureImg, showPicture, uploadPictures, imageFiles, choosePicture, dropTarget, fam, kindBadge, byName } from './wiki-data.js';
 
 /** A picture in the text: ![caption|place](picture:id). */
@@ -30,7 +31,12 @@ export function richText(text, cls = 'wiki-text', { embeds = null, dm = false } 
   const targets = [];
   const pictures = [];
   const embedded = [];
+  const live = [];
   const marked = text
+    .replace(APP_EMBED_RE, (_, kind, name) => {
+      live.push({ kind: kind.toLowerCase(), name: name.trim() });
+      return '<span class="wiki-app-slot"></span>';
+    })
     .replace(EMBED_RE, (_, name) => {
       embedded.push(name.trim());
       return '<span class="wiki-embed-slot"></span>';
@@ -47,6 +53,11 @@ export function richText(text, cls = 'wiki-text', { embeds = null, dm = false } 
   box.append(markdownFragment(marked));
   box.querySelectorAll('span.wiki-pic-slot').forEach((span, i) => (pictures[i] ? span.replaceWith(figure(pictures[i])) : span.remove()));
   box.querySelectorAll('span.wiki-link').forEach((span, i) => span.replaceWith(pageLink(targets[i], span.textContent)));
+  box.querySelectorAll('span.wiki-app-slot').forEach((span, i) => {
+    const el = live[i] && appEmbedBox(live[i].kind, live[i].name, embeds, dm);
+    if (el) span.replaceWith(el);
+    else span.remove();
+  });
   box.querySelectorAll('span.wiki-embed-slot').forEach((span, i) => {
     const el = embedBox(embedded[i], embeds, dm);
     if (el) span.replaceWith(el);
@@ -500,7 +511,7 @@ export function editor(page) {
 
   const addSection = (s = { heading: '', text: '', available: 'all' }) => {
     const heading = h('input', { value: s.heading, maxLength: 200, placeholder: 'Heading (optional)', 'aria-label': 'Section heading' });
-    const text = h('textarea', { rows: s.prompt ? 4 : 8, 'aria-label': template ? 'Writing prompt' : 'Section text', placeholder: template ? 'The writing prompt a new page shows here: what to write in this section.' : s.prompt || 'Markdown. [[Page name]] links a page; [[!Clue name]] puts a clue\'s words here (whoever can see the clue sees them). A block between ":::for Thorin" and ":::" is only for Thorin; ":::dm" is only for you. Paste or drop a picture to put it here.' });
+    const text = h('textarea', { rows: s.prompt ? 4 : 8, 'aria-label': template ? 'Writing prompt' : 'Section text', placeholder: template ? 'The writing prompt a new page shows here: what to write in this section.' : s.prompt || 'Markdown. [[Page name]] links a page; [[!Clue name]] puts a clue\'s words here (whoever can see the clue sees them); [[creature:Goblin boss]] (or item:, merchant:, handout:, map:) shows it live. A block between ":::for Thorin" and ":::" is only for Thorin; ":::dm" is only for you. Paste or drop a picture to put it here.' });
     text.value = s.text;
     const addPictures = async (files) => {
       try {
@@ -544,6 +555,11 @@ export function editor(page) {
           const id = await choosePicture('Put a picture in the text');
           if (id) insertAt(text, `![](picture:${id})`);
         } }, '+ Picture'),
+        // A live embed (stage 9a): a creature, item, merchant, handout or map, shown as it is now.
+        h('button', { type: 'button', class: 'ghost small', 'aria-label': 'Embed a creature, item, merchant, handout or map', onclick: async () => {
+          const pick = await chooseEmbed();
+          if (pick) insertAt(text, `[[${pick.kind}:${pick.name}]]`);
+        } }, '+ Embed'),
         // The AI on a saved section (stage 5b): what it writes waits under Waiting for you.
         ...(s.id && !isNew && !template ? [
           h('button', { type: 'button', class: 'ghost small wiki-ai-btn', title: 'Add more to this section from the records (as saved)', onclick: (e) => askWriter({ mode: 'expand', page_id: page.id, section_id: s.id }, e.currentTarget) }, '✦ Expand'),

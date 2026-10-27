@@ -22,6 +22,21 @@ export const LINK_RE = /\[\[([^\]|\n]+)(?:\|([^\]\n]+))?\]\]/g;
  * business, so revealing the clue once reveals it everywhere it's embedded; a viewer who can't see it gets nothing.
  */
 export const EMBED_RE = /\[\[!([^\]|\n]+)\]\]/g;
+
+/**
+ * Live embeds (stage 9a): `[[creature:Goblin boss]]`, `[[item:…]]`, `[[merchant:…]]`, `[[handout:…]]`,
+ * `[[map:…]]` show the app's own thing, live, by its name. They're never links to wiki pages.
+ */
+export const APP_EMBED_KINDS = ['creature', 'item', 'merchant', 'handout', 'map'];
+export const APP_EMBED_RE = /\[\[(creature|item|merchant|handout|map):([^\]|\n]+)\]\]/gi;
+const isAppEmbed = (name) => /^(creature|item|merchant|handout|map):/i.test(String(name).trim());
+
+/** The live embeds in a text: [{ kind, name }] (no duplicates). */
+export function appEmbeds(text) {
+  const out = new Map();
+  for (const m of String(text ?? '').matchAll(APP_EMBED_RE)) out.set(`${m[1].toLowerCase()}:${wikiKey(m[2])}`, { kind: m[1].toLowerCase(), name: m[2].trim() });
+  return [...out.values()];
+}
 export const embedNames = (text) => [...new Set([...String(text ?? '').matchAll(EMBED_RE)].map((m) => m[1].trim()))];
 /** A text without its embeds (search, the AI, excerpts: the embedded page speaks for itself). */
 export const unembed = (text) => String(text ?? '').replace(EMBED_RE, '');
@@ -106,11 +121,11 @@ export function unknownBlockNames(texts, roster) {
 /** The page names a text links to, as written (no duplicates). */
 export function wikiLinks(text) {
   // An embed ([[!Clue]]) links its page too.
-  return [...new Set([...String(text ?? '').matchAll(LINK_RE)].map((m) => m[1].trim().replace(/^!\s*/, '')))];
+  return [...new Set([...String(text ?? '').matchAll(LINK_RE)].filter((m) => !isAppEmbed(m[1])).map((m) => m[1].trim().replace(/^!\s*/, '')))];
 }
 
 /** A text with its [[links]] as plain words (for the AI and for search). */
-export const unlink = (text) => unembed(text).replace(LINK_RE, (_, name, shown) => (shown ?? name).trim());
+export const unlink = (text) => unembed(text).replace(APP_EMBED_RE, (_, kind, name) => name.trim()).replace(LINK_RE, (_, name, shown) => (shown ?? name).trim());
 
 /** Lower case with spaces squeezed, for matching page titles and aliases. */
 export const wikiKey = (s) => String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');

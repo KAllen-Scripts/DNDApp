@@ -12,6 +12,7 @@ import { createArchivist } from './kb/archivist.js';
 import { createUpdates } from './kb/updates.js';
 import { createHandouts } from './handouts.js';
 import { createWiki } from './wiki.js';
+import { createWikiEmbeds } from './wiki-embeds.js';
 import { createWikiAI } from './wiki-ai.js';
 import { createWikiPictures } from './wiki-pictures.js';
 import { linkWikiToMaps } from './wiki-maps.js';
@@ -73,6 +74,8 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const mapStamps = createMapStamps({ db, archive, store });
   // The wiki's pictures: uploaded, or copied from a creature, item, merchant, map, handout or token.
   const wikiPictures = createWikiPictures({ archive, store, creatures, items, merchants, maps, handouts, pictures });
+  // Live embeds in pages (stage 9a): creatures, items, merchants, handouts and maps, per viewer.
+  wiki.appEmbeds = createWikiEmbeds({ creatures, items, merchants, handouts, maps });
   handouts.events.on('update', ({ campaign_id }) => jobs.scheduleUpdates(campaign_id));
   // Sheet changes, late note edits and handouts reach the archivist between sessions.
   const updates = createUpdates({ db, store, archive, handoutsBetween: handouts.forArchivist });
