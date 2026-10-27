@@ -3,7 +3,7 @@
  * or a player for View as): plain functions of the pages that viewer may see,
  * so nothing hidden reaches the page, not even in a count.
  */
-import { KIND_FAMILIES, kindFamily, wikiKey, wikiPieces, wikiLinks, wikiPictures as picturesIn, unlink, unpicture, embedNames, unembed, isPrepPage } from '@dndapp/shared/wiki.js';
+import { KIND_FAMILIES, kindFamily, wikiKey, wikiPieces, wikiLinks, wikiPictures as picturesIn, unlink, unpicture, embedNames, unembed, isPrepPage, prepPlayed } from '@dndapp/shared/wiki.js';
 
 /** A page as a card: enough for the cards and the preview shown over a link (its picture and its opening words). */
 export const summary = (p) => ({
@@ -33,6 +33,25 @@ export function embedsIn(page, pages, opening) {
     }
   }
   return out;
+}
+
+/**
+ * On a prep page (stage 7c), each embedded clue's outcome for the DM: `found` (its Found fact, "Session 12: Thorin,
+ * Mira"), and `status`: 'found', 'carried' (a later prep page embeds it, `carried_to` its title) or 'missed' (the
+ * session was played and it didn't come out). Changes `embeds` in place.
+ */
+export function prepMarks(page, embeds, pages) {
+  if (!isPrepPage(page)) return embeds;
+  const later = pages.filter((p) => isPrepPage(p) && p.id !== page.id && String(p.created_at) > String(page.created_at));
+  for (const e of Object.values(embeds)) {
+    const clue = pages.find((p) => p.id === e.id);
+    const found = clue?.facts.find((f) => wikiKey(f.label) === 'found')?.value?.trim() ?? '';
+    const next = later.find((p) => p.sections.some((s) => embedNames(s.text).some((n) => [e.title, ...(clue?.aliases ?? [])].some((x) => wikiKey(x) === wikiKey(n)))));
+    if (found && !/^not yet/i.test(found)) Object.assign(e, { status: 'found', found });
+    else if (next) Object.assign(e, { status: 'carried', carried_to: next.title });
+    else if (prepPlayed(page)) e.status = 'missed';
+  }
+  return embeds;
 }
 
 function excerpt(p) {

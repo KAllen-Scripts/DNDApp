@@ -24,7 +24,7 @@ import { z } from 'zod';
 import { renderRecord } from './kb/store.js';
 import { BadRequestError, NotFoundError } from './store.js';
 import { WIKI_LIMITS as L } from './wiki.js';
-import { narrowest, audienceOf, canSeeAudience, wikiKey, wikiPictures as picturesIn, PICTURE_RE, TONES } from '@dndapp/shared/wiki.js';
+import { narrowest, audienceOf, canSeeAudience, wikiKey, wikiPictures as picturesIn, PICTURE_RE, TONES, embedNames, openPrepPage, PREP_KIND } from '@dndapp/shared/wiki.js';
 import { json } from './db/index.js';
 import { CITATION_RE, normalizeSources } from '@dndapp/shared/citations.js';
 import { parseWhen, whenText, whenKey } from '@dndapp/shared/wiki-time.js';
@@ -118,6 +118,26 @@ Changes:
 Don't propose what's already waiting for the DM, or anything the DM rejected before unless the records have changed since. Return no changes if nothing needs changing.`;
 
 // ---------- the AI as a writing partner (stage 5b): on the DM's button, one call each, as proposals ----------
+
+/** After a session (stage 7c): which of the prep page's clues came out, and what carries over to the next one. */
+export const PrepSchema = z.object({
+  clues: z.array(z.object({
+    page_id: z.string().describe('The clue page'),
+    found: z.boolean().describe('true when the records show the players came across this clue this session'),
+    found_by: z.array(z.number().int()).describe('The player user ids who found it or were there; [] when not found'),
+    sources: z.array(z.number().int()).describe('Ids of the records showing it; [] when not found'),
+    reason: z.string().describe('One sentence for the DM'),
+  })),
+  strong_start: z.string().describe('A strong start for the next session, from where this one ended (a sentence or two)'),
+  scenes_left: z.string().describe('The planned scenes they didn\'t reach, still worth keeping (Markdown, "" for none)'),
+  reason: z.string().describe('One sentence for the DM: how the session went against the plan'),
+});
+
+const PREP_SYSTEM = `You help a Dungeon Master check their session prep against what happened. You get the prep page they wrote for the session just played, the clue pages it embeds, and the records the archivist made from the session.
+
+For each clue, say whether the records show the players came across it this session: found only when a record shows it (give those records' ids in sources), and found_by only the players those records say know it or were there. Never guess. Then write a strong start for the next session from where this one ended, and list the planned scenes they didn't reach.
+
+Everything you write waits for the DM's approval.`;
 
 const DraftSchema = z.object({
   sections: z.array(SectionSchema).describe('The page\'s sections, under the headings asked for where the records have something for them'),
@@ -462,6 +482,84 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
     return { available, sections };
   }
 
+  /**
+   * After a session (stage 7c): the open prep page's clues against the session's records. A clue that came out
+   * becomes a reveal of its opening to those who found it (only players the records say know it) and its Found
+   * fact; the prep page gets Played; and a next prep page is proposed, carrying the clues not found and the scenes
+   * not reached. Everything waits for the DM. Returns how many proposals it made.
+   */
+  async function afterSession(cid, session, records, playerIds) {
+    const pages = wiki.list(cid);
+    const prep = openPrepPage(pages);
+    if (!prep) return 0;
+    const byName = (n) => pages.find((p) => [p.title, ...p.aliases].some((x) => wikiKey(x) === wikiKey(n)));
+    const clues = [...new Map(prep.sections.flatMap((s) => embedNames(s.text)).map(byName).filter(Boolean).map((p) => [p.id, p])).values()];
+    if (!clues.length) return 0;
+    const roster = players(cid);
+    const names = new Map(roster.map((m) => [m.user_id, m.character_name ? `${m.character_name} (user ${m.user_id})` : `${m.name} (user ${m.user_id})`]));
+    const out = await llm.structured({
+      task: 'wiki',
+      purpose: 'wiki:prep',
+      system: PREP_SYSTEM,
+      prompt: [
+        `<players>\n${roster.map((m) => `user ${m.user_id}: ${m.character_name || '(no character)'}, played by ${m.name}`).join('\n') || '(none)'}\n</players>`,
+        `<session>${session}</session>`,
+        `<prep_page>\n${renderPage(prep, names)}\n</prep_page>`,
+        `<clues>\n${clues.map((c) => renderPage(c, names)).join('\n\n')}\n</clues>`,
+        `<records>\n${records.map(renderRecord).join('\n\n')}\n</records>`,
+        'Which clues came out this session, and what carries over to the next?',
+      ].join('\n\n'),
+      schema: PrepSchema,
+      campaignId: cid,
+    });
+    const who = (ids) => ids.map((id) => roster.find((m) => m.user_id === id)).filter(Boolean).map((m) => m.character_name || m.name).join(', ');
+    let made = 0;
+    const keep = (p) => { if (add(cid, { run: session, ...p })) made++; };
+    const found = new Set();
+    for (const c of out.clues) {
+      const clue = clues.find((x) => x.id === c.page_id);
+      if (!clue || !c.found) continue;
+      // Only players the records say know it, and only from records that show it.
+      const audience = audienceFrom(cid, c.sources, playerIds);
+      const finders = [...new Set(c.found_by)].filter((id) => playerIds.includes(id) && (audience == null || audience.includes(id))).sort((a, b) => a - b);
+      if (!finders.length) continue;
+      found.add(clue.id);
+      const opening = clue.sections[0];
+      const pageAudience = audienceOf(clue.available);
+      const hidden = opening && finders.filter((id) => !canSeeAudience({ userId: id }, narrowest(pageAudience, audienceOf(opening.available))));
+      if (hidden?.length) {
+        keep({ reason: clean(c.reason, 1000), page_id: clue.id, page_title: clue.title, action: 'reveal', key: `reveal:${clue.id}:${opening.id}`, section_id: opening.id, section_heading: opening.heading, players: hidden, sections: [] });
+      }
+      keep({ reason: clean(c.reason, 1000), page_id: clue.id, page_title: clue.title, action: 'set_fact', key: `${clue.id}:fact:found`, fact: { label: 'Found', value: `${session}: ${who(finders)}`, canon: 'true', available: 'dm', records: c.sources }, sections: [] });
+    }
+    keep({ reason: clean(out.reason, 1000) || `Played in ${session}.`, page_id: prep.id, page_title: prep.title, action: 'set_fact', key: `${prep.id}:fact:played`, fact: { label: 'Played', value: session, canon: 'true', available: 'dm', records: [] }, sections: [] });
+    // The next prep page: the clues not found, the scenes not reached.
+    const fact = (label) => prep.facts.find((f) => wikiKey(f.label) === wikiKey(label))?.value ?? '';
+    const number = Number(/\d+/.exec(session)?.[0]);
+    const title = Number.isFinite(number) ? `Session ${number + 1} plan` : `Plan after ${session}`;
+    const carried = clues.filter((c) => !found.has(c.id));
+    const taken = new Set(pages.flatMap((p) => [p.title, ...p.aliases]).map(wikiKey));
+    if (!taken.has(wikiKey(title))) {
+      const planned = { available: 'all', canon: 'planned', records: [] };
+      const sections = [
+        { heading: 'Strong start', text: clean(out.strong_start, 4000), ...planned },
+        { heading: 'Scenes', text: clean(out.scenes_left, 20_000), ...planned },
+        { heading: 'Clues', text: carried.map((c) => `[[!${c.title}]]`).join('\n\n'), ...planned },
+      ].filter((s) => s.text);
+      keep({
+        reason: `The plan for the next session: ${carried.length ? `${carried.length} clue${carried.length === 1 ? '' : 's'} carried over` : 'every clue came out'}.`,
+        action: 'new_page', key: `new:${wikiKey(title)}`, title, kind: PREP_KIND, aliases: [], parent: prep.parent, page_available: 'dm', when: null, events: [],
+        facts: [
+          { label: 'Session', value: Number.isFinite(number) ? String(number + 1) : '', canon: 'planned', available: 'all', records: [] },
+          ...(fact('Arc') ? [{ label: 'Arc', value: fact('Arc'), canon: 'planned', available: 'all', records: [] }] : []),
+          { label: 'Played', value: '', canon: 'planned', available: 'all', records: [] },
+        ].filter((f) => f.value || f.label === 'Played'),
+        sections: sections.length ? sections : [{ heading: 'Scenes', text: 'What could happen next.', ...planned }],
+      });
+    }
+    return made;
+  }
+
   const wikiAI = {
     /** Proposals waiting for the DM, oldest first, each with what's there now to compare. */
     pending(cid) {
@@ -521,8 +619,18 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
           if (p && add(cid, p)) made++;
         }
       }
+      // After a session: check the prep page's clues against it (stage 7c).
+      const session = runs.find((r) => /^session\s*\d+/i.test(String(r)));
+      let prepNote = '';
+      if (session && records.length) {
+        try {
+          made += await afterSession(cid, session, records, playerIds);
+        } catch (err) {
+          prepNote = ` (the prep page's clues couldn't be checked: ${err.message})`;
+        }
+      }
       setCursor(cid, upTo);
-      progress(1, made ? `${made} wiki change${made === 1 ? '' : 's'} waiting for you` : 'Nothing new for the wiki');
+      progress(1, `${made ? `${made} wiki change${made === 1 ? '' : 's'} waiting for you` : 'Nothing new for the wiki'}${prepNote}`);
       return made;
     },
 

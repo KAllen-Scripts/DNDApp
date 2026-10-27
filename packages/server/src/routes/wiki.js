@@ -17,7 +17,7 @@ import { webGraph } from '../wiki-web.js';
 import { pageOnMaps, makePageFor, atlasLayers, pagePlaces, shownToViewer } from '../wiki-maps.js';
 import { timeline } from '../wiki-timeline.js';
 import { STARTER_TEMPLATES } from '@dndapp/shared/wiki-templates.js';
-import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass, embedsIn } from '../wiki-views.js';
+import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass, embedsIn, prepMarks } from '../wiki-views.js';
 
 export function registerWiki(app, r) {
   const { access, auth, store, wiki, wikiAI, wikiPictures, jobs, pictures, search, maps, handouts, sheets, db, kb, config } = r;
@@ -490,7 +490,7 @@ export function registerWiki(app, r) {
       const seen = pages.find((p) => p.id === page.id) ?? null;
       return { page: seen, as, from_sheet: seen && fromSheet(cid, seen, as), embeds: seen ? embedsIn(seen, pages, openings(cid)) : {} };
     }
-    return { page, mentioned_in: wiki.mentionedIn(cid, page), unknown_names: wiki.unknownNames(cid, page), on_maps: pageOnMaps(maps, cid, page.id), from_sheet: fromSheet(cid, page, null), embeds: embedsIn(page, wiki.list(cid), openings(cid)) };
+    return { page, mentioned_in: wiki.mentionedIn(cid, page), unknown_names: wiki.unknownNames(cid, page), on_maps: pageOnMaps(maps, cid, page.id), from_sheet: fromSheet(cid, page, null), embeds: prepMarks(page, embedsIn(page, wiki.list(cid), openings(cid)), wiki.list(cid)) };
   });
 
   /** Each page's opening section, for embeds (stage 7a): what an embedded clue shows. */
