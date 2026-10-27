@@ -32,6 +32,7 @@ import { drawKnows } from './wiki-knows.js';
 import { drawTidy } from './wiki-tidy.js';
 import { drawTransfer, printPages } from './wiki-transfer.js';
 import { drawBoards } from './wiki-boards.js';
+import { clearMoments } from './wiki-asof.js';
 import { openSaveList } from './wiki-lists.js';
 import { linkHints } from './wiki-write.js';
 import { drawWheel } from './wiki-wheel.js';
@@ -50,6 +51,7 @@ const $ = (sel) => document.querySelector(sel);
 export async function loadWiki({ campaignId, guarded, isDm = true, userId = null }) {
   clearTimeout(state.poll);
   clearPictures();
+  clearMoments();
   resetSpace();
   // A player reads their own version (stage 6a): everything is drawn as them, and the DM's tools are left out.
   Object.assign(state, { campaignId, guarded, dm: isDm, me: userId, pages: [], players: [], filter: '', kindFilter: null, kindKey: null, tagFilter: null, open: null, view: 'page', as: isDm ? null : userId, proposals: 0, aiRun: null, poll: null });

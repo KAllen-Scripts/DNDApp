@@ -24,7 +24,7 @@ const sessionNumber = (p) => Number(/\bsession\s*#?(\d+)/i.exec(p.title)?.[1] ??
  * lane page ids; `truth`: the DM's Truth toggle (no rumours or falsehoods); `forDm`: keep who each event is for; `journeys`: mapJourneys() for the viewer.
  * Returns { lanes: [{ id, title, family?, picture?, page? }], items, undated, sessions, capped }.
  */
-export function timeline(pages, { places = new Map(), lanes = [], truth = false, forDm = false, journeys = [] } = {}) {
+export function timeline(pages, { places = new Map(), lanes = [], truth = false, forDm = false, journeys = [], characters = false } = {}) {
   const byId = new Map(pages.map((p) => [p.id, p]));
   const byName = new Map();
   for (const p of pages) for (const n of [p.title, ...p.aliases]) if (!byName.has(wikiKey(n))) byName.set(wikiKey(n), p);
@@ -58,7 +58,23 @@ export function timeline(pages, { places = new Map(), lanes = [], truth = false,
       else items.push({ ...item, lane: laneOf(p, e.when.from) });
     }
   }
+  // Lanes by character (stage 11): each player character's own lane of where they went (their journeys).
+  const pcLanes = new Map();
+  const pcsOf = (j) => j.who.filter((w) => !/ \(.*\)$/.test(w));
   for (const j of journeys) {
+    if (characters) {
+      for (const name of pcsOf(j)) {
+        const lane = `pc:${name.toLowerCase()}`;
+        if (!pcLanes.has(lane)) pcLanes.set(lane, { id: lane, title: name, character: true });
+        items.push({
+          id: `journey:${j.id}:${lane}`, type: 'journey', page_id: null, title: j.map_name, family: 'journey', picture: null,
+          text: `${j.done ? (j.stopped ? 'Set off' : 'Went') : 'On the way'} ${j.to_name ? `to ${j.to_name}` : 'on a journey'}${j.stopped ? ' (stopped on the way)' : ''}${j.who.length > 1 ? ` with ${j.who.filter((w) => w !== name).join(', ')}` : ''}`,
+          place: { map_id: j.map_id, map_name: j.map_name, x: j.to.x, y: j.to.y },
+          when: { text: '', from: j.leaves, to: j.arrives }, canon: 'true', by: 'map', lane, done: j.done, stopped: j.stopped, by_way: j.by,
+        });
+      }
+      if (pcsOf(j).length) continue;
+    }
     items.push({
       id: `journey:${j.id}`, type: 'journey', page_id: null, title: j.map_name, family: 'journey', picture: null,
       text: `${j.who.join(', ')} ${j.done ? (j.stopped ? 'set off' : 'went') : 'on the way'} ${j.to_name ? `to ${j.to_name}` : 'on a journey'}${j.stopped ? ' (stopped on the way)' : ''}`,
@@ -71,7 +87,7 @@ export function timeline(pages, { places = new Map(), lanes = [], truth = false,
     .sort((a, b) => sessionNumber(a) - sessionNumber(b) || String(a.created_at).localeCompare(String(b.created_at)))
     .map((p) => ({ id: p.id, title: p.title, picture: summary(p).picture }));
   return {
-    lanes: [...own.map(({ claims: _c, ...l }) => l), { id: 'history', title: 'History' }, { id: 'campaign', title: 'The campaign' }],
+    lanes: [...own.map(({ claims: _c, ...l }) => l), ...[...pcLanes.values()].sort((a, b) => a.title.localeCompare(b.title)), { id: 'history', title: 'History' }, { id: 'campaign', title: 'The campaign' }],
     items: items.slice(0, TIMELINE_LIMITS.items),
     undated: undated.slice(0, TIMELINE_LIMITS.undated),
     sessions: sessions.filter((s) => !undated.some((u) => u.id === s.id)),

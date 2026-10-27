@@ -31,6 +31,9 @@ const widthOf = (x, k) => {
 };
 const label = (x) => (x.type === 'page' ? x.title : x.text.length > 70 ? `${x.text.slice(0, 67)}…` : x.text);
 
+// Lanes by character (stage 11): each player character's own lane of where they went.
+let byCharacter = false;
+
 /** Draw the Timeline into the wiki's main area. */
 export async function drawTimeline(main) {
   pan?.destroy();
@@ -38,6 +41,7 @@ export async function drawTimeline(main) {
   const q = new URLSearchParams();
   if (state.as != null) q.set('as', String(state.as));
   else if (truthOn()) q.set('truth', '1');
+  if (byCharacter) q.set('characters', '1');
   let data;
   try {
     data = await state.guarded(() => api('GET', `${base()}/timeline?${q}`));
@@ -169,6 +173,7 @@ function drawBar(data) {
     addLane,
     // Group by arc (stage 7b): a lane for each arc page, with its quests and sessions inside it.
     state.as == null && state.pages.some(isArcPage) ? h('button', { type: 'button', class: 'ghost small', title: 'A lane for each arc: the arc, its quests and sessions, and what links to it', onclick: () => setLanes(state.pages.filter(isArcPage).map((p) => p.id)) }, 'Lanes by arc') : null,
+    h('button', { type: 'button', class: 'ghost small', 'aria-pressed': String(byCharacter), title: 'A lane for each player character: where they went, from their journeys on the maps', onclick: () => { byCharacter = !byCharacter; nav.drawMain(); } }, 'Lanes by character'),
   ].filter(Boolean));
 }
 

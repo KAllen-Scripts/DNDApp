@@ -11,6 +11,7 @@ import { api, h } from './api.js';
 import { KIND_FAMILIES } from './shared/wiki.js';
 import { panZoom } from './pan-zoom.js';
 import { state, nav, base, report, pictureImg, playerName } from './wiki-data.js';
+import { timeSlider } from './wiki-asof.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const svg = (tag, attrs = {}, ...kids) => {
@@ -21,7 +22,8 @@ const svg = (tag, attrs = {}, ...kids) => {
 };
 
 // What the Web shows, kept while the DM moves round the wiki.
-const opts = { steps: 2, families: [], mentions: false, preset: null };
+// `at`: the moment shown (stage 11), or null for now.
+const opts = { steps: 2, families: [], mentions: false, preset: null, at: null };
 let pan = null;
 
 const phone = () => window.matchMedia?.('(max-width: 700px)').matches ?? false;
@@ -64,6 +66,7 @@ export async function drawWebView(main) {
     if (opts.preset) q.set('preset', opts.preset);
     if (state.as != null) q.set('as', String(state.as));
     else if (truthOn()) q.set('truth', '1');
+    if (opts.at) q.set('at', opts.at);
     let web;
     try {
       web = await state.guarded(() => api('GET', `${base()}/web?${q}`));
@@ -102,8 +105,11 @@ export async function drawWebView(main) {
         }),
         chip('Links in the text', opts.mentions, () => { opts.mentions = !opts.mentions; drawBar(); load(); }))) : null,
       viewAs,
+      slider,
     ].filter(Boolean));
   };
+  // As it was at the end of a session (stage 11).
+  const slider = timeSlider(opts.at, (at) => { opts.at = at; load(); });
 
   const draw = (web) => {
     card.hidden = true;

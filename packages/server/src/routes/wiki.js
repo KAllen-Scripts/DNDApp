@@ -21,7 +21,10 @@ import { viewerPagesFor, spoilerCheckFor, playersOf } from './wiki-viewer.js';
 import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass, embedsIn, prepMarks } from '../wiki-views.js';
 
 export function registerWiki(app, r) {
-  const { access, auth, store, wiki, wikiAI, wikiPictures, jobs, pictures, search, maps, handouts, sheets, db, kb, config } = r;
+  const { access, auth, store, wiki, wikiAI, wikiPictures, wikiAsOf, jobs, pictures, search, maps, handouts, sheets, db, kb, config } = r;
+  // ?at= (stage 11): a moment in the past, as an ISO time.
+  const atOf = (request) => z.object({ at: z.string().datetime({ offset: true }).optional() }).parse({ at: request.query?.at }).at ?? null;
+  const iso = (at) => new Date(at).toISOString();
 
   const crop = z.object({ x: z.number().min(0), y: z.number().min(0), w: z.number().positive(), h: z.number().positive() });
   const pictureId = z.string().regex(/^[a-f0-9]{10}$/);
@@ -158,12 +161,18 @@ export function registerWiki(app, r) {
    * player (only what they may see; places only revealed ones), `?truth=1` (the DM's): no rumours or falsehoods.
    */
   const timelineFor = (request, { cid, as, pages }) => {
-    const { truth } = z.object({ truth: z.enum(['0', '1']).optional() }).parse({ truth: request.query?.truth });
+    const { truth, characters } = z.object({ truth: z.enum(['0', '1']).optional(), characters: z.enum(['0', '1']).optional() }).parse({ truth: request.query?.truth, characters: request.query?.characters });
     const { calendar, clock, wiki: own } = store.getSettings(cid);
     const journeys = maps.journeys(cid, { forUser: as ?? null });
-    const t = timeline(pages, { places: pagePlaces(maps, cid, { as }), lanes: own.lanes, truth: as == null && truth === '1', forDm: as == null, journeys });
+    const t = timeline(pages, { places: pagePlaces(maps, cid, { as }), lanes: own.lanes, truth: as == null && truth === '1', forDm: as == null, journeys, characters: characters === '1' });
     return { ...t, now: clock, calendar };
   };
+  /** The moments to scrub the Atlas and the Web to (stage 11): the end of each session played. */
+  app.get('/campaigns/:cid/wiki/moments', async (request) => {
+    const { cid } = access(request);
+    return { moments: wikiAsOf ? wikiAsOf.moments(cid) : [] };
+  });
+
   app.get('/campaigns/:cid/wiki/timeline', async (request) => {
     const v = viewerPages(request);
     return { ...timelineFor(request, v), as: v.as };
@@ -238,7 +247,16 @@ export function registerWiki(app, r) {
    */
   app.get('/campaigns/:cid/wiki/atlas', async (request) => {
     const { cid, as, pages } = viewerPages(request);
-    const { map: mapId } = z.object({ map: z.string().max(40).optional() }).parse(request.query ?? {});
+    const { map: mapId } = z.object({ map: z.string().max(40).optional() }).parse({ map: request.query?.map });
+    const at = atOf(request);
+    if (at && wikiAsOf) {
+      // As it was (stage 11): the map's changes replayed to then, the pages as they were, and where the tokens stood.
+      const then = mapId && wikiAsOf.map(cid, mapId, iso(at), as);
+      if (!then) return { layers: null, maps: [], at: iso(at) };
+      const layers = atlasLayers(then, wikiAsOf.pages(cid, iso(at), as), { as });
+      const tokens = then.tokens.filter((t) => as == null || !t.hidden).map((t) => ({ id: t.id, name: t.name, kind: t.kind, x: t.x, y: t.y, ...(t.journey?.to_name && { going_to: t.journey.to_name }), ...(as == null && t.hidden && { hidden: true }) }));
+      return { layers: layers && { ...layers, then_tokens: tokens }, as, at: iso(at) };
+    }
     // A player: only maps shown to them, and nothing said about any other.
     const all = maps.list(cid).filter((m) => as == null || shownToViewer(m, as, { revealed: 'shown', to: 'shown_to' }));
     const map = mapId ? (as == null ? maps.get(cid, mapId) : all.find((m) => m.id === mapId)) : all.find((m) => !all.some((o) => o.places.some((p) => p.to === m.id))) ?? all[0];
@@ -274,7 +292,11 @@ export function registerWiki(app, r) {
    * `truth=1` (the DM's: rumours and falsehoods left out).
    */
   app.get('/campaigns/:cid/wiki/web', async (request) => {
-    const { as, pages } = viewerPages(request);
+    const v = viewerPages(request);
+    const at = atOf(request);
+    // As it was (stage 11): each page's version then, judged for a player by what they could see then and now.
+    const { as } = v;
+    const pages = at && wikiAsOf ? wikiAsOf.pages(v.cid, iso(at), as) : v.pages;
     const q = z.object({
       around: z.string().regex(/^[a-f0-9]{10}$/).optional(),
       steps: z.coerce.number().int().min(1).max(3).default(2),
@@ -292,7 +314,7 @@ export function registerWiki(app, r) {
       truth: as == null && q.truth === '1',
       forDm: as == null,
     });
-    return { ...web, ...(as == null ? {} : { as }) };
+    return { ...web, ...(as == null ? {} : { as }), ...(at && { at: iso(at) }) };
   });
 
   /** A page's compass: its family, what it's inside, what's inside it, and its links both ways (`compass: null` if the player can't see it). */
