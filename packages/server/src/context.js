@@ -14,6 +14,7 @@ import { createHandouts } from './handouts.js';
 import { createWiki } from './wiki.js';
 import { createWikiAI } from './wiki-ai.js';
 import { createWikiPictures } from './wiki-pictures.js';
+import { linkWikiToMaps } from './wiki-maps.js';
 import { createRolls } from './rolls.js';
 import { createRests } from './rests.js';
 import { createEditions } from './editions.js';
@@ -60,6 +61,8 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const maps = createMaps({ db, archive, store, pictures, sheets });
   // A character's token shows the sheet's hit points: maps with it are sent again when the sheet changes.
   sheets.events.on('save', ({ campaign_id, user_id }) => maps.sheetChanged(campaign_id, user_id));
+  // Places and tokens linked to a wiki page follow its title, and lose the link when it's deleted.
+  linkWikiToMaps({ wiki, maps });
   // What happened on the maps on a session's day goes to the archivist with the transcript.
   const archivist = createArchivist({ db, store, kb, search, llm, config, mapEvents: (cid, date) => maps.eventsOn(cid, date, config.notes.rolloverHour) });
   const handouts = createHandouts({ db, archive, store, llm });
