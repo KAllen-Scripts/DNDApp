@@ -180,4 +180,25 @@ export function registerWikiOverview(app, r) {
     });
     return { rules: TIDY_RULES.map((x) => ({ ...x, count: items.filter((i) => i.rule === x.rule).length })), items };
   });
+
+  // ---------- a Home that thinks (stage 8d) ----------
+
+  /** The insights the AI made after the sessions, still open: { insights: [{ id, type, kind, text, page_id, page_title, can_fix, run }] }. */
+  app.get('/campaigns/:cid/wiki/insights', async (request) => {
+    const { cid } = access(request, { dm: true });
+    return { insights: wikiAI.insights(cid) };
+  });
+
+  app.post('/campaigns/:cid/wiki/insights/:id/dismiss', async (request) => {
+    const { cid } = access(request, { dm: true });
+    wikiAI.dismissInsight(cid, request.params.id);
+    return { insights: wikiAI.insights(cid) };
+  });
+
+  /** A contradiction's fix, proposed: it waits under Waiting like the AI's other changes. */
+  app.post('/campaigns/:cid/wiki/insights/:id/fix', async (request) => {
+    const { cid } = access(request, { dm: true });
+    const proposal = wikiAI.fixInsight(cid, request.params.id);
+    return { proposal, proposals: wikiAI.count(cid), insights: wikiAI.insights(cid) };
+  });
 }

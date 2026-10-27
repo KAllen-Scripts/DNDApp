@@ -222,7 +222,7 @@ export function registerWiki(app, r) {
       // The Timeline tile: the latest moments (by in-game time).
       moments: timeline(pages).items.slice(-12).map((x) => ({ at: x.when.from, family: x.family, title: x.type === 'event' ? x.text : x.title })),
       // For the DM, what waits and the prep page being prepared (stage 7b).
-      ...(as == null ? { waiting: { proposals: wikiAI.count(cid) }, prep: (() => { const p = openPrepPage(pages); return p ? summary(p) : null; })() } : { as }),
+      ...(as == null ? { waiting: { proposals: wikiAI.count(cid) }, insights: wikiAI.insights(cid), prep: (() => { const p = openPrepPage(pages); return p ? summary(p) : null; })() } : { as }),
     };
   });
 

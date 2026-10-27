@@ -2631,3 +2631,11 @@ button.wiki-tile { text-align: left; border: 1px solid var(--border); color: inh
 .wiki-tidy-rule ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
 .wiki-tidy-item { display: flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.4rem; border-radius: 8px; background: var(--surface-2); }
 .wiki-tidy-text { flex: 1; min-width: 0; }
+
+/* A Home that thinks (wiki space stage 8d). */
+.wiki-insights { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 0.5rem; }
+.wiki-insight { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.6rem; border-radius: 10px; background: var(--surface-2); border-left: 4px solid var(--accent); }
+.wiki-insight.insight-contradiction { border-left-color: #b0504a; }
+.wiki-insight.insight-previously { grid-column: 1 / -1; }
+.wiki-insight p { margin: 0; }
+.wiki-insight-recap { font-style: italic; line-height: 1.5; }
