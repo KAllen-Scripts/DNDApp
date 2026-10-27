@@ -15,6 +15,7 @@ import { miniRibbon } from './mini-views.js';
 import { openMakeUp } from './wiki-write.js';
 import { newFromTemplate } from './wiki-templates.js';
 import { drawLists } from './wiki-lists.js';
+import { drawInsights } from './wiki-insights.js';
 import { STARTER_TEMPLATES } from './shared/wiki-templates.js';
 
 /** Draw the hub into `box` (it fills in when the server answers). */
@@ -60,6 +61,8 @@ export async function drawHub(box) {
         h('p', {}, `${data.count} page${data.count === 1 ? '' : 's'} about your world`),
       ),
     ),
+    // What the AI noticed after the sessions (stage 8d), the DM's.
+    drawInsights(data.insights),
     h('div', { class: 'wiki-hub-grid' },
       h('section', { class: 'wiki-hub-last' },
         h('h3', {}, 'Last time'),

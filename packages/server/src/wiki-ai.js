@@ -24,7 +24,7 @@ import { z } from 'zod';
 import { renderRecord } from './kb/store.js';
 import { BadRequestError, NotFoundError } from './store.js';
 import { WIKI_LIMITS as L } from './wiki.js';
-import { narrowest, audienceOf, canSeeAudience, wikiKey, wikiPictures as picturesIn, PICTURE_RE, TONES, unlink, embedNames, openPrepPage, PREP_KIND } from '@dndapp/shared/wiki.js';
+import { narrowest, audienceOf, canSeeAudience, wikiKey, wikiPictures as picturesIn, PICTURE_RE, TONES, unlink, embedNames, openPrepPage, PREP_KIND, kindFamily } from '@dndapp/shared/wiki.js';
 import { json } from './db/index.js';
 import { CITATION_RE, normalizeSources } from '@dndapp/shared/citations.js';
 import { parseWhen, whenText, whenKey } from '@dndapp/shared/wiki-time.js';
@@ -120,6 +120,31 @@ Don't propose what's already waiting for the DM, or anything the DM rejected bef
 // ---------- the AI as a writing partner (stage 5b): on the DM's button, one call each, as proposals ----------
 
 /** After a session (stage 7c): which of the prep page's clues came out, and what carries over to the next one. */
+/** A Home that thinks (stage 8d): after a session, what the DM might want to know. */
+export const InsightsSchema = z.object({
+  loose_threads: z.array(z.object({
+    kind: z.enum(['rumour', 'unseen', 'promise', 'clue', 'other']).describe('rumour: a rumoured quest not followed; unseen: someone not seen for a while; promise: a promise made and not kept yet; clue: a clue not found'),
+    text: z.string().describe('One or two sentences for the DM'),
+    page_id: z.string().nullable().describe('The wiki page it is about, or null'),
+  })).default([]).describe('Loose threads worth picking up; [] when none stand out'),
+  previously: z.string().default('').describe('"Previously on…": a short recap of the session just played, for the DM to read aloud at the start of the next one; written for the players, so nothing they did not see'),
+  contradictions: z.array(z.object({
+    page_id: z.string().describe('The wiki page that disagrees with the records'),
+    section_id: z.string().nullable().describe('Its section that says it, or null'),
+    text: z.string().describe('What the page says, and what the records say instead'),
+    fix: z.string().describe('The section rewritten to agree with the records, keeping everything else; "" when no rewrite is right'),
+    sources: z.array(z.number().int()).describe('Ids of the records that disagree'),
+  })).default([]).describe('Pages that the session\'s records contradict; [] when none do'),
+});
+const INSIGHTS_SYSTEM = `You help a Dungeon Master keep track of their campaign after each session. You get the campaign's wiki (its page index, and the pages the session's records seem to be about, in full), the session's records from the archivist, the last session's page if there is one, and what you noticed before.
+
+Return:
+- loose threads: rumoured quests the players haven't followed, people not seen for a while, promises made and not kept, clues not found. Only ones the wiki or records show; never invent. Skip any you noticed before.
+- previously: a short "Previously on…" recap of this session, to read aloud to the players at the start of the next one. Only what the players saw; no secrets.
+- contradictions: a wiki section the records clearly contradict (not just add to). Skip any you noticed before.
+
+The DM decides what to do with each.`;
+
 /** Make a list (stage 8a): which pages fit the DM's words. */
 export const ListSchema = z.object({
   name: z.string().describe('A short name for the list, in the words a DM would use'),
@@ -569,6 +594,70 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
     return made;
   }
 
+  // ---------- a Home that thinks (stage 8d) ----------
+
+  const insightList = (cid) => db.prepare("SELECT * FROM wiki_proposals WHERE campaign_id = ? AND json_extract(data, '$.action') = 'insight' ORDER BY created_at, rowid").all(cid).map(toProposal);
+
+  /**
+   * After a session: one more call for the Home's insights (loose threads, "Previously on…", contradictions), kept
+   * beside the proposals (`action: 'insight'`, status open, dismissed or done). One the DM saw before (by its key, or
+   * the same page and kind) is never made again. Returns how many were made.
+   */
+  async function insightsAfter(cid, session, records) {
+    const pages = wiki.list(cid);
+    const roster = players(cid);
+    const names = new Map(roster.map((m) => [m.user_id, m.character_name ? `${m.character_name} (user ${m.user_id})` : `${m.name} (user ${m.user_id})`]));
+    const related = await relatedPages(cid, records.slice(0, perCall), pages);
+    const last = pages.filter((p) => kindFamily(p.kind) === 'session' && wikiKey(p.kind) !== PREP_KIND).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+    const before = insightList(cid);
+    const fact = (p, label) => p.facts.find((f) => wikiKey(f.label) === label)?.value ?? '';
+    const out = await llm.structured({
+      task: 'wiki',
+      purpose: 'wiki:insights',
+      system: INSIGHTS_SYSTEM,
+      prompt: [
+        `<players>\n${roster.map((m) => `user ${m.user_id}: ${m.character_name || '(no character)'}, played by ${m.name}`).join('\n') || '(none)'}\n</players>`,
+        `<session>${session}</session>`,
+        `<wiki_pages>\n${pages.map((p) => `${p.id} | ${p.title} | ${p.kind || '-'}${fact(p, 'status') ? ` | status: ${unlink(fact(p, 'status'))}` : ''} | last changed ${String(p.updated_at).slice(0, 10)}`).join('\n') || '(the wiki is empty)'}\n</wiki_pages>`,
+        related.length ? `<related_pages>\n${related.map((p) => renderPage(p, names)).join('\n\n')}\n</related_pages>` : '',
+        last ? `<last_session_page>\n${renderPage(last, names)}\n</last_session_page>` : '',
+        before.length ? `<noticed_before>\n${before.slice(-60).map((x) => `- ${x.type}: ${x.text.slice(0, 200)}`).join('\n')}\n</noticed_before>` : '',
+        `<records>\n${records.slice(0, 80).map(renderRecord).join('\n\n')}\n</records>`,
+        'What should the DM know after this session?',
+      ].filter(Boolean).join('\n\n'),
+      schema: InsightsSchema,
+      campaignId: cid,
+    });
+    const byId = new Map(pages.map((p) => [p.id, p]));
+    const seen = (key, type, pageId) => before.some((x) => x.key === key || (pageId && x.type === type && x.page_id === pageId && x.status !== 'done'));
+    const now = new Date().toISOString();
+    let made = 0;
+    const keep = (x) => {
+      if (seen(x.key, x.type, x.page_id)) return;
+      before.push(write(cid, { ...x, id: crypto.randomBytes(5).toString('hex'), action: 'insight', status: 'open', run: session, created_at: now, updated_at: now }));
+      made++;
+    };
+    const previously = clean(out.previously, 4000);
+    if (previously && !seen(`previously:${wikiKey(session)}`, 'previously', null)) {
+      // Only the newest recap is shown.
+      for (const old of before.filter((x) => x.type === 'previously' && x.status === 'open')) write(cid, { ...old, status: 'dismissed', updated_at: now });
+      keep({ type: 'previously', key: `previously:${wikiKey(session)}`, text: previously, page_id: null, page_title: null });
+    }
+    for (const t of out.loose_threads.slice(0, 8)) {
+      const text = clean(t.text, 1000);
+      const page = byId.get(String(t.page_id));
+      if (text) keep({ type: 'loose_thread', kind: t.kind, key: `thread:${page?.id ?? ''}:${t.kind}:${wikiKey(text).slice(0, 80)}`, text, page_id: page?.id ?? null, page_title: page?.title ?? null });
+    }
+    for (const c of out.contradictions.slice(0, 5)) {
+      const page = byId.get(String(c.page_id));
+      const text = clean(c.text, 1000);
+      if (!page || !text) continue;
+      const section = page.sections.find((x) => x.id === c.section_id) ?? null;
+      keep({ type: 'contradiction', key: `contra:${page.id}:${section?.id ?? ''}`, text, page_id: page.id, page_title: page.title, section_id: section?.id ?? null, fix: section && section.by !== 'player' ? String(c.fix ?? '').slice(0, L.text).trim() : '', sources: c.sources.filter((id) => Number.isInteger(id)) });
+    }
+    return made;
+  }
+
   const wikiAI = {
     /** Proposals waiting for the DM, oldest first, each with what's there now to compare. */
     pending(cid) {
@@ -636,6 +725,14 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
           made += await afterSession(cid, session, records, playerIds);
         } catch (err) {
           prepNote = ` (the prep page's clues couldn't be checked: ${err.message})`;
+        }
+      }
+      // And the Home's insights (stage 8d): a failure leaves the rest.
+      if (session && records.length) {
+        try {
+          await insightsAfter(cid, session, records);
+        } catch (err) {
+          prepNote += ` (the Home's insights couldn't be made: ${err.message})`;
         }
       }
       setCursor(cid, upTo);
@@ -868,6 +965,33 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
         }
       }
       return { approved, failed };
+    },
+
+    // ---------- the Home's insights (stage 8d) ----------
+
+    /** The insights still open, newest first (the DM's alone). */
+    insights: (cid) => insightList(cid).filter((x) => x.status === 'open').reverse()
+      .map(({ id, type, kind, text, page_id, page_title, section_id, fix, run, created_at }) => ({ id, type, kind: kind ?? null, text, page_id, page_title, section_id: section_id ?? null, can_fix: !!fix, run, created_at })),
+
+    /** Dismiss one: it's never shown, or made, again. */
+    dismissInsight(cid, id) {
+      const x = get(cid, id);
+      if (x.action !== 'insight') throw new NotFoundError('No such insight');
+      write(cid, { ...x, status: 'dismissed', updated_at: new Date().toISOString() });
+    },
+
+    /** A contradiction's fix: its rewrite becomes a change waiting for the DM, like the AI's others. Returns the proposal. */
+    fixInsight(cid, id) {
+      const x = get(cid, id);
+      if (x.action !== 'insight' || x.type !== 'contradiction' || !x.fix) throw new BadRequestError('There is no fix to propose for that.');
+      const page = wiki.get(cid, x.page_id);
+      const section = page.sections.find((s) => s.id === x.section_id);
+      if (!section) throw new BadRequestError('That section is gone from the page.');
+      const p = proposalOf(cid, { action: 'update_section', page_id: page.id, section_id: section.id, section: { heading: section.heading, text: x.fix, sources: x.sources ?? [] }, reason: x.text }, x.run, players(cid).map((m) => m.user_id));
+      if (!p) throw new BadRequestError('The page already says that.');
+      const made = add(cid, p);
+      write(cid, { ...x, status: 'done', updated_at: new Date().toISOString() });
+      return made;
     },
 
     // ---------- the DM's saved lists (stage 8a) ----------

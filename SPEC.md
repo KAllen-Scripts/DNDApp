@@ -1,6 +1,8 @@
 # DNDApp — Project Spec
 
-> Status: v0.93 (2026-10-27). Tidy up: the wiki lists what needs a hand (missing pages, names not linked, places off the map, people with no picture and more), each with a button to fix it (§6.11).
+> Status: v0.94 (2026-10-27). A Home that thinks: after each session the wiki's AI notes loose threads, a Previously on… recap and contradictions, shown on the DM's Home (§6.11).
+>
+> Previously v0.93 (2026-10-27). Tidy up: the wiki lists what needs a hand (missing pages, names not linked, places off the map, people with no picture and more), each with a button to fix it (§6.11).
 >
 > Previously v0.92 (2026-10-27). Who knows what: a grid of the wiki's pages against the players, Reveal to… in one go, and a spoiler check before anything new reaches a player (§6.11).
 >
@@ -925,7 +927,8 @@ Owner (2026-10-18): "I want to start work on the DM being able to build a wiki. 
 - **The quest board and lists (stage 8a):** `#/quests` shows the quests the viewer may see in columns by their Status fact (Rumoured, Active, Done, Failed, others, none), a row per arc; the DM moves a card (drag, or pick its status) and the Status fact changes. The DM saves a Wheel filter as a list, or has the AI make one from plain words (Ask's model, quick); lists show on the Home as rows of cards, are the DM's alone (kept with the proposals, never in the settings players get), and filter per viewer.
 - **Who knows what and the spoiler check (stage 8b):** `#/knows` shows the DM every page against every player (all, some or none of it); a click shows that player's version, and chosen parts are revealed to them in one go. Before a reveal, a section sent as a handout, or approving a reveal or a player's lore, the server lists what the newly visible words name that those players can't see yet, so the DM doesn't give a secret away by its name.
 - **Tidy up (stage 8c):** `#/tidy` lists what needs a hand, each with a button to fix it: links to missing pages, facts linking deleted pages, names not linked, pages with no links, places not on a map and places with no page, people with no picture, blocks for unknown names, parts planned for three sessions or more, and players' accounts not yet judged.
-- **Later:** importing old notes and checking the wiki for contradictions; pictures in players' lore.
+- **A Home that thinks (stage 8d):** after each session the wiki's AI also notes loose threads, a Previously on… recap to read aloud, and pages the records contradict. They show on the DM's Home with Open, Dismiss and (for a contradiction) Propose the fix; one dismissed is never raised again.
+- **Later:** importing old notes; pictures in players' lore.
 
 ## 7. Security & cost controls
 
