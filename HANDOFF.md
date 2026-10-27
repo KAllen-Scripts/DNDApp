@@ -1647,6 +1647,7 @@ The owner (2026-10-21 feedback, item 2): "some way of managing attacks and such 
 - **Link it** (no AI): `wiki.linkSuggestions` finds names of other pages (titles and other names, the longest first) in a page's text that aren't linked, outside links, pictures and block lines, and not pages the section links already; `GET …/wiki/:pid/links`; `POST …/wiki/:pid/links` makes the first one a `[[Title|as written]]`. The page underlines them with a Link it button.
 - Page (`web/public/wiki-write.js`): ✦ Draft from the records at the foot of the editor, ✦ Expand and ✦ Tidy on each saved section, ✦ Make up… in Find (Ctrl K) and on the Home.
 - Tests: `server/test/wiki-draft.test.js` (2), `web/test/wiki-write.test.js`.
+- End of stage 5: regression tests pass; the full `npm test` passed apart from the dice-physics timing test ("thrown dice land … within a few seconds"), which passes on its own: it's timing-sensitive under the full run's load, and this stage didn't touch dice.
 
 ### 2026-10-27: The wiki's space, stage 5a: templates
 - `shared/src/wiki-templates.js`: starter templates Person (leads with **At the table**: voice and manner, wants, knows, would trade; the DM's), Place, Faction, Item, Creature, Quest, Session, Lore, and **Clue** and **Arc** for stage 7; `templateFor(kind, own)` (the DM's for that kind, the starter for it, then the family's), `fromTemplate` (empty sections and facts with the prompts beside them). "arc" joins the quest family.
