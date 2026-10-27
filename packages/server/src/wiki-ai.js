@@ -191,6 +191,23 @@ const MakeUpSchema = z.object({
   reason: z.string().describe('One sentence for the DM: what it fits with in the wiki'),
 });
 
+/** Messy notes sorted into pages (stage 9b): the DM's own notes, so true and theirs. */
+const ImportSchema = z.object({
+  pages: z.array(z.object({
+    title: z.string(),
+    kind: z.string().describe('npc, place, tavern, faction, item, quest, lore, …'),
+    aliases: z.array(z.string()).default([]),
+    parent_title: z.string().nullable().default(null).describe('The page this one is inside (a place in a region, a room in a building), if any'),
+    sections: z.array(z.object({ heading: z.string(), text: z.string() })),
+    facts: z.array(z.object({ label: z.string(), value: z.string() })).default([]),
+  })).default([]),
+});
+const IMPORT_CHUNK = 24_000;
+
+const IMPORT_SYSTEM = `You sort a Dungeon Master's own campaign notes into wiki pages. The notes are messy: lists, half sentences, a session log, a Word document pasted as text.
+
+Make one page for each person, place, faction, item, quest or piece of lore the notes say something about, with a title (its name), a kind, short sections (Markdown) and at a glance facts (Race, Role, Where they are, Ruler, …). Use only what the notes say, in their words where you can: add nothing, and leave nothing about a page out. Link other pages with [[Page title]], both the ones you make and the ones the wiki already has. When the wiki already has a page, use its exact title: what you write is added to it. Give parent_title when a page is clearly inside another (a tavern in a town). Never write :::for or :::dm blocks.`;
+
 const DRAFT_SYSTEM = `You help a Dungeon Master write their campaign wiki. The DM pressed a button and you do that one thing. What you write waits for the DM's approval.
 
 Write clear, readable Markdown for the DM. Link other pages with [[Page title]] (pages that exist). Never write :::for or :::dm blocks.
@@ -948,6 +965,66 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
         }
       } else {
         throw new BadRequestError('Unknown way to write.');
+      }
+      return made;
+    },
+
+    /**
+     * Messy notes (stage 9b): the AI sorts the DM's text into pages, one call per piece of about 24,000 characters.
+     * A new page waits under Waiting as a new page (the DM's only, true: they're the DM's own notes); a page the
+     * wiki already has gets its sections as additions. Returns the proposals made.
+     */
+    async importNotes(cid, text, { name = '' } = {}) {
+      const all = String(text ?? '').replace(/\r\n/g, '\n').trim();
+      if (!all) throw new BadRequestError('There is nothing in those notes.');
+      const pieces = [];
+      for (let at = 0; at < all.length;) {
+        let end = Math.min(all.length, at + IMPORT_CHUNK);
+        if (end < all.length) {
+          const cut = all.lastIndexOf('\n\n', end);
+          if (cut > at + IMPORT_CHUNK / 2) end = cut;
+        }
+        pieces.push(all.slice(at, end));
+        at = end;
+      }
+      const run = `Import${name ? `: ${clean(name, 100)}` : ''}`;
+      const made = [];
+      for (const [i, piece] of pieces.entries()) {
+        const pages = wiki.list(cid);
+        const out = await llm.structured({
+          task: 'wiki_draft', purpose: 'wiki:import', system: IMPORT_SYSTEM, campaignId: cid, schema: ImportSchema,
+          prompt: [
+            `<wiki_pages>\n${pages.map((p) => `${p.title} | ${p.kind || '-'}`).join('\n') || '(the wiki is empty)'}\n</wiki_pages>`,
+            `<notes${pieces.length > 1 ? ` part="${i + 1} of ${pieces.length}"` : ''}>\n${piece}\n</notes>`,
+            'Sort these notes into pages.',
+          ].join('\n\n'),
+        });
+        const byKey = new Map(pages.flatMap((p) => [p.title, ...p.aliases].map((t) => [wikiKey(t), p])));
+        const waiting = new Set(list(cid, 'pending').filter((p) => p.action === 'new_page').map((p) => wikiKey(p.title)));
+        for (const n of out.pages) {
+          const title = clean(n.title, L.title);
+          const sections = (n.sections ?? []).map((s) => ({ heading: clean(s.heading, L.heading), text: String(s.text ?? '').slice(0, L.text).trim(), records: [], available: 'all' })).filter((s) => s.text);
+          if (!title || !sections.length) continue;
+          const facts = (n.facts ?? []).map((f) => ({ label: clean(f.label, L.label), value: clean(f.value, L.value), tone: null, available: 'all', records: [] })).filter((f) => f.label && f.value);
+          const page = byKey.get(wikiKey(title));
+          const keep = (p) => {
+            const saved = add(cid, p);
+            if (saved) made.push(saved);
+          };
+          if (page) {
+            // Added to a page the wiki has: only the DM's until they share it (the page may be the players' already).
+            for (const s of sections) keep({ reason: 'From your notes.', run, page_id: page.id, page_title: page.title, action: 'add_section', key: `${page.id}:import:${wikiKey(s.heading || s.text.slice(0, 60))}`, section_id: null, dm_section: true, sections: [{ ...s, available: 'dm' }] });
+            continue;
+          }
+          if (waiting.has(wikiKey(title))) continue;
+          waiting.add(wikiKey(title));
+          const parent = n.parent_title && byKey.get(wikiKey(n.parent_title));
+          keep({
+            reason: 'From your notes.', run, action: 'new_page', key: `new:${wikiKey(title)}`, title, kind: clean(n.kind, L.kind),
+            aliases: [...new Set((n.aliases ?? []).map((a) => clean(a, L.alias)).filter((a) => a && !byKey.has(wikiKey(a)) && wikiKey(a) !== wikiKey(title)))].slice(0, L.aliases),
+            parent: parent?.id ?? null, page_available: 'dm', facts, when: null, events: [], sections,
+          });
+        }
       }
       return made;
     },
