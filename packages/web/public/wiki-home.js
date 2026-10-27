@@ -13,6 +13,8 @@ import { state, nav, base, report, pictureImg, fam, kindBadge } from './wiki-dat
 import { drawWheel } from './wiki-wheel.js';
 import { miniRibbon } from './mini-views.js';
 import { openMakeUp } from './wiki-write.js';
+import { newFromTemplate } from './wiki-templates.js';
+import { STARTER_TEMPLATES } from './shared/wiki-templates.js';
 
 /** Draw the hub into `box` (it fills in when the server answers). */
 export async function drawHub(box) {
@@ -76,6 +78,11 @@ export async function drawHub(box) {
           atlasTile(tile('⌖', 'Atlas', 'Where: your maps, with their pages', '#/atlas')),
           tile('⁂', 'Web', 'Who: people and how they are tied', '#/web'),
           timelineTile(tile('⟿', 'Timeline', 'When: what happened, in order', '#/timeline')),
+          // Session prep (stage 7b): the prep page being prepared, or a new one from the Session plan template.
+          data.waiting ? h('button', { type: 'button', class: 'wiki-tile wiki-tile-prep', onclick: () => (data.prep ? nav.go(`#/page/${data.prep.id}`) : newFromTemplate(STARTER_TEMPLATES.find((t) => t.id === 'starter-session-plan'))) },
+            h('span', { class: 'wiki-tile-art', 'aria-hidden': 'true' }, '☾'),
+            h('strong', {}, 'Next session'),
+            h('span', { class: 'muted small' }, data.prep ? data.prep.title : 'Plan it: a strong start, scenes, clues')) : null,
           data.waiting ? h('button', { type: 'button', class: 'wiki-tile', onclick: () => openMakeUp() },
             h('span', { class: 'wiki-tile-art', 'aria-hidden': 'true' }, '✦'),
             h('strong', {}, 'Make up…'),
