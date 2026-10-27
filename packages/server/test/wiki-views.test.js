@@ -103,3 +103,28 @@ test("wiki views: a page's compass has its chain, what it holds and its links bo
   }
 });
 
+
+test('wiki find: names first, then pages whose text matches, and as a player never a hidden page', async () => {
+  const t = await setup();
+  try {
+    const { hand } = await world(t);
+    const make = (body) => t.request('POST', `/campaigns/${t.campaign.id}/wiki`, { body });
+    await make({ title: 'Rennick', kind: 'npc', available: 'all', sections: all('A one-eyed smuggler with an eyepatch.') });
+    await make({ title: 'Mother Ash', kind: 'npc', available: 'dm', sections: all('Wears an eyepatch made of bark.') });
+    const find = async (q, as) => (await t.request('GET', `/campaigns/${t.campaign.id}/wiki/find?q=${encodeURIComponent(q)}${as ? `&as=${as}` : ''}`)).json().pages;
+
+    const grey = await find('the grey');
+    assert.deepEqual([grey[0].title, grey[0].found_by], ['The Grey Lady', 'name'], 'a name match comes first');
+    const patch = await find('eyepatch');
+    assert.deepEqual(patch.slice(0, 2).map((p) => p.title).sort(), ['Mother Ash', 'Rennick'], 'then the pages whose text says it');
+    assert.equal(patch[0].found_by, 'text');
+    const alex = await find('eyepatch', t.alex.id);
+    assert.equal(alex[0].title, 'Rennick');
+    assert.ok(!alex.some((p) => p.title === 'Mother Ash'), "the DM's own page is not found for a player");
+    assert.ok(!JSON.stringify(await find('cult', t.alex.id)).includes(hand.id));
+    assert.equal((await find('cult'))[0].id, hand.id);
+    assert.deepEqual(await find(''), []);
+  } finally {
+    await t.cleanup();
+  }
+});

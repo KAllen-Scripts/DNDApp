@@ -450,6 +450,32 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
 .wiki-diff ins { background: color-mix(in srgb, #2f8a5f 25%, transparent); text-decoration: none; }
 .wiki-diff del { background: color-mix(in srgb, #b0303f 22%, transparent); }
 
+/* The drawer (wiki-drawer.js): a page at the side, over either space. */
+.wiki-drawer {
+  position: fixed; z-index: 30; top: 0; right: 0; bottom: 0; width: min(30rem, 100vw); overflow-y: auto;
+  display: grid; align-content: start; gap: 0.5rem; padding: 1rem 1.1rem 1.5rem;
+  background: var(--surface); border-left: 4px solid var(--kind); box-shadow: -8px 0 28px rgb(0 0 0 / 0.22);
+}
+.wiki-drawer-head { display: flex; align-items: center; gap: 0.5rem; }
+.wiki-drawer-head h2 { flex: 1; margin: 0; font-size: 1.3rem; }
+.wiki-drawer-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.wiki-drawer .wiki-layout.with-box { grid-template-columns: 1fr; }
+.wiki-drawer .wiki-layout.with-box > .wiki-infobox { grid-column: 1; grid-row: 1; position: static; }
+.wiki-drawer .wiki-layout.with-box > .wiki-body { grid-row: 2; }
+/* Names in Ask's answers that are wiki pages (wiki-names.js). */
+button.wiki-name { color: inherit; font-size: inherit; text-decoration: underline; text-decoration-color: var(--kind); text-decoration-thickness: 2px; text-underline-offset: 2px; }
+/* Find (wiki-find.js, Ctrl K). */
+.wiki-find { width: min(40rem, calc(100vw - 2rem)); }
+.wiki-find-bar { display: flex; gap: 0.4rem; }
+.wiki-find-bar input { flex: 1; font-size: 1.05rem; }
+.wiki-find-results { display: grid; gap: 0.4rem; margin-top: 0.6rem; max-height: 60vh; overflow-y: auto; }
+.wiki-find-card { display: flex; gap: 0.6rem; padding: 0.4rem; text-align: left; border: 1px solid var(--border); border-left: 4px solid var(--kind); border-radius: 8px; background: var(--surface); }
+.wiki-find-card:hover, .wiki-find-card:focus-visible { background: var(--surface-2); }
+.wiki-find-art { flex: none; display: grid; place-items: center; width: 3.5rem; height: 3.5rem; overflow: hidden; border-radius: 6px; background: color-mix(in srgb, var(--kind) 22%, var(--surface)); }
+.wiki-find-art:not(.has-picture)::before { content: var(--kind-icon); color: var(--kind); font-size: 1.2rem; }
+.wiki-find-art img { width: 100%; height: 100%; object-fit: cover; }
+.wiki-find-body { display: grid; gap: 0.15rem; min-width: 0; }
+
 /* Small views (mini-views.js): a map crop, a ring of portraits, a ribbon of moments. */
 .mini { display: block; overflow: visible; }
 .mini-pin, .mini-dot { fill: var(--kind); stroke: var(--bg, #fff); stroke-width: 1.2; }

@@ -9,10 +9,11 @@ import { BadRequestError, NotFoundError } from '../store.js';
 import { WIKI_LIMITS as L } from '../wiki.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 import { SOURCE_KINDS } from '../wiki-pictures.js';
+import { wikiKey } from '@dndapp/shared/wiki.js';
 import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass } from '../wiki-views.js';
 
 export function registerWiki(app, r) {
-  const { access, auth, store, wiki, wikiAI, wikiPictures, jobs, pictures } = r;
+  const { access, auth, store, wiki, wikiAI, wikiPictures, jobs, pictures, search } = r;
 
   const pictureId = z.string().regex(/^[a-f0-9]{10}$/);
   const available = z.union([z.literal('all'), z.literal('dm'), z.array(z.number().int()).max(100)]);
@@ -96,6 +97,33 @@ export function registerWiki(app, r) {
       party: party(cid),
       ...(as == null ? { waiting: { proposals: wikiAI.count(cid) } } : { as }),
     };
+  });
+
+  /**
+   * Find pages (Ctrl K): titles and other names that match first, then pages
+   * whose text means something like it (the search index's wiki parts, only
+   * those the viewer may see), so "the guy with the eyepatch" finds Rennick.
+   */
+  app.get('/campaigns/:cid/wiki/find', async (request) => {
+    const { cid, as, pages } = viewerPages(request);
+    const q = z.object({ q: z.string().trim().max(200).default('') }).parse(request.query ?? {}).q;
+    if (!q) return { pages: [] };
+    const key = wikiKey(q);
+    const named = pages
+      .map((p) => {
+        const names = [p.title, ...p.aliases].map(wikiKey);
+        const rank = names.some((n) => n === key) ? 0 : names.some((n) => n.startsWith(key)) ? 1 : names.some((n) => n.includes(key)) ? 2 : null;
+        return rank == null ? null : { p, rank };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.rank - b.rank || a.p.title.localeCompare(b.p.title))
+      .map((x) => x.p);
+    const byId = new Map(pages.map((p) => [p.id, p]));
+    const viewer = as == null ? { seesAll: true } : { userId: as, seesAll: false };
+    const meant = (await search.search(cid, q, { kinds: ['wiki'], viewer, limit: 6 })).map((d) => byId.get(d.ref_id)).filter(Boolean);
+    const seen = new Set();
+    const found = [...named.map((p) => ({ p, by: 'name' })), ...meant.map((p) => ({ p, by: 'text' }))].filter(({ p }) => !seen.has(p.id) && seen.add(p.id)).slice(0, 12);
+    return { pages: found.map(({ p, by }) => ({ ...summary(p), found_by: by })) };
   });
 
   /** A page's compass: its family, what it's inside, what's inside it, and its links both ways (`compass: null` if the player can't see it). */

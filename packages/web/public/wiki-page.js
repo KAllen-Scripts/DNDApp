@@ -44,7 +44,13 @@ export function pageLink(name, text) {
     type: 'button',
     class: `link wiki-link${page ? '' : ' missing'}`,
     title: page ? '' : `No page called "${name}" yet: click to make it`,
-    onclick: () => (page ? nav.openPage(page.id) : nav.newPage(name)),
+    // In the drawer a link opens its page there; elsewhere in the wiki, in the wiki.
+    onclick: (e) => {
+      const inDrawer = !!e.currentTarget.closest('#wiki-drawer');
+      if (page) return inDrawer ? nav.drawer(page.id) : nav.openPage(page.id);
+      if (inDrawer) nav.enter();
+      nav.newPage(name);
+    },
   }, text);
   if (page) {
     b.addEventListener('mouseenter', () => showPreview(b, page));

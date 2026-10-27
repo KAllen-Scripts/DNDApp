@@ -20,6 +20,8 @@ import { setSettingsCampaign, initSettings } from './campaign-settings.js';
 import { loadArchivist, initArchivistActions } from './archivist.js';
 import { loadWiki } from './wiki.js';
 import { setSpace, spaceInUrl, routeFromUrl, initSpace } from './wiki-space.js';
+import { initFind } from './wiki-find.js';
+import { markNames } from './wiki-names.js';
 import { loadCreatures, initCreatureActions } from './creatures.js';
 import { loadItems, initItemActions } from './items.js';
 import { loadMerchants, initMerchantActions, merchantsOpened } from './merchants.js';
@@ -445,6 +447,7 @@ function addTurn(question, answer = '', evidence = []) {
   a.className = 'a';
   const body = document.createElement('div');
   body.innerHTML = renderAnswer(answer, evidence);
+  markNames(body);
   a.append(body);
   const ev = renderEvidence(evidence);
   if (ev) a.append(ev);
@@ -703,6 +706,7 @@ async function ask(question, mode = 'auto') {
           show();
         } else if (event === 'done') {
           body.innerHTML = renderAnswer(data.answer, data.evidence);
+          markNames(body);
           const ev = renderEvidence(data.evidence);
           if (ev) a.append(ev);
           if (data.path === 'quick') a.append(quickNote(question));
@@ -830,7 +834,8 @@ initSheetActions();
 phoneMenu($('.sheet-bar'), { label: 'Sheet: review, upload, download, print, pop out', keep: '#sheet-status, .sheet-modes' });
 phoneMenu($('#gear-add'), { label: 'More ways to add', keep: '#gear-kind, #gear-name, #dl-gear, button[type=submit], #gear-status' });
 initSheetPlace({ onChange: () => showTab(currentTab), currentTab: () => currentTab });
-initSpace({ table: WINDOW_TAB ? null : () => showTab(tableTab) });
+initSpace({ table: WINDOW_TAB ? null : () => showTab(tableTab), enter: () => { if (currentTab !== 'wiki') showTab('wiki'); } });
+initFind();
 // Back and Forward in and out of the wiki's space, and between its pages.
 window.addEventListener('popstate', async () => {
   if (WINDOW_TAB && WINDOW_TAB !== 'wiki') return;
