@@ -43,6 +43,16 @@ function canonOf(x) {
   return out;
 }
 
+/**
+ * Who wrote a fact or an event besides the DM: the AI, or a player (their character's lore, stage 6c, with
+ * `owner` their user id: only they may change it, and the AI never rewrites it).
+ */
+function byOf(x) {
+  if (x?.by === 'ai') return { by: 'ai' };
+  if (x?.by === 'player' && Number(x.owner) > 0) return { by: 'player', owner: Number(x.owner) };
+  return {};
+}
+
 /** How we know a part (stage 3b): the transcript citations it came from, kept only when there are some. */
 function sourcesOf(x) {
   const sources = normalizeSources(x?.sources);
@@ -100,12 +110,13 @@ export function normalizeWikiPage(p = {}) {
       id: String(s.id ?? crypto.randomBytes(3).toString('hex')),
       heading: String(s.heading ?? '').trim(),
       text: String(s.text ?? ''),
-      // Who wrote it: the DM, or the AI (a proposal the DM approved as it was).
-      by: s.by === 'ai' ? 'ai' : 'dm',
+      // Who wrote it: the DM, the AI (a proposal the DM approved as it was), or a player (their character's lore, stage 6c).
+      by: byOf(s).by ?? 'dm',
       // 'all' here means "as the page".
       available: normalizeAvailable(s.available, 'all'),
       ...canonOf(s),
       ...sourcesOf(s),
+      ...(byOf(s).owner && { owner: byOf(s).owner }),
     })),
     // Pictures (2026-10-21): the main picture (a portrait, a view of the place) beside the facts, a banner across the top, and a gallery.
     picture: normalizePicture(p.picture),
@@ -113,7 +124,7 @@ export function normalizeWikiPage(p = {}) {
     gallery: (Array.isArray(p.gallery) ? p.gallery : []).map((x) => normalizePicture(x)).filter(Boolean).slice(0, WIKI_LIMITS.gallery),
     // At a glance (an infobox): short facts like "Race: Half-elf", each with who it's available to ('all' = as the page).
     facts: (Array.isArray(p.facts) ? p.facts : [])
-      .map((f) => ({ label: String(f?.label ?? '').trim().slice(0, WIKI_LIMITS.label), value: String(f?.value ?? '').trim().slice(0, WIKI_LIMITS.value), available: normalizeAvailable(f?.available, 'all'), ...canonOf(f), ...sourcesOf(f), ...(TONES.includes(f?.tone) && { tone: f.tone }), ...(f?.by === 'ai' && { by: 'ai' }) }))
+      .map((f) => ({ label: String(f?.label ?? '').trim().slice(0, WIKI_LIMITS.label), value: String(f?.value ?? '').trim().slice(0, WIKI_LIMITS.value), available: normalizeAvailable(f?.available, 'all'), ...canonOf(f), ...sourcesOf(f), ...(TONES.includes(f?.tone) && { tone: f.tone }), ...byOf(f) }))
       .filter((f) => f.label || f.value)
       .slice(0, WIKI_LIMITS.facts),
     // When it happened (stage 4b): a session, a war, a birth. Null for no time.
@@ -127,7 +138,7 @@ export function normalizeWikiPage(p = {}) {
         available: normalizeAvailable(e?.available, 'all'),
         ...canonOf(e),
         ...sourcesOf(e),
-        ...(e?.by === 'ai' && { by: 'ai' }),
+        ...byOf(e),
       }))
       .filter((e) => e.text)
       .slice(0, WIKI_LIMITS.events),
@@ -489,15 +500,25 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
         next.sections = fields.sections.map((s) => {
           if (s.by) return s;
           const old = s.id && was.get(s.id);
-          return { ...s, by: old?.by === 'ai' && old.text === s.text && old.heading === (s.heading ?? '').trim() ? 'ai' : 'dm' };
+          // A player's lore (stage 6c) saved unchanged stays theirs; the DM changing it makes it the DM's, as with the AI's.
+          const same = old && old.by !== 'dm' && old.text === s.text && old.heading === (s.heading ?? '').trim();
+          return { ...s, by: same ? old.by : 'dm', ...(same && old.owner != null && old.by === 'player' && { owner: old.owner }) };
         });
       }
       // The same for facts (a tie the AI added, stage 3e): one saved unchanged stays the AI's.
       if (fields.facts) {
         next.facts = fields.facts.map((f) => {
           if (f.by) return f;
-          const old = before.facts.find((o) => o.by === 'ai' && wikiKey(o.label) === wikiKey(f.label) && o.value === String(f.value ?? '').trim());
-          return old ? { ...f, by: 'ai' } : f;
+          const old = before.facts.find((o) => (o.by === 'ai' || o.by === 'player') && wikiKey(o.label) === wikiKey(f.label) && o.value === String(f.value ?? '').trim());
+          return old ? { ...f, by: old.by, ...(old.by === 'player' && { owner: old.owner }) } : f;
+        });
+      }
+      // And events (the AI's, stage 4d, and a player's, stage 6c), by id.
+      if (fields.events) {
+        next.events = fields.events.map((e) => {
+          if (e.by) return e;
+          const old = e.id && before.events.find((o) => o.id === e.id && o.by && o.text === String(e.text ?? '').trim() && (o.when?.text ?? '') === (e.when?.text ?? '').trim());
+          return old ? { ...e, ...byOf(old) } : e;
         });
       }
       if (fields.title != null && wikiKey(fields.title) !== wikiKey(before.title)) {

@@ -209,6 +209,8 @@ function sections(page, { dm, me = null }) {
     h('div', { class: 'wiki-canon-text' }, ...(dm ? sectionBody(s.text) : [richText(s.text)])),
     sourceChips(s.sources, { as: me }),
     s.id ? sendButton(page, { section: s.id }, s.heading ? `The section "${s.heading}"` : 'A section', dm) : null,
+    // A player's own lore (stage 6c): they can change it.
+    !dm && s.by === 'player' && s.owner === me && me != null && nav.editLore ? h('button', { type: 'button', class: 'ghost small wiki-lore-change', onclick: (e) => nav.editLore(page, s, e.currentTarget.closest('.wiki-section')) }, 'Change') : null,
   ));
 }
 

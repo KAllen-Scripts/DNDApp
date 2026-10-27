@@ -106,7 +106,7 @@ const TAGS = { new_page: 'New page', update_section: 'Change', add_section: 'New
 /** One of the AI's changes: what's there now beside what it proposes, and Approve, Edit, Reject. */
 function proposalCard(p) {
   const card = h('div', { class: 'wiki-proposal card' });
-  const tag = p.dm_section ? 'Suggestion for your section' : TAGS[p.action];
+  const tag = p.from === 'player' ? `From ${playerName(p.by_player)}` : p.dm_section ? 'Suggestion for your section' : TAGS[p.action];
   const where = p.action === 'new_page' ? p.title : p.action === 'set_fact' ? `${p.page_title} › ${p.fact.label}` : p.action === 'set_when' || p.action === 'add_event' ? p.page_title : `${p.page_title}${p.action === 'reveal' ? ` › ${p.section_heading || '(opening section)'}` : p.action === 'update_section' && p.current?.heading ? ` › ${p.current.heading}` : ''}`;
   const edits = { sections: p.sections.map(() => null) };
   const done = async (path, body, message) => {
@@ -202,8 +202,17 @@ function proposalCard(p) {
   };
   draw(false);
 
+  // A player's lore (stage 6c): what it is once approved, their account by default.
+  const canonPick = p.from === 'player' ? h('select', { 'aria-label': 'Approve it as' },
+    h('option', { value: 'told' }, `${playerName(p.by_player)}'s account`), h('option', { value: 'true' }, 'True'), h('option', { value: 'false' }, 'False (with the truth)')) : null;
+  const truth = canonPick ? h('input', { maxLength: 2000, placeholder: 'What is really so (only you see this)', 'aria-label': 'The truth', hidden: true }) : null;
+  canonPick?.addEventListener('change', () => { truth.hidden = canonPick.value !== 'false'; });
   const approve = h('button', { type: 'button', class: 'primary', disabled: p.gone, onclick: () => {
     const out = {};
+    if (canonPick) {
+      out.canon = canonPick.value;
+      if (out.canon === 'false') out.truth = truth.value.trim();
+    }
     if (pagePicker) out.page_available = pagePicker.value();
     if (usePicture && !usePicture.checked) out.use_picture = false;
     if (factEdit) out.fact = { label: factEdit.label.value.trim(), value: factEdit.value.value.trim(), tone: factEdit.tone.value || null, available: factEdit.picker.value() };
@@ -227,7 +236,7 @@ function proposalCard(p) {
     edit.hidden = true;
     approve.textContent = 'Approve with my changes';
   } }, 'Edit');
-  const reject = h('button', { type: 'button', class: 'ghost danger', onclick: () => done('reject', {}, () => 'Rejected. The AI won\'t suggest it again.') }, 'Reject');
+  const reject = h('button', { type: 'button', class: 'ghost danger', onclick: () => done('reject', {}, () => (p.from === 'player' ? `Rejected. ${playerName(p.by_player)} sees it wasn't used.` : 'Rejected. The AI won\'t suggest it again.')) }, 'Reject');
 
   card.append(...[
     h('div', { class: 'wiki-proposal-head' }, h('span', { class: 'wiki-tag small' }, tag), h('strong', {}, where)),
@@ -235,6 +244,7 @@ function proposalCard(p) {
     p.gone ? h('p', { class: 'wiki-warn small' }, 'That page or section is gone, so this can only be rejected.') : null,
     p.dm_section ? h('p', { class: 'muted small' }, 'You wrote this section. The AI thinks the records disagree with it.') : null,
     body,
+    canonPick ? h('div', { class: 'wiki-lore-canon small' }, h('label', {}, 'Approve it as ', canonPick), truth) : null,
     h('div', { class: 'wiki-actions' }, approve, edit, reject),
   ].filter(Boolean));
   return card;

@@ -2550,3 +2550,13 @@ button.wiki-tile { text-align: left; border: 1px solid var(--border); color: inh
 .wiki-sheet-share legend { padding: 0; color: var(--muted); }
 .wiki-character-offers { margin: 0 0 14px; }
 .wiki-wheel-member.has-page { cursor: pointer; }
+
+/* Players' lore (stage 6c): their story on their character's page, and the DM's choice of canon. */
+.wiki-lore { border: 1px dashed var(--border); border-radius: var(--radius); padding: 0.6rem 0.9rem; margin: 0 0 0.9rem; }
+.wiki-lore-head { display: flex; align-items: center; gap: 0.6rem; justify-content: space-between; flex-wrap: wrap; }
+.wiki-lore-head h3 { margin: 0; font-size: 1rem; }
+.wiki-lore-list { margin: 0.4rem 0 0; padding-left: 1.1rem; }
+.wiki-lore-list .wiki-lore-rejected { color: var(--muted); }
+.wiki-lore-edit { display: grid; gap: 0.4rem; }
+.wiki-lore-change { margin-top: 0.3rem; }
+.wiki-lore-canon { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin: 0.4rem 0; }
