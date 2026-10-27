@@ -9,7 +9,7 @@ import { BadRequestError, NotFoundError } from '../store.js';
 import { WIKI_LIMITS as L } from '../wiki.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 import { SOURCE_KINDS } from '../wiki-pictures.js';
-import { wikiKey, wikiPieces, unlink, unpicture, audienceOf, canSeeAudience, CANONS } from '@dndapp/shared/wiki.js';
+import { wikiKey, wikiPieces, unlink, unpicture, audienceOf, canSeeAudience, CANONS, TONES } from '@dndapp/shared/wiki.js';
 import { MAX_SOURCES } from '@dndapp/shared/citations.js';
 import { createTools } from '../qa/tools.js';
 import { pageOnMaps, makePageFor, atlasLayers } from '../wiki-maps.js';
@@ -38,7 +38,7 @@ export function registerWiki(app, r) {
     picture: z.object({ id: pictureId, caption: z.string().max(L.caption).default(''), available: available.default('all'), ...canon }).nullable(),
     banner: z.object({ id: pictureId, caption: z.string().max(L.caption).default(''), available: available.default('all'), focus: z.number().min(0).max(100).default(50), ...canon }).nullable(),
     gallery: z.array(z.object({ id: pictureId, caption: z.string().max(L.caption).default(''), available: available.default('all'), ...canon })).max(L.gallery),
-    facts: z.array(z.object({ label: z.string().max(L.label), value: z.string().max(L.value), available: available.default('all'), ...canon, ...sources })).max(L.facts),
+    facts: z.array(z.object({ label: z.string().max(L.label), value: z.string().max(L.value), available: available.default('all'), tone: z.enum(TONES).nullable().optional(), ...canon, ...sources })).max(L.facts),
   };
 
   /** Chosen players must be players of this campaign. */

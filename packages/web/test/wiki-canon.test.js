@@ -98,3 +98,31 @@ test('wiki sources: a part shows the sessions it came from, opens what was said,
     assert.equal(page.errors.length, 0, page.errors.join('\n'));
   });
 });
+
+test('wiki ties: a fact that links a page gets a tone picker, guessed from its label, and its colour', async () => {
+  await withPage({
+    before: async (t) => {
+      const dana = await addDm(t);
+      const thorin = (await t.request('POST', `/campaigns/${t.campaign.id}/wiki`, { body: {
+        title: 'Thorin', available: 'all', facts: [{ label: 'Rival', value: '[[Lord Vex]]', available: 'all' }, { label: 'Home', value: 'Brindle', available: 'all' }],
+      } })).json().page;
+      return { dana, thorin };
+    },
+    page: (t, { dana, thorin }) => ({ as: dana, path: `/?space=wiki#/page/${thorin.id}` }),
+  }, async (page, t, { thorin }) => {
+    await page.waitFor(() => page.$('#wiki-main dd'));
+    assert.ok(page.$('dd.wiki-tie.tone-hostile'), 'a rival is hostile');
+    page.click(button(page, '#wiki-main', 'Edit'));
+    const form = page.$('.wiki-editor');
+    const [rival, home] = form.querySelectorAll('.wiki-fact-row');
+    const tone = rival.querySelector('select.wiki-tone-pick');
+    assert.ok(!tone.hidden);
+    assert.match(tone.options[0].textContent, /Hostile \(from the label\)/);
+    assert.ok(home.querySelector('select.wiki-tone-pick').hidden, 'no link, no tone');
+    page.type(tone, 'friendly');
+    page.submit(form);
+    await page.waitFor(() => page.$('dd.wiki-tie.tone-friendly'));
+    assert.equal(t.wiki.get(t.campaign.id, thorin.id).facts[0].tone, 'friendly');
+    assert.equal(page.errors.length, 0, page.errors.join('\n'));
+  });
+});

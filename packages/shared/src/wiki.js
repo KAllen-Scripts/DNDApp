@@ -196,3 +196,30 @@ export function canonMarker(canon, { forDm = false, truth = '', owner = '' } = {
   if (c === 'planned') return "[planned: the DM's prep, not yet in play]";
   return '';
 }
+
+// ---------- relationships (wiki space stage 3c) ----------
+
+/**
+ * A fact that links another page is a relationship ("Rival: [[Lord Vex]]"): its label says what it is, and its tone
+ * how it feels, for the Web's lines. A fact keeps `tone` only when the DM chose one; otherwise it's guessed from the
+ * label.
+ */
+export const TONES = ['friendly', 'neutral', 'hostile'];
+
+/** The pages a fact links to, as written. */
+export const factLinks = (fact) => wikiLinks(fact?.value);
+
+const TONE_WORDS = {
+  hostile: ['enemy', 'enemies', 'rival', 'rivals', 'nemesis', 'foe', 'foes', 'hunted by', 'hunts', 'hates', 'hated by', 'at war', 'war with', 'killed', 'killer', 'murdered', 'betrayed', 'betrayer', 'wants dead', 'feud', 'opposes', 'opposed by', 'threat', 'captor', 'captured by', 'victim'],
+  friendly: ['ally', 'allies', 'friend', 'friends', 'patron', 'mentor', 'student', 'apprentice', 'loves', 'lover', 'married', 'spouse', 'wife', 'husband', 'partner', 'protector', 'protects', 'serves', 'servant', 'member of', 'leader of', 'led by', 'leader', 'member', 'owes', 'trusts', 'sworn to', 'parent', 'mother', 'father', 'child', 'son', 'daughter', 'sibling', 'brother', 'sister', 'family', 'employer', 'employs', 'works for', 'guards', 'follower', 'devotee', 'worships'],
+};
+
+/** A relationship's tone from its label: 'friendly', 'hostile' or 'neutral'. */
+export function guessTone(label) {
+  const words = ` ${String(label ?? '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim()} `;
+  for (const tone of ['hostile', 'friendly']) if (TONE_WORDS[tone].some((w) => words.includes(` ${w} `))) return tone;
+  return 'neutral';
+}
+
+/** The tone a fact is drawn with: the DM's choice, or the guess. */
+export const factTone = (fact) => (TONES.includes(fact?.tone) ? fact.tone : guessTone(fact?.label));

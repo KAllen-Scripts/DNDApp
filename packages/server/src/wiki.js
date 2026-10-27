@@ -20,10 +20,10 @@ import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { NotFoundError, BadRequestError } from './store.js';
 import { ArchiveConflictError } from './archive.js';
-import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, unpicture, wikiKey, isPictureId, pagePictureIds, normalizeCanon, playerCanon, canonMarker } from '@dndapp/shared/wiki.js';
+import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, unpicture, wikiKey, isPictureId, pagePictureIds, normalizeCanon, playerCanon, canonMarker, TONES } from '@dndapp/shared/wiki.js';
 import { normalizeSources } from '@dndapp/shared/citations.js';
 
-export const WIKI_LIMITS = { title: 200, kind: 60, alias: 200, aliases: 50, tags: 30, tag: 60, sections: 200, heading: 200, text: 200_000, caption: 300, gallery: 60, facts: 30, label: 60, value: 500, truth: 2000 };
+export const WIKI_LIMITS = { title: 200, kind: 60, alias: 200, aliases: 50, tags: 30, tag: 60, sections: 200, heading: 200, text: 200_000, caption: 300, gallery: 60, facts: 60, label: 60, value: 500, truth: 2000 };
 
 export const isWikiId = (id) => /^[a-f0-9]{10}$/.test(String(id));
 
@@ -93,7 +93,7 @@ export function normalizeWikiPage(p = {}) {
     gallery: (Array.isArray(p.gallery) ? p.gallery : []).map((x) => normalizePicture(x)).filter(Boolean).slice(0, WIKI_LIMITS.gallery),
     // At a glance (an infobox): short facts like "Race: Half-elf", each with who it's available to ('all' = as the page).
     facts: (Array.isArray(p.facts) ? p.facts : [])
-      .map((f) => ({ label: String(f?.label ?? '').trim().slice(0, WIKI_LIMITS.label), value: String(f?.value ?? '').trim().slice(0, WIKI_LIMITS.value), available: normalizeAvailable(f?.available, 'all'), ...canonOf(f), ...sourcesOf(f) }))
+      .map((f) => ({ label: String(f?.label ?? '').trim().slice(0, WIKI_LIMITS.label), value: String(f?.value ?? '').trim().slice(0, WIKI_LIMITS.value), available: normalizeAvailable(f?.available, 'all'), ...canonOf(f), ...sourcesOf(f), ...(TONES.includes(f?.tone) && { tone: f.tone }) }))
       .filter((f) => f.label || f.value)
       .slice(0, WIKI_LIMITS.facts),
     version: Number(p.version) || 1,

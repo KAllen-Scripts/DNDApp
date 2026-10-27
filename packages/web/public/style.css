@@ -558,6 +558,13 @@ button.wiki-name { color: inherit; font-size: inherit; text-decoration: underlin
 .wiki-sources-edit:empty { display: none; }
 .wiki-fact-row .wiki-sources-edit { grid-column: 1 / -1; order: 2; }
 
+/* Relationships (stage 3c): a fact that links a page gets its tone's colour, the same as the Web's lines. */
+:root { --tone-friendly: #3f7d4e; --tone-neutral: #8a7d6b; --tone-hostile: #b23a2e; }
+dd.wiki-tie { border-left: 3px solid var(--tie, var(--tone-neutral)); padding-left: 0.5rem; }
+dd.tone-friendly { --tie: var(--tone-friendly); }
+dd.tone-hostile { --tie: var(--tone-hostile); }
+dd.wiki-tie.canon-rumour, dd.wiki-tie.canon-false { border-left-style: dotted; }
+
 /* Truth and rumour (wiki-canon.js): one look for every view. Rumour dotted, false struck red with the truth
    beside it (the DM only), planned faint (the DM only), an account in quote marks. */
 .wiki-canon { display: inline-block; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em; padding: 0.05rem 0.4rem; margin-right: 0.35rem; border-radius: 999px; border: 1px dotted currentColor; vertical-align: 0.1em; color: var(--muted); }
@@ -669,7 +676,7 @@ button.wiki-link.missing { color: var(--muted); text-decoration-style: dashed; }
 .wiki-gallery-item img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; }
 .wiki-gallery-item .icon-btn { position: absolute; top: 0.5rem; right: 0.5rem; background: var(--surface); }
 .wiki-facts-edit { display: grid; gap: 0.35rem; }
-.wiki-fact-row { display: grid; grid-template-columns: minmax(6rem, 10rem) minmax(0, 1fr) auto auto auto auto; gap: 0.35rem; align-items: center; }
+.wiki-fact-row { display: grid; grid-template-columns: minmax(6rem, 10rem) minmax(0, 1fr) auto auto auto auto auto; gap: 0.35rem; align-items: center; }
 .wiki-fact-row .wiki-canon-picker { display: contents; }
 .wiki-fact-row .wiki-truth-box { grid-column: 1 / -1; order: 1; }
 .wiki-fact-row input { min-width: 0; }
