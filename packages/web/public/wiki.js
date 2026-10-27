@@ -28,6 +28,7 @@ import { drawWebView, leaveWeb } from './wiki-web.js';
 import { drawTimeline, leaveTimeline } from './wiki-timeline.js';
 import { drawTemplates, saveAsTemplate } from './wiki-templates.js';
 import { drawQuests } from './wiki-quests.js';
+import { drawKnows } from './wiki-knows.js';
 import { openSaveList } from './wiki-lists.js';
 import { linkHints } from './wiki-write.js';
 import { drawWheel } from './wiki-wheel.js';
@@ -258,7 +259,7 @@ function phoneBack() {
 function drawMain() {
   const main = $('#wiki-main');
   hidePreview();
-  const reading = !!state.open || state.view === 'review' || state.view === 'wheel' || state.view === 'atlas' || state.view === 'web' || state.view === 'timeline' || state.view === 'templates' || state.view === 'quests';
+  const reading = !!state.open || state.view === 'review' || state.view === 'wheel' || state.view === 'atlas' || state.view === 'web' || state.view === 'timeline' || state.view === 'templates' || state.view === 'quests' || state.view === 'knows';
   $('#wiki-view').classList.toggle('wiki-reading', reading);
   drawReviewButton();
   if (state.view !== 'atlas') leaveAtlas();
@@ -271,6 +272,7 @@ function drawMain() {
   if (state.view === 'timeline') return drawTimeline(main);
   if (state.view === 'templates') return drawTemplates(main);
   if (state.view === 'quests') return drawQuests(main);
+  if (state.view === 'knows') return drawKnows(main);
   if (state.view === 'review') return drawReview();
   if (state.view === 'wheel') return drawWheelView();
   if (reading) queueMicrotask(() => main.prepend(phoneBack()));

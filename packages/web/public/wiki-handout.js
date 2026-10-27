@@ -6,6 +6,7 @@
  */
 import { api, h } from './api.js';
 import { state, nav, base, report, status, playerName } from './wiki-data.js';
+import { spoilerWords } from './wiki-waiting.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -34,6 +35,12 @@ export function sendHandout(page, part, label) {
     const to = everyone.checked ? 'everyone' : boxes.filter((b) => b.checked).map((b) => Number(b.value));
     if (!to.length) return status('Tick who gets it.', true);
     try {
+      // The spoiler check (stage 8b): a section that names what they can't see yet asks first.
+      if (part.section) {
+        const { spoilers } = await state.guarded(() => api('POST', `${base()}/spoilers`, { page_id: page.id, players: to, sections: [part.section] }));
+        const words = spoilerWords(spoilers);
+        if (words && !confirm(`${words}\n\nSend it anyway? (Links become plain names in a handout.)`)) return;
+      }
       const res = await state.guarded(() => api('POST', `${base()}/${page.id}/handout`, { part, to, share: share.checked }));
       d.close();
       status(`Sent "${res.handout.title}" as a handout.${res.page_hidden ? ' The page itself still isn’t shared with them, so they won’t see that part in the wiki until you share the page.' : ''}`);

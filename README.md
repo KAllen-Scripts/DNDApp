@@ -322,6 +322,9 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET / POST | `/campaigns/:cid/wiki/lists` | The DM's lists, each with its pages for the viewer (`?as=`) `{lists: [{id, name, filter, pages}]}` (a player gets none) / save one `{name, filter: {family?, kind?, tag?, canon?, fact?: {label, value}} \| {ids}}` (DM only) |
 | PUT / DELETE | `/campaigns/:cid/wiki/lists/:id` | Change or remove a list (DM only) |
 | POST | `/campaigns/:cid/wiki/lists/make` | Make a list from plain words `{words}` (one quick AI call) → `{name, filter: {ids}, pages}`, not saved (DM only) |
+| GET | `/campaigns/:cid/wiki/knows` | Who knows what `{players, pages: [page card + {cells: {<player id>: "all" \| "some" \| "none"}}]}` (DM only) |
+| POST | `/campaigns/:cid/wiki/:pid/reveal` | Reveal chosen parts to players in one save `{players, sections?: [ids], facts?: [labels], events?: [ids], version?}` (none chosen: the page and all of it) → `{page, knows}` (DM only) |
+| POST | `/campaigns/:cid/wiki/spoilers` | The spoiler check `{players: [ids] \| "everyone", page_id?, sections?, facts?, events?, text?}` → `{spoilers: [{player, name, names: [{id, title}]}]}` (DM only) |
 | GET / POST | `/campaigns/:cid/wiki/lore` | A player's lore about their own character (players only): theirs and what became of each `{lore: [{id, type, title, status, page_id, created_at}]}` / add some `{type: section \| page \| relationship \| event, heading?, text?, title?, kind?, label?, value?, when?, available?: "dm" \| "all" \| [user ids]}` (waits for the DM under Waiting) |
 | PUT | `/campaigns/:cid/wiki/:pid/lore` | A player changes their own approved part `{section_id, heading?, text}` \| `{event_id, when?, text}` \| `{fact_label, label?, value}` → `{page}` (only its player; one confirmed as true goes back to their account) |
 | POST | `/campaigns/:cid/wiki/proposals/:id/reject` | Reject one; the AI won't propose it again (DM only) |

@@ -218,3 +218,34 @@ export function listPages(pages, filter = {}) {
     })() : true);
   return pages.filter((p) => !p.template && has(p)).sort((a, b) => a.title.localeCompare(b.title));
 }
+
+/**
+ * Who knows what (stage 8b): the DM's pages as rows, each with how much of it each player gets ('all', 'some' or
+ * 'none'); `coverage` maps each player's id to wiki.coverage for them.
+ */
+export function knowsGrid(pages, coverage) {
+  return pages.filter((p) => !p.template).sort((a, b) => a.title.localeCompare(b.title))
+    .map((p) => ({ ...summary(p), cells: Object.fromEntries([...coverage].map(([uid, c]) => [uid, c.get(p.id) ?? 'none'])) }));
+}
+
+/**
+ * The spoiler check (stage 8b): what some text names that a player can't see yet. Names are its links and the
+ * titles and other names of pages written out in it (four letters or more). `pages` are the DM's; `visible` maps
+ * each player's id to the ids of the pages they see; `except` are pages this change itself shows them. Returns
+ * [{ player, names: [{ id, title }] }] for the players it would spoil something for.
+ */
+export function spoilers(text, pages, visible, except = []) {
+  const plainText = ` ${wikiKey(unlink(String(text ?? '')))} `;
+  const linked = new Set(wikiLinks(String(text ?? '')).map((n) => wikiKey(n.replace(/^!/, ''))));
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const named = pages.filter((p) => !p.template && !except.includes(p.id) && [p.title, ...p.aliases].some((n) => {
+    const k = wikiKey(n);
+    return linked.has(k) || (k.length >= 4 && new RegExp(`(^|[^\\p{L}\\p{N}])${esc(k)}($|[^\\p{L}\\p{N}])`, 'u').test(plainText));
+  }));
+  const out = [];
+  for (const [player, ids] of visible) {
+    const names = named.filter((p) => !ids.has(p.id)).map((p) => ({ id: p.id, title: p.title }));
+    if (names.length) out.push({ player, names });
+  }
+  return out;
+}

@@ -370,6 +370,27 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
     },
 
     /**
+     * How much of each page a player gets (who knows what, stage 8b): page id -> 'all', 'some' or 'none'. The parts
+     * are the sections' blocks, facts, events and pictures; planned ones are the DM's and never counted.
+     */
+    coverage(cid, viewer) {
+      const roster = players(cid);
+      const out = new Map();
+      for (const page of rows(cid)) {
+        const pageAudience = audienceOf(page.available);
+        if (!filtered(page, viewer, roster)) {
+          out.set(page.id, 'none');
+          continue;
+        }
+        const own = [page.picture, page.banner, ...page.gallery, ...page.facts.filter((f) => f.canon !== 'planned'), ...page.events.filter((e) => e.canon !== 'planned')].filter(Boolean)
+          .map((x) => narrowest(pageAudience, audienceOf(x.available)));
+        const audiences = [...parts(page, roster).filter((x) => x.text.trim() && x.section.canon !== 'planned').map((x) => x.audience), ...own];
+        out.set(page.id, audiences.every((a) => canSeeAudience(viewer, a)) ? 'all' : 'some');
+      }
+      return out;
+    },
+
+    /**
      * Every page as a viewer may see it (stage 6a). For a player: no hidden parent, and a link to a page they can't
      * see becomes its words (a link's target is a page's name, which can be a secret).
      */
