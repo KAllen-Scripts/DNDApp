@@ -2524,3 +2524,10 @@ button.wiki-tile { text-align: left; border: 1px solid var(--border); color: inh
 .wiki-template-card .wiki-actions { margin-top: auto; flex-wrap: wrap; }
 .wiki-start-from { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
 .wiki-template-editor { border-left: 4px solid var(--accent); padding-left: 0.8rem; }
+
+/* ---------- the AI as a writing partner (wiki-write.js) ---------- */
+.wiki-ai-btn { color: var(--accent); }
+.wiki-link-hint { text-decoration: underline dotted var(--accent); text-underline-offset: 3px; }
+.wiki-link-it { margin-left: 0.25rem; padding: 0 0.35rem; border: 1px solid var(--accent); border-radius: 999px; background: none; color: var(--accent); font-size: 0.72rem; line-height: 1.4; cursor: pointer; vertical-align: 1px; }
+.wiki-link-it:hover, .wiki-link-it:focus-visible { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+.wiki-make-up form { display: flex; flex-direction: column; gap: 0.6rem; min-width: min(28rem, 90vw); }

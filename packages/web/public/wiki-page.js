@@ -11,6 +11,7 @@ import { sourceChips, sourcesEditor } from './wiki-sources.js';
 import { parseWhen, whenText, whenKey } from './shared/wiki-time.js';
 import { canonBadge, canonClass, truthNote, canonPicker } from './wiki-canon.js';
 import { templateChooser } from './wiki-templates.js';
+import { askWriter } from './wiki-write.js';
 import { state, nav, base, status, report, availableText, pictureImg, showPicture, uploadPictures, imageFiles, choosePicture, dropTarget, fam, kindBadge, byName } from './wiki-data.js';
 
 /** A picture in the text: ![caption|place](picture:id). */
@@ -200,7 +201,7 @@ export function pageContent(page, { dm, me = null }) {
 
 function sections(page, { dm, me = null }) {
   if (!page.sections.length) return [h('p', { class: 'muted' }, dm ? 'This page is empty. Press Edit to write it.' : 'No text on this page is available.')];
-  return page.sections.map((s) => h('section', { class: `wiki-section${canonClass(s)}` },
+  return page.sections.map((s) => h('section', { class: `wiki-section${canonClass(s)}`, 'data-section': s.id },
     s.heading || canonClass(s) ? h('h3', {}, canonBadge(s, { me }), s.heading) : null,
     dm ? truthNote(s) : null,
     dm && s.by === 'ai' ? h('p', { class: 'wiki-by-ai muted small' }, 'Written by the AI. It keeps this section up to date (with your approval) until you change it.') : null,
@@ -491,7 +492,7 @@ export function editor(page) {
     const picker = availablePicker(s.available, { section: true, label: 'Section available to' });
     const canon = canonPicker(s, { label: 'Section' });
     const sources = sourcesEditor(s.sources);
-    const row = { id: s.id, heading, text, picker, canon, sources, fromTemplate: !!s.from_template };
+    const row = { id: s.id, heading, text, picker, canon, sources, fromTemplate: !!s.from_template, prompt: s.prompt ?? '' };
     const move = (d) => {
       const i = rows.indexOf(row);
       const j = i + d;
@@ -516,6 +517,11 @@ export function editor(page) {
           const id = await choosePicture('Put a picture in the text');
           if (id) insertAt(text, `![](picture:${id})`);
         } }, '+ Picture'),
+        // The AI on a saved section (stage 5b): what it writes waits under Waiting for you.
+        ...(s.id && !isNew && !template ? [
+          h('button', { type: 'button', class: 'ghost small wiki-ai-btn', title: 'Add more to this section from the records (as saved)', onclick: (e) => askWriter({ mode: 'expand', page_id: page.id, section_id: s.id }, e.currentTarget) }, '✦ Expand'),
+          h('button', { type: 'button', class: 'ghost small wiki-ai-btn', title: 'Smooth the wording of this section (as saved), keeping every fact', onclick: (e) => askWriter({ mode: 'tidy', page_id: page.id, section_id: s.id }, e.currentTarget) }, '✦ Tidy'),
+        ] : []),
       ),
       text,
       sources.el,
@@ -563,6 +569,12 @@ export function editor(page) {
     list,
     h('div', { class: 'wiki-edit-foot' },
       h('button', { type: 'button', class: 'ghost', onclick: () => addSection() }, '+ Add section'),
+      template ? null : h('button', { type: 'button', class: 'ghost wiki-ai-btn', title: isNew ? 'The AI writes this page from what the records say; it waits under Waiting for you' : 'The AI fills this page (as saved) from what the records say; it waits under Waiting for you', onclick: (e) => {
+        if (isNew && !title.value.trim()) return status('Give the page a title first.', true);
+        askWriter(isNew
+          ? { mode: 'draft', page: { title: title.value.trim(), kind: kind.value.trim(), sections: rows.map((r) => ({ heading: r.heading.value.trim(), prompt: r.prompt })) } }
+          : { mode: 'draft', page_id: page.id }, e.currentTarget);
+      } }, '✦ Draft from the records'),
       h('span', { class: 'spacer' }),
       h('button', { type: 'button', class: 'ghost', onclick: () => {
         if (template) return nav.go('#/templates');

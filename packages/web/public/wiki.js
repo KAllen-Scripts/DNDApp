@@ -27,6 +27,7 @@ import { resetSpace } from './wiki-space.js';
 import { drawWebView, leaveWeb } from './wiki-web.js';
 import { drawTimeline, leaveTimeline } from './wiki-timeline.js';
 import { drawTemplates, saveAsTemplate } from './wiki-templates.js';
+import { linkHints } from './wiki-write.js';
 import { drawWheel } from './wiki-wheel.js';
 import { drawHub } from './wiki-home.js';
 import { pageDiff } from './wiki-diff.js';
@@ -264,7 +265,9 @@ function drawMain() {
   if (state.open.page.template) state.view = 'edit'; // a template is only ever edited
   if (state.view === 'edit') return main.replaceChildren(editor(state.open.page));
   if (state.view === 'history') return drawHistory();
-  main.replaceChildren(pageView());
+  const article = pageView();
+  main.replaceChildren(article);
+  linkHints(article, state.open.page);
 }
 
 function pageView() {

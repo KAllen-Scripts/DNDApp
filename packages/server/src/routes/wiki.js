@@ -71,6 +71,37 @@ export function registerWiki(app, r) {
     return { pages: wiki.list(cid).map(summary), players, proposals: wikiAI.count(cid), ai_run: lastRun(cid), calendar, clock };
   });
 
+  /**
+   * The AI as a writing partner (stage 5b), on the DM's button: one call, its result as proposals under Waiting.
+   * { mode: draft | expand | tidy | make_up, page_id?, section_id?, page?: { title, kind, sections: [{ heading, prompt }] }, what?, notes? }
+   */
+  app.post('/campaigns/:cid/wiki/draft', async (request) => {
+    const { cid } = access(request, { dm: true });
+    const body = z.object({
+      mode: z.enum(['draft', 'expand', 'tidy', 'make_up']),
+      page_id: z.string().max(20).nullable().optional(),
+      section_id: z.string().max(20).nullable().optional(),
+      page: z.object({ title: z.string().trim().min(1).max(L.title), kind: z.string().max(L.kind).default(''), sections: z.array(z.object({ heading: z.string().max(L.heading).default(''), prompt: z.string().max(2000).default('') })).max(40).default([]) }).nullable().optional(),
+      what: z.string().max(200).default(''),
+      notes: z.string().max(2000).default(''),
+    }).parse(request.body ?? {});
+    const made = await wikiAI.draft(cid, body);
+    return { made: made.length, proposals: wikiAI.count(cid) };
+  });
+
+  /** Names in a page's text that match another page but aren't linked (stage 5b, no AI). */
+  app.get('/campaigns/:cid/wiki/:pid/links', async (request) => {
+    const { cid } = access(request, { dm: true });
+    return { suggestions: wiki.linkSuggestions(cid, wiki.get(cid, request.params.pid)) };
+  });
+
+  /** Link it: turn a suggested name into a [[link]]. */
+  app.post('/campaigns/:cid/wiki/:pid/links', async (request) => {
+    const { cid } = access(request, { dm: true });
+    const body = z.object({ section_id: z.string().max(20), page_id: z.string().max(20), version: z.number().int().optional() }).parse(request.body ?? {});
+    return { page: await wiki.linkIt(cid, request.params.pid, body.section_id, body.page_id, { by: request.user.id, version: body.version }) };
+  });
+
   /** Templates for new pages (stage 5a): the app's starters and the DM's own (pages with `template`). */
   app.get('/campaigns/:cid/wiki/templates', async (request) => {
     const { cid } = access(request, { dm: true });
