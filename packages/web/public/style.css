@@ -545,6 +545,19 @@ button.wiki-name { color: inherit; font-size: inherit; text-decoration: underlin
 .wiki-meta, .wiki-available, .wiki-warn, .wiki-as, .wiki-mentioned { margin: 0; }
 .wiki-available { color: var(--accent); }
 
+/* How we know it (wiki-sources.js): session chips under a part, opening the transcript lines. */
+.wiki-sources { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; margin: 0.3rem 0; }
+.wiki-source { display: inline-flex; align-items: center; gap: 0.2rem; padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 0.75rem; cursor: pointer; }
+.wiki-source[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
+.wiki-source .icon-btn { padding: 0 0.15rem; min-height: 0; font-size: 0.7rem; }
+.wiki-evidence { flex-basis: 100%; }
+.wiki-evidence:empty { display: none; }
+.wiki-evidence figure { margin: 0.2rem 0 0; padding: 0.4rem 0.6rem; border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); border-radius: 0 6px 6px 0; }
+.wiki-evidence pre { white-space: pre-wrap; margin: 0.2rem 0 0; font-size: 0.85rem; }
+.wiki-sources-edit { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.wiki-sources-edit:empty { display: none; }
+.wiki-fact-row .wiki-sources-edit { grid-column: 1 / -1; order: 2; }
+
 /* Truth and rumour (wiki-canon.js): one look for every view. Rumour dotted, false struck red with the truth
    beside it (the DM only), planned faint (the DM only), an account in quote marks. */
 .wiki-canon { display: inline-block; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em; padding: 0.05rem 0.4rem; margin-right: 0.35rem; border-radius: 999px; border: 1px dotted currentColor; vertical-align: 0.1em; color: var(--muted); }

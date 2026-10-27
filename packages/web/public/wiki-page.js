@@ -7,6 +7,7 @@
 import { api, h } from './api.js';
 import { markdownFragment } from './markdown.js';
 import { wikiPieces, wikiKey, LINK_RE, PICTURE_RE, pictureAlt, KIND_FAMILIES } from './shared/wiki.js';
+import { sourceChips, sourcesEditor } from './wiki-sources.js';
 import { canonBadge, canonClass, truthNote, canonPicker } from './wiki-canon.js';
 import { state, nav, base, status, report, availableText, pictureImg, showPicture, uploadPictures, imageFiles, choosePicture, dropTarget, fam, kindBadge, byName } from './wiki-data.js';
 
@@ -148,7 +149,7 @@ function infobox(page, { dm, me = null }) {
       h('button', { type: 'button', class: 'wiki-figure-open', title: 'Show it bigger', onclick: () => showPicture(page.picture.id, page.picture.caption) }, pictureImg(page.picture.id, { alt: page.picture.caption || page.title })),
       captionOf(page.picture, dm, me)) : null,
     page.facts?.length || (dm && parent) ? h('dl', { class: 'wiki-facts' },
-      ...(page.facts ?? []).flatMap((f) => [h('dt', { class: canonClass(f).trim() || null }, f.label), h('dd', { class: canonClass(f).trim() || null }, canonBadge(f, { me }), richText(f.value, 'wiki-fact-value'), dm ? truthNote(f) : null, ownAvailable(f, dm))]),
+      ...(page.facts ?? []).flatMap((f) => [h('dt', { class: canonClass(f).trim() || null }, f.label), h('dd', { class: canonClass(f).trim() || null }, canonBadge(f, { me }), richText(f.value, 'wiki-fact-value'), dm ? truthNote(f) : null, ownAvailable(f, dm), sourceChips(f.sources, { as: me }))]),
       ...(dm && parent ? [h('dt', {}, 'Inside'), h('dd', {}, pageLink(parent.title, parent.title))] : []),
     ) : null,
     children.length ? h('div', { class: 'wiki-children' },
@@ -184,6 +185,7 @@ function sections(page, { dm, me = null }) {
     dm && s.by === 'ai' ? h('p', { class: 'wiki-by-ai muted small' }, 'Written by the AI. It keeps this section up to date (with your approval) until you change it.') : null,
     dm && s.available !== 'all' ? h('p', { class: 'wiki-available small' }, `Available to ${availableText(s.available, { section: true })}.`) : null,
     h('div', { class: 'wiki-canon-text' }, ...(dm ? sectionBody(s.text) : [richText(s.text)])),
+    sourceChips(s.sources, { as: me }),
     s.id ? sendButton(page, { section: s.id }, s.heading ? `The section "${s.heading}"` : 'A section', dm) : null,
   ));
 }
@@ -323,8 +325,9 @@ function factsEditor(facts, kindInput) {
     const value = h('input', { value: f.value ?? '', maxLength: 500, placeholder: 'What it is. [[Links]] work.', 'aria-label': 'Fact value' });
     const picker = availablePicker(f.available ?? 'all', { section: true, label: 'Fact available to' });
     const canon = canonPicker(f, { label: 'Fact' });
-    const row = { label, value, picker, canon };
-    row.el = h('div', { class: 'wiki-fact-row' }, label, value, picker.el, canon.el,
+    const sources = sourcesEditor(f.sources);
+    const row = { label, value, picker, canon, sources };
+    row.el = h('div', { class: 'wiki-fact-row' }, label, value, picker.el, canon.el, sources.el,
       h('button', { type: 'button', class: 'ghost icon-btn danger', title: 'Remove this fact', 'aria-label': 'Remove fact', onclick: () => {
         rows.splice(rows.indexOf(row), 1);
         row.el.remove();
@@ -351,7 +354,7 @@ function factsEditor(facts, kindInput) {
       list,
       h('div', { class: 'wiki-edit-foot' }, h('button', { type: 'button', class: 'ghost', onclick: () => add({ label: '', value: '' }) }, '+ Add a fact'), usual),
     ),
-    value: () => rows.map((r) => ({ label: r.label.value.trim(), value: r.value.value.trim(), available: r.picker.value(), ...r.canon.value() })).filter((f) => f.value), // a fact left empty (the usual ones not filled in) isn't kept
+    value: () => rows.map((r) => ({ label: r.label.value.trim(), value: r.value.value.trim(), available: r.picker.value(), ...r.canon.value(), ...r.sources.value() })).filter((f) => f.value), // a fact left empty (the usual ones not filled in) isn't kept
   };
 }
 
@@ -395,7 +398,8 @@ export function editor(page) {
     dropTarget(text, addPictures);
     const picker = availablePicker(s.available, { section: true, label: 'Section available to' });
     const canon = canonPicker(s, { label: 'Section' });
-    const row = { id: s.id, heading, text, picker, canon };
+    const sources = sourcesEditor(s.sources);
+    const row = { id: s.id, heading, text, picker, canon, sources };
     const move = (d) => {
       const i = rows.indexOf(row);
       const j = i + d;
@@ -422,6 +426,7 @@ export function editor(page) {
         } }, '+ Picture'),
       ),
       text,
+      sources.el,
       h('p', { class: 'muted small wiki-hint' }, 'A picture shows where its line is. Write a caption between the brackets; add |right, |left, |small or |wide after it to place it: ![The mill at dusk|right](picture:…). A picture inside a :::dm block stays with you.'),
     );
     rows.push(row);
@@ -473,7 +478,7 @@ export function editor(page) {
       banner: banner.value(),
       gallery: galleryEd.value(),
       facts: factsEd.value(),
-      sections: rows.map((r) => ({ ...(r.id ? { id: r.id } : {}), heading: r.heading.value.trim(), text: r.text.value, available: r.picker.value(), ...r.canon.value() })),
+      sections: rows.map((r) => ({ ...(r.id ? { id: r.id } : {}), heading: r.heading.value.trim(), text: r.text.value, available: r.picker.value(), ...r.canon.value(), ...r.sources.value() })),
     };
     save.disabled = true;
     try {

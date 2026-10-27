@@ -1,11 +1,12 @@
 /**
  * Truth and rumour on the page (stage 3a): the DM marks a section false with
  * the truth beside it, the badges show it, the Truth toggle hides what's only
- * believed, and a player (viewed as) gets the falsehood as a rumour.
+ * believed, and a player (viewed as) gets the falsehood as a rumour. Then
+ * how we know it (stage 3b): session chips that open what was said.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { withPage, addDm } from './helpers.js';
+import { withPage, addDm, upload, SAMPLE } from './helpers.js';
 
 const button = (page, scope, text) => page.$$(`${scope} button`).find((b) => b.textContent.trim() === text);
 
@@ -60,6 +61,40 @@ test('wiki canon: the DM marks a part false with its truth, the Truth toggle and
     assert.equal(content.querySelectorAll('.canon-false').length, 0);
     assert.equal(content.querySelectorAll('.wiki-section.canon-rumour').length, 2);
     assert.doesNotMatch(content.textContent, /cellar|Old Jory|Planned|False/);
+    assert.equal(page.errors.length, 0, page.errors.join('\n'));
+  });
+});
+
+test('wiki sources: a part shows the sessions it came from, opens what was said, and the editor keeps them', async () => {
+  await withPage({
+    before: async (t) => {
+      const dana = await addDm(t);
+      await upload(t, { transcript: SAMPLE });
+      const mill = (await t.request('POST', `/campaigns/${t.campaign.id}/wiki`, { body: {
+        title: 'Hollow Mill', available: 'all',
+        sections: [{ heading: 'Where', text: 'North of Brindle.', available: 'all', sources: ['S1 00:01:30', 'S1'] }],
+        facts: [{ label: 'Key', value: 'Silver', available: 'all', sources: ['S1 00:01:30'] }],
+      } })).json().page;
+      return { dana, mill };
+    },
+    page: (t, { dana, mill }) => ({ as: dana, path: `/?space=wiki#/page/${mill.id}` }),
+  }, async (page, t, { mill }) => {
+    await page.waitFor(() => page.$('#wiki-main .wiki-section .wiki-source'));
+    const chips = page.$$('.wiki-section .wiki-source');
+    assert.deepEqual(chips.map((c) => c.textContent), ['From session 1, 0:01:30', 'From session 1']);
+    assert.equal(page.$$('dd .wiki-source').length, 1);
+    page.click(chips[0]);
+    await page.waitFor(() => page.$('.wiki-section .wiki-evidence pre'));
+    assert.match(page.text('.wiki-section .wiki-evidence pre'), /old mill north of town/);
+
+    page.click(button(page, '#wiki-main', 'Edit'));
+    const form = page.$('.wiki-editor');
+    page.click(form.querySelector('.wiki-edit-section [aria-label="Take off From session 1"]'));
+    page.submit(form);
+    await page.waitFor(() => page.$('#wiki-main .wiki-section') && !page.$('.wiki-editor'));
+    const saved = t.wiki.get(t.campaign.id, mill.id);
+    assert.deepEqual(saved.sections[0].sources, ['S1 00:01:30']);
+    assert.deepEqual(saved.facts[0].sources, ['S1 00:01:30']);
     assert.equal(page.errors.length, 0, page.errors.join('\n'));
   });
 });

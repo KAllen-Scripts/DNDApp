@@ -26,6 +26,7 @@ import { BadRequestError, NotFoundError } from './store.js';
 import { WIKI_LIMITS as L } from './wiki.js';
 import { narrowest, audienceOf, canSeeAudience, wikiKey, wikiPictures as picturesIn, PICTURE_RE } from '@dndapp/shared/wiki.js';
 import { json } from './db/index.js';
+import { CITATION_RE, normalizeSources } from '@dndapp/shared/citations.js';
 
 const isProposalId = (id) => /^[a-f0-9]{10}$/.test(String(id));
 
@@ -169,6 +170,17 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
     return recs.reduce((a, r) => narrowest(a, knowers(cid, r, playerIds)), null);
   }
 
+  /**
+   * How we know it (stage 3b): the transcript citations of the records a section was written from, copied onto it
+   * when the DM approves (record ids change as the archivist works; citations don't). The records' sources first,
+   * then citations in their text.
+   */
+  function citationsFrom(cid, ids = []) {
+    const recs = [...new Set(ids)].map((id) => kb.get(cid, id)).filter((r) => r && r.kind !== '_guide');
+    const inText = (r) => [...String(r.body ?? '').matchAll(CITATION_RE)].map((m) => m[0].slice(1, -1));
+    return normalizeSources([...recs.flatMap((r) => r.sources ?? []), ...recs.flatMap(inText)]);
+  }
+
   // ---------- the prompt ----------
 
   function renderAvailable(a, names) {
@@ -229,6 +241,7 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
   // ---------- turning the AI's answer into proposals ----------
 
   const clean = (s, max) => String(s ?? '').trim().slice(0, max);
+  const recordIds = (ids) => [...new Set((Array.isArray(ids) ? ids : []).map(Number).filter(Number.isInteger))].slice(0, 50);
   const cleanSection = (s) => ({ heading: clean(s.heading, L.heading), text: String(s.text ?? '').slice(0, L.text).trim() });
 
   /** A proposal from one change, or null when it doesn't hold up. Who it's available to is worked out here. */
@@ -242,7 +255,7 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
       if (!title || !n.sections?.length) return null;
       const taken = new Set(pages.flatMap((p) => [p.title, ...p.aliases]).map(wikiKey));
       if (taken.has(wikiKey(title))) return null;
-      const sections = n.sections.map((s) => ({ ...cleanSection(s), audience: audienceFrom(cid, s.sources, playerIds) })).filter((s) => s.text);
+      const sections = n.sections.map((s) => ({ ...cleanSection(s), records: recordIds(s.sources), audience: audienceFrom(cid, s.sources, playerIds) })).filter((s) => s.text);
       if (!sections.length) return null;
       const pageAudience = sections.reduce((a, s) => (a === undefined ? s.audience : widest(a, s.audience)), undefined);
       const parent = n.parent_title && pages.find((p) => [p.title, ...p.aliases].some((x) => wikiKey(x) === wikiKey(n.parent_title)));
@@ -256,7 +269,7 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
         parent: parent?.id ?? null,
         page_available: availableOf(pageAudience),
         // A section as wide as the page is "as the page".
-        sections: sections.map((s) => ({ heading: s.heading, text: s.text, available: JSON.stringify(availableOf(s.audience)) === JSON.stringify(availableOf(pageAudience)) ? 'all' : availableOf(s.audience) })),
+        sections: sections.map((s) => ({ heading: s.heading, text: s.text, records: s.records, available: JSON.stringify(availableOf(s.audience)) === JSON.stringify(availableOf(pageAudience)) ? 'all' : availableOf(s.audience) })),
       };
     }
     const page = byId.get(String(c.page_id));
@@ -272,7 +285,7 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
       return { ...base, ...pageBits, action: 'reveal', key: `reveal:${page.id}:${section.id}`, section_id: section.id, section_heading: section.heading, players: who.sort((a, b) => a - b), sections: [] };
     }
     if (!c.section) return null;
-    const s = cleanSection(c.section);
+    const s = { ...cleanSection(c.section), records: recordIds(c.section.sources) };
     if (!s.text) return null;
     const audience = audienceFrom(cid, c.section.sources, playerIds);
     if (c.action === 'add_section') {
@@ -385,11 +398,12 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
     async approve(cid, id, edits = {}, { by }) {
       const p = get(cid, id);
       if (p.status !== 'pending') throw new BadRequestError('This proposal was already dealt with.');
-      const sections = p.sections.map((s, i) => {
+      const sections = p.sections.map(({ records, ...s }, i) => {
         const e = edits.sections?.[i];
-        if (!e) return { ...s, by: p.dm_section ? 'dm' : 'ai' };
+        const sources = citationsFrom(cid, records);
+        if (!e) return { ...s, sources, by: p.dm_section ? 'dm' : 'ai' };
         const changed = !sameText(e.text, s.text) || (e.heading ?? s.heading).trim() !== s.heading;
-        return { heading: (e.heading ?? s.heading).trim(), text: e.text ?? s.text, available: e.available ?? s.available, by: changed || p.dm_section ? 'dm' : 'ai' };
+        return { heading: (e.heading ?? s.heading).trim(), text: e.text ?? s.text, available: e.available ?? s.available, sources, by: changed || p.dm_section ? 'dm' : 'ai' };
       });
       let page;
       if (p.action === 'new_page') {
@@ -409,7 +423,7 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
           fields = { sections: [...current.sections, ...sections] };
         } else {
           if (!current.sections.some((s) => s.id === p.section_id)) throw new BadRequestError('That section is gone from the page.');
-          fields = { sections: current.sections.map((s) => (s.id === p.section_id ? { ...s, ...sections[0], text: keepPictures(s.text, sections[0].text) } : s)) };
+          fields = { sections: current.sections.map((s) => (s.id === p.section_id ? { ...s, ...sections[0], text: keepPictures(s.text, sections[0].text), sources: normalizeSources([...sections[0].sources, ...(s.sources ?? [])]) } : s)) };
         }
         page = await wiki.update(cid, current.id, fields, { by, version: current.version });
       }
