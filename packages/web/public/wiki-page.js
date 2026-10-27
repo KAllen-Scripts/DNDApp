@@ -61,7 +61,9 @@ function embedBox(name, embeds, dm) {
   if (!e) return dm ? h('span', { class: 'wiki-embed missing muted small' }, `No page called "${name}" to put here yet. `, pageLink(name, 'Make it')) : null;
   const who = e.section_available && e.section_available !== 'all' ? e.section_available : e.available;
   return h('span', { class: `wiki-embed fam-${fam(e.kind)}` },
-    h('span', { class: 'wiki-embed-head small' }, pageLink(e.title, `${e.kind && wikiKey(e.kind) === 'clue' ? 'Clue' : 'From'}: ${e.title}`), dm ? h('span', { class: 'muted' }, ` · ${availableText(who)}`) : null),
+    h('span', { class: 'wiki-embed-head small' }, pageLink(e.title, `${e.kind && wikiKey(e.kind) === 'clue' ? 'Clue' : 'From'}: ${e.title}`), dm ? h('span', { class: 'muted' }, ` · ${availableText(who)}`) : null,
+      // On a prep page (stage 7c): what became of it.
+      dm && e.status ? h('span', { class: `wiki-clue-status ${e.status}` }, { found: ` ✓ Found (${e.found})`, missed: ' ✗ Missed', carried: ` ↷ Carried to ${e.carried_to}` }[e.status]) : null),
     richText(e.text, 'wiki-embed-text'));
 }
 
