@@ -321,6 +321,12 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
 .fam-session { --kind: #5a5fa8; --kind-icon: "☾"; }
 .fam-lore { --kind: #8a6a3a; --kind-icon: "❧"; }
 .fam-other { --kind: var(--accent); --kind-icon: "❦"; }
+/* Small views (mini-views.js): a map crop, a ring of portraits, a ribbon of moments. */
+.mini { display: block; overflow: visible; }
+.mini-pin, .mini-dot { fill: var(--kind); stroke: var(--bg, #fff); stroke-width: 1.2; }
+.mini-ring-edge { fill: none; stroke: var(--kind); stroke-width: 2; }
+.mini-line, .mini-axis { stroke: var(--muted); stroke-width: 1.2; }
+.mini-line.rumour { stroke-dasharray: 2 2; }
 .wiki-panel { display: grid; grid-template-columns: minmax(12rem, 16rem) 1fr; gap: 1rem; align-items: start; overflow-y: auto; }
 .wiki-side { display: grid; gap: 0.5rem; position: sticky; top: 0; max-height: 100%; overflow-y: auto; }
 .wiki-bar { display: flex; gap: 0.4rem; flex-wrap: wrap; }
