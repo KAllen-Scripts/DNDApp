@@ -96,6 +96,7 @@ const WEB_MODULES = {
   '/shared/sheet.js': '@dndapp/shared/sheet.js',
   '/shared/calendar.js': '@dndapp/shared/calendar.js',
   '/shared/wiki-time.js': '@dndapp/shared/wiki-time.js',
+  '/shared/wiki-templates.js': '@dndapp/shared/wiki-templates.js',
   '/shared/wild-shape.js': '@dndapp/shared/wild-shape.js',
   '/shared/companions.js': '@dndapp/shared/companions.js',
   '/shared/class-features.js': '@dndapp/shared/class-features.js',

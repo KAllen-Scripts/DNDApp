@@ -15,6 +15,7 @@ import { createTools } from '../qa/tools.js';
 import { webGraph } from '../wiki-web.js';
 import { pageOnMaps, makePageFor, atlasLayers, pagePlaces } from '../wiki-maps.js';
 import { timeline } from '../wiki-timeline.js';
+import { STARTER_TEMPLATES } from '@dndapp/shared/wiki-templates.js';
 import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass } from '../wiki-views.js';
 
 export function registerWiki(app, r) {
@@ -68,6 +69,12 @@ export function registerWiki(app, r) {
     const players = store.roster(cid).filter((m) => m.role === 'player').map((m) => ({ id: m.user_id, name: m.name, character_name: m.character_name }));
     const { calendar, clock } = store.getSettings(cid);
     return { pages: wiki.list(cid).map(summary), players, proposals: wikiAI.count(cid), ai_run: lastRun(cid), calendar, clock };
+  });
+
+  /** Templates for new pages (stage 5a): the app's starters and the DM's own (pages with `template`). */
+  app.get('/campaigns/:cid/wiki/templates', async (request) => {
+    const { cid } = access(request, { dm: true });
+    return { starters: STARTER_TEMPLATES, own: wiki.templates(cid) };
   });
 
   // ---------- the space's views (wiki-views.js), as the DM sees them or ?as= a player ----------
@@ -324,7 +331,7 @@ export function registerWiki(app, r) {
    */
   app.get('/campaigns/:cid/wiki/:pid', async (request) => {
     const { cid } = access(request, { dm: true });
-    const page = wiki.get(cid, request.params.pid);
+    const page = wiki.get(cid, request.params.pid, { templates: true });
     const { as } = z.object({ as: z.coerce.number().int().optional() }).parse(request.query ?? {});
     if (as != null) {
       if (auth.membership(cid, as)?.role !== 'player') throw new BadRequestError("That isn't a player in this campaign.");
@@ -335,7 +342,7 @@ export function registerWiki(app, r) {
 
   app.post('/campaigns/:cid/wiki', async (request, reply) => {
     const { cid } = access(request, { dm: true });
-    const body = checkPlayers(cid, z.object({ ...fields, aliases: fields.aliases.default([]), kind: fields.kind.default(''), parent: fields.parent.default(null), tags: fields.tags.default([]), available: available.default('dm'), sections: fields.sections.default([]), picture: fields.picture.default(null), banner: fields.banner.default(null), gallery: fields.gallery.default([]), facts: fields.facts.default([]), when: fields.when.default(null), events: fields.events.default([]) }).parse(request.body ?? {}));
+    const body = checkPlayers(cid, z.object({ ...fields, aliases: fields.aliases.default([]), kind: fields.kind.default(''), parent: fields.parent.default(null), tags: fields.tags.default([]), available: available.default('dm'), sections: fields.sections.default([]), picture: fields.picture.default(null), banner: fields.banner.default(null), gallery: fields.gallery.default([]), facts: fields.facts.default([]), when: fields.when.default(null), events: fields.events.default([]), template: z.boolean().default(false) }).parse(request.body ?? {}));
     const page = await wiki.create(cid, body, { by: request.user.id });
     reply.status(201);
     return { page, unknown_names: wiki.unknownNames(cid, page) };

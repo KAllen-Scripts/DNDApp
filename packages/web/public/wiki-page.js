@@ -10,6 +10,7 @@ import { wikiPieces, wikiKey, LINK_RE, PICTURE_RE, pictureAlt, KIND_FAMILIES, TO
 import { sourceChips, sourcesEditor } from './wiki-sources.js';
 import { parseWhen, whenText, whenKey } from './shared/wiki-time.js';
 import { canonBadge, canonClass, truthNote, canonPicker } from './wiki-canon.js';
+import { templateChooser } from './wiki-templates.js';
 import { state, nav, base, status, report, availableText, pictureImg, showPicture, uploadPictures, imageFiles, choosePicture, dropTarget, fam, kindBadge, byName } from './wiki-data.js';
 
 /** A picture in the text: ![caption|place](picture:id). */
@@ -356,12 +357,12 @@ function toneSelect(f, label, value) {
 }
 
 /** The "at a glance" facts in the editor, with the usual ones for the page's kind a click away. { el, value(), kindChanged() }. */
-function factsEditor(facts, kindInput) {
+function factsEditor(facts, kindInput, { template = false } = {}) {
   const rows = [];
   const list = h('div', { class: 'wiki-facts-edit' });
   const add = (f) => {
     const label = h('input', { value: f.label ?? '', maxLength: 60, placeholder: 'Race, Region, Leader…', 'aria-label': 'Fact' });
-    const value = h('input', { value: f.value ?? '', maxLength: 500, placeholder: 'What it is. [[Links]] work.', 'aria-label': 'Fact value' });
+    const value = h('input', { value: f.value ?? '', maxLength: 500, placeholder: f.prompt || 'What it is. [[Links]] work.', 'aria-label': 'Fact value' });
     const picker = availablePicker(f.available ?? 'all', { section: true, label: 'Fact available to' });
     const canon = canonPicker(f, { label: 'Fact' });
     const sources = sourcesEditor(f.sources);
@@ -394,7 +395,8 @@ function factsEditor(facts, kindInput) {
       list,
       h('div', { class: 'wiki-edit-foot' }, h('button', { type: 'button', class: 'ghost', onclick: () => add({ label: '', value: '' }) }, '+ Add a fact'), usual),
     ),
-    value: () => rows.map((r) => ({ label: r.label.value.trim(), value: r.value.value.trim(), available: r.picker.value(), ...r.canon.value(), ...r.sources.value(), ...r.tone.value() })).filter((f) => f.value), // a fact left empty (the usual ones not filled in) isn't kept
+    // A fact left empty (the usual ones not filled in) isn't kept; a template's needs a label (its value is the prompt).
+    value: () => rows.map((r) => ({ label: r.label.value.trim(), value: r.value.value.trim(), available: r.picker.value(), ...r.canon.value(), ...r.sources.value(), ...r.tone.value() })).filter((f) => (template ? f.label && f.value : f.value)),
   };
 }
 
@@ -441,8 +443,13 @@ function eventsEditor(events) {
   };
 }
 
+/**
+ * The page editor. A template (stage 5a: `page.template`) is edited with the same form: its sections' text and its
+ * facts' values are the writing prompts a new page shows. A new page can start from a template.
+ */
 export function editor(page) {
   const isNew = !page.id;
+  const template = !!page.template;
   const title = h('input', { value: page.title, maxLength: 200, required: true, 'aria-label': 'Title' });
   const kinds = [...new Set([...state.pages.map((p) => p.kind).filter(Boolean), 'npc', 'place', 'faction', 'item', 'quest', 'lore'])].sort();
   const kind = h('input', { value: page.kind, maxLength: 60, list: 'wiki-kinds', placeholder: 'npc, place, faction, lore…', 'aria-label': 'Kind' });
@@ -457,7 +464,7 @@ export function editor(page) {
   const mainPicture = pictureSlot('Main picture', page.picture);
   const banner = pictureSlot('Banner', page.banner, { banner: true });
   const galleryEd = galleryEditor(page.gallery ?? []);
-  const factsEd = factsEditor(page.facts ?? [], kind);
+  const factsEd = factsEditor(page.facts ?? [], kind, { template });
   const when = whenInput(page.when, 'When');
   const eventsEd = eventsEditor(page.events ?? []);
   const list = h('div', { class: 'wiki-edit-sections' });
@@ -465,7 +472,7 @@ export function editor(page) {
 
   const addSection = (s = { heading: '', text: '', available: 'all' }) => {
     const heading = h('input', { value: s.heading, maxLength: 200, placeholder: 'Heading (optional)', 'aria-label': 'Section heading' });
-    const text = h('textarea', { rows: 8, 'aria-label': 'Section text', placeholder: 'Markdown. [[Page name]] links a page. A block between ":::for Thorin" and ":::" is only for Thorin; ":::dm" is only for you. Paste or drop a picture to put it here.' });
+    const text = h('textarea', { rows: s.prompt ? 4 : 8, 'aria-label': template ? 'Writing prompt' : 'Section text', placeholder: template ? 'The writing prompt a new page shows here: what to write in this section.' : s.prompt || 'Markdown. [[Page name]] links a page. A block between ":::for Thorin" and ":::" is only for Thorin; ":::dm" is only for you. Paste or drop a picture to put it here.' });
     text.value = s.text;
     const addPictures = async (files) => {
       try {
@@ -484,7 +491,7 @@ export function editor(page) {
     const picker = availablePicker(s.available, { section: true, label: 'Section available to' });
     const canon = canonPicker(s, { label: 'Section' });
     const sources = sourcesEditor(s.sources);
-    const row = { id: s.id, heading, text, picker, canon, sources };
+    const row = { id: s.id, heading, text, picker, canon, sources, fromTemplate: !!s.from_template };
     const move = (d) => {
       const i = rows.indexOf(row);
       const j = i + d;
@@ -520,31 +527,45 @@ export function editor(page) {
   for (const s of page.sections) addSection(s);
   if (!page.sections.length) addSection();
 
-  const save = h('button', { type: 'submit', class: 'primary' }, isNew ? 'Make page' : 'Save');
-  const form = h('form', { class: 'wiki-editor' },
-    h('h2', {}, isNew ? 'New page' : `Editing ${page.title}`),
+  const save = h('button', { type: 'submit', class: 'primary' }, template ? (isNew ? 'Make template' : 'Save template') : isNew ? 'Make page' : 'Save');
+  // A new page: start from a template (the kind's, once a kind is typed, while nothing is written yet).
+  const chooser = isNew && !template ? templateChooser({
+    kind,
+    untouched: () => rows.every((r) => !r.text.value.trim()) && !factsEd.value().length,
+    use: (fields) => {
+      state.open = { page: { ...page, ...fields, title: title.value } };
+      nav.drawMain();
+    },
+  }) : null;
+  const form = h('form', { class: `wiki-editor${template ? ' wiki-template-editor' : ''}` },
+    h('h2', {}, template ? (isNew ? 'New template' : `Editing the template ${page.title}`) : isNew ? 'New page' : `Editing ${page.title}`),
+    chooser?.el,
+    template ? h('p', { class: 'muted small' }, 'A template gives a new page its kind, sections and facts. What you write in each section and fact is the prompt the new page shows in it. Templates are only yours: never in Ask or a player\'s wiki.') : null,
     h('div', { class: 'wiki-edit-grid' },
-      h('label', {}, 'Title', title),
-      h('label', {}, 'Kind', kind, kindList),
-      h('label', {}, 'Other names', aliases),
-      h('label', {}, 'Inside', parent),
-      h('label', {}, 'Tags', tags),
-      h('label', {}, 'Page available to', available.el),
-      h('label', {}, 'When (if it happened at a time)', when.input, when.says),
+      h('label', {}, template ? 'Template name' : 'Title', title),
+      h('label', {}, template ? 'Kind of page it makes' : 'Kind', kind, kindList),
+      ...(template ? [] : [
+        h('label', {}, 'Other names', aliases),
+        h('label', {}, 'Inside', parent),
+        h('label', {}, 'Tags', tags),
+        h('label', {}, 'Page available to', available.el),
+        h('label', {}, 'When (if it happened at a time)', when.input, when.says),
+      ]),
     ),
-    h('p', { class: 'muted small' }, 'A new page is only yours until you choose otherwise. Each section, fact, picture and block can narrow it further, never widen it. Other names are never shown to players.'),
-    h('fieldset', { class: 'wiki-edit-pictures' },
+    template ? null : h('p', { class: 'muted small' }, 'A new page is only yours until you choose otherwise. Each section, fact, picture and block can narrow it further, never widen it. Other names are never shown to players.'),
+    template ? null : h('fieldset', { class: 'wiki-edit-pictures' },
       h('legend', {}, 'Pictures'),
       h('div', { class: 'wiki-slots' }, mainPicture.el, banner.el),
       galleryEd.el,
     ),
     h('fieldset', { class: 'wiki-edit-box' }, h('legend', {}, 'At a glance'), factsEd.el),
-    h('fieldset', { class: 'wiki-edit-box' }, h('legend', {}, 'Events'), eventsEd.el),
+    template ? null : h('fieldset', { class: 'wiki-edit-box' }, h('legend', {}, 'Events'), eventsEd.el),
     list,
     h('div', { class: 'wiki-edit-foot' },
       h('button', { type: 'button', class: 'ghost', onclick: () => addSection() }, '+ Add section'),
       h('span', { class: 'spacer' }),
       h('button', { type: 'button', class: 'ghost', onclick: () => {
+        if (template) return nav.go('#/templates');
         if (isNew) state.open = null;
         state.view = 'page';
         nav.drawMain();
@@ -567,12 +588,21 @@ export function editor(page) {
       facts: factsEd.value(),
       when: when.input.value.trim() ? { text: when.input.value.trim() } : null,
       events: eventsEd.value(),
-      sections: rows.map((r) => ({ ...(r.id ? { id: r.id } : {}), heading: r.heading.value.trim(), text: r.text.value, available: r.picker.value(), ...r.canon.value(), ...r.sources.value() })),
+      // A template's section left without writing isn't kept.
+      sections: rows.filter((r) => !r.fromTemplate || r.text.value.trim()).map((r) => ({ ...(r.id ? { id: r.id } : {}), heading: r.heading.value.trim(), text: r.text.value, available: r.picker.value(), ...r.canon.value(), ...r.sources.value() })),
     };
+    if (template) {
+      for (const k of ['aliases', 'tags', 'parent', 'available', 'picture', 'banner', 'gallery', 'when', 'events']) delete body[k];
+      if (isNew) body.template = true;
+    }
     save.disabled = true;
     try {
       await state.guarded(async () => {
         const res = isNew ? await api('POST', base(), body) : await api('PUT', `${base()}/${page.id}`, { ...body, version: page.version });
+        if (template) {
+          status(isNew ? `Made the template "${res.page.title}".` : 'Saved the template.');
+          return nav.go('#/templates');
+        }
         await nav.refreshList();
         state.open = isNew ? await api('GET', `${base()}/${res.page.id}`) : res;
         state.view = 'page';

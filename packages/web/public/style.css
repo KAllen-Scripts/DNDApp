@@ -2512,3 +2512,15 @@ button.wiki-tile { text-align: left; border: 1px solid var(--border); color: inh
 .wiki-timeline.phone .wiki-tl-card { position: fixed; left: 0.6rem; right: 0.6rem; bottom: 0.6rem; top: auto; width: auto; }
 .map-wiki-pin.pulse { animation: wiki-pulse 1s ease-out 4; }
 @keyframes wiki-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 70%, transparent); } 100% { box-shadow: 0 0 0 18px transparent; } }
+
+/* ---------- the wiki's templates (wiki-templates.js) ---------- */
+.wiki-templates section { margin-top: 1rem; }
+.wiki-template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr)); gap: 0.8rem; }
+.wiki-template-card { border-top: 4px solid var(--kind); display: flex; flex-direction: column; gap: 0.4rem; }
+.wiki-template-head { display: flex; align-items: baseline; gap: 0.4rem; }
+.wiki-template-icon { color: var(--kind); font-size: 1.2rem; }
+.wiki-template-parts { margin: 0; padding-left: 1.1rem; }
+.wiki-template-parts li { margin: 0.15rem 0; }
+.wiki-template-card .wiki-actions { margin-top: auto; flex-wrap: wrap; }
+.wiki-start-from { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+.wiki-template-editor { border-left: 4px solid var(--accent); padding-left: 0.8rem; }

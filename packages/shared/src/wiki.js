@@ -156,7 +156,7 @@ export const KIND_FAMILIES = {
   faction: { label: 'Factions', icon: '⚑', words: ['faction', 'organisation', 'organization', 'guild', 'cult', 'order', 'house', 'family', 'clan', 'church'], facts: ['Leader', 'Base', 'Goals', 'Allies', 'Enemies'] },
   item: { label: 'Items', icon: '⚱', words: ['item', 'artifact', 'artefact', 'weapon', 'relic', 'treasure', 'object'], facts: ['Type', 'Rarity', 'Owner', 'Where it is'] },
   creature: { label: 'Creatures', icon: '☠', words: ['creature', 'monster', 'beast', 'race', 'species'], facts: ['Type', 'Habitat', 'Danger'] },
-  quest: { label: 'Quests', icon: '✦', words: ['quest', 'mission', 'job', 'plot', 'hook', 'mystery', 'clue'], facts: ['Given by', 'Status', 'Reward'] },
+  quest: { label: 'Quests', icon: '✦', words: ['quest', 'mission', 'job', 'plot', 'hook', 'mystery', 'clue', 'arc'], facts: ['Given by', 'Status', 'Reward'] },
   session: { label: 'Sessions', icon: '☾', words: ['session', 'recap', 'log', 'adventure'], facts: ['Played on', 'Where', 'Who was there'] },
   lore: { label: 'Lore', icon: '❧', words: ['lore', 'history', 'legend', 'myth', 'religion', 'deity', 'god', 'magic', 'event', 'era'], facts: ['When', 'Related to'] },
   other: { label: 'Other', icon: '❦', words: [], facts: [] },
