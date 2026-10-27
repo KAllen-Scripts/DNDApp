@@ -130,3 +130,40 @@ test('wiki space: the Home is a hub (last session, a small wheel, recent changes
   });
 });
 
+test("wiki space: a page's compass shows where it sits; History shows what changed in each version", async () => {
+  await withPage({
+    before: async (t) => {
+      const dana = await addDm(t);
+      const { mill, lady } = await twoPages(t);
+      const res = await t.request('PUT', `/campaigns/${t.campaign.id}/wiki/${lady.id}`, { body: { version: lady.version, parent: mill.id, sections: [{ ...lady.sections[0], text: 'About The Grey Lady. She haunts [[Millbrook]].' }] } });
+      assert.equal(res.statusCode, 200, res.body);
+      return { dana, mill, lady };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t, { mill, lady }) => {
+    page.click('[data-tab=wiki]');
+    await page.waitFor('.wiki-card');
+    await (await page.module('wiki-space.js')).go(`#/page/${lady.id}`);
+    await page.waitFor('.wiki-compass .wiki-compass-chip');
+    const group = (label) => page.$$('.wiki-compass-group').find((g) => g.querySelector('.wiki-compass-label').textContent === label);
+    const chips = (label) => [...group(label).querySelectorAll('.wiki-compass-title')].map((e) => e.textContent);
+    assert.match(page.text(group('Kind')), /People/);
+    assert.deepEqual(chips('Inside'), ['Millbrook']);
+    assert.deepEqual(chips('Links to'), ['Millbrook']);
+    page.click(group('Inside').querySelector('.wiki-compass-chip'));
+    await page.waitFor(() => page.window.location.hash === `#/page/${mill.id}`);
+    await page.waitFor(() => group('Holds'));
+    assert.deepEqual(chips('Holds'), ['The Grey Lady']);
+    assert.deepEqual(chips('Linked from'), ['The Grey Lady']);
+
+    // History: version 2 of the Lady shows the sentence added to version 1.
+    await (await page.module('wiki-space.js')).go(`#/page/${lady.id}/history`);
+    await page.waitFor(() => page.$$('.wiki-history button').length === 2);
+    page.click(page.$$('.wiki-history button').find((b) => b.textContent === 'Version 2'));
+    await page.waitFor('.wiki-diff');
+    assert.match(page.text('.wiki-diff summary'), /What changed from version 1/);
+    assert.equal(page.$$('.wiki-diff ins').map((e) => e.textContent).join(''), ' She haunts [[Millbrook]].');
+    assert.equal(page.errors.length, 0, page.errors.join('\n'));
+  });
+});
+

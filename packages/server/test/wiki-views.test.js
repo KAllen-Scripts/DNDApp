@@ -72,3 +72,34 @@ test('wiki views: the home has the last session, the newest changes and what wai
     await t.cleanup();
   }
 });
+
+test("wiki views: a page's compass has its chain, what it holds and its links both ways, and as a player only what they may see", async () => {
+  const t = await setup();
+  try {
+    const { vale, mill, lady, hand, crypt } = await world(t);
+    const put = (p, sections) => t.request('PUT', `/campaigns/${t.campaign.id}/wiki/${p.id}`, { body: { version: p.version, sections } });
+    await put(lady, [{ heading: '', text: 'Haunts [[Hollow Mill]].\n:::dm\nServes [[The Pale Hand]].\n:::', available: 'all' }]);
+    const base = (p) => `/campaigns/${t.campaign.id}/wiki/${p.id}/compass`;
+    const titles = (list) => list.map((p) => p.title);
+
+    const dm = (await t.request('GET', base(crypt))).json().compass;
+    assert.equal(dm.family, 'place');
+    assert.deepEqual(titles(dm.chain), ['The Vale', 'The Pale Hand']);
+    const ladyDm = (await t.request('GET', base(lady))).json().compass;
+    assert.deepEqual(titles(ladyDm.links_to), ['Hollow Mill', 'The Pale Hand']);
+    const millDm = (await t.request('GET', base(mill))).json().compass;
+    assert.deepEqual(titles(millDm.linked_from), ['The Grey Lady']);
+    assert.deepEqual(titles((await t.request('GET', base(vale))).json().compass.children), ['Hollow Mill', 'The Pale Hand']);
+
+    const sam = (await t.request('GET', `${base(crypt)}?as=${t.sam.id}`)).json().compass;
+    assert.deepEqual(sam.chain, [], 'the hidden cult (and so the chain through it) is left out');
+    const ladySam = (await t.request('GET', `${base(lady)}?as=${t.sam.id}`)).json().compass;
+    assert.deepEqual(titles(ladySam.links_to), ['Hollow Mill'], "a link in the DM's block leads nowhere");
+    assert.ok(!JSON.stringify(ladySam).includes(hand.id));
+    assert.deepEqual(titles((await t.request('GET', `${base(vale)}?as=${t.alex.id}`)).json().compass.children), ['Hollow Mill']);
+    assert.equal((await t.request('GET', `${base(hand)}?as=${t.alex.id}`)).json().compass, null);
+  } finally {
+    await t.cleanup();
+  }
+});
+

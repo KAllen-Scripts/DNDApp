@@ -9,7 +9,7 @@ import { BadRequestError, NotFoundError } from '../store.js';
 import { WIKI_LIMITS as L } from '../wiki.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 import { SOURCE_KINDS } from '../wiki-pictures.js';
-import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture } from '../wiki-views.js';
+import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass } from '../wiki-views.js';
 
 export function registerWiki(app, r) {
   const { access, auth, store, wiki, wikiAI, wikiPictures, jobs, pictures } = r;
@@ -96,6 +96,14 @@ export function registerWiki(app, r) {
       party: party(cid),
       ...(as == null ? { waiting: { proposals: wikiAI.count(cid) } } : { as }),
     };
+  });
+
+  /** A page's compass: its family, what it's inside, what's inside it, and its links both ways (`compass: null` if the player can't see it). */
+  app.get('/campaigns/:cid/wiki/:pid/compass', async (request) => {
+    const { cid, as, pages } = viewerPages(request);
+    wiki.get(cid, request.params.pid); // 404 for a page that doesn't exist
+    const page = pages.find((p) => p.id === request.params.pid);
+    return { compass: page ? compass(page, pages) : null, ...(as == null ? {} : { as }) };
   });
 
   // ---------- pictures ----------

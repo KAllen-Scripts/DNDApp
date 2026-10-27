@@ -295,6 +295,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET / PUT / DELETE | `/campaigns/:cid/wiki/:pid` | A page with `mentioned_in` and `unknown_names` (`?as=<user id>`: what that player may see, or `null`) / save it `{version, …}` (409 if someone saved first) / delete it (kept in the archive) (DM only) |
 | GET | `/campaigns/:cid/wiki/wheel` | The Wheel: every kind family with its count and kinds, the party, and the pages as cards `{families, party, pages}` (`?as=<user id>`: only what that player may see) (DM only) |
 | GET | `/campaigns/:cid/wiki/home` | The Home: `{count, hero, last_session, families, recent, party, waiting}` (`?as=`: as that player, without `waiting`) (DM only) |
+| GET | `/campaigns/:cid/wiki/:pid/compass` | A page's compass: `{family, chain, children, links_to, linked_from}` (`?as=`: as that player; `compass: null` if they can't see the page) (DM only) |
 | GET | `/campaigns/:cid/wiki/:pid/history` (`/:version`) | Every version of a page / one version (DM only) |
 | POST | `/campaigns/:cid/wiki/:pid/restore` | Bring an earlier version back as a new one `{version}` (DM only) |
 | GET / POST | `/campaigns/:cid/wiki/pictures` | The wiki's pictures and everything else with a picture `{pictures, sources}` / add one `{filename, data}` or copy one `{from: {kind, id}}` (DM only) |
