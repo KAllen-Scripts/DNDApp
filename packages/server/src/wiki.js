@@ -21,6 +21,7 @@ import { EventEmitter } from 'node:events';
 import { NotFoundError, BadRequestError } from './store.js';
 import { ArchiveConflictError } from './archive.js';
 import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, unpicture, wikiKey, isPictureId, pagePictureIds, normalizeCanon, playerCanon, canonMarker } from '@dndapp/shared/wiki.js';
+import { normalizeSources } from '@dndapp/shared/citations.js';
 
 export const WIKI_LIMITS = { title: 200, kind: 60, alias: 200, aliases: 50, tags: 30, tag: 60, sections: 200, heading: 200, text: 200_000, caption: 300, gallery: 60, facts: 30, label: 60, value: 500, truth: 2000 };
 
@@ -39,6 +40,12 @@ function canonOf(x) {
   if (canon === 'false') out.truth = String(x?.truth ?? '').trim().slice(0, WIKI_LIMITS.truth);
   if (canon === 'told' && Number.isInteger(Number(x?.owner)) && x?.owner != null) out.owner = Number(x.owner);
   return out;
+}
+
+/** How we know a part (stage 3b): the transcript citations it came from, kept only when there are some. */
+function sourcesOf(x) {
+  const sources = normalizeSources(x?.sources);
+  return sources.length ? { sources } : {};
 }
 
 /** A part as a player gets it: a falsehood is a rumour to them, and the truth is the DM's. */
@@ -78,6 +85,7 @@ export function normalizeWikiPage(p = {}) {
       // 'all' here means "as the page".
       available: normalizeAvailable(s.available, 'all'),
       ...canonOf(s),
+      ...sourcesOf(s),
     })),
     // Pictures (2026-10-21): the main picture (a portrait, a view of the place) beside the facts, a banner across the top, and a gallery.
     picture: normalizePicture(p.picture),
@@ -85,7 +93,7 @@ export function normalizeWikiPage(p = {}) {
     gallery: (Array.isArray(p.gallery) ? p.gallery : []).map((x) => normalizePicture(x)).filter(Boolean).slice(0, WIKI_LIMITS.gallery),
     // At a glance (an infobox): short facts like "Race: Half-elf", each with who it's available to ('all' = as the page).
     facts: (Array.isArray(p.facts) ? p.facts : [])
-      .map((f) => ({ label: String(f?.label ?? '').trim().slice(0, WIKI_LIMITS.label), value: String(f?.value ?? '').trim().slice(0, WIKI_LIMITS.value), available: normalizeAvailable(f?.available, 'all'), ...canonOf(f) }))
+      .map((f) => ({ label: String(f?.label ?? '').trim().slice(0, WIKI_LIMITS.label), value: String(f?.value ?? '').trim().slice(0, WIKI_LIMITS.value), available: normalizeAvailable(f?.available, 'all'), ...canonOf(f), ...sourcesOf(f) }))
       .filter((f) => f.label || f.value)
       .slice(0, WIKI_LIMITS.facts),
     version: Number(p.version) || 1,

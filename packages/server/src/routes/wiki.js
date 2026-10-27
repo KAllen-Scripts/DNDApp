@@ -10,17 +10,21 @@ import { WIKI_LIMITS as L } from '../wiki.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 import { SOURCE_KINDS } from '../wiki-pictures.js';
 import { wikiKey, wikiPieces, unlink, unpicture, audienceOf, canSeeAudience, CANONS } from '@dndapp/shared/wiki.js';
+import { MAX_SOURCES } from '@dndapp/shared/citations.js';
+import { createTools } from '../qa/tools.js';
 import { pageOnMaps, makePageFor, atlasLayers } from '../wiki-maps.js';
 import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass } from '../wiki-views.js';
 
 export function registerWiki(app, r) {
-  const { access, auth, store, wiki, wikiAI, wikiPictures, jobs, pictures, search, maps, handouts } = r;
+  const { access, auth, store, wiki, wikiAI, wikiPictures, jobs, pictures, search, maps, handouts, db, kb, config } = r;
 
   const crop = z.object({ x: z.number().min(0), y: z.number().min(0), w: z.number().positive(), h: z.number().positive() });
   const pictureId = z.string().regex(/^[a-f0-9]{10}$/);
   const available = z.union([z.literal('all'), z.literal('dm'), z.array(z.number().int()).max(100)]);
   // Truth and rumour on each part: its canon, the truth beside a falsehood (the DM's), and an account's teller.
   const canon = { canon: z.enum(CANONS).default('true'), truth: z.string().max(L.truth).optional(), owner: z.number().int().nullable().optional() };
+  // How we know a section or fact (stage 3b): transcript citations ('S12 01:02:03'); others are dropped (src/wiki.js).
+  const sources = { sources: z.array(z.string().max(40)).max(MAX_SOURCES).optional() };
   const fields = {
     title: z.string().trim().min(1).max(L.title),
     aliases: z.array(z.string().trim().min(1).max(L.alias)).max(L.aliases),
@@ -29,12 +33,12 @@ export function registerWiki(app, r) {
     tags: z.array(z.string().trim().min(1).max(L.tag)).max(L.tags),
     available,
     sections: z
-      .array(z.object({ id: z.string().regex(/^[a-f0-9]{6}$/).optional(), heading: z.string().trim().max(L.heading), text: z.string().max(L.text), available, ...canon }))
+      .array(z.object({ id: z.string().regex(/^[a-f0-9]{6}$/).optional(), heading: z.string().trim().max(L.heading), text: z.string().max(L.text), available, ...canon, ...sources }))
       .max(L.sections),
     picture: z.object({ id: pictureId, caption: z.string().max(L.caption).default(''), available: available.default('all'), ...canon }).nullable(),
     banner: z.object({ id: pictureId, caption: z.string().max(L.caption).default(''), available: available.default('all'), focus: z.number().min(0).max(100).default(50), ...canon }).nullable(),
     gallery: z.array(z.object({ id: pictureId, caption: z.string().max(L.caption).default(''), available: available.default('all'), ...canon })).max(L.gallery),
-    facts: z.array(z.object({ label: z.string().max(L.label), value: z.string().max(L.value), available: available.default('all'), ...canon })).max(L.facts),
+    facts: z.array(z.object({ label: z.string().max(L.label), value: z.string().max(L.value), available: available.default('all'), ...canon, ...sources })).max(L.facts),
   };
 
   /** Chosen players must be players of this campaign. */
@@ -72,6 +76,19 @@ export function registerWiki(app, r) {
     const ids = new Set(pages.map((p) => p.id));
     return { cid, as, pages: pages.map((p) => (p.parent && !ids.has(p.parent) ? { ...p, parent: null } : p)) };
   }
+
+  /**
+   * How we know it (stage 3b): the transcript lines behind a page's sources, the way Ask's citations show them
+   * (`?s=S12 01:02:03` once per source, `?as=` a player: only sessions they were at).
+   */
+  app.get('/campaigns/:cid/wiki/evidence', async (request) => {
+    const { cid, as } = viewerPages(request);
+    const q = request.query?.s;
+    const list = (Array.isArray(q) ? q : q ? [q] : []).slice(0, MAX_SOURCES);
+    const viewer = as == null ? { userId: request.user.id, seesAll: true } : { userId: as, seesAll: false };
+    const tools = createTools({ db, store, kb, search, books: null, wiki, config, campaignId: cid, viewer });
+    return { evidence: tools.evidenceFor(list.map((x) => `[${x}]`).join(' '), MAX_SOURCES) };
+  });
 
   /** The party, for the middle of the Wheel and the Home: each player's character, and their token picture's key. */
   const party = (cid) => store.roster(cid).filter((m) => m.role === 'player').map((m) => ({
