@@ -1,6 +1,8 @@
 # DNDApp — Project Spec
 
-> Status: v0.96 (2026-10-27). The wiki moves in and out: import from an Obsidian or Markdown folder, or messy notes the AI sorts into pages; export as Markdown (a player's version has only what they see); print pages or save them as a PDF (§6.11).
+> Status: v0.97 (2026-10-27). Boards: the DM and each player lay pages, notes and pictures out on boards with arrows between them; a player's is theirs unless they share it with the DM, and a card for a page they can no longer see shows as gone (§6.11).
+>
+> Previously v0.96 (2026-10-27). The wiki moves in and out: import from an Obsidian or Markdown folder, or messy notes the AI sorts into pages; export as Markdown (a player's version has only what they see); print pages or save them as a PDF (§6.11).
 >
 > Previously v0.95 (2026-10-27). Live embeds: a wiki page can show a creature's stat block (with its rolls), an item, a merchant's shop, a handout or a map, live, and each player sees only the ones they could see anyway (§6.11).
 >
@@ -934,6 +936,7 @@ Owner (2026-10-18): "I want to start work on the DM being able to build a wiki. 
 - **A Home that thinks (stage 8d):** after each session the wiki's AI also notes loose threads, a Previously on… recap to read aloud, and pages the records contradict. They show on the DM's Home with Open, Dismiss and (for a contradiction) Propose the fix; one dismissed is never raised again.
 - **Live embeds (stage 9a):** `[[creature:Name]]`, `[[item:…]]`, `[[merchant:…]]`, `[[handout:…]]` and `[[map:…]]` in a page's text show the thing as it is now (a stat block with its rolls, an item's card, a shop to open, a handout, a map to open), never a copy. A player gets one only when they could see it anyway (a merchant whose token they see, a handout they got, a map shown to them; never a creature or an item) and loses the rest from the text, names included. The editor's + Embed picks one.
 - **Import and export (stage 9b):** the DM imports a Markdown or Obsidian folder (a zip) straight into pages, only for them: front matter for kind, tags, aliases and facts, links kept, pictures into the wiki's, folders as "inside", existing titles never overwritten. Messy notes (pasted, text or a Word file) go to the AI, whose pages wait under Waiting. Anyone downloads the wiki as Markdown as they see it (the DM also as any player), and it imports back. Pages print one a sheet, alone or a chosen set.
+- **Boards (stage 10):** a board is a canvas of cards (pages, sticky notes, wiki pictures, links to other boards) and labelled arrows, panned and zoomed, saved as it's moved (schema v21, archived per board). The DM's boards are every DM's; each player makes their own from the pages they can see (their conspiracy board), and the DM reads one only when they share it. A card for a page the viewer can't see (any more) is drawn as gone, with nothing about it. On a phone, boards are for looking and moving. A prep page lays its pages out as a board.
 - **Later:** pictures in players' lore.
 
 ## 7. Security & cost controls

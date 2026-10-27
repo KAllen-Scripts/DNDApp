@@ -23,12 +23,12 @@ function olderDb(file, version, change) {
   db.close();
 }
 
-test('a new database: folders made, current schema, version 20', () => {
+test('a new database: folders made, current schema, version 21', () => {
   const file = tmp();
   const db = openDb(file);
   try {
     assert.ok(fs.existsSync(file));
-    assert.equal(db.pragma('user_version', { simple: true }), 20);
+    assert.equal(db.pragma('user_version', { simple: true }), 21);
     for (const t of ['campaigns', 'users', 'sessions', 'kb_records', 'character_sheets', 'maps', 'map_pins', 'map_explored', 'character_pictures', 'conversations']) assert.ok(tables(db).includes(t), t);
     assert.equal(db.pragma('foreign_keys', { simple: true }), 1);
   } finally {
@@ -36,10 +36,10 @@ test('a new database: folders made, current schema, version 20', () => {
   }
   // Opening it again changes nothing.
   const again = openDb(file);
-  assert.equal(again.pragma('user_version', { simple: true }), 20);
+  assert.equal(again.pragma('user_version', { simple: true }), 21);
   again.close();
   const mem = openDb(':memory:');
-  assert.equal(mem.pragma('user_version', { simple: true }), 20);
+  assert.equal(mem.pragma('user_version', { simple: true }), 21);
   mem.close();
 });
 
@@ -52,7 +52,7 @@ test('v10 → v11: notes can be edited and deleted; handouts, rolls and archivis
   });
   const db = openDb(file);
   try {
-    assert.equal(db.pragma('user_version', { simple: true }), 20);
+    assert.equal(db.pragma('user_version', { simple: true }), 21);
     assert.ok(columns(db, 'player_notes').includes('edited_at') && columns(db, 'player_notes').includes('deleted_at') && columns(db, 'sessions').includes('processed_at'));
     assert.deepEqual(db.prepare('SELECT text, edited_at, deleted_at FROM player_notes').get(), { text: 'A key', edited_at: null, deleted_at: null });
     for (const t of ['handouts', 'rolls', 'archivist_marks']) assert.ok(tables(db).includes(t), t);
@@ -66,7 +66,7 @@ test('v11 → v12: the DM\'s creatures table is added', () => {
   olderDb(file, 11, (db) => db.exec('DROP TABLE creatures'));
   const db = openDb(file);
   try {
-    assert.equal(db.pragma('user_version', { simple: true }), 20);
+    assert.equal(db.pragma('user_version', { simple: true }), 21);
     assert.ok(tables(db).includes('creatures'));
   } finally {
     db.close();
@@ -78,7 +78,7 @@ test('v12 → v13: the rests table is added', () => {
   olderDb(file, 12, (db) => db.exec('DROP TABLE rests'));
   const db = openDb(file);
   try {
-    assert.equal(db.pragma('user_version', { simple: true }), 20);
+    assert.equal(db.pragma('user_version', { simple: true }), 21);
     assert.ok(tables(db).includes('rests'));
   } finally {
     db.close();
@@ -98,7 +98,7 @@ test('v19 → v20: each player\'s sheet (and its pictures) becomes their first c
   `));
   const db = openDb(file);
   try {
-    assert.equal(db.pragma('user_version', { simple: true }), 20);
+    assert.equal(db.pragma('user_version', { simple: true }), 21);
     const row = db.prepare('SELECT * FROM character_sheets').get();
     assert.deepEqual({ number: row.number, active: row.active, version: row.version, deleted_at: row.deleted_at }, { number: 1, active: 1, version: 7, deleted_at: null });
     assert.equal(JSON.parse(row.data).name, 'Thorin');
@@ -111,12 +111,24 @@ test('v19 → v20: each player\'s sheet (and its pictures) becomes their first c
   }
 });
 
+test('v20 → v21: the wiki boards table is added', () => {
+  const file = tmp();
+  olderDb(file, 20, (db) => db.exec('DROP TABLE wiki_boards'));
+  const db = openDb(file);
+  try {
+    assert.equal(db.pragma('user_version', { simple: true }), 21);
+    assert.ok(tables(db).includes('wiki_boards'));
+  } finally {
+    db.close();
+  }
+});
+
 test('v18 → v19: the wiki proposals tables are added', () => {
   const file = tmp();
   olderDb(file, 18, (db) => db.exec('DROP TABLE wiki_proposals; DROP TABLE wiki_chronicle'));
   const db = openDb(file);
   try {
-    assert.equal(db.pragma('user_version', { simple: true }), 20);
+    assert.equal(db.pragma('user_version', { simple: true }), 21);
     assert.ok(tables(db).includes('wiki_proposals'));
     assert.ok(tables(db).includes('wiki_chronicle'));
   } finally {
@@ -129,7 +141,7 @@ test('v17 → v18: the wiki table is added', () => {
   olderDb(file, 17, (db) => db.exec('DROP TABLE wiki_pages'));
   const db = openDb(file);
   try {
-    assert.equal(db.pragma('user_version', { simple: true }), 20);
+    assert.equal(db.pragma('user_version', { simple: true }), 21);
     assert.ok(tables(db).includes('wiki_pages'));
   } finally {
     db.close();
@@ -141,7 +153,7 @@ test('v16 → v17: the map creator stamps table is added', () => {
   olderDb(file, 16, (db) => db.exec('DROP TABLE map_stamps'));
   const db = openDb(file);
   try {
-    assert.equal(db.pragma('user_version', { simple: true }), 20);
+    assert.equal(db.pragma('user_version', { simple: true }), 21);
     assert.ok(tables(db).includes('map_stamps'));
   } finally {
     db.close();
@@ -153,7 +165,7 @@ test('v15 → v16: the map creator assets table is added', () => {
   olderDb(file, 15, (db) => db.exec('DROP TABLE map_assets'));
   const db = openDb(file);
   try {
-    assert.equal(db.pragma('user_version', { simple: true }), 20);
+    assert.equal(db.pragma('user_version', { simple: true }), 21);
     assert.ok(tables(db).includes('map_assets'));
   } finally {
     db.close();
@@ -165,7 +177,7 @@ test('v14 → v15: the campaign settings table is added', () => {
   olderDb(file, 14, (db) => db.exec('DROP TABLE campaign_settings'));
   const db = openDb(file);
   try {
-    assert.equal(db.pragma('user_version', { simple: true }), 20);
+    assert.equal(db.pragma('user_version', { simple: true }), 21);
     assert.ok(tables(db).includes('campaign_settings'));
   } finally {
     db.close();
@@ -177,7 +189,7 @@ test('v13 → v14: the items and merchants tables are added', () => {
   olderDb(file, 13, (db) => db.exec('DROP TABLE items; DROP TABLE merchants'));
   const db = openDb(file);
   try {
-    assert.equal(db.pragma('user_version', { simple: true }), 20);
+    assert.equal(db.pragma('user_version', { simple: true }), 21);
     assert.ok(tables(db).includes('items'));
     assert.ok(tables(db).includes('merchants'));
   } finally {
@@ -195,7 +207,7 @@ test('v4 (the live install) and v5 → v10: conversations can be pinned and dele
   });
   const db = openDb(file);
   try {
-    assert.equal(db.pragma('user_version', { simple: true }), 20);
+    assert.equal(db.pragma('user_version', { simple: true }), 21);
     assert.ok(columns(db, 'conversations').includes('pinned'));
     assert.ok(columns(db, 'conversations').includes('deleted_at'));
     assert.deepEqual(db.prepare('SELECT title, pinned, deleted_at FROM conversations').get(), { title: 'Where is the mill?', pinned: 0, deleted_at: null });
