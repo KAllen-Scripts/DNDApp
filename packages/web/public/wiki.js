@@ -36,6 +36,7 @@ import { drawOnMap } from './wiki-onmap.js';
 import { drawAtlas, leaveAtlas, pickAtlasMap } from './wiki-atlas.js';
 import './wiki-handout.js';
 import { drawFromSheet } from './wiki-sheet.js';
+import { drawLore } from './wiki-lore.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -287,6 +288,7 @@ function pageView() {
       drawCompass(page, { onMaps: [] }),
       h('div', { class: 'wiki-page-head' }, h('p', { class: 'wiki-meta muted small' }, [page.kind, parent && `in ${parent.title}`].filter(Boolean).join(' · '))),
       drawFromSheet(fromSheet, page),
+      drawLore(page),
       h('div', { class: 'wiki-content' }, ...pageContent(page, { dm: false, me: state.me })),
       mentioned.length ? h('p', { class: 'wiki-mentioned muted small' }, 'Mentioned in: ', ...mentioned.flatMap((m, i) => [i ? ', ' : null, pageLink(m.title, m.title)])) : null,
     );

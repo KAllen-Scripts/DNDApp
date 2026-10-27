@@ -373,9 +373,83 @@ export function registerWiki(app, r) {
       fact: z.object({ label: z.string().trim().min(1).max(L.label).optional(), value: z.string().trim().min(1).max(L.value).optional(), tone: z.enum(TONES).nullable().optional(), available: available.optional() }).optional(),
       when: z.string().trim().min(1).max(L.when).optional(),
       event: z.object({ when: z.string().max(L.when).optional(), text: z.string().trim().min(1).max(L.event).optional(), available: available.optional() }).optional(),
+      // A player's lore (stage 6c): their account (the default), true, or false with the truth beside it.
+      canon: z.enum(['told', 'true', 'false']).optional(),
+      truth: z.string().max(L.truth).optional(),
     }).parse(request.body ?? {}));
     const page = await wikiAI.approve(cid, request.params.id, edits, { by: request.user.id });
     return { page, proposals: wikiAI.count(cid) };
+  });
+
+  /**
+   * A player's lore about their own character (stage 6c): `POST` adds a section, a page, a relationship or an event,
+   * waiting for the DM under Waiting; `GET` lists theirs and what the DM did with each.
+   */
+  const playerOnly = (request) => {
+    const a = access(request);
+    if (a.role !== 'player') throw new AuthError('Only a player adds to their own story.', 403);
+    return a;
+  };
+  app.post('/campaigns/:cid/wiki/lore', async (request, reply) => {
+    const { cid, userId } = playerOnly(request);
+    const body = checkPlayers(cid, z.object({
+      type: z.enum(['section', 'page', 'relationship', 'event']),
+      title: z.string().max(L.title).optional(),
+      kind: z.string().max(L.kind).optional(),
+      heading: z.string().max(L.heading).optional(),
+      text: z.string().max(L.text).optional(),
+      label: z.string().max(L.label).optional(),
+      value: z.string().max(L.value).optional(),
+      when: z.string().max(L.when).optional(),
+      available: available.default('dm'),
+    }).parse(request.body ?? {}));
+    const p = wikiAI.lore(cid, userId, body);
+    reply.status(201);
+    return { lore: wikiAI.loreOf(cid, userId).find((x) => x.id === p.id) };
+  });
+  app.get('/campaigns/:cid/wiki/lore', async (request) => {
+    const { cid, userId } = playerOnly(request);
+    return { lore: wikiAI.loreOf(cid, userId) };
+  });
+
+  /**
+   * A player changes their own lore on a page, once the DM approved it (stage 6c): `{section_id, heading?, text}`,
+   * `{event_id, when?, text}` or `{fact_label, label?, value}`. It applies at once; one the DM confirmed as true
+   * goes back to being their account.
+   */
+  app.put('/campaigns/:cid/wiki/:pid/lore', async (request) => {
+    const { cid, userId } = playerOnly(request);
+    const body = z.object({
+      section_id: z.string().optional(), event_id: z.string().optional(), fact_label: z.string().optional(),
+      heading: z.string().max(L.heading).optional(), text: z.string().max(L.text).optional(),
+      label: z.string().max(L.label).optional(), value: z.string().max(L.value).optional(), when: z.string().max(L.when).optional(),
+    }).parse(request.body ?? {});
+    // Only a page they may see, and only their own part on it (the same 404 for anything else).
+    if (!viewerPages(request).pages.some((p) => p.id === request.params.pid)) throw new NotFoundError('No such page');
+    const page = wiki.get(cid, request.params.pid);
+    const mine = (x) => x?.by === 'player' && x.owner === userId;
+    const told = (x) => (x.canon === 'true' ? { canon: 'told' } : {});
+    let fields;
+    if (body.section_id) {
+      const s = page.sections.find((x) => x.id === body.section_id);
+      if (!mine(s)) throw new NotFoundError('No such part of yours');
+      if (!body.text?.trim()) throw new BadRequestError('Write something, or ask the DM to remove it.');
+      fields = { sections: page.sections.map((x) => (x === s ? { ...x, heading: (body.heading ?? x.heading).trim(), text: body.text, ...told(x) } : x)) };
+    } else if (body.event_id) {
+      const e = page.events.find((x) => x.id === body.event_id);
+      if (!mine(e)) throw new NotFoundError('No such part of yours');
+      if (!body.text?.trim()) throw new BadRequestError('Say what happened.');
+      fields = { events: page.events.map((x) => (x === e ? { ...x, text: body.text.trim(), when: body.when === undefined ? x.when && { text: x.when.text } : body.when.trim() ? { text: body.when.trim() } : null, ...told(x) } : x.when ? { ...x, when: { text: x.when.text } } : x)) };
+    } else if (body.fact_label) {
+      const f = page.facts.find((x) => mine(x) && wikiKey(x.label) === wikiKey(body.fact_label));
+      if (!f) throw new NotFoundError('No such part of yours');
+      if (!(body.value ?? f.value).trim()) throw new BadRequestError('Say who.');
+      fields = { facts: page.facts.map((x) => (x === f ? { ...x, label: (body.label ?? x.label).trim(), value: (body.value ?? x.value).trim(), ...told(x) } : x)) };
+    } else {
+      throw new BadRequestError('Say which part to change.');
+    }
+    const saved = await wiki.update(cid, page.id, fields, { by: request.user.id });
+    return { page: wiki.forViewer(cid, saved, { userId, seesAll: false }) };
   });
 
   app.post('/campaigns/:cid/wiki/proposals/:id/reject', async (request) => {

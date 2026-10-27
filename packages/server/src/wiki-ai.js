@@ -104,6 +104,7 @@ Who can see what matters. Each record has known_by: everyone, or the user ids of
 - Keep facts that different players know in different sections. A section mixing a fact everyone knows with one only Thorin knows is available only to Thorin.
 - Always list the records a section is written from in its sources. A section with no valid sources stays with the DM.
 - Never write :::for or :::dm blocks; the DM uses those.
+- Sections, facts and events marked by="player" are a player's own account of their character's past (their lore): never rewrite, replace or contradict them in place. If the records disagree, propose a section of your own beside it and say so in the reason.
 
 Changes:
 - new_page: a page with its sections.
@@ -421,7 +422,8 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
     }
     if (c.action !== 'update_section') return null;
     const section = page.sections.find((x) => x.id === c.section_id);
-    if (!section || (sameText(section.text, s.text) && section.heading === s.heading)) return null;
+    // A player's lore (stage 6c) is theirs: the AI never rewrites it.
+    if (!section || section.by === 'player' || (sameText(section.text, s.text) && section.heading === s.heading)) return null;
     // A change never widens who a section is available to; only a reveal does.
     const was = narrowest(audienceOf(page.available), audienceOf(section.available));
     const next = narrowest(was, audience);
@@ -464,7 +466,7 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
     /** Proposals waiting for the DM, oldest first, each with what's there now to compare. */
     pending(cid) {
       return list(cid, 'pending').map((p) => {
-        if (p.action === 'new_page') return { ...p, picture: suggestPicture(cid, p) };
+        if (p.action === 'new_page') return { ...p, picture: p.from === 'player' ? null : suggestPicture(cid, p) };
         let page = null;
         try {
           page = wiki.get(cid, p.page_id);
@@ -533,8 +535,13 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
     async approve(cid, id, edits = {}, { by }) {
       const p = get(cid, id);
       if (p.status !== 'pending') throw new BadRequestError('This proposal was already dealt with.');
+      // A player's lore (stage 6c) stays theirs, edited or not: the DM chooses its canon (their account by default,
+      // or true, or false with the truth beside it).
+      const canon = edits.canon ?? 'told';
+      const lore = p.from === 'player' ? { canon, ...(canon === 'false' && { truth: edits.truth ?? '' }), by: 'player', owner: p.by_player } : null;
       const sections = p.sections.map(({ records, ...s }, i) => {
         const e = edits.sections?.[i];
+        if (lore) return { heading: (e?.heading ?? s.heading).trim(), text: e?.text ?? s.text, available: e?.available ?? s.available, sources: [], ...lore };
         const sources = citationsFrom(cid, records);
         if (!e) return { ...s, sources, by: p.dm_section ? 'dm' : 'ai' };
         const changed = !sameText(e.text, s.text) || (e.heading ?? s.heading).trim() !== s.heading;
@@ -543,7 +550,7 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
       let page;
       if (p.action === 'new_page') {
         const parent = p.parent && wiki.list(cid).some((x) => x.id === p.parent) ? p.parent : null;
-        const suggested = edits.use_picture === false ? null : suggestPicture(cid, p);
+        const suggested = edits.use_picture === false || lore ? null : suggestPicture(cid, p);
         const picture = suggested ? { id: (await wikiPictures.copy(cid, suggested, { by })).id, caption: '', available: 'all' } : null;
         page = await wiki.create(cid, {
           title: edits.title ?? p.title, kind: edits.kind ?? p.kind, aliases: p.aliases, parent, available: edits.page_available ?? p.page_available, sections, picture,
@@ -558,8 +565,9 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
           // The DM's edits, if any; an existing fact the DM marked (a rumour, false, planned, an account) stays marked so.
           const e = edits.fact ?? {};
           const changed = ['label', 'value', 'tone'].some((k) => e[k] !== undefined && e[k] !== p.fact[k]);
-          const fact = { ...factOf(cid, p.fact), ...pick(e, ['label', 'value', 'available']), ...(e.tone !== undefined && { tone: e.tone }), ...(changed && { by: 'dm' }) };
-          const i = current.facts.findIndex((f) => wikiKey(f.label) === wikiKey(p.fact.label));
+          const fact = { ...factOf(cid, p.fact), ...pick(e, ['label', 'value', 'available']), ...(e.tone !== undefined && { tone: e.tone }), ...(changed && { by: 'dm' }), ...lore };
+          // A player's own fact (stage 6c) is never replaced: the AI's, or another player's, goes beside it.
+          const i = p.from === 'player' ? -1 : current.facts.findIndex((f) => wikiKey(f.label) === wikiKey(p.fact.label) && f.by !== 'player');
           const facts = [...current.facts];
           if (i < 0) facts.push(fact);
           else facts[i] = { ...fact, ...(facts[i].canon !== 'true' && { canon: facts[i].canon }), ...(facts[i].truth != null && { truth: facts[i].truth }), ...(facts[i].owner != null && { owner: facts[i].owner }), sources: normalizeSources([...fact.sources, ...(facts[i].sources ?? [])]) };
@@ -570,7 +578,7 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
           const e = edits.event ?? {};
           const changed = ['when', 'text'].some((k) => e[k] !== undefined && e[k] !== (k === 'when' ? p.event.when?.text ?? '' : p.event.text));
           const when = e.when !== undefined ? (e.when.trim() ? { text: e.when.trim() } : null) : p.event.when && { text: p.event.when.text };
-          const event = { ...eventOf(cid, p.event), when, ...pick(e, ['text', 'available']), ...(changed && { by: 'dm' }) };
+          const event = { ...eventOf(cid, p.event), when, ...pick(e, ['text', 'available']), ...(changed && { by: 'dm' }), ...lore };
           fields = { events: [...current.events, event] };
         } else if (p.action === 'reveal') {
           if (!current.sections.some((s) => s.id === p.section_id)) throw new BadRequestError('That section is gone from the page.');
@@ -588,6 +596,50 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
       const now = new Date().toISOString();
       write(cid, { ...p, status: 'approved', page_id: page.id, decided_by: by, decided_at: now, updated_at: now, ...(Object.keys(edits).some((k) => k !== 'use_picture') && { edited: true }) });
       return page;
+    },
+
+    /**
+     * A player's lore about their own character (stage 6c), waiting for the DM like the AI's changes: `type`
+     * 'section' (on their character's page), 'page' (a page of its own, inside their character's), 'relationship'
+     * (a fact on their character's page linking another page) or 'event' (a dated line on it). `available` is who
+     * it's for: only the DM ('dm', the default), chosen players, or everyone ('all').
+     */
+    lore(cid, userId, { type, title = '', kind = '', heading = '', text = '', label = '', value = '', when = '', available = 'dm' }) {
+      const me = players(cid).find((m) => m.user_id === userId);
+      if (!me) throw new BadRequestError('Only a player of this campaign can add to their story.');
+      const pages = wiki.list(cid);
+      const character = pages.find((p) => p.player === userId);
+      if (!character && type !== 'page') throw new BadRequestError("Your character has no page yet. Ask the DM to make it (it's offered under Waiting).");
+      const who = me.character_name || me.name;
+      const base = { from: 'player', by_player: userId, reason: `From ${who}'s player.`, run: null, key: `lore:${userId}:${crypto.randomBytes(4).toString('hex')}` };
+      const onPage = character && { page_id: character.id, page_title: character.title };
+      let p;
+      if (type === 'section') {
+        if (!clean(text, L.text)) throw new BadRequestError('Write something first.');
+        p = { ...base, ...onPage, action: 'add_section', section_id: null, sections: [{ heading: clean(heading, L.heading), text: String(text).slice(0, L.text).trim(), records: [], available }] };
+      } else if (type === 'page') {
+        const t = clean(title, L.title);
+        if (!t || !clean(text, L.text)) throw new BadRequestError('Give the page a title and some words.');
+        if (pages.some((x) => [x.title, ...x.aliases].some((n) => wikiKey(n) === wikiKey(t)))) throw new BadRequestError(`There's a page called "${t}" already. Write about it on your character's page, or choose another title.`);
+        p = { ...base, action: 'new_page', title: t, kind: clean(kind, L.kind) || 'lore', aliases: [], parent: character?.id ?? null, page_available: available, facts: [], when: null, events: [], sections: [{ heading: '', text: String(text).slice(0, L.text).trim(), records: [], available: 'all' }] };
+      } else if (type === 'relationship') {
+        if (!clean(label, L.label) || !clean(value, L.value)) throw new BadRequestError('Say who, and what they are to your character.');
+        p = { ...base, ...onPage, action: 'set_fact', fact: { label: clean(label, L.label), value: clean(value, L.value), canon: 'told', available, records: [] }, sections: [] };
+      } else if (type === 'event') {
+        if (!clean(text, L.event)) throw new BadRequestError('Say what happened.');
+        const w = clean(when, L.when);
+        p = { ...base, ...onPage, action: 'add_event', event: { when: w ? { text: w, reads: reads(cid, w) } : null, text: clean(text, L.event), canon: 'told', available, records: [] }, sections: [] };
+      } else {
+        throw new BadRequestError('Add a section, a page, a relationship or an event.');
+      }
+      const now = new Date().toISOString();
+      return write(cid, { ...p, id: crypto.randomBytes(5).toString('hex'), status: 'pending', created_at: now, updated_at: now });
+    },
+
+    /** A player's own lore and what the DM did with it, newest first (only theirs). */
+    loreOf(cid, userId) {
+      return db.prepare("SELECT * FROM wiki_proposals WHERE campaign_id = ? AND json_extract(data, '$.by_player') = ? ORDER BY created_at DESC LIMIT 50").all(cid, userId).map(toProposal)
+        .map((p) => ({ id: p.id, type: { add_section: 'section', new_page: 'page', set_fact: 'relationship', add_event: 'event' }[p.action], title: p.action === 'new_page' ? p.title : p.action === 'set_fact' ? p.fact.label : p.action === 'add_event' ? p.event.text : p.sections[0]?.heading || p.sections[0]?.text.slice(0, 80), status: p.status, page_id: p.status === 'approved' ? p.page_id : null, created_at: p.created_at }));
     },
 
     /** Reject a proposal. The AI is told, so it doesn't propose the same again. */
@@ -613,6 +665,7 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
       const section = page && section_id ? page.sections.find((s) => s.id === section_id) : null;
       if (page_id && !page) throw new NotFoundError('No such page');
       if ((mode === 'expand' || mode === 'tidy') && !section) throw new NotFoundError('No such section');
+      if ((mode === 'expand' || mode === 'tidy') && section.by === 'player') throw new BadRequestError("That's a player's own account of their character: the AI doesn't rewrite it.");
       if (mode === 'draft' && !page && !clean(asked?.title, L.title)) throw new BadRequestError('Give the page a title first.');
       if (mode === 'make_up' && !clean(what, 200) && !clean(notes, 2000)) throw new BadRequestError('Say what to make up.');
       const about = page ? [page.title, ...page.aliases].join(', ') : mode === 'draft' ? asked.title : `${what}\n${notes}`;
