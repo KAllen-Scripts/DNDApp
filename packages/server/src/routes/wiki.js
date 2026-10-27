@@ -103,7 +103,8 @@ export function registerWiki(app, r) {
   const timelineFor = (request, { cid, as, pages }) => {
     const { truth } = z.object({ truth: z.enum(['0', '1']).optional() }).parse({ truth: request.query?.truth });
     const { calendar, clock, wiki: own } = store.getSettings(cid);
-    const t = timeline(pages, { places: pagePlaces(maps, cid, { as }), lanes: own.lanes, truth: as == null && truth === '1', forDm: as == null });
+    const journeys = maps.journeys(cid, { forUser: as ?? null });
+    const t = timeline(pages, { places: pagePlaces(maps, cid, { as }), lanes: own.lanes, truth: as == null && truth === '1', forDm: as == null, journeys });
     return { ...t, now: clock, calendar };
   };
   app.get('/campaigns/:cid/wiki/timeline', async (request) => {
@@ -297,6 +298,8 @@ export function registerWiki(app, r) {
       players: z.array(z.number().int()).max(100).optional(),
       use_picture: z.boolean().optional(),
       fact: z.object({ label: z.string().trim().min(1).max(L.label).optional(), value: z.string().trim().min(1).max(L.value).optional(), tone: z.enum(TONES).nullable().optional(), available: available.optional() }).optional(),
+      when: z.string().trim().min(1).max(L.when).optional(),
+      event: z.object({ when: z.string().max(L.when).optional(), text: z.string().trim().min(1).max(L.event).optional(), available: available.optional() }).optional(),
     }).parse(request.body ?? {}));
     const page = await wikiAI.approve(cid, request.params.id, edits, { by: request.user.id });
     return { page, proposals: wikiAI.count(cid) };
