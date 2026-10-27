@@ -24,6 +24,7 @@ import { state, nav, base, status, report, availableText, playerName, pictureImg
 import { pageLink, hidePreview, hero, pageContent, editor } from './wiki-page.js';
 import { drawReview } from './wiki-waiting.js';
 import { resetSpace } from './wiki-space.js';
+import { drawWebView, leaveWeb } from './wiki-web.js';
 import { drawWheel } from './wiki-wheel.js';
 import { drawHub } from './wiki-home.js';
 import { pageDiff } from './wiki-diff.js';
@@ -240,13 +241,15 @@ function phoneBack() {
 function drawMain() {
   const main = $('#wiki-main');
   hidePreview();
-  const reading = !!state.open || state.view === 'review' || state.view === 'wheel' || state.view === 'atlas';
+  const reading = !!state.open || state.view === 'review' || state.view === 'wheel' || state.view === 'atlas' || state.view === 'web';
   $('#wiki-view').classList.toggle('wiki-reading', reading);
   drawReviewButton();
   if (state.view !== 'atlas') leaveAtlas();
   else pickAtlasMap();
   nav.routed();
+  if (state.view !== 'web') leaveWeb();
   if (state.view === 'atlas') return drawAtlas(main);
+  if (state.view === 'web') return drawWebView(main);
   if (state.view === 'review') return drawReview();
   if (state.view === 'wheel') return drawWheelView();
   if (reading) queueMicrotask(() => main.prepend(phoneBack()));

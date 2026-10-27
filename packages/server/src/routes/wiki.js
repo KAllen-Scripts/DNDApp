@@ -12,6 +12,7 @@ import { SOURCE_KINDS } from '../wiki-pictures.js';
 import { wikiKey, wikiPieces, unlink, unpicture, audienceOf, canSeeAudience, CANONS, TONES } from '@dndapp/shared/wiki.js';
 import { MAX_SOURCES } from '@dndapp/shared/citations.js';
 import { createTools } from '../qa/tools.js';
+import { webGraph } from '../wiki-web.js';
 import { pageOnMaps, makePageFor, atlasLayers } from '../wiki-maps.js';
 import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass } from '../wiki-views.js';
 
@@ -159,6 +160,33 @@ export function registerWiki(app, r) {
     const seen = new Set();
     const found = [...named.map((p) => ({ p, by: 'name' })), ...meant.map((p) => ({ p, by: 'text' }))].filter(({ p }) => !seen.has(p.id) && seen.add(p.id)).slice(0, 12);
     return { pages: found.map(({ p, by }) => ({ ...summary(p), found_by: by })) };
+  });
+
+  /**
+   * The Web (stage 3d): who is tied to whom, from the pages the viewer may see (`?as=` a player).
+   * `around` a page id, `steps` 1-3, `families` (comma separated), `mentions=1`, `preset=factions|family`,
+   * `truth=1` (the DM's: rumours and falsehoods left out).
+   */
+  app.get('/campaigns/:cid/wiki/web', async (request) => {
+    const { as, pages } = viewerPages(request);
+    const q = z.object({
+      around: z.string().regex(/^[a-f0-9]{10}$/).optional(),
+      steps: z.coerce.number().int().min(1).max(3).default(2),
+      families: z.string().max(200).optional(),
+      mentions: z.enum(['0', '1']).optional(),
+      preset: z.enum(['factions', 'family']).optional(),
+      truth: z.enum(['0', '1']).optional(),
+    }).parse(request.query ?? {});
+    const web = webGraph(pages, {
+      around: q.around ?? null,
+      steps: q.steps,
+      families: q.families ? q.families.split(',').filter(Boolean) : null,
+      mentions: q.mentions === '1',
+      preset: q.preset ?? null,
+      truth: as == null && q.truth === '1',
+      forDm: as == null,
+    });
+    return { ...web, ...(as == null ? {} : { as }) };
   });
 
   /** A page's compass: its family, what it's inside, what's inside it, and its links both ways (`compass: null` if the player can't see it). */

@@ -34,11 +34,22 @@ export function drawCompass(page, { onMaps = [] } = {}) {
   if (page.id == null) return box;
   (async () => {
     let c;
+    let web;
     try {
-      c = (await api('GET', `${base()}/${page.id}/compass`)).compass;
+      [c, web] = await Promise.all([
+        api('GET', `${base()}/${page.id}/compass`).then((r) => r.compass),
+        api('GET', `${base()}/web?around=${page.id}&steps=1`).catch(() => null),
+      ]);
     } catch {
       return;
     }
+    // The mini-web: the nearest six pages tied to it, and the Web round it.
+    const ties = (web?.nodes ?? []).filter((n) => n.id !== page.id).slice(0, 6);
+    const toWeb = h('button', { type: 'button', class: 'wiki-compass-family wiki-compass-web', title: 'Open the Web round this page', onclick: () => {
+      nav.closeDrawer?.();
+      nav.enter();
+      nav.go(`#/web/${page.id}`);
+    } }, h('span', { 'aria-hidden': 'true' }, '⁂'), ' Web');
     if (!c || !box.isConnected) return;
     const family = KIND_FAMILIES[c.family];
     const group = (label, list, more = null) => (list.length ? h('div', { class: 'wiki-compass-group' },
@@ -50,6 +61,7 @@ export function drawCompass(page, { onMaps = [] } = {}) {
         h('span', { class: 'wiki-compass-label' }, 'Kind'),
         h('button', { type: 'button', class: `wiki-compass-family fam-${c.family}`, title: `${family.label} on the Wheel`, onclick: () => nav.go(`#/wheel/${c.family}`) },
           h('span', { 'aria-hidden': 'true' }, family.icon), ` ${family.label}`)),
+      ties.length ? group('Ties', ties, toWeb) : null,
       group('Inside', c.chain),
       group('Holds', c.children),
       group('Links to', c.links_to),
