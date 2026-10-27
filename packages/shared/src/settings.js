@@ -18,6 +18,8 @@ import { dateText, moonText, normalizeCalendar } from './calendar.js';
  * suggested on every player's sheet beside the books' ones.
  *
  * calendar: what the in-game clock's days are called (calendar.js), or null for "Day 1, Day 2…" as before.
+ *
+ * wiki: the wiki space's settings (`normalizeWikiSettings`).
  */
 export const WEIGHT_RULES = { capacity: 'Carrying capacity (PHB)', variant: 'Variant encumbrance (PHB)', ignore: 'Ignore weight limits' };
 
@@ -64,9 +66,14 @@ export const normalizeAttackSettings = (a = {}) => ({
   damage: a && a.damage in ATTACK_DAMAGE ? a.damage : DEFAULT_ATTACKS.damage,
   show_ac: typeof a?.show_ac === 'boolean' ? a.show_ac : DEFAULT_ATTACKS.show_ac,
 });
-export const DEFAULT_SETTINGS = Object.freeze({ weight: 'capacity', edition: null, clock: START_CLOCK, travel: DEFAULT_TRAVEL, attacks: DEFAULT_ATTACKS, backgrounds: Object.freeze([]), calendar: null });
+export const DEFAULT_SETTINGS = Object.freeze({ weight: 'capacity', edition: null, clock: START_CLOCK, travel: DEFAULT_TRAVEL, attacks: DEFAULT_ATTACKS, backgrounds: Object.freeze([]), calendar: null, wiki: Object.freeze({ lanes: Object.freeze([]) }) });
 /** The clock goes at most this far (about 27,000 years of days), so it stays a plain number. */
 export const MAX_CLOCK = 1440 * 10_000_000;
+
+/** wiki: the DM's wiki space's own settings. lanes: pages with a lane of their own on the Timeline (at most 12). */
+export const normalizeWikiSettings = (w = {}) => ({
+  lanes: [...new Set((Array.isArray(w?.lanes) ? w.lanes : []).map(String).filter((id) => /^[a-f0-9]{10}$/.test(id)))].slice(0, 12),
+});
 
 /** Settings with anything unknown dropped and missing ones defaulted. */
 export function normalizeSettings(s = {}) {
@@ -78,6 +85,7 @@ export function normalizeSettings(s = {}) {
     attacks: normalizeAttackSettings(s?.attacks),
     backgrounds: normalizeCustomBackgrounds(s?.backgrounds),
     calendar: normalizeCalendar(s?.calendar),
+    wiki: normalizeWikiSettings(s?.wiki),
   };
 }
 

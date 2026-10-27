@@ -67,10 +67,13 @@ export function registerAccounts(app, r) {
       backgrounds: z.array(z.record(z.string(), z.unknown())).max(MAX_CUSTOM_BACKGROUNDS).optional(),
       // The campaign's calendar, whole (shared/calendar.js cleans it), or null for "Day N".
       calendar: z.record(z.string(), z.unknown()).nullable().optional(),
+      // The wiki space's settings: the Timeline's lanes (page ids).
+      wiki: z.object({ lanes: z.array(z.string().regex(/^[a-f0-9]{10}$/)).max(12) }).partial().strict().optional(),
     }).strict().parse(request.body ?? {});
     if (body.attacks) body.attacks = { ...store.getSettings(a.cid).attacks, ...body.attacks };
     // Travel switches change one at a time.
     if (body.travel) body.travel = { ...store.getSettings(a.cid).travel, ...body.travel };
+    if (body.wiki) body.wiki = { ...store.getSettings(a.cid).wiki, ...body.wiki };
     return store.setSettings(a.cid, body);
   });
 

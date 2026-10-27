@@ -234,3 +234,77 @@ export function whenText(when, calendar = null) {
   }
   return `${dayText(from, calendar)}, ${timeText(from)} to ${Math.floor(to / DAY) === Math.floor(from / DAY) ? '' : `${dayText(to, calendar)}, `}${timeText(to)}`;
 }
+
+// ---------- the Timeline's scale (stage 4c) ----------
+
+const yearStartOf = (calendar, year) => wholeOf(calendar, year, null).from;
+
+/**
+ * The marks along the Timeline's scale between `from` and `to` (minutes) at `px` pixels a minute: the finest step
+ * that leaves room for a label (hours, days, months, years, tens, hundreds or thousands of years), each
+ * { at, label, major } (major: the start of the next step up, labelled more fully). With the calendar's names.
+ */
+export function timeTicks(from, to, px, calendar = null, { room = 70 } = {}) {
+  const fits = (minutes) => minutes * px >= room;
+  const out = [];
+  const push = (at, label, major = false) => { if (at >= from && at <= to && out.length < 400) out.push({ at, label, major }); };
+  for (const hours of [1, 3, 6, 12]) {
+    if (!fits(hours * 60)) continue;
+    for (let at = Math.ceil(from / (hours * 60)) * hours * 60; at <= to && out.length < 400; at += hours * 60) {
+      push(at, mod(at, DAY) === 0 ? dayText(at, calendar) : timeText(at), mod(at, DAY) === 0);
+    }
+    return out;
+  }
+  if (!calendar) {
+    // Days counted from Day 1, then years of 365 days before it.
+    for (const days of [1, 2, 7, 30, 100, 365, 3650, 36500, 365000, 3650000]) {
+      if (!fits(days * DAY)) continue;
+      for (let at = Math.ceil(from / (days * DAY)) * days * DAY; at <= to && out.length < 400; at += days * DAY) push(at, dayText(at, null), days >= 365 ? mod(at, days * 10 * DAY) === 0 : at === 0);
+      return out;
+    }
+    return out;
+  }
+  const firstYear = dateOf(from, calendar).year;
+  const lastYear = dateOf(to, calendar).year;
+  const era = calendar.era ? ` ${calendar.era}` : '';
+  const real = calendar.months.filter((m) => m.days > 1).length || 1;
+  const yearDays = unitMinutes('year', calendar) / DAY;
+  if (fits(5 * DAY)) {
+    // Days: each one when there's room, else every 5th (and the first of each month).
+    const every = fits(DAY) ? 1 : 5;
+    for (let at = Math.ceil(from / DAY) * DAY; at <= to && out.length < 400; at += DAY) {
+      const d = dateOf(at, calendar);
+      if (d.day === 1) push(at, d.festival && monthLengths(calendar, d.year)[d.month] === 1 ? d.monthName : `${d.monthName}${d.month === 0 ? ` ${d.year}${era}` : ''}`, true);
+      else if ((d.day - 1) % every === 0) push(at, String(d.day));
+    }
+    return out;
+  }
+  if (fits((yearDays / real) * DAY)) {
+    for (let year = firstYear; year <= lastYear && out.length < 400; year++) {
+      const lengths = monthLengths(calendar, year);
+      let at = yearStartOf(calendar, year);
+      lengths.forEach((n, i) => {
+        // Festival days between months are too short to label here.
+        if (n > 1) push(at, i === lengths.findIndex((x) => x > 0) ? `${year}${era}` : calendar.months[i].name, i === lengths.findIndex((x) => x > 0));
+        at += n * DAY;
+      });
+    }
+    return out;
+  }
+  for (const step of [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 10000, 100000]) {
+    if (!fits(step * yearDays * DAY)) continue;
+    for (let year = Math.ceil(firstYear / step) * step; year <= lastYear + 1 && out.length < 400; year += step) push(yearStartOf(calendar, year), `${year}${era}`, year % (step * 10) === 0);
+    return out;
+  }
+  return out;
+}
+
+/** The days a calendar's moons are full between `from` and `to` (at most 400 days looked at): [{ at, name }]. */
+export function fullMoons(from, to, calendar) {
+  if (!calendar?.moons.length || to - from > 400 * DAY) return [];
+  const out = [];
+  for (let at = Math.floor(from / DAY) * DAY; at <= to; at += DAY) {
+    for (const m of dateOf(at, calendar).moons) if (m.phase === 'Full') out.push({ at, name: m.name });
+  }
+  return out;
+}

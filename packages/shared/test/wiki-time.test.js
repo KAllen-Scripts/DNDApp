@@ -73,3 +73,17 @@ test('wiki time: Gregorian-like weekdays are read past', () => {
   assert.deepEqual([w.from, w.to], [2 * D, 3 * D]);
   assert.match(whenText(w, g), /3 January 1200$/);
 });
+
+test('wiki time: the Timeline scale names hours, days, months and years by the calendar, and finds full moons', async () => {
+  const { timeTicks, fullMoons } = await import('../src/wiki-time.js');
+  const h = calendarPreset('harptos');
+  const labels = (from, to, px, cal) => timeTicks(from, to, px, cal).map((t) => `${t.label}${t.major ? '*' : ''}`);
+  assert.deepEqual(labels(0, 2 * D, 0.05, h), ['Hammer 1492 DR*', '2', '3'], 'a day each; the first names its month');
+  assert.deepEqual(labels(0, 2 * D, 0.05, null), ['Day 1*', 'Day 2', 'Day 3']);
+  assert.deepEqual(labels(0, D / 2, 2, null).slice(0, 3), ['Day 1*', '01:00', '02:00'], 'hours');
+  assert.deepEqual(labels(0, 400 * D, 1000 / (400 * D), h).slice(0, 3), ['1492 DR*', 'Alturiak', 'Ches'], 'months, festival days left out');
+  assert.deepEqual(labels(-300 * 365 * D, 30 * D, 1000 / (300 * 365 * D), h).slice(0, 2), ['1200 DR', '1250 DR'], 'years');
+  assert.deepEqual(labels(-300 * 365 * D, 30 * D, 1000 / (300 * 365 * D), null).at(-1), 'Day 1*');
+  assert.deepEqual(fullMoons(0, 70 * D, h).map((m) => m.at / D), [0, 30, 61]);
+  assert.deepEqual(fullMoons(0, 500 * D, h), [], 'not over long spans');
+});

@@ -13,7 +13,8 @@ import { wikiKey, wikiPieces, unlink, unpicture, audienceOf, canSeeAudience, CAN
 import { MAX_SOURCES } from '@dndapp/shared/citations.js';
 import { createTools } from '../qa/tools.js';
 import { webGraph } from '../wiki-web.js';
-import { pageOnMaps, makePageFor, atlasLayers } from '../wiki-maps.js';
+import { pageOnMaps, makePageFor, atlasLayers, pagePlaces } from '../wiki-maps.js';
+import { timeline } from '../wiki-timeline.js';
 import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass } from '../wiki-views.js';
 
 export function registerWiki(app, r) {
@@ -95,6 +96,21 @@ export function registerWiki(app, r) {
     return { evidence: tools.evidenceFor(list.map((x) => `[${x}]`).join(' '), MAX_SOURCES) };
   });
 
+  /**
+   * The Timeline (stage 4c): lanes, dated items, undated ones and sessions with no time, for the DM or `?as=` a
+   * player (only what they may see; places only revealed ones), `?truth=1` (the DM's): no rumours or falsehoods.
+   */
+  const timelineFor = (request, { cid, as, pages }) => {
+    const { truth } = z.object({ truth: z.enum(['0', '1']).optional() }).parse({ truth: request.query?.truth });
+    const { calendar, clock, wiki: own } = store.getSettings(cid);
+    const t = timeline(pages, { places: pagePlaces(maps, cid, { as }), lanes: own.lanes, truth: as == null && truth === '1', forDm: as == null });
+    return { ...t, now: clock, calendar };
+  };
+  app.get('/campaigns/:cid/wiki/timeline', async (request) => {
+    const v = viewerPages(request);
+    return { ...timelineFor(request, v), as: v.as };
+  });
+
   /** The party, for the middle of the Wheel and the Home: each player's character, and their token picture's key. */
   const party = (cid) => store.roster(cid).filter((m) => m.role === 'player').map((m) => ({
     id: m.user_id, name: m.name, character_name: m.character_name, token: pictures?.view(cid, m.user_id).token?.key ?? null,
@@ -121,6 +137,8 @@ export function registerWiki(app, r) {
       families: wheelFamilies(pages),
       recent: recentPages(pages).map(summary),
       party: party(cid),
+      // The Timeline tile: the latest moments (by in-game time).
+      moments: timeline(pages).items.slice(-12).map((x) => ({ at: x.when.from, family: x.family, title: x.type === 'event' ? x.text : x.title })),
       ...(as == null ? { waiting: { proposals: wikiAI.count(cid) } } : { as }),
     };
   });

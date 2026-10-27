@@ -22,7 +22,20 @@ const layer = {
   data: null, // { key, layers }
   loading: null,
   card: null, // what the open card is for: 'pin:<place id>' | 'person:<page id>' | 'quest:<page id>'
+  pulse: null, // a place's pin to draw the eye to (the Timeline's Show on the map), for a few seconds
 };
+
+/** Draw the eye to a place's pin (its card open) for a few seconds. */
+export function pulseWikiPin(placeId) {
+  layer.pulse = `pin:${placeId}`;
+  layer.card = layer.pulse;
+  renderWikiLayers();
+  setTimeout(() => {
+    if (layer.pulse !== `pin:${placeId}`) return;
+    layer.pulse = null;
+    renderWikiLayers();
+  }, 4000);
+}
 
 const on = () => state.canEdit && (layer.forced || storage.get(KEY) === 'on');
 const keyOf = (map) => `${map.id}|${map.version ?? ''}|${layer.as ?? ''}`;
@@ -79,6 +92,7 @@ function card(item, kind) {
       h('div', { class: 'map-wiki-card-actions' },
         h('button', { type: 'button', class: 'primary small', onclick: () => openPageFrom(p.id) }, 'Open page'),
         target ? h('button', { type: 'button', class: 'ghost small', onclick: () => { layer.card = null; show(target); } }, `Open ${target.name}`) : null,
+        p.dated && document.documentElement.dataset.space === 'wiki' ? h('button', { type: 'button', class: 'ghost small', onclick: () => nav.go(`#/timeline/${p.id}`) }, 'On the timeline') : null,
         h('button', { type: 'button', class: 'ghost small', 'aria-label': 'Close', onclick: () => { layer.card = null; renderWikiLayers(); } }, '✕'))));
 }
 
@@ -86,7 +100,7 @@ function badge(item, kind, id, { dx = 0 } = {}) {
   const p = item.page;
   const el = h('button', {
     type: 'button',
-    class: `map-wiki-pin ${kind} fam-${p.family}${p.picture ? ' has-picture' : ''}`,
+    class: `map-wiki-pin ${kind} fam-${p.family}${p.picture ? ' has-picture' : ''}${layer.pulse === id ? ' pulse' : ''}`,
     title: p.title,
     'aria-label': `${p.title} (wiki)`,
     onclick: (e) => {

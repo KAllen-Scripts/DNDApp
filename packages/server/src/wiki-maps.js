@@ -96,9 +96,26 @@ export async function makePageFor({ wiki, maps, wikiPictures }, cid, { map_id, k
 }
 
 /** The family colour key of a page, and what the Atlas needs to draw it. */
-const atlasPage = (p) => ({ ...summary(p), family: kindFamily(p.kind) });
+const atlasPage = (p) => ({ ...summary(p), family: kindFamily(p.kind), dated: !!(p.when?.from != null || p.events?.some((e) => e.when?.from != null)) });
 
 const shownToViewer = (thing, uid, { revealed = 'revealed', to = 'revealed_to' } = {}) => !!thing[revealed] && (thing[to] == null || thing[to].includes(uid));
+
+/**
+ * Where each page is pinned (the first place linked to it), for the Timeline's Show on the
+ * map: Map(page id → { map_id, map_name, place_id, x, y }). As a player (`as`), only places revealed to them on maps
+ * shown to them.
+ */
+export function pagePlaces(maps, cid, { as = null } = {}) {
+  const out = new Map();
+  for (const m of maps.list(cid)) {
+    if (as != null && !shownToViewer(m, as, { revealed: 'shown', to: 'shown_to' })) continue;
+    for (const p of m.places ?? []) {
+      if (!p.page || out.has(p.page.id) || (as != null && !shownToViewer(p, as))) continue;
+      out.set(p.page.id, { map_id: m.id, map_name: m.name, place_id: p.id, x: p.x, y: p.y });
+    }
+  }
+  return out;
+}
 
 /**
  * The Atlas's wiki layers for one map, from the pages this viewer may see (`pages`, filtered already) and, as a
