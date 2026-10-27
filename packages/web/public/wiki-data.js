@@ -17,9 +17,10 @@ export const state = {
   players: [],
   filter: '',
   kindFilter: null, // a kind family shown on the front page, or null for all
+  kindKey: null, // one kind in that family (wikiKey), or null for all of them
   tagFilter: null,
   open: null, // { page, mentioned_in, unknown_names } of the page shown
-  view: 'page', // 'page' | 'edit' | 'history' | 'review'
+  view: 'page', // 'page' | 'edit' | 'history' | 'review' | 'wheel'
   as: null, // a player's id while viewing as them
   proposals: 0, // how many of the AI's changes wait for the DM
   aiRun: null, // the AI's last run for the wiki: { status, message, finished_at }
@@ -36,6 +37,7 @@ export const nav = {
   drawReviewButton: () => {},
   phoneBack: () => null,
   routed: () => {}, // after each draw: the address and the trail follow (wiki-space.js)
+  go: async () => {}, // to a route of the space (wiki-space.js)
 };
 
 /** Forget the pictures fetched for the last campaign. */

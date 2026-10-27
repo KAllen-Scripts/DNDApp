@@ -9,10 +9,10 @@ import { BadRequestError, NotFoundError } from '../store.js';
 import { WIKI_LIMITS as L } from '../wiki.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 import { SOURCE_KINDS } from '../wiki-pictures.js';
-import { wikiPieces, wikiPictures as picturesIn, unlink, unpicture } from '@dndapp/shared/wiki.js';
+import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture } from '../wiki-views.js';
 
 export function registerWiki(app, r) {
-  const { access, auth, store, wiki, wikiAI, wikiPictures, jobs } = r;
+  const { access, auth, store, wiki, wikiAI, wikiPictures, jobs, pictures } = r;
 
   const pictureId = z.string().regex(/^[a-f0-9]{10}$/);
   const available = z.union([z.literal('all'), z.literal('dm'), z.array(z.number().int()).max(100)]);
@@ -42,21 +42,6 @@ export function registerWiki(app, r) {
     return body;
   }
 
-  /**
-   * A page in the DM's list: enough for the cards and the preview shown over
-   * a link (its picture and its opening words). Only the DM gets the list.
-   */
-  const summary = (p) => ({
-    id: p.id, title: p.title, aliases: p.aliases, kind: p.kind, parent: p.parent, tags: p.tags, available: p.available, updated_at: p.updated_at,
-    picture: p.picture?.id ?? p.banner?.id ?? p.gallery[0]?.id ?? p.sections.flatMap((s) => picturesIn(s.text))[0] ?? null,
-    excerpt: excerpt(p),
-  });
-  const excerpt = (p) => {
-    const plain = (p.sections.map((s) => wikiPieces(s.text).filter((x) => !x.block).map((x) => x.text).join(' ')).find((t) => t.trim()) ?? '');
-    const text = unpicture(unlink(plain)).replace(/\[picture[^\]]*\]/g, '').replace(/[#>*_`|~-]+/g, ' ').replace(/\s+/g, ' ').trim();
-    return text.length > 220 ? `${text.slice(0, 217).replace(/\s+\S*$/, '')}…` : text;
-  };
-
   /** The last time the AI read the records for the wiki, if it has: { status, message, finished_at }. */
   const lastRun = (cid) => {
     const j = jobs.list(cid, 50).find((x) => x.type === 'wiki');
@@ -68,6 +53,49 @@ export function registerWiki(app, r) {
     const { cid } = access(request, { dm: true });
     const players = store.roster(cid).filter((m) => m.role === 'player').map((m) => ({ id: m.user_id, name: m.name, character_name: m.character_name }));
     return { pages: wiki.list(cid).map(summary), players, proposals: wikiAI.count(cid), ai_run: lastRun(cid) };
+  });
+
+  // ---------- the space's views (wiki-views.js), as the DM sees them or ?as= a player ----------
+
+  /** `?as=<player id>` checked: the viewer, and the pages they may see (a hidden parent left out). */
+  function viewerPages(request) {
+    const { cid } = access(request, { dm: true });
+    const { as } = z.object({ as: z.coerce.number().int().optional() }).parse(request.query ?? {});
+    if (as == null) return { cid, as: null, pages: wiki.list(cid) };
+    if (auth.membership(cid, as)?.role !== 'player') throw new BadRequestError("That isn't a player in this campaign.");
+    const pages = wiki.list(cid).map((p) => wiki.forViewer(cid, p, { userId: as, seesAll: false })).filter(Boolean);
+    const ids = new Set(pages.map((p) => p.id));
+    return { cid, as, pages: pages.map((p) => (p.parent && !ids.has(p.parent) ? { ...p, parent: null } : p)) };
+  }
+
+  /** The party, for the middle of the Wheel and the Home: each player's character, and their token picture's key. */
+  const party = (cid) => store.roster(cid).filter((m) => m.role === 'player').map((m) => ({
+    id: m.user_id, name: m.name, character_name: m.character_name, token: pictures?.view(cid, m.user_id).token?.key ?? null,
+  }));
+
+  /** The Wheel: the kind families with their counts, the party, and the pages as cards. */
+  app.get('/campaigns/:cid/wiki/wheel', async (request) => {
+    const { cid, as, pages } = viewerPages(request);
+    return { families: wheelFamilies(pages), party: party(cid), pages: pages.map(summary), as };
+  });
+
+  /**
+   * The Home: its picture, the last session's page, the families, the pages
+   * changed most recently and the party; for the DM also what waits for them
+   * (not with ?as=, which shows the Home as that player would get it).
+   */
+  app.get('/campaigns/:cid/wiki/home', async (request) => {
+    const { cid, as, pages } = viewerPages(request);
+    const last = lastSessionPage(pages, store.lastProcessedSession(cid) || null);
+    return {
+      count: pages.length,
+      hero: heroPicture(pages, last),
+      last_session: last ? summary(last) : null,
+      families: wheelFamilies(pages),
+      recent: recentPages(pages).map(summary),
+      party: party(cid),
+      ...(as == null ? { waiting: { proposals: wikiAI.count(cid) } } : { as }),
+    };
   });
 
   // ---------- pictures ----------

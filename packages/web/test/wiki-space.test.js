@@ -91,3 +91,42 @@ test("wiki space: a player sent to the wiki's address stays at the table and nev
     assert.ok(!page.requests.some((r) => r.path.includes('/wiki')));
   });
 });
+
+test('wiki space: the Home is a hub (last session, a small wheel, recent changes) and the Wheel shows a family\'s kinds and pages', async () => {
+  await withPage({
+    before: async (t) => {
+      const dana = await addDm(t);
+      const pages = await twoPages(t);
+      const s1 = (await t.request('POST', `/campaigns/${t.campaign.id}/wiki`, { body: { title: 'Session 1', kind: 'session', sections: [{ heading: '', text: 'They met the Lady.', available: 'all' }] } })).json().page;
+      return { dana, ...pages, s1 };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t, { mill, s1 }) => {
+    page.click('[data-tab=wiki]');
+    await page.waitFor('.wiki-hub .wiki-last');
+    assert.match(page.text('.wiki-hub-last'), /Session 1\s*They met the Lady/);
+    assert.equal(page.$$('.wiki-hub .wiki-mini-card').length, 3);
+    assert.equal(page.$$('.wiki-hub .wiki-wheel .wiki-slice').length, 9);
+    assert.match(page.text('.wiki-hub-party'), /Thorin/);
+    assert.equal(page.$$('#wiki-main .wiki-card').length, 3, 'every page as a card below the hub');
+
+    // A slice of the Home's wheel opens the Wheel on that family.
+    page.click('.wiki-hub .wiki-slice[data-family="place"]');
+    await page.waitFor(() => page.window.location.hash === '#/wheel/place' && page.$('.wiki-wheel-view .wiki-wheel'));
+    assert.ok(page.$('.wiki-wheel-view .wiki-slice.on[data-family="place"]'));
+    assert.match(page.text('.wiki-wheel-side'), /Places\s*1 page\s*village 1/);
+    assert.deepEqual(page.$$('.wiki-wheel-view .wiki-card-title').map((e) => e.textContent), ['Millbrook']);
+
+    // Another family; then the rail's Wheel button keeps it, and a card opens its page.
+    page.click('.wiki-wheel-view .wiki-slice[data-family="person"]');
+    assert.equal(page.window.location.hash, '#/wheel/person');
+    assert.deepEqual(page.$$('.wiki-wheel-view .wiki-card-title').map((e) => e.textContent), ['The Grey Lady']);
+    page.click(page.$$('.wiki-wheel-view .wiki-card')[0]);
+    await page.waitFor(() => page.text('#wiki-main').includes('About The Grey Lady.'));
+    page.window.history.back();
+    await page.waitFor(() => page.$('.wiki-wheel-view .wiki-slice.on[data-family="person"]'));
+    assert.ok(mill && s1);
+    assert.equal(page.errors.length, 0, page.errors.join('\n'));
+  });
+});
+
