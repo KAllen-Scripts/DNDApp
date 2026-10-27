@@ -2,11 +2,11 @@
  * A page's compass: the strip under its banner that says where the page sits,
  * in pictures. Its family (to the Wheel), what it's inside (the chain up),
  * what's inside it, the pages it links to and that link to it, and a small
- * map of where it is (opening the Atlas). Later stages add a ring of people
- * and a ribbon of moments to it (mini-views.js). The server works it out for the viewer (GET …/wiki/:pid/compass).
+ * map of where it is (opening the Atlas), its ties (to the Web) and a ribbon of
+ * its moments (to the Timeline). The server works it out for the viewer (GET …/wiki/:pid/compass).
  */
 import { api, h, fileUrl } from './api.js';
-import { miniCrop } from './mini-views.js';
+import { miniCrop, miniRibbon } from './mini-views.js';
 import { KIND_FAMILIES } from './shared/wiki.js';
 import { state, nav, base, pictureImg, fam } from './wiki-data.js';
 
@@ -55,12 +55,21 @@ export function drawCompass(page, { onMaps = [] } = {}) {
     const group = (label, list, more = null) => (list.length ? h('div', { class: 'wiki-compass-group' },
       h('span', { class: 'wiki-compass-label' }, label),
       h('div', { class: 'wiki-compass-chips' }, ...list.slice(0, 8).map(chip), list.length > 8 ? h('span', { class: 'muted small' }, `+${list.length - 8} more`) : null, more)) : null);
+    // The mini-ribbon: the page's own times, opening the Timeline at them.
+    const moments = [page.when, ...(page.events ?? []).map((e) => e.when)].filter((w) => w?.from != null).map((w) => ({ at: w.from, family: c.family, title: w.text }));
+    const ribbon = moments.length ? h('div', { class: 'wiki-compass-group' }, h('span', { class: 'wiki-compass-label' }, 'When'),
+      h('button', { type: 'button', class: 'wiki-compass-map wiki-compass-ribbon', title: 'Open the Timeline at this page', onclick: () => {
+        nav.closeDrawer?.();
+        nav.enter();
+        nav.go(`#/timeline/${page.id}`);
+      } }, miniRibbon({ events: moments, width: 120, height: 32, label: `${page.title} on the Timeline` }))) : null;
     box.replaceChildren(...[
       onMaps.length ? h('div', { class: 'wiki-compass-group' }, h('span', { class: 'wiki-compass-label' }, 'On the map'), miniMap(page, onMaps[0])) : null,
       h('div', { class: 'wiki-compass-group' },
         h('span', { class: 'wiki-compass-label' }, 'Kind'),
         h('button', { type: 'button', class: `wiki-compass-family fam-${c.family}`, title: `${family.label} on the Wheel`, onclick: () => nav.go(`#/wheel/${c.family}`) },
           h('span', { 'aria-hidden': 'true' }, family.icon), ` ${family.label}`)),
+      ribbon,
       ties.length ? group('Ties', ties, toWeb) : null,
       group('Inside', c.chain),
       group('Holds', c.children),

@@ -93,6 +93,6 @@ export function initTruthToggle() {
       localStorage.setItem(TRUTH_KEY, String(on));
     } catch { /* private window: just for now */ }
     applyTruth(on);
-    if (state.view === 'web') nav.drawMain(); // the Web asks the server again, with or without the rumours
+    if (state.view === 'web' || state.view === 'timeline') nav.drawMain(); // they ask the server again, with or without the rumours
   });
 }

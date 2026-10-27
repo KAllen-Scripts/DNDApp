@@ -8,7 +8,7 @@
 import { h } from './api.js';
 import { state, nav, playerName } from './wiki-data.js';
 import { openMapAt, fitMap, setTool } from './map.js';
-import { setWikiLayers } from './map-wiki.js';
+import { setWikiLayers, pulseWikiPin } from './map-wiki.js';
 import { state as mapState } from './map-state.js';
 import { atlasOrder } from './shared/map.js';
 
@@ -74,6 +74,12 @@ export async function drawAtlas(main) {
   setWikiLayers({ forced: true, as: null });
   await openMapAt(map.id);
   requestAnimationFrame(() => fitMap());
+  if (focus?.map_id === map.id) {
+    const at = focus;
+    focus = null;
+    requestAnimationFrame(() => openMapAt(at.map_id, { x: at.x, y: at.y }));
+    pulseWikiPin(at.place_id);
+  }
   if (pending) {
     const page = pending;
     pending = null;
@@ -82,6 +88,15 @@ export async function drawAtlas(main) {
 }
 
 let pending = null; // a page to put on the map once the Atlas has drawn
+let focus = null; // a place to show once the Atlas has drawn: { map_id, place_id, x, y }
+
+/** The Timeline's Show on the map: the Atlas on that map, the place in the middle, its pin pulsing with its card open. */
+export function showOnMap(place) {
+  focus = place;
+  state.atlasMap = place.map_id;
+  if (state.view === 'atlas' && inAtlas()) nav.drawMain();
+  else nav.go(`#/atlas/${place.map_id}`);
+}
 
 /** Click (or drag) on the map in the Atlas to put this page there as a place: the place dialog opens named and linked. */
 function startPlacing(page, banner) {

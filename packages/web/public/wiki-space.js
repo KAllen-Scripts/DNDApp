@@ -36,6 +36,7 @@ export function currentRoute() {
   if (state.view === 'wheel') return `#/wheel${state.kindFilter ? `/${state.kindFilter}` : ''}`;
   if (state.view === 'atlas') return `#/atlas${state.atlasMap ? `/${state.atlasMap}` : ''}`;
   if (state.view === 'web') return `#/web${state.webAround ? `/${state.webAround}` : ''}`;
+  if (state.view === 'timeline') return `#/timeline${state.timelineFocus ? `/${state.timelineFocus}` : ''}`;
   if (!state.open) return '#/home';
   const id = state.open.page.id;
   if (id == null) return '#/new';
@@ -72,7 +73,7 @@ export function setSpace(space, { push = true } = {}) {
 
 /** Draw what the address says (on entering the space from Back, Forward or a reload). */
 export async function routeFromUrl() {
-  const m = /^#\/(home|waiting|new|wheel(?:\/([a-z]+))?|page\/([a-f0-9]+)(?:\/(edit|history))?|atlas(?:\/([A-Za-z0-9_-]+))?|web(?:\/([a-f0-9]{10}))?)?$/.exec(location.hash) ?? [];
+  const m = /^#\/(home|waiting|new|wheel(?:\/([a-z]+))?|page\/([a-f0-9]+)(?:\/(edit|history))?|atlas(?:\/([A-Za-z0-9_-]+))?|web(?:\/([a-f0-9]{10}))?|timeline(?:\/([a-f0-9]{10}))?)?$/.exec(location.hash) ?? [];
   applying = true;
   ready = true;
   try {
@@ -98,6 +99,12 @@ export async function routeFromUrl() {
       state.open = null;
       state.view = 'web';
       state.webAround = m[6] ?? null;
+      nav.drawList();
+      nav.drawMain();
+    } else if (m[1]?.startsWith('timeline')) {
+      state.open = null;
+      state.view = 'timeline';
+      state.timelineFocus = m[7] ?? null;
       nav.drawList();
       nav.drawMain();
     } else if (m[1]?.startsWith('wheel')) {
@@ -154,6 +161,7 @@ function drawRail() {
     item(route.startsWith('#/wheel') ? route : '#/wheel', '❂', 'Wheel'),
     item(route.startsWith('#/atlas') ? route : '#/atlas', '⌖', 'Atlas'),
     item(route.startsWith('#/web') ? route : '#/web', '⁂', 'Web'),
+    item(route.startsWith('#/timeline') ? route : '#/timeline', '⟿', 'Timeline'),
     item('#find', '⌕', 'Find', { onclick: () => openFind() }),
     item('#/new', '✚', 'New page', { onclick: () => nav.newPage() }),
     item('#/waiting', '✎', 'Waiting', { count: state.proposals }),

@@ -1,7 +1,7 @@
 /**
  * The wiki's Home (sketch 1 in the research): a hub to go anywhere from, by
  * pictures. The campaign's picture, "Last time" (the last session's page), the
- * Wheel, small, a tile for each view to come (the Atlas, the Web, the
+ * Wheel, small, a tile for each view (the Atlas, the Web, the
  * Timeline), the pages changed most recently, the party, and what waits for
  * the DM. Its numbers come from the server (GET …/wiki/home). Below it,
  * wiki.js draws every page as a card.
@@ -11,6 +11,7 @@ import { atlasOrder } from './shared/map.js';
 import { state as mapState } from './map-state.js';
 import { state, nav, base, report, pictureImg, fam, kindBadge } from './wiki-data.js';
 import { drawWheel } from './wiki-wheel.js';
+import { miniRibbon } from './mini-views.js';
 
 /** Draw the hub into `box` (it fills in when the server answers). */
 export async function drawHub(box) {
@@ -38,6 +39,11 @@ export async function drawHub(box) {
     fileUrl(`/campaigns/${state.campaignId}/maps/${top.id}/image?crop=0,0,${w},${hh}&size=200`).then((src) => {
       el.querySelector('.wiki-tile-art')?.replaceWith(h('img', { class: 'wiki-tile-map', src, alt: '' }));
     }, () => {});
+    return el;
+  };
+  // The Timeline tile shows the latest moments as a ribbon.
+  const timelineTile = (el) => {
+    if (data.moments?.length) el.querySelector('.wiki-tile-art')?.replaceChildren(miniRibbon({ events: data.moments, width: 96, height: 32, label: 'The latest moments' }));
     return el;
   };
   const last = data.last_session;
@@ -68,7 +74,7 @@ export async function drawHub(box) {
         h('div', { class: 'wiki-tiles' },
           atlasTile(tile('⌖', 'Atlas', 'Where: your maps, with their pages', '#/atlas')),
           tile('⁂', 'Web', 'Who: people and how they are tied', '#/web'),
-          tile('⟿', 'Timeline', 'When: what happened, in order'),
+          timelineTile(tile('⟿', 'Timeline', 'When: what happened, in order', '#/timeline')),
         ),
       ),
       h('section', { class: 'wiki-hub-party' },
