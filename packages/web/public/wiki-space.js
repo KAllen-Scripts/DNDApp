@@ -7,7 +7,7 @@
  *
  * The address says where you are, so Back, Forward and reload work:
  * ?space=wiki#/home, #/page/<id>, #/page/<id>/edit, #/page/<id>/history,
- * #/new and #/waiting. More views join the rail as they're built
+ * #/new, #/waiting and #/quests. More views join the rail as they're built
  * (docs/notes/wiki-space.md).
  */
 import { initTruthToggle } from './wiki-canon.js';
@@ -37,6 +37,7 @@ export function currentRoute() {
   if (state.view === 'atlas') return `#/atlas${state.atlasMap ? `/${state.atlasMap}` : ''}`;
   if (state.view === 'web') return `#/web${state.webAround ? `/${state.webAround}` : ''}`;
   if (state.view === 'templates') return '#/templates';
+  if (state.view === 'quests') return '#/quests';
   if (state.view === 'timeline') return `#/timeline${state.timelineFocus ? `/${state.timelineFocus}` : ''}`;
   if (!state.open) return '#/home';
   const id = state.open.page.id;
@@ -74,7 +75,7 @@ export function setSpace(space, { push = true } = {}) {
 
 /** Draw what the address says (on entering the space from Back, Forward or a reload). */
 export async function routeFromUrl() {
-  const m = /^#\/(home|waiting|new|templates|wheel(?:\/([a-z]+))?|page\/([a-f0-9]+)(?:\/(edit|history))?|atlas(?:\/([A-Za-z0-9_-]+))?|web(?:\/([a-f0-9]{10}))?|timeline(?:\/([a-f0-9]{10}))?)?$/.exec(location.hash) ?? [];
+  const m = /^#\/(home|waiting|new|templates|quests|wheel(?:\/([a-z]+))?|page\/([a-f0-9]+)(?:\/(edit|history))?|atlas(?:\/([A-Za-z0-9_-]+))?|web(?:\/([a-f0-9]{10}))?|timeline(?:\/([a-f0-9]{10}))?)?$/.exec(location.hash) ?? [];
   applying = true;
   ready = true;
   // A player only reads: the DM's tools (new, templates, waiting, edit, history) open the Home instead.
@@ -95,6 +96,11 @@ export async function routeFromUrl() {
     } else if (m[1] === 'templates') {
       state.open = null;
       state.view = 'templates';
+      nav.drawList();
+      nav.drawMain();
+    } else if (m[1] === 'quests') {
+      state.open = null;
+      state.view = 'quests';
       nav.drawList();
       nav.drawMain();
     } else if (m[1]?.startsWith('atlas')) {
@@ -170,6 +176,7 @@ function drawRail() {
     item(route.startsWith('#/atlas') ? route : '#/atlas', '⌖', 'Atlas'),
     item(route.startsWith('#/web') ? route : '#/web', '⁂', 'Web'),
     item(route.startsWith('#/timeline') ? route : '#/timeline', '⟿', 'Timeline'),
+    item('#/quests', '✦', 'Quests'),
     item('#find', '⌕', 'Find', { onclick: () => openFind() }),
     // The DM's own tools; a player only reads (stage 6a).
     state.dm && item('#/new', '✚', 'New page', { onclick: () => nav.newPage() }),

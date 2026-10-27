@@ -24,7 +24,7 @@ import { z } from 'zod';
 import { renderRecord } from './kb/store.js';
 import { BadRequestError, NotFoundError } from './store.js';
 import { WIKI_LIMITS as L } from './wiki.js';
-import { narrowest, audienceOf, canSeeAudience, wikiKey, wikiPictures as picturesIn, PICTURE_RE, TONES, embedNames, openPrepPage, PREP_KIND } from '@dndapp/shared/wiki.js';
+import { narrowest, audienceOf, canSeeAudience, wikiKey, wikiPictures as picturesIn, PICTURE_RE, TONES, unlink, embedNames, openPrepPage, PREP_KIND } from '@dndapp/shared/wiki.js';
 import { json } from './db/index.js';
 import { CITATION_RE, normalizeSources } from '@dndapp/shared/citations.js';
 import { parseWhen, whenText, whenKey } from '@dndapp/shared/wiki-time.js';
@@ -120,6 +120,15 @@ Don't propose what's already waiting for the DM, or anything the DM rejected bef
 // ---------- the AI as a writing partner (stage 5b): on the DM's button, one call each, as proposals ----------
 
 /** After a session (stage 7c): which of the prep page's clues came out, and what carries over to the next one. */
+/** Make a list (stage 8a): which pages fit the DM's words. */
+export const ListSchema = z.object({
+  name: z.string().describe('A short name for the list, in the words a DM would use'),
+  page_ids: z.array(z.string()).describe('The ids of the pages that fit, best first; [] when none do'),
+});
+const LIST_SYSTEM = `You pick pages from a D&D campaign's wiki for a list the DM asks for. Each page is one line: id | title | kind | tags | facts.
+Choose only pages the lines show fit what the DM asked; never guess beyond them. Return their ids and a short name for the list.`;
+const LIST_MAX = 30;
+
 export const PrepSchema = z.object({
   clues: z.array(z.object({
     page_id: z.string().describe('The clue page'),
@@ -859,6 +868,47 @@ export function createWikiAI({ db, archive, store, kb, wiki, wikiPictures = null
         }
       }
       return { approved, failed };
+    },
+
+    // ---------- the DM's saved lists (stage 8a) ----------
+    // Kept beside the proposals (action 'list', status 'saved' or 'removed') so the archive keeps them, and never in
+    // the campaign's settings, which every player gets: a list's name can give a secret away.
+
+    /** The DM's lists, oldest first: { id, name, filter }. */
+    lists: (cid) => list(cid, 'saved').filter((p) => p.action === 'list').map(({ id, name, filter }) => ({ id, name, filter })),
+
+    /** Save a list (a new one, or `id` renamed or refiltered). */
+    saveList(cid, { id = null, name, filter }) {
+      const now = new Date().toISOString();
+      const old = id ? get(cid, id) : null;
+      if (old && (old.action !== 'list' || old.status !== 'saved')) throw new NotFoundError('No such list');
+      if (!old && wikiAI.lists(cid).length >= LIST_MAX) throw new BadRequestError(`A wiki keeps up to ${LIST_MAX} lists. Remove one first.`);
+      const p = write(cid, { ...(old ?? { id: crypto.randomBytes(5).toString('hex'), created_at: now }), action: 'list', status: 'saved', name, filter, updated_at: now });
+      return { id: p.id, name: p.name, filter: p.filter };
+    },
+
+    /** Remove a list (the archive keeps it). */
+    removeList(cid, id) {
+      const old = get(cid, id);
+      if (old.action !== 'list' || old.status !== 'saved') throw new NotFoundError('No such list');
+      write(cid, { ...old, status: 'removed', updated_at: new Date().toISOString() });
+    },
+
+    /**
+     * Make a list (stage 8a): the DM's words ("hostile NPCs in Millbrook") and the pages to pick from (the DM's; the
+     * route filters what comes back for whoever views it). One quick call on Ask's model: { name, ids }.
+     */
+    async makeList(cid, words, pages) {
+      const index = pages.filter((p) => !p.template).slice(0, 600).map((p) => {
+        const facts = p.facts.filter((f) => f.value.trim()).slice(0, 8).map((f) => `${f.label}: ${unlink(f.value).slice(0, 80)}`).join('; ');
+        return `${p.id} | ${p.title} | ${p.kind || '-'}${p.tags.length ? ` | #${p.tags.join(' #')}` : ''}${facts ? ` | ${facts}` : ''}`;
+      });
+      const out = await llm.structured({
+        task: 'qa', purpose: 'wiki:list', effort: config?.qa?.quickEffort, system: LIST_SYSTEM, schema: ListSchema, campaignId: cid,
+        prompt: `<wiki_pages>\n${index.join('\n') || '(the wiki is empty)'}\n</wiki_pages>\n\n<asked_for>${words}</asked_for>`,
+      });
+      const known = new Set(pages.map((p) => p.id));
+      return { name: clean(out.name, 80) || clean(words, 80), ids: [...new Set(out.page_ids.filter((id) => known.has(id)))].slice(0, 100) };
     },
   };
   return wikiAI;

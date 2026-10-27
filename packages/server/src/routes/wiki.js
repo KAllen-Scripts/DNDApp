@@ -17,6 +17,7 @@ import { webGraph } from '../wiki-web.js';
 import { pageOnMaps, makePageFor, atlasLayers, pagePlaces, shownToViewer } from '../wiki-maps.js';
 import { timeline } from '../wiki-timeline.js';
 import { STARTER_TEMPLATES } from '@dndapp/shared/wiki-templates.js';
+import { viewerPagesFor } from './wiki-viewer.js';
 import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass, embedsIn, prepMarks } from '../wiki-views.js';
 
 export function registerWiki(app, r) {
@@ -116,18 +117,7 @@ export function registerWiki(app, r) {
 
   // ---------- the space's views (wiki-views.js), as the DM sees them or ?as= a player ----------
 
-  /**
-   * The viewer and the pages they may see (a hidden parent left out): the DM, or the DM `?as=<player id>`, or a
-   * player (stage 6a: always as themselves, whatever `?as=` says).
-   */
-  function viewerPages(request) {
-    const a = access(request);
-    const { cid } = a;
-    const { as } = a.role === 'dm' ? z.object({ as: z.coerce.number().int().optional() }).parse(request.query ?? {}) : { as: a.userId };
-    if (as == null) return { cid, as: null, pages: wiki.list(cid) };
-    if (auth.membership(cid, as)?.role !== 'player') throw new BadRequestError("That isn't a player in this campaign.");
-    return { cid, as, pages: wiki.listFor(cid, { userId: as, seesAll: false }) };
-  }
+  const viewerPages = viewerPagesFor(r);
 
   /**
    * How we know it (stage 3b): the transcript lines behind a page's sources, the way Ask's citations show them

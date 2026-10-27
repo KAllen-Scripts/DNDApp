@@ -14,6 +14,7 @@ import { drawWheel } from './wiki-wheel.js';
 import { miniRibbon } from './mini-views.js';
 import { openMakeUp } from './wiki-write.js';
 import { newFromTemplate } from './wiki-templates.js';
+import { drawLists } from './wiki-lists.js';
 import { STARTER_TEMPLATES } from './shared/wiki-templates.js';
 
 /** Draw the hub into `box` (it fills in when the server answers). */
@@ -78,6 +79,7 @@ export async function drawHub(box) {
           atlasTile(tile('⌖', 'Atlas', 'Where: your maps, with their pages', '#/atlas')),
           tile('⁂', 'Web', 'Who: people and how they are tied', '#/web'),
           timelineTile(tile('⟿', 'Timeline', 'When: what happened, in order', '#/timeline')),
+          tile('✦', 'Quests', 'What the party is doing, by status', '#/quests'),
           // Session prep (stage 7b): the prep page being prepared, or a new one from the Session plan template.
           data.waiting ? h('button', { type: 'button', class: 'wiki-tile wiki-tile-prep', onclick: () => (data.prep ? nav.go(`#/page/${data.prep.id}`) : newFromTemplate(STARTER_TEMPLATES.find((t) => t.id === 'starter-session-plan'))) },
             h('span', { class: 'wiki-tile-art', 'aria-hidden': 'true' }, '☾'),
@@ -100,6 +102,8 @@ export async function drawHub(box) {
           waiting ? `${waiting} change${waiting === 1 ? '' : 's'} from the AI wait for you` : 'Nothing waits for you') : null,
       ),
     ),
+    // The DM's lists (stage 8a), filled in when the server answers.
+    data.waiting ? (() => { const lists = h('section', { class: 'wiki-hub-lists' }); drawLists(lists); return lists; })() : null,
     data.recent.length ? h('section', { class: 'wiki-hub-recent' },
       h('h3', {}, 'Changed lately'),
       h('div', { class: 'wiki-minis' }, ...data.recent.map(mini))) : null,

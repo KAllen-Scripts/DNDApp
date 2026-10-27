@@ -27,6 +27,8 @@ import { resetSpace } from './wiki-space.js';
 import { drawWebView, leaveWeb } from './wiki-web.js';
 import { drawTimeline, leaveTimeline } from './wiki-timeline.js';
 import { drawTemplates, saveAsTemplate } from './wiki-templates.js';
+import { drawQuests } from './wiki-quests.js';
+import { openSaveList } from './wiki-lists.js';
 import { linkHints } from './wiki-write.js';
 import { drawWheel } from './wiki-wheel.js';
 import { drawHub } from './wiki-home.js';
@@ -180,6 +182,8 @@ async function drawWheelView() {
               const on = state.kindKey === key;
               return h('button', { type: 'button', class: `wiki-chip wiki-kind fam-${family.family}${on ? ' on' : ''}`, 'aria-pressed': on ? 'true' : 'false', onclick: () => { state.kindKey = on ? null : key; redraw(); } }, `${k.kind || 'no kind'} ${k.count}`);
             })) : null,
+          // The filter shown, saved as a list on the Home (stage 8a).
+          state.dm ? h('button', { type: 'button', class: 'ghost small wiki-save-list', onclick: () => openSaveList({ family: state.kindFilter, kind: family?.kinds.find((k) => wikiKey(k.kind) === state.kindKey)?.kind, tag: state.tagFilter }) }, '☰ Save as a list') : null,
         ),
       ),
       h('div', { class: 'wiki-home' }, ...cardGrid(redraw)),
@@ -254,7 +258,7 @@ function phoneBack() {
 function drawMain() {
   const main = $('#wiki-main');
   hidePreview();
-  const reading = !!state.open || state.view === 'review' || state.view === 'wheel' || state.view === 'atlas' || state.view === 'web' || state.view === 'timeline' || state.view === 'templates';
+  const reading = !!state.open || state.view === 'review' || state.view === 'wheel' || state.view === 'atlas' || state.view === 'web' || state.view === 'timeline' || state.view === 'templates' || state.view === 'quests';
   $('#wiki-view').classList.toggle('wiki-reading', reading);
   drawReviewButton();
   if (state.view !== 'atlas') leaveAtlas();
@@ -266,6 +270,7 @@ function drawMain() {
   if (state.view === 'web') return drawWebView(main);
   if (state.view === 'timeline') return drawTimeline(main);
   if (state.view === 'templates') return drawTemplates(main);
+  if (state.view === 'quests') return drawQuests(main);
   if (state.view === 'review') return drawReview();
   if (state.view === 'wheel') return drawWheelView();
   if (reading) queueMicrotask(() => main.prepend(phoneBack()));
