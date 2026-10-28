@@ -20,6 +20,8 @@ const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
  */
 export const PIPELINE_VERSION = 38;
 
+const DATA_SET = env.DATA_SET === 'example' ? 'example' : 'real';
+
 const DEFAULT_MODEL = env.MODEL || 'claude-opus-5-5';
 
 export const config = {
@@ -29,7 +31,12 @@ export const config = {
   publicUrl: env.PUBLIC_URL || 'https://thepartyledger.fyi',
   host: env.HOST || '127.0.0.1',
   port: num(env.PORT, 4400),
-  dataDir: path.resolve(repoRoot, env.DATA_DIR || 'data'),
+  // Which data the server runs on (owner, 2026-10-28: "a toggle ... that switches between the example data and real
+  // data"): 'real' (data/, the default) or 'example' (data-example/, the made-up test campaign in example/, seeded
+  // there by itself the first time). Each is a whole data folder of its own, so the two never mix: DATA_DIR names the real
+  // one and EXAMPLE_DATA_DIR the example one, so a .env that sets DATA_DIR=data can't send the example data there.
+  dataSet: DATA_SET,
+  dataDir: path.resolve(repoRoot, DATA_SET === 'example' ? env.EXAMPLE_DATA_DIR || 'data-example' : env.DATA_DIR || 'data'),
   // The player web page, served by this server at "/".
   webDir: path.resolve(repoRoot, env.WEB_DIR || 'packages/web/public'),
   // Largest upload (transcripts, sheet files, maps). Other requests are limited to 1 MB.
@@ -180,7 +187,8 @@ export const config = {
 export const paths = {
   archive: path.join(config.dataDir, 'archive'),
   db: path.join(config.dataDir, 'dndapp.sqlite'),
-  models: path.join(config.dataDir, 'models'),
+  // The embedding model is the same whichever data set runs, so both share the real folder's copy.
+  models: path.join(path.resolve(repoRoot, env.DATA_DIR || 'data'), 'models'),
 };
 
 /** Rough token estimate (~4 chars per token for English). */
