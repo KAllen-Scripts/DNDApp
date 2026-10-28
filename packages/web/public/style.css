@@ -921,8 +921,8 @@ label.check input { width: auto; flex: none; margin: 0; }
 .sessions-panel .sessions { margin-top: 0.4rem; }
 #sessions-status:empty { display: none; }
 #sessions-status { margin: 0.4rem 0 0; }
-.sessions-campaign { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
-.sessions-campaign select { padding: 0.3rem 0.45rem; max-width: 100%; }
+.sessions-campaign { margin: 0; font-size: 0.85rem; color: var(--muted); }
+.sessions-campaign strong { color: var(--text); }
 .sessions-table td { vertical-align: top; }
 .sessions-table .status-cell button { margin-top: 0.3rem; padding: 0.25rem 0.6rem; font-size: 0.85rem; }
 .notice { padding: 0.6rem 0.8rem; border-radius: 8px; background: var(--camp-soft); border: 1px solid var(--camp-line); font-size: 0.9rem; }
@@ -1218,7 +1218,7 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 }
 /* A popped-out window: just the one page. */
 .popped-window #app-view { --page-width: none; --bar-width: 100%; }
-.popped-window :is(.tabs, #switch-campaign, .change-password, #tab-popout, #map-beside) { display: none !important; }
+.popped-window :is(.tabs, .switch-campaign, .change-password, #tab-popout, #map-beside) { display: none !important; }
 
 /*
  * One set of measurements for the whole sheet, so boxes line up in every

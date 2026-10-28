@@ -164,6 +164,7 @@ When you change the web page, add or update a test in `packages/web/test/` (READ
 
 ## Checks to run in VS Code
 
+- **Switch campaign (2026-10-28):** with an account in two campaigns, on the PC and the phone: Switch campaign should be beside the campaign's name and in the ⚙ menu (on the phone, the ☰ sheet), and the Sessions tab should say "For" the campaign you're in, with no picker.
 - **Transcript progress (2026-10-28, rest of the transcript upload check):** upload a transcript with the real AI running (the browser script's fake AI finishes at once): does the Sessions table show processing's progress, on the PC and the phone? (The picker, the speaker guesses and the phone layout were checked in Chrome on 2026-10-28.)
 - **Back to the real data (2026-10-28, rest of the example data check):** the live server was running on the example data on 2026-10-28 (`.env` has `DATA_SET=example`). Take the line out and `npm run restart`: the real data should be back. (The example campaign itself was checked in Chrome on 2026-10-28.)
 - **As of (2026-10-27, stage 11):** on the real campaign, in the Atlas and the Web, drag As of back through the sessions: do the tokens and pages look as they did then, and is it quick enough (the first time for each session is the slow one)? View as a player in the past. On the Timeline, try Lanes by character after a few journeys.
@@ -1884,3 +1885,9 @@ The owner (2026-10-21 feedback, item 2): "some way of managing attacks and such 
 - Fixed: a Who knows cell for a page the player can't see crashed the side panel; the DM's top bar put a long campaign name under the tabs (now cut short with a tooltip, the bar is wider and the DM's tools go to icons below 1440 px); on a phone the Atlas's map was a short strip, ☰ covered the wiki rail's last button, and the Sessions table pushed the page past the screen's edge; a player's empty Atlas told them to import a map; transcript speakers were only guessed when they contained an account's name ("Rowan" now finds test-rowan). Each has a regression test.
 - Taken off the list (done): the wiki's space, the example data (but the live server is on the example data until `DATA_SET=example` comes out of `.env`). Narrowed to what's left: transcript progress, the Atlas's two-finger zoom, Who knows' reveal and handout warning, Tidy up's buttons on a phone, Tidier pages' other parts. The rest of the list (the real AI, a real phone, Foundry, Obsidian, the books) is still there.
 - Seen but left: after zooming out in the Atlas, the table's Map tab keeps that zoom (press Fit); labels on the region map overlap a little where places are close (Mother Sallow's stilt-house and The Sallowmere).
+
+### 2026-10-28: Sessions follows the campaign the DM is in
+- The owner: "In 'Sessions', the DM can choose a campaign. This actually doesn't make sense because the DM chooses one at login. Speaking of, how do they change the campaign they are viewing?"
+- The Sessions tab's Campaign picker is gone: the tab is for the campaign the DM is in, and says so ("For …"). `loadSessions` takes `{ campaign, guarded }`.
+- Switch campaign, which was only a small link beside the campaign's name, is now also in the ⚙ account menu (on a phone, the ☰ sheet). It still shows only to someone in two or more campaigns; with one campaign there's nothing to switch to.
+- Tests: `web/test/sessions.test.js` (the tab has no picker and follows Switch campaign from the ⚙ menu; one campaign, no Switch campaign anywhere).
