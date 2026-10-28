@@ -50,7 +50,7 @@ export async function drawAtlas(main) {
     leaveAtlas();
     main.replaceChildren(h('div', { class: 'wiki-atlas-empty' },
       h('h2', {}, 'The Atlas'),
-      h('p', { class: 'muted' }, 'No maps yet. Import one on the Map tab; its places can then link to pages here.')));
+      h('p', { class: 'muted' }, state.dm ? 'No maps yet. Import one on the Map tab; its places can then link to pages here.' : 'No maps to see yet. Your DM shares them here.')));
     return;
   }
   const viewAs = !state.dm ? null : h('select', { 'aria-label': 'View as', title: 'Show the layers as a player would get them' },

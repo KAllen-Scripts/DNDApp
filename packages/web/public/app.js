@@ -210,6 +210,7 @@ async function enterCampaign(campaign) {
   storage.set(CAMPAIGN_KEY, String(campaign.id));
   tabCampaign.set(campaign.id);
   $('#campaign-name').textContent = campaign.name;
+  $('#campaign-name').title = campaign.name;
   $('#character').textContent = describe(campaign);
   $('#switch-campaign').hidden = state.me.campaigns.length < 2;
   $('#account-name').textContent = state.me.user.name;

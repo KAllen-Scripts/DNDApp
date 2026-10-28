@@ -78,7 +78,7 @@ async function showCell(side, row, player, redraw) {
   } }, `Reveal to ${who}`);
   side.replaceChildren(
     h('h3', {}, `${page.title}, as ${who} has it`),
-    theirs ? h('div', { class: 'wiki-knows-version wiki-content' }, ...pageContent(theirs.page, { dm: false, me: player.id, embeds: theirs.embeds ?? {} })) : h('p', { class: 'muted' }, `${who} can't see this page.`),
+    theirs?.page ? h('div', { class: 'wiki-knows-version wiki-content' }, ...pageContent(theirs.page, { dm: false, me: player.id, embeds: theirs.embeds ?? {} })) : h('p', { class: 'muted' }, `${who} can't see this page.`),
     parts,
     h('div', { class: 'wiki-actions' }, reveal),
   );

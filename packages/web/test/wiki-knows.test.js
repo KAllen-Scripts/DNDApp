@@ -55,3 +55,20 @@ test('who knows what: a player\'s lore that would spoil shows the warning under 
     assert.match(page.text('#wiki-main .wiki-spoilers'), /names The Pale Hand, which Lyra doesn't know yet/);
   });
 });
+
+test("regression: a Who knows cell for a page the player can't see says so (it crashed on the server's empty page)", async () => {
+  await withPage({
+    before: async (t) => {
+      const hand = await make(t)({ title: 'The Pale Hand', kind: 'faction', available: 'dm', sections: [{ heading: '', text: 'A cult.', available: 'all' }] });
+      return { dana: await addDm(t), hand };
+    },
+    page: (t, { dana }) => ({ as: dana, path: '/?space=wiki#/knows' }),
+  }, async (page, t, { hand }) => {
+    const cell = () => page.$(`#wiki-main tr[data-page="${hand.id}"] .wiki-knows-cell[data-player="${t.alex.id}"]`);
+    await page.waitFor(() => cell());
+    page.click(cell());
+    await page.waitFor(() => /can't see this page/.test(page.text('#wiki-main .wiki-knows-side')));
+    assert.match(page.text('#wiki-main .wiki-knows-side h3'), /The Pale Hand, as Lyra has it/);
+    assert.ok(page.$('#wiki-main .wiki-knows-parts'), 'the parts to reveal are still offered');
+  });
+});

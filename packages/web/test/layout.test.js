@@ -271,3 +271,23 @@ test('accent colour: your own over any theme, with readable text on it; back to 
     assert.equal(root(page).style.getPropertyValue('--accent'), '');
   });
 });
+
+test("regression: a long campaign name in the DM's bar is cut short with its tooltip, not spilled under the tabs", async () => {
+  // "The Lanterns of Saltreach" wrapped a word a line in a 25 px column and ran under the DM's ten tabs.
+  const css = fs.readFileSync(new URL('../public/style.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const rule = css.split('}').find((r) => r.split('{')[0].trim() === '#campaign-name') ?? '';
+  assert.match(rule, /white-space:\s*nowrap/);
+  assert.match(rule, /text-overflow:\s*ellipsis/);
+  assert.match(rule, /overflow:\s*hidden/);
+  await withPage(asSam(), async (page) => {
+    assert.equal(page.$('#campaign-name').title, page.text('#campaign-name'));
+  });
+});
+
+test("regression: the Sessions tab's table scrolls in its own box on a phone instead of pushing the page past the screen's edge", () => {
+  // .sessions was a grid with an automatic column, which grew to the table's width, so the table's own scroll box
+  // never scrolled and the campaign picker, the table and the upload box ran off the right of a phone.
+  const css = fs.readFileSync(new URL('../public/style.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const rule = css.split('}').find((r) => r.split('{')[0].trim() === '.sessions') ?? '';
+  assert.match(rule, /grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+});

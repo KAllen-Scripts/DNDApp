@@ -104,7 +104,7 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
 /* The page fills the window. Each tab's panel is as wide as it needs (--page-width:
    narrow for Ask and Notes, wider for the sheet and the map), but the bar along the
    top is always the same width (--bar-width), so it never moves when you switch tabs. */
-#app-view { display: flex; flex-direction: column; height: 100%; --page-width: 860px; --bar-width: 1280px; }
+#app-view { display: flex; flex-direction: column; height: 100%; --page-width: 860px; --bar-width: 1480px; }
 #app-view > .panel { width: 100%; max-width: var(--page-width); margin-inline: auto; }
 .topbar {
   display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
@@ -114,6 +114,8 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
 .tab-icon { display: none; }
 .topbar .who { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
 .topbar .who select { width: auto; max-width: 100%; padding: 0.3rem 0.5rem; }
+/* A long campaign name is cut short (the whole name is its tooltip) rather than spilling under the DM's ten tabs. */
+#campaign-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tabs { display: flex; gap: 0.25rem; background: var(--surface-2); padding: 0.2rem; border-radius: 9px; }
 .tabs button { border: none; background: transparent; padding: 0.35rem 0.9rem; border-radius: 7px; }
 .tabs button[aria-selected="true"] { background: var(--surface); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }
@@ -141,6 +143,11 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
 @media (max-width: 1180px) {
   :root:not([data-phone]) #app-view > .topbar .bar-tool:not(#account-menu-open) .bar-label,
   :root:not([data-phone]) #app-view > .topbar .dice-open span { display: none; }
+}
+/* The DM's bar has ten tabs, so its tools go to icons sooner, leaving room for the campaign's name. */
+@media (max-width: 1440px) {
+  :root:not([data-phone]) #app-view > .topbar:has([data-tab="sessions"]:not([hidden])) .bar-tool:not(#account-menu-open) .bar-label,
+  :root:not([data-phone]) #app-view > .topbar:has([data-tab="sessions"]:not([hidden])) .dice-open span { display: none; }
 }
 
 .panel { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0.75rem 16px 16px; gap: 0.75rem; }
@@ -909,7 +916,8 @@ label.check input { width: auto; flex: none; margin: 0; }
 .editor-buttons { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
 
 /* The DM's Sessions tab (sessions.js) */
-.sessions { display: grid; gap: 0.6rem; }
+/* One column no wider than the page, so a wide sessions table scrolls in its own box instead of widening the page. */
+.sessions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; }
 .sessions-panel .sessions { margin-top: 0.4rem; }
 #sessions-status:empty { display: none; }
 #sessions-status { margin: 0.4rem 0 0; }

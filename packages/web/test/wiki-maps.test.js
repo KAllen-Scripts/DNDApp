@@ -97,3 +97,11 @@ test('wiki atlas: the map moves into the wiki with its layers and back to the ta
     assert.equal(page.errors.length, 0, page.errors.join('\n'));
   });
 });
+
+test("regression: a player's Atlas with no maps to see doesn't tell them to import one", async () => {
+  await withPage({ page: (t) => ({ as: t.sam, path: '/?space=wiki#/atlas' }) }, async (page) => {
+    await page.waitFor(() => page.$('#wiki-main .wiki-atlas-empty'));
+    assert.match(page.text('#wiki-main .wiki-atlas-empty'), /Your DM shares them here/);
+    assert.doesNotMatch(page.text('#wiki-main .wiki-atlas-empty'), /Import/);
+  });
+});
