@@ -114,7 +114,8 @@ async function readEvents(res, onEvent) {
 /** Fetch a file that needs the login (an <img> can't send it) and return a URL for it. */
 export async function fileUrl(path) {
   const res = await fetch(path, { headers: { authorization: `Bearer ${getToken()}` } });
-  checkVersion(res);
+  // No checkVersion here: pictures are cached for a year with the headers they first came
+  // with, so a cached one carries an old version and the page would reload forever.
   if (res.status === 401) throw new LoggedOut();
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Request failed (${res.status})`);
   return URL.createObjectURL(await res.blob());

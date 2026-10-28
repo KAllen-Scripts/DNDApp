@@ -76,6 +76,30 @@ test('regression: a page opened before the server was updated reloads itself, wa
   });
 });
 
+test('regression: a picture from the browser cache with an old page version does not reload the page', async () => {
+  // Pictures are cached for a year with their first headers; after an update, each cached one made the page reload, forever.
+  await withPage({ page: (t) => ({ as: t.sam }) }, async (page) => {
+    const { api, fileUrl, reloadPage } = await page.module('api.js');
+    let reloads = 0;
+    reloadPage.now = () => reloads++;
+    await api('GET', '/me');
+    const before = globalThis.fetch;
+    globalThis.fetch = async (...args) => {
+      const res = await before(...args);
+      const headers = new Headers(res.headers);
+      headers.set('x-page-version', 'cached-before-the-update');
+      return new Response(res.body, { status: res.status, headers });
+    };
+    try {
+      await fileUrl('/me');
+      await new Promise((r) => setTimeout(r, 10));
+    } finally {
+      globalThis.fetch = before;
+    }
+    assert.equal(reloads, 0);
+  });
+});
+
 test('logout: ends the login on the server and shows the login form', async () => {
   await withPage({ page: (t) => ({ as: t.sam }) }, async (page, t) => {
     assert.ok(page.visible('#app-view'));
