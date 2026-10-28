@@ -47,7 +47,7 @@ server's own API (so it's validated and archived like anything the DM makes) wit
 
 ## Feeding the transcripts in
 
-Upload them in order on the admin screen, one session each, dated **after** the day the example was
+Upload them in order as the DM (`test-rowan`) on the **Sessions** tab, one session each, dated **after** the day the example was
 seeded (sessions take the map and sheet changes made on their date, and the seed made lots). Link the
 speakers on the first upload (left to you on purpose, to try the upload screen's guesses): Rowan is the DM
 (`test-rowan`), Mags plays Wren (`test-mags`), Theo plays Bran (`test-theo`), Jules plays Pip (`test-jules`),

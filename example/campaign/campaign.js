@@ -6,7 +6,7 @@
 
 export const CAMPAIGN = 'The Lanterns of Saltreach';
 
-/** The admin login for the example data (it uploads the transcripts). */
+/** The admin login for the example data (the DM, test-rowan, uploads the transcripts). */
 export const ADMIN = 'test-admin';
 
 /**

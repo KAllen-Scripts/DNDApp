@@ -1,10 +1,10 @@
 /**
- * The admin screen (admin.js, admin-sessions.js): accounts, campaigns,
- * members and session uploads.
+ * The admin screen (admin.js): accounts, campaigns and members. Session
+ * uploads are the DM's (sessions.test.js).
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { withPage, addAccount, upload, createFakeLLM, SAMPLE, PASSWORD } from './helpers.js';
+import { withPage, addAccount, upload, SAMPLE, PASSWORD } from './helpers.js';
 
 const asAdmin = (opts = {}) => ({ ...opts, page: (t) => ({ as: { token: t.dmToken } }) });
 
@@ -33,7 +33,8 @@ test('admin: accounts and campaigns are listed', async () => {
     const card = campaignCard(page, 'Test Campaign');
     assert.deepEqual([...card.querySelectorAll('.campaign-meta .pill')].map((p) => p.textContent), ['0 sessions', '2 players', 'DM: Kenny']);
     assert.deepEqual([...card.querySelectorAll('tbody tr td:first-child')].map((td) => td.textContent), ['Kenny', 'Alex', 'Sam']);
-    assert.match(page.text(card.querySelector('.sessions-list')), /No sessions uploaded yet/);
+    // Transcripts are the DM's to upload, not the admin's.
+    assert.equal(card.querySelector('.upload-form'), null);
   });
 });
 
@@ -227,98 +228,5 @@ test('admin: with no campaigns, the lists say so', async () => {
   await withPage(asAdmin({ before: (t) => t.request('DELETE', `/admin/campaigns/${t.campaign.id}`) }), async (page) => {
     assert.equal(page.text('#campaigns'), 'No campaigns yet. Create one above.');
     assert.match(page.text('#add-user-campaigns'), /No campaigns yet/);
-  });
-});
-
-// ---------- sessions ----------
-
-const sessionsOf = (page) => campaignCard(page, 'Test Campaign').querySelector('.sessions');
-
-test('sessions: paste a transcript, check who\'s who, upload; it gets processed', async () => {
-  await withPage(asAdmin({ before: async (t) => { await t.request('POST', `/campaigns/${t.campaign.id}/notes`, { as: t.sam.token, body: { text: 'A note' } }); } }), async (page, t) => {
-    const box = sessionsOf(page);
-    // A note with no transcript yet is waiting, and its date is suggested.
-    assert.match(page.text(box.querySelector('.notice')), /Player notes waiting for a transcript.*1 note from 1 player/);
-    const form = box.querySelector('form.upload-form');
-    assert.equal(form.querySelector('[aria-label="Session number"]').value, '1');
-    assert.match(page.text(form.querySelector('.hint')), /1 note from 1 player on .* will go with this session/);
-    assert.ok(form.querySelector('[type=submit]').disabled);
-
-    // Submitting before there's a transcript says what's missing.
-    page.submit(form);
-    assert.match(message(page), /Choose a transcript file/);
-
-    page.type(form.querySelector('[aria-label="Transcript text"]'), SAMPLE);
-    await page.waitFor(() => form.querySelectorAll('.speaker-row').length === 3, { what: 'the speaker preview' });
-    assert.match(page.text(form.querySelector('.speakers p')), /6 lines, 00:00:05 to 00:02:00/);
-    const picks = Object.fromEntries([...form.querySelectorAll('.speaker-row')].map((r) => [r.querySelector('strong').textContent, r.querySelector('select').selectedOptions[0].textContent]));
-    assert.deepEqual(picks, { KennyDM: 'Kenny (DM)', SamPlays: 'Sam (Thorin)', AlexR: 'Alex (Lyra)' });
-    assert.ok(!form.querySelector('[type=submit]').disabled);
-
-    // Unlink one: the upload asks first (cancelled, then confirmed).
-    page.type(form.querySelector('[aria-label="Who is AlexR"]'), '');
-    assert.ok(form.querySelector('[aria-label="Who is AlexR"]').closest('.speaker-row').classList.contains('unlinked'));
-    page.type(form.querySelector('[aria-label="Title"]'), 'Arrival in Brindle');
-    page.answers.confirm = [false, true];
-    page.submit(form);
-    assert.match(page.dialogs.at(-1).message, /aren't linked to an account: AlexR/);
-    assert.equal(page.requests.filter((r) => r.method === 'POST' && r.path.endsWith('/sessions')).length, 0);
-    page.submit(form);
-    await page.settle();
-    assert.match(message(page), /Uploaded session #1 .*Processing has started/);
-    const sent = page.requests.find((r) => r.method === 'POST' && r.path.endsWith('/sessions')).body;
-    assert.equal(sent.title, 'Arrival in Brindle');
-    assert.deepEqual(sent.speakers.map((s) => s.user_id), [t.dm.id, t.sam.id, null]);
-
-    // Once processed, the list says so (it refreshes itself while anything is processing).
-    await t.jobs.idle();
-    await page.waitFor(() => /processed/.test(page.text(sessionsOf(page).querySelector('.sessions-list'))), { timeout: 8000, what: 'the session to show as processed' });
-    const row = sessionsOf(page).querySelector('.sessions-table tbody tr');
-    assert.match(page.text(row), /#1.*Arrival in Brindle.*1 note from 1 player.*2 accounts.*processed/);
-    assert.equal(sessionsOf(page).querySelector('.notice'), null);
-  });
-});
-
-test('sessions: a number that\'s taken is refused; a date that\'s taken asks first; a bad transcript is reported', async () => {
-  await withPage(asAdmin({ before: (t) => upload(t, { transcript: SAMPLE, played_on: '2026-10-01' }) }), async (page) => {
-    const form = sessionsOf(page).querySelector('form.upload-form');
-    assert.equal(form.querySelector('[aria-label="Session number"]').value, '2');
-
-    page.type(form.querySelector('[aria-label="Transcript text"]'), 'no timestamps here');
-    await page.waitFor(() => form.querySelector('.speakers .error'), { what: 'the error' });
-    assert.match(page.text(form.querySelector('.speakers')), /^Can't read this transcript/);
-
-    page.setFiles(form.querySelector('[aria-label="Transcript file"]'), [{ name: 's.txt', type: 'text/plain', content: SAMPLE }]);
-    await page.waitFor(() => form.querySelectorAll('.speaker-row').length === 3, { what: 'the speaker preview' });
-    page.type(form.querySelector('[aria-label="Session number"]'), '1');
-    page.submit(form);
-    assert.match(message(page), /Session #1 already exists/);
-
-    page.type(form.querySelector('[aria-label="Session number"]'), '2');
-    page.type(form.querySelector('[aria-label="Date played"]'), '2026-10-01');
-    assert.match(page.text(form.querySelector('.hint')), /Session #1 already has this date/);
-    page.answers.confirm = [false];
-    page.submit(form);
-    assert.match(page.dialogs.at(-1).message, /Session #1 is already dated/);
-  });
-});
-
-test('sessions: a failed session shows its error and can be retried', async () => {
-  let fail = true;
-  const llm = createFakeLLM({
-    archivist: async () => {
-      if (fail) throw new Error('The archivist fell over');
-      return 'ok';
-    },
-  });
-  await withPage(asAdmin({ setup: { llm }, before: (t) => upload(t, { transcript: SAMPLE }) }), async (page, t) => {
-    const list = () => sessionsOf(page).querySelector('.sessions-list');
-    assert.match(page.text(list()), /failed.*The archivist fell over/);
-    fail = false;
-    page.click(button(list(), 'Retry'));
-    await page.settle();
-    assert.equal(message(page), 'Session 1 is queued for processing.');
-    await t.jobs.idle();
-    await page.waitFor(() => /processed/.test(page.text(list())), { timeout: 8000, what: 'the retried session to be processed' });
   });
 });

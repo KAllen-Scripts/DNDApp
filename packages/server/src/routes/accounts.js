@@ -4,7 +4,7 @@
  */
 import { MAX_CUSTOM_BACKGROUNDS } from '@dndapp/shared/backgrounds.js';
 import { z } from 'zod';
-import { BadRequestError, NotFoundError, sessionDateFor } from '../store.js';
+import { BadRequestError, NotFoundError } from '../store.js';
 import { ATTACK_DAMAGE, EDITIONS, TRAVEL_PARTS, TRAVEL_TIME, WEIGHT_RULES } from '@dndapp/shared/settings.js';
 
 export function registerAccounts(app, r) {
@@ -214,48 +214,6 @@ export function registerAccounts(app, r) {
     const { name } = z.object({ name: z.string().trim().min(1).max(100) }).parse(request.body);
     reply.status(201);
     return store.createCampaign(name);
-  });
-
-  /**
-   * Sessions for the admin screen: each upload with its processing state and
-   * how many player notes its date picks up, plus dates that have notes but no
-   * transcript yet (notes are matched to a session by date; see sessionDateFor).
-   */
-  app.get('/admin/campaigns/:cid/sessions', async (request) => {
-    requireAdmin(request);
-    const cid = store.getCampaign(Number(request.params.cid)).id;
-    const notesByDate = new Map(
-      db
-        .prepare('SELECT session_date AS date, COUNT(*) AS notes, COUNT(DISTINCT user_id) AS authors FROM player_notes WHERE campaign_id = ? AND deleted_at IS NULL GROUP BY session_date')
-        .all(cid)
-        .map((r) => [r.date, r]),
-    );
-    const jobs = new Map();
-    for (const j of db.prepare("SELECT status, progress, message, error, params FROM jobs WHERE campaign_id = ? AND type = 'ingest' ORDER BY id").all(cid)) {
-      jobs.set(JSON.parse(j.params).session, { status: j.status, progress: j.progress, message: j.message, error: j.error });
-    }
-    const sessions = db
-      .prepare(
-        `SELECT s.id, s.number, s.title, s.played_on, s.status, s.error, s.created_at,
-           (SELECT COUNT(*) FROM attendance a WHERE a.session_id = s.id) AS attendees
-         FROM sessions s WHERE s.campaign_id = ? ORDER BY s.number DESC`,
-      )
-      .all(cid)
-      .map(({ id, ...s }) => ({
-        ...s,
-        notes: notesByDate.get(s.played_on)?.notes ?? 0,
-        note_authors: notesByDate.get(s.played_on)?.authors ?? 0,
-        job: jobs.get(s.number) ?? null,
-      }));
-    const dates = new Set(sessions.map((s) => s.played_on));
-    const waiting = [...notesByDate.values()].filter((r) => !dates.has(r.date)).sort((a, b) => b.date.localeCompare(a.date));
-    return {
-      sessions,
-      notes_waiting: waiting,
-      next_number: (sessions[0]?.number ?? 0) + 1,
-      today: sessionDateFor(new Date(), config.notes.rolloverHour),
-      rollover_hour: config.notes.rolloverHour,
-    };
   });
 
   /**
