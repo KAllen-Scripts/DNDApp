@@ -76,3 +76,24 @@ test("backgrounds: the DM makes one in Campaign settings; a player's sheet sugge
     assert.match(sheet.features, /Hideout/);
   });
 });
+
+test('regression: what a background gives sits full width under the info grid, not in its narrow cell, and Apply goes once it would add nothing', async () => {
+  await withPage({
+    before: async (t) => { t.sheets.save(t.campaign.id, t.sam.id, { ...emptySheet({ name: 'Wren' }), background: 'Outlander' }); },
+    page: (t) => ({ as: t.sam, storage: NO_3D }),
+  }, async (page) => {
+    page.click('[data-tab=sheet]');
+    const gives = page.el('#sheet .bg-gives');
+    assert.ok(gives, 'Outlander is known, so what it gives is shown');
+    assert.equal(gives.closest('.info-grid'), null, 'not inside a grid cell (a sixth of the width squeezed it to a letter a line)');
+    assert.equal(gives.closest('label'), null, 'not inside the Background label (its clicks went to the input)');
+    assert.ok(button(gives, 'Apply Outlander to the sheet'), 'offered while it would still add something');
+
+    page.click(button(gives, 'Apply Outlander to the sheet'));
+    await page.waitFor(() => /Outlander applied/.test(page.text('#sheet .bg-applied')));
+    assert.equal(button(page.el('#sheet .bg-gives'), 'Apply Outlander to the sheet'), undefined, 'already applied: the button goes');
+    page.click(button(page.el('#sheet .bg-applied'), 'OK'));
+    await page.waitFor(() => !page.$('#sheet .bg-applied'));
+    assert.equal(button(page.el('#sheet .bg-gives'), 'Apply Outlander to the sheet'), undefined, 'and stays gone after OK');
+  });
+});
