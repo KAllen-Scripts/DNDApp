@@ -54,7 +54,7 @@ test('sessions: paste a transcript, check who\'s who, upload; it gets processed'
     // Unlink one: the upload asks first (cancelled, then confirmed).
     page.type(f.querySelector('[aria-label="Who is AlexR"]'), '');
     assert.ok(f.querySelector('[aria-label="Who is AlexR"]').closest('.speaker-row').classList.contains('unlinked'));
-    page.type(f.querySelector('[aria-label="Title"]'), 'Arrival in Brindle');
+    page.type(f.querySelector('[aria-label="Session title"]'), 'Arrival in Brindle');
     page.answers.confirm = [false, true];
     page.submit(f);
     assert.match(page.dialogs.at(-1).message, /aren't linked to an account: AlexR/);

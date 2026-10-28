@@ -145,7 +145,7 @@ function uploadForm() {
   const campaign = state.campaigns.find((c) => c.id === state.campaignId);
   const number = h('input', { type: 'number', min: 1, step: 1, value: v.next_number, required: true, 'aria-label': 'Session number' });
   const date = h('input', { type: 'date', value: v.notes_waiting[0]?.date ?? v.today, required: true, 'aria-label': 'Date played' });
-  const title = h('input', { placeholder: 'Title (optional)', maxLength: 200, 'aria-label': 'Title' });
+  const title = h('input', { placeholder: 'Title (optional)', maxLength: 200, 'aria-label': 'Session title' });
   const file = h('input', { type: 'file', accept: '.txt,text/plain', 'aria-label': 'Transcript file' });
   const paste = h('textarea', { rows: 4, placeholder: '[00:00:05] Speaker Name: what they said', 'aria-label': 'Transcript text' });
   const dateHint = h('p', { class: 'small hint' });
