@@ -187,6 +187,8 @@ Everything lives in `data/` (git-ignored):
 - `data/archive/` is the permanent record: accounts, original transcripts, player notes (every version), character sheets (every change, plus uploaded files), character pictures, maps (the images or PDFs as imported, the pictures drawn for maps made in the creator, other pictures of them, token pictures, every change, and everyone's private pins), handouts, the DM's creatures, items and merchants (with recent sales), the DM's own map creator assets, the rests the DM called (`rests.jsonl`), the campaign's settings (`settings.json`), speaker map, glossary, DM corrections, and a snapshot of the knowledge base after every archivist run. **Back this folder up.**
 - `data/dndapp.sqlite` is the working database. It can be rebuilt from the archive.
 
+**Example data.** `DATA_SET=example` in `.env` runs the server on `data-example/` instead: a made-up campaign (The Lanterns of Saltreach) with accounts, sheets, a wiki, creatures, items, merchants and linked maps, seeded the first time it starts, plus four session transcripts to feed in. Remove the line to go back to the real data; the two folders never mix. See [example/README.md](example/README.md).
+
 ### Rebuilding
 
 When the prompts or processing change, regenerate everything from the archive. Stop the server first.

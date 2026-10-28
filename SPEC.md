@@ -271,6 +271,7 @@ DNDApp/
                           uvtt.js (walls from Universal VTT files, and maps as one), sight.js (players' line of sight and explored areas),
                           stats.js (AI stat blocks), pdf.js (drawing a PDF page), events.js (what happened on the maps, for the archivist)
         cli/              admin.js (init, set-password, list), rebuild.js
+        example/          seed.js (the example campaign put in through the API, no AI), startup.js (seeding an empty example folder at start), region-map.js (its region map, painted)
       test/               offline tests (fake AI); fixtures/privacy-scenario/ = manual real-AI scenario
     web/
       public/     the web page, served by the server at / (no build step):
@@ -285,6 +286,8 @@ DNDApp/
                   phone.js (the phone layout's ☰ and ⋯ menus);
                   style.css, themes.css, mobile.css (the phone layout), icon.svg
       test/       page tests in jsdom against a real test server (page.js), fakes for the dice libraries
+  example/        the example campaign (owner, 2026-10-28): campaign/ (its data as JS: accounts, settings, sheets, creatures, items, merchants, maps, wiki),
+                  pictures/ (public domain or CC0, credits.json), transcripts/ (four sessions to feed in, with a README), ask-checks.md, README.md
   docs/notes/     design notes, research and checklists from the first Claude project (README.md lists them)
   scripts/        restart-server.js (npm run restart); browser.js (real-browser checks: Playwright with the installed Chrome on a throwaway copy of data/, fake AI); art/ (build.js, picks.js, render-props.js: the map creator's CC0 art, see §6.6 Map art)
   docs/regressions.md  every bug found and fixed, and the `regression: …` test that keeps it fixed
@@ -418,6 +421,8 @@ Also accepted: `[MM:SS]`, fractional seconds, no brackets, `0:01:30 - Name: text
 | `rolls` | operational | Dice rolls with who rolled, label, result and who may see them (`party`, `dm`, `self`). Not archived. Schema v11. |
 
 ### 4.3 Archive, restore and rebuild
+
+The server runs on one data folder: `data/` (`DATA_DIR`) normally, or with `DATA_SET=example` (owner, 2026-10-28: "a toggle somewhere, like the config, that switches between the example data and real data") `data-example/` (`EXAMPLE_DATA_DIR`), which it seeds with the example campaign the first time it starts there (`src/example/`). The two never mix; only the embedding model (`models/`) is shared, from the real folder. The example holds nothing from play (no sessions, notes, knowledge base, proposals, handouts given, rolls or rests): that comes from feeding its transcripts in.
 
 ```
 data/archive/
