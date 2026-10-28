@@ -5,7 +5,7 @@
 import { MAX_CUSTOM_BACKGROUNDS } from '@dndapp/shared/backgrounds.js';
 import { z } from 'zod';
 import { BadRequestError, NotFoundError } from '../store.js';
-import { ATTACK_DAMAGE, EDITIONS, TRAVEL_PARTS, TRAVEL_TIME, WEIGHT_RULES } from '@dndapp/shared/settings.js';
+import { ATTACK_DAMAGE, EDITIONS, LEVEL_UP_WHO, TRAVEL_PARTS, TRAVEL_TIME, WEIGHT_RULES } from '@dndapp/shared/settings.js';
 
 export function registerAccounts(app, r) {
   const { access, auth, config, db, requireAdmin, search, store } = r;
@@ -51,7 +51,7 @@ export function registerAccounts(app, r) {
 
   /**
    * Change the campaign's settings (DM): { weight?: 'capacity' | 'variant' | 'ignore',
-   * edition?: '2014' | '2024' | null (null: not chosen, follow the books), travel?: { time?, roads?, terrain?,
+   * edition?: '2014' | '2024' | null (null: not chosen, follow the books), level_up?: 'player' | 'dm', travel?: { time?, roads?, terrain?,
    * vehicles?, marches?, encounters? }, attacks?: { on?, damage?: 'auto' | 'dm', show_ac? } (shared/settings.js; the rest
    * stay as they were), backgrounds?: the DM's own backgrounds, the whole list (shared/backgrounds.js) }. Everyone in
    * it hears `settings` live.
@@ -61,6 +61,7 @@ export function registerAccounts(app, r) {
     const body = z.object({
       weight: z.enum(Object.keys(WEIGHT_RULES)).optional(),
       edition: z.enum(Object.keys(EDITIONS)).nullable().optional(),
+      level_up: z.enum(Object.keys(LEVEL_UP_WHO)).optional(),
       travel: z.object({ time: z.enum(Object.keys(TRAVEL_TIME)), ...Object.fromEntries(Object.keys(TRAVEL_PARTS).map((k) => [k, z.boolean()])) }).partial().strict().optional(),
       attacks: z.object({ on: z.boolean(), damage: z.enum(Object.keys(ATTACK_DAMAGE)), show_ac: z.boolean() }).partial().strict().optional(),
       // The DM's own backgrounds, the whole list (shared/backgrounds.js cleans each one).
