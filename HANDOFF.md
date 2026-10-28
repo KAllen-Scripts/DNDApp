@@ -371,6 +371,14 @@ Not about the app, from the first project's chat (2026-10-08): the owner's $100 
 
 ## Change log
 
+### 2026-10-28: Casting a spell from the sheet spends a spell slot
+- The owner's feedback: "Using a spell does not burn a spell slot at the moment." Casting on the map already did; the sheet's spell rolls didn't.
+- `shared/src/spell-slots.js` (new, served to the page): `slotsLeft`, `spendSlot`, `refundSlot` moved out of `attacks.js` (which re-exports them), plus `castLevels` (the levels a spell can use, with what's left, pact included) and `castWithSlot` (spend one or say why not). One place for slot rules: the map, the sheet, and non-attack spells (Entangle) when they come.
+- `POST /campaigns/:cid/sheet/spells/cast` `{ id, slot? }` (players): spends the slot and saves the sheet with the reason ("cast Shield (1st-level slot)").
+- The sheet: every spell of 1st level or higher has a slot list ("1st (2 left)") and spends the slot on its to-hit roll (spell attacks), its damage/heal roll (anything else) or a new **Cast** button (nothing to roll: Shield, Entangle). None left: asks whether to roll anyway (scroll, item, free cast). Cantrips unchanged.
+- Map: with no slot level picked, it now uses the lowest level with a slot left (a warlock's 1st-level spell takes the pact slot instead of failing).
+- Not handled: casting a ritual without a slot (untick a slot box after, or say no to the question when out of slots).
+
 ### 2026-10-03: Project start, spec
 
 - Cloned the empty GitHub repo. Wrote `SPEC.md` v0.1 (architecture, layered memory, Q&A, milestones).

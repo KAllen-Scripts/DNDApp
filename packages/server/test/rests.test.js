@@ -311,3 +311,38 @@ test('potions: drinking one is rolled by the server, heals and uses it up; one t
     await t.cleanup();
   }
 });
+
+test('regression: casting a spell from the sheet spends a spell slot (pact if that is all there is); cantrips, a slot too low and none left are refused', async () => {
+  const t = await setup();
+  try {
+    const spells = [
+      { id: 'sp1', name: 'Shield', level: 1 },
+      { id: 'sp2', name: 'Fire Bolt', level: 0 },
+    ];
+    await saveSheet(t, t.sam, { ...THORIN, spells });
+    const cast = (body) => t.request('POST', `/campaigns/${t.campaign.id}/sheet/spells/cast`, { as: t.sam.token, body });
+    // Wizard 2: three 1st-level slots, two used.
+    let res = await cast({ id: 'sp1' });
+    assert.equal(res.statusCode, 200, res.body);
+    assert.equal(res.json().level, 1);
+    assert.equal(res.json().used, 'slot');
+    assert.equal(res.json().sheet.spellcasting.slots_used[1], 3);
+    assert.equal((await sheetOf(t, t.sam)).sheet.spellcasting.slots_used[1], 3);
+    const lines = fs.readFileSync(path.join(t.archive.root, t.campaign.slug, 'character-sheets', `${t.sam.id}.jsonl`), 'utf8').trim().split('\n').map(JSON.parse);
+    assert.match(lines.at(-1).reason, /cast Shield \(1st-level slot\)/);
+    assert.match((await cast({ id: 'sp1' })).json().error, /No 1st-level spell slots left/);
+    assert.match((await cast({ id: 'sp1', slot: 2 })).json().error, /No 2nd-level/);
+    assert.match((await cast({ id: 'sp2' })).json().error, /cantrip/);
+    assert.equal((await cast({ id: 'nope' })).statusCode, 400);
+    assert.equal((await t.request('POST', `/campaigns/${t.campaign.id}/sheet/spells/cast`, { body: { id: 'sp1' } })).statusCode, 403, 'the DM has no sheet');
+
+    // A warlock 3 has two 2nd-level pact slots: a 1st-level spell cast at 2nd uses one.
+    await t.request('PUT', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token, body: { sheet: { ...THORIN, classes: [{ name: 'Warlock', subclass: '', level: 3 }], spellcasting: { class: 'Warlock', slots_used: {}, pact_used: 0 }, spells: [{ id: 'hx', name: 'Hex', level: 1 }] }, version: 2 } });
+    res = await cast({ id: 'hx', slot: 2 });
+    assert.equal(res.statusCode, 200, res.body);
+    assert.equal(res.json().used, 'pact');
+    assert.equal(res.json().sheet.spellcasting.pact_used, 1);
+  } finally {
+    await t.cleanup();
+  }
+});

@@ -13,7 +13,7 @@ import { computeSheet } from '@dndapp/shared/sheet.js';
 import { spendForAttack } from '@dndapp/shared/attack-extras.js';
 import { activeForm, formHasHp, setFormHp } from '@dndapp/shared/wild-shape.js';
 import {
-  attackRiders, attackSituation, concentrationDc, creatureActions, creatureDefenses, refundSlot, resolveAttack,
+  attackRiders, attackSituation, castLevels, concentrationDc, creatureActions, creatureDefenses, refundSlot, resolveAttack,
   sheetActions, sheetDefenses, slotsLeft, spendSlot, tokenGap,
 } from '@dndapp/shared/attacks.js';
 import { AuthError } from '../auth.js';
@@ -258,7 +258,8 @@ export function registerAttacks(app, r) {
     // A spell of 1st level or higher uses a slot (unless the player says not: a scroll, an item, a free cast).
     let sheetAfterSlot = null;
     let used = null;
-    const slotLevel = action.source === 'spell' && action.level >= 1 ? Math.max(action.level, body.slot ?? action.level) : null;
+    // No level picked: the lowest slot left that can cast it (a warlock's 1st-level spell takes their pact slot).
+    const slotLevel = action.source === 'spell' && action.level >= 1 ? Math.max(action.level, body.slot ?? (pre.sheet ? castLevels(pre.sheet.sheet, pre.sheet.calc, action.level).first : action.level)) : null;
     if (slotLevel && body.use_slot && pre.sheet) {
       const spent = spendSlot(pre.sheet.sheet, pre.sheet.calc, slotLevel);
       if (!spent) throw new BadRequestError(`${attacker.name} has no ${ordinal(slotLevel)}-level spell slots left. Untick "Use a spell slot" to cast it anyway.`);

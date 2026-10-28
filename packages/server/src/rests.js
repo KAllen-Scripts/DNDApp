@@ -8,6 +8,8 @@
  *     it the same way and adds the hit points.
  *   - A player drinks a healing potion from their inventory: the server rolls
  *     what it heals the same way, adds the hit points and takes one away.
+ *   - A player casts a spell from their sheet: a spell slot is spent (the
+ *     page rolls its dice as before).
  *   - A player takes a short rest on their own sheet (Pact Magic slots back).
  *   - The DM calls a short or long rest for the party (everyone, or chosen
  *     players). Each sheet is changed and saved with the reason, and the rest
@@ -23,10 +25,13 @@ import { EventEmitter } from 'node:events';
 import { computeSheet, hitDice, longRest, shortRest, spendHitDie, formatBonus } from '@dndapp/shared/sheet.js';
 import { featureRow, healFeature, healWithSlot, restText, setRolled } from '@dndapp/shared/class-features.js';
 import { drinkPotion } from '@dndapp/shared/gear.js';
+import { castWithSlot } from '@dndapp/shared/spell-slots.js';
 import { BadRequestError } from './store.js';
 import { createEditions } from './editions.js';
 
 export const REST_KINDS = ['short', 'long'];
+
+const ordinal = (n) => ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'][n] ?? `${n}th`;
 
 /** A rest read from the database or the archive, with anything unknown dropped. */
 export function normalizeRest(r = {}) {
@@ -147,6 +152,27 @@ export function createRests({ db, archive, store, sheets, rolls, books = null, c
       const { sheet, healed } = drinkPotion(current.sheet, id, rolled.total, values.hp_max ?? null);
       const saved = sheets.save(cid, userId, sheet, { reason: `drank ${line.name} (${rolled.roll ? `rolled ${rolled.total}, ` : ''}regained ${healed} hit points)` });
       return { ...rolled, healed, ...saved };
+    },
+
+    /**
+     * Cast a spell of 1st level or higher from the sheet (`id`: its id on the
+     * sheet) with a slot of level `slot` (its own level if not given): the
+     * slot is spent (an ordinary one of that level, else a Pact Magic one).
+     * @returns { level, used: 'slot' | 'pact', sheet, version, updated_at }
+     */
+    async castSpell(cid, userId, id, { slot = null } = {}) {
+      const current = sheets.get(cid, userId);
+      const spell = (current.sheet.spells ?? []).find((s) => s.id === id);
+      if (!spell) throw new BadRequestError("That spell isn't on your sheet any more.");
+      const calc = computeSheet(current.sheet, { ...store?.getSettings?.(cid), edition: await edition(cid) });
+      let cast;
+      try {
+        cast = castWithSlot(current.sheet, calc, spell, slot);
+      } catch (err) {
+        throw new BadRequestError(err.message);
+      }
+      const saved = sheets.save(cid, userId, cast.sheet, { reason: `cast ${spell.name} (${ordinal(cast.level)}-level ${cast.used === 'pact' ? 'Pact Magic ' : ''}slot)` });
+      return { level: cast.level, used: cast.used, ...saved };
     },
 
     /** A player's own short rest. */
