@@ -606,6 +606,23 @@ test('regression: an upload with a bad speaker link is refused before anything i
   }
 });
 
+// The speaker map took any account, so a player from another campaign could be linked and end up in this one's known_by.
+test('regression: the speaker map refuses an account from another campaign', async () => {
+  const t = await setup();
+  try {
+    const b = (await t.request('POST', '/admin/campaigns', { body: { name: 'Campaign B' } })).json();
+    const other = (await t.request('POST', '/admin/users', { body: { name: 'Bea', password: 'password-bea-1', campaigns: [{ campaign_id: b.id, role: 'player', character_name: 'Zed' }] } })).json();
+    const before = (await t.request('GET', `/campaigns/${t.campaign.id}/speakers`)).json();
+    const res = await t.request('PUT', `/campaigns/${t.campaign.id}/speakers`, {
+      body: [...before, { speaker: 'Bea', display_name: 'Zed (Bea)', user_id: other.id }],
+    });
+    assert.equal(res.statusCode, 400);
+    assert.deepEqual((await t.request('GET', `/campaigns/${t.campaign.id}/speakers`)).json(), before);
+  } finally {
+    await t.cleanup();
+  }
+});
+
 // ---------- sessions & archivist ----------
 
 test('upload needs a date; transcripts are archived and never replaced', async () => {

@@ -528,7 +528,7 @@ Streaming events (`POST /campaigns/:cid/ask` `{question, conversationId?, mode?}
 
 ### 5.4 Campaigns are separate
 
-Every campaign has its own sessions, transcripts, knowledge base (and archivist guide), player notes, speaker map, glossary, corrections, DM questions and conversations. Every query is scoped by `campaign_id`; knowledge-base records are fetched with `id AND campaign_id`, so even a wrong id can't reach another campaign. Q&A only runs for a member of the campaign it was asked in, and the prompt names that campaign and the asker's character in it. A test asks in a second campaign with every tool and checks nothing from the first appears.
+Every campaign has its own sessions, transcripts, knowledge base (and archivist guide), player notes, speaker map, glossary, corrections, DM questions and conversations. Every query is scoped by `campaign_id`; knowledge-base records are fetched with `id AND campaign_id`, so even a wrong id can't reach another campaign. Speaker links (on upload and in the speaker map) only take accounts in that campaign. Q&A only runs for a member of the campaign it was asked in, and the prompt names that campaign and the asker's character in it. A test asks in a second campaign with every tool and checks nothing from the first appears.
 
 ### 5.5 Privacy (primitive version)
 
