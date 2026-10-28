@@ -232,3 +232,13 @@ test('regression: an open ⋯ menu in a bar that stays at the top sits above the
   assert.ok(scrim > 0, 'the scrim has a z-index');
   assert.ok(bar > scrim, `a bar with its menu open is lifted over the scrim (${bar} > ${scrim})`);
 });
+
+test("regression: on a phone the wiki's Atlas fills the screen and the rail's last button isn't under ☰", () => {
+  // The wiki's grid kept its row at the top (align-content: start), so the Atlas's map was a short strip; and the
+  // rail's room for ☰ was padding at the end of its scroll, so ☰ covered the last button showing until you scrolled.
+  const css = fs.readFileSync(new URL('../public/mobile.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const rule = (selector) => css.split('}').find((r) => r.split('{')[0].split(/,(?![^(]*\))/).some((s) => s.trim() === selector)) ?? '';
+  assert.match(rule(':root[data-phone] #wiki-view.wiki-atlas-on'), /align-content:\s*stretch/);
+  assert.match(rule(':root[data-phone] .wiki-rail'), /margin-right:\s*2\.8rem/);
+  assert.doesNotMatch(rule(':root[data-phone] .wiki-rail'), /padding:\s*0 2\.8rem/);
+});

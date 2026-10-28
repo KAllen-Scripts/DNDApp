@@ -169,13 +169,14 @@ function uploadForm() {
   date.addEventListener('input', updateDateHint);
   updateDateHint();
 
-  // Best guess at who a transcript name is: an account or character whose name it contains.
+  // Best guess at who a transcript name is: an account or character whose name it contains ("KennyDM" is Kenny),
+  // or one with the transcript name as a word of it ("Rowan" is test-rowan).
   const guess = (speaker) => {
     const s = speaker.toLowerCase().replace(/[^a-z0-9]/g, '');
     const hit = v.members.filter((m) =>
       [m.name, m.character_name].filter(Boolean).some((n) => {
         const k = n.toLowerCase().replace(/[^a-z0-9]/g, '');
-        return k.length >= 3 && s.includes(k);
+        return (k.length >= 3 && s.includes(k)) || (s.length >= 3 && n.toLowerCase().split(/[^a-z0-9]+/).includes(s));
       }),
     );
     return hit.length === 1 ? hit[0].user_id : null;

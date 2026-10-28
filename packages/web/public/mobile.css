@@ -270,7 +270,7 @@
 
 /* The wiki's space: its rail is a row of pictures along the top (clear of ☰), then the trail, then the page. */
 :root[data-phone] #app-view > #tab-wiki.wiki-space { display: flex; flex-direction: column; gap: 0.4rem; padding-top: calc(0.4rem + env(safe-area-inset-top)); padding-left: calc(0.5rem + env(safe-area-inset-left)); }
-:root[data-phone] .wiki-rail { flex-direction: row; padding: 0 2.8rem 0 0; background: none; border: none; overflow-x: auto; flex: none; }
+:root[data-phone] .wiki-rail { flex-direction: row; padding: 0; margin-right: 2.8rem; background: none; border: none; overflow-x: auto; flex: none; }
 :root[data-phone] .wiki-rail-btn { width: auto; min-width: 3.6rem; }
 :root[data-phone] .wiki-rail-gap { flex: 0 0 0.5rem; }
 :root[data-phone] .wiki-space-bar { padding: 0; }
@@ -283,5 +283,7 @@
 /* The front page's cards are the list on a phone. */
 :root[data-phone] .wiki-list { display: none; }
 :root[data-phone] .wiki-panel { align-content: start; }
+/* ...but the Atlas's map fills the rest of the screen. */
+:root[data-phone] #wiki-view.wiki-atlas-on { align-content: stretch; }
 :root[data-phone] .wiki-side { overflow: visible; }
 :root[data-phone] .wiki-back { display: inline-block; justify-self: start; margin-bottom: 0.4rem; }

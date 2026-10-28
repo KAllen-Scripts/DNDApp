@@ -160,3 +160,18 @@ test('sessions: a failed session shows its error and can be retried', async () =
     await page.waitFor(() => /processed/.test(page.text(list())), { timeout: 8000, what: 'the retried session to be processed' });
   });
 });
+
+test('regression: a transcript name that is a word of an account\'s name is guessed ("Rowan" is test-rowan; it was left unlinked)', async () => {
+  await withPage({
+    before: async (t) => ({ rowan: await addDm(t, 'test-rowan') }),
+    page: (t, { rowan }) => ({ as: rowan, campaign: t.campaign }),
+  }, async (page) => {
+    page.click('[data-tab=sessions]');
+    await page.settle();
+    const f = form(page);
+    page.type(f.querySelector('[aria-label="Transcript text"]'), '[00:00:05] Rowan: Welcome back.\n[00:00:20] SamPlays: Thorin waves.\n[00:00:40] Ro: Hm.');
+    await page.waitFor(() => f.querySelectorAll('.speaker-row').length === 3, { what: 'the speaker preview' });
+    const picks = Object.fromEntries([...f.querySelectorAll('.speaker-row')].map((r) => [r.querySelector('strong').textContent, r.querySelector('select').selectedOptions[0].textContent]));
+    assert.deepEqual(picks, { Rowan: 'test-rowan (DM)', SamPlays: 'Sam (Thorin)', Ro: 'Not in the campaign (guest, bot…)' });
+  });
+});
