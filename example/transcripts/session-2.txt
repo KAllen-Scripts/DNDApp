@@ -1,0 +1,1018 @@
+[00:00:01] Rowan: Okay, is it recording? It's recording. Hello again, bot.
+[00:00:05] Jules: Hello bot. You owe me a copper.
+[00:00:12] Rowan: Why does the bot owe you a copper?
+[00:00:18] Jules: Because it called Pip "Pip Thistle wood". Two words. I won the bet. Well, you owe me a copper, Rowan, technically.
+[00:00:27] Rowan: That's fair. I'll pay you in-game.
+[00:00:34] Jules: Pip gets a copper.
+[00:00:38] Theo: Did everyone try the Ask thing?
+[00:00:43] Mags: I did! I asked it what the lighthouse keeper's log said and it gave me the whole thing. Word for word. With a little time stamp.
+[00:00:57] Theo: I asked it how much I owe Crane and it said a hundred and twenty gold, due at the new moon on the eleventh of Rimewane, and it said who told me. Hosk. In the Brined Eel.
+[00:01:15] Priya: I asked it what the white light was and it said it didn't know, which I thought was very honest.
+[00:01:26] Rowan: Good. That's what it should say.
+[00:01:32] Mags: I asked it about the thing you sent me and it said, well, I won't say. But it knew.
+[00:01:43] Theo: Secrets.
+[00:01:48] Mags: And I asked it as a test what Pip's secret was and it said it didn't know anything about that. So.
+[00:01:58] Jules: Good bot.
+[00:02:01] Rowan: Good bot. Okay. Priya, you're on time.
+[00:02:08] Priya: I got the earlier bus! I'm here! I've had my tea!
+[00:02:16] Rowan: Amazing. Okay. So, first thing. Can someone recap last session? In character or out, whatever you like.
+[00:02:23] Jules: Oh, I'll do it. Okay. So. We came into Salt Reach on a coach, and the lighthouse is out. The harbourmaster, Brask, hired us, fifty gold each up front and a hundred when we're done.
+[00:02:40] Rowan: Twenty five up front.
+[00:02:45] Jules: Was it twenty five?
+[00:02:51] Rowan: Twenty five each now, a hundred each when the light's burning or Tamsin's found. You tried to haggle and rolled a six.
+[00:03:04] Jules: Oh yeah. I did roll a six. Okay, twenty five, sorry. Pip wishes it was fifty.
+[00:03:11] Theo: We all wish it was fifty.
+[00:03:17] Jules: So then we went shopping, and Bran bought a harpoon for no reason.
+[00:03:27] Theo: It's a fishing town.
+[00:03:32] Jules: And then the pub, the Brined Eel, where the eel has a hat. And everyone says Saltjaw killed Tamsin and that Lindqvist is a saint and the cellar floods at the new moon, and then a huge man called Hosk told everyone that Bran owes a hundred and twenty gold to a woman called Crane.
+[00:03:57] Theo: Thank you, Jules.
+[00:04:01] Jules: And then we found Wick, Tamsin's apprentice, who said the light went red, then out.
+[00:04:11] Priya: Green.
+[00:04:16] Jules: Green?
+[00:04:19] Priya: Green, then out. Green.
+[00:04:23] Rowan: It went green, then out.
+[00:04:29] Jules: Green, then out. Sorry. And he gave Oriel a key to the lamp room. And we went to the lighthouse, and there's seawater in the oil, and there's a barnacle sign on the cellar door, and the logbook said ask the old woman in the mere, and the Lantern of Saint Aubrel is gone. And we fought drowned sailors. And then we went into Silas Gorm's warehouse and he's gone and there's footprints going into the sea.
+[00:05:01] Rowan: That's really good, actually. Two mistakes.
+[00:05:05] Jules: Two out of a million.
+[00:05:09] Mags: Oh, Rowan, before we start, I tried the wiki thing. I could see some pages. Saltreach and the harbour and the pub.
+[00:05:21] Rowan: Yeah, players can see the bits I've marked for them. It's mostly what your characters would know already. Common knowledge stuff.
+[00:05:31] Jules: I could see a page about the Gull Steps that had a bit only I could see. With the chalk signs.
+[00:05:44] Rowan: Yep. That's yours. Pip would know those.
+[00:05:50] Theo: There was a page about Bran's debt. Only I could see it. It said "Status: Active".
+[00:06:00] Rowan: That's right. It's your quest. Nobody else sees that page.
+[00:06:08] Priya: I could see a page about the Lamplighters' Guild and it had the oath on it. The lamplighter's oath. I read it out to my cat.
+[00:06:19] Rowan: How did the cat take it?
+[00:06:24] Priya: She was moved.
+[00:06:28] Jules: Biscuit would have been moved too.
+[00:06:33] Rowan: Okay. Recap.
+[00:06:37] Rowan: Okay. So. It's the morning of the fourth of Rimewane. Netday. You wake up at the Brined Eel. It's still foggy, but it's lifted a bit, and it's drizzling. The breakfast is porridge and kippers. What do you want to do today?
+[00:06:55] Mags: Wait, before that. Did anyone tell Jory Cotter's wife? The cockle seller? That we found him?
+[00:07:06] Theo: Brask said she'd tell her.
+[00:07:09] Mags: Can we go and see her anyway? On the quay?
+[00:07:15] Rowan: Sure. Okay. So on the quay, by the fish market, there's a woman with a barrow of cockles and whelks, in a black shawl, black because she's in mourning. She's about thirty, red hands from the cold water. And when she sees you she knows who you are, because, everyone knows everything by breakfast.
+[00:07:38] Mags: Wren goes up to her. "Mistress Cotter?"
+[00:07:45] Rowan: "Annie," she says. "You're the ones who found Jory."
+[00:07:53] Mags: "We did. We put him above the tide. Where the sea can't take him."
+[00:08:01] Rowan: She's quiet for a bit. And then she says, "My brother went up with the cart last night. They brought him home. And the other two. Hal Pryce and Tommy Fenn." She looks at you. "They said it wasn't the sea that killed him, the second time. They said he had a sword cut in him."
+[00:08:24] Theo: Oh. Bran steps forward. "That was me. I'm sorry. He. He wasn't himself."
+[00:08:32] Rowan: She looks up at you. Bran, you're a big man and she's not tall, and she looks up at you for a long time. And then she says, "He'd have hated that. Walking about. He hated being cold." And she says, "Thank you for putting him to rest." And she puts a little paper cone of cockles in your hand.
+[00:08:57] Theo: Bran takes the cockles.
+[00:09:01] Rowan: "Find who put the light out," she says. "That's all. Find them."
+[00:09:08] Theo: "We will."
+[00:09:12] Mags: Wren gives her a piece of sea glass. A blue one. That's four given.
+[00:09:20] Rowan: She holds it up to the light. "Jory used to find these," she says. "On the beach. He'd bring them home for the kids."
+[00:09:33] Mags: Wren is crying a bit now.
+[00:09:37] Jules: Pip is crying a bit now.
+[00:09:44] Rowan: Okay. Tommy Fenn, by the way. Fenn. He's from Fenwick. The village on the edge of the marsh. Just so you know.
+[00:09:55] Theo: Bran eats a cockle. Solemnly.
+[00:10:02] Theo: We said we'd go and see Lindquist. At the Guild.
+[00:10:09] Priya: Politely.
+[00:10:13] Theo: Politely. Oriel's doing the talking.
+[00:10:18] Rowan: Okay. The Guild hall is in Upper Town. So you go up from the harbour, there's a steep street of steps called the Climb, and at the top it's all nicer, bigger houses, slate roofs, little gardens. The Guild hall is a big stone building with a tower on it, a little lantern tower, with the Guild sign over the door. And next door there's the Chapel of the Lantern, which is a small grey chapel with a bell.
+The Guild hall door is open and there's a clerk at a desk, a young man with ink all over his fingers. He says, "Good morning. Can I help you?"
+[00:11:03] Priya: "Good morning. My name's Oriel Vane, I'm a lamplighter, from Cray Head. We're working for the harbourmaster on the matter of Lamplight Point. We'd very much like to speak to Mistress Lindqvist, if she has a moment."
+[00:11:21] Rowan: "Oh, I'm so sorry. Mistress Lindquist is at prayer. She's been at the chapel every morning since the light went out, praying for Keeper Rook. She doesn't see anybody until the afternoon. I can take a message?"
+[00:11:40] Priya: Hm. "Could you tell her a sister of the Guild from Cray Head would like to see her? And that we've been to the light."
+[00:11:52] Rowan: He writes it down. "Of course. She'll be very glad, I'm sure. She's been terribly distressed."
+[00:12:02] Jules: Can Pip look around? While Oriel's talking?
+[00:12:07] Rowan: Sure. What are you looking for?
+[00:12:12] Jules: Anything. Papers. Who's coming and going. Is there a board with the warehouse on it?
+[00:12:21] Rowan: Investigation, or Perception, whichever.
+[00:12:24] Jules: Perception. Fourteen. Plus five. Nineteen.
+[00:12:29] Rowan: There's a board behind the clerk with a list of the lights the Guild looks after, all down the coast, Cray Head, Lamplight Point, the Varrowgate river lights, and their keepers' names. And next to lamp light point someone has written "T. Rook," and then crossed it out, very neatly, and written "vacant".
+[00:12:53] Jules: That's cold.
+[00:12:58] Rowan: And there's a rack of letters waiting to go out. And one of them is addressed to "The Guild House, Varrowgate. The Cellars." In very elegant handwriting.
+[00:13:10] Jules: The cellars. Pip remembers that.
+[00:13:16] Rowan: Okay.
+[00:13:18] Priya: "Thank you so much. We'll come back."
+[00:13:23] Rowan: "Of course. And," he says, "if you're going up to the Point again, Mistress Lindqvist asked anyone going up to please not touch anything. She's very particular about the lamp room. Brother Aldous at the chapel is to bless it before it's lit again."
+[00:13:42] Priya: Oriel smiles very sweetly. "Of course."
+[00:13:46] Theo: We already touched everything.
+[00:13:52] Priya: We cleaned the lens.
+[00:13:56] Rowan: Okay. So you come out. Do you want to go into the chapel?
+[00:14:04] Mags: Is she in there? Lindquist?
+[00:14:08] Rowan: You could look.
+[00:14:12] Theo: I don't want to barge in on someone praying.
+[00:14:18] Priya: Oriel would just pop in. To say a prayer for Tamsin. It's a chapel of Saint Aubrel, Oriel would go in anyway.
+[00:14:28] Rowan: Okay. Oriel goes in. It's small and plain and cold, rows of wooden benches, candles everywhere, hundreds of little candles, and at the front a statue of a man in a hooded coat holding up a lantern. Saint Aubrey. And kneeling at the front, there's a woman in grey, with her back to you, very still. Long silver hair in a plait. She doesn't turn round. And there's an old monk in brown lighting candles, and he sees you and puts his finger to his lips.
+[00:15:06] Priya: Oriel lights a candle. And kneels at the back. And prays for Tamsin.
+[00:15:16] Rowan: Okay. Nice. And you can stay as long as you like. The woman at the front doesn't move.
+[00:15:27] Priya: Oriel finishes and goes out quietly.
+[00:15:34] Rowan: Okay. And the monk follows you out. He's an old man, very thin, with a shaved head and very kind, very tired eyes. He says, "You're a keeper. I saw the coat. I'm Brother Aldous." He takes your hand. "You've been to the light? How is it?"
+[00:15:57] Priya: "Dark, Brother. Someone's been putting seawater in the oil."
+[00:16:04] Rowan: He looks really shocked. "Seawater? But. That's the Guild oil. That's blessed oil, I bless the casks myself, every month." He looks back at the chapel door. And then he says, quieter, "I'll tell you something, keeper. The Mistress prays for Tamsin every morning. Every morning. She's very devout. But last Restday I came in early, and she was here, and she wasn't praying to the Saint." He stops.
+[00:16:33] Priya: "What do you mean?"
+[00:16:35] Rowan: "She was facing the wrong way. She was kneeling with her back to him. Facing the sea." He shakes his head. "I'm an old man, I see things. Forgive me." And he goes back inside.
+[00:16:51] Priya: Oreo comes out and tells everyone. Very quietly.
+[00:16:55] Theo: Facing the sea.
+[00:16:57] Mags: That's ominous.
+[00:17:02] Jules: That's really ominous.
+[00:17:05] Theo: Is it, though? Lots of fishing towns pray to the sea.
+[00:17:13] Priya: Not in a chapel of Saint Aubrel. You'd face the lantern. Always. That's the whole point.
+[00:17:22] Rowan: Oriel would know that's very strange. You face the light.
+[00:17:30] Priya: Oriel's not sure what to think. She trusts people who wear the lantern. It's sort of her flaw.
+[00:17:39] Rowan: It is literally your flaw.
+[00:17:45] Priya: It's literally my flaw. So Oriel says, "There's probably an explanation."
+[00:17:51] Jules: There's definitely an explanation.
+[00:17:58] Rowan: Okay. So, it's about ten. And as you're going back down the Climb, you meet the Watch coming up. There's six watchmen in blue tabards, halberds, and at the front, a thick necked, red faced man with a sergeant's sash and a big moustache. And he stops when he sees you. And he looks at Bran.
+[00:18:24] Theo: Oh no. What now.
+[00:18:27] Rowan: He says, "Sergeant Hale?"
+[00:18:32] Theo: Everyone knows Bran.
+[00:18:34] Rowan: "It's Reeve, Sergeant. Dunstan Reeve. Corporal Reeve, I was. Greyhallow tower. Under you."
+[00:18:44] Theo: Oh. Okay. Okay. Bran looks at him. "Reeve." He doesn't say anything else for a second. And then, "You've done well."
+[00:18:55] Rowan: Reeve puffs up. "Sergeant of the Harbour Watch these four years. Not bad, eh?" And then he looks at the rest of you. "I hear you're working for Brass. On the light."
+[00:19:12] Theo: "That's right."
+[00:19:14] Rowan: "Well, you can stop. I've got it. It's the Gullwings. Saltjaw Merrow. He's been landing goods on the north shore under cover of the dark, and the keeper saw him, and he did for her. Plain as day. I'm going down the Gull Steps tomorrow at low tide with twenty men and I'm going to drag him out by his iron jaw."
+[00:19:43] Jules: Pip's going very still.
+[00:19:46] Theo: "What's your evidence?"
+[00:19:52] Rowan: "Evidence?" He laughs. "Everyone knows it. Ask in any pub."
+[00:19:59] Theo: "The Gullwings lost two boats on the Teeth. Why would they put out the light they need to get home?"
+[00:20:10] Rowan: Reeve goes a bit redder. "Smugglers are stupid, Sergeant. That's why they're smugglers."
+[00:20:17] Theo: Bran says, quietly, "Dunstan. You remember the night the Kestrel went down?"
+[00:20:24] Rowan: Ooh. Okay. Reeve goes very still. And then he says, very low, "I remember."
+[00:20:31] Theo: "Then you know what happens when people don't ask the hard questions."
+[00:20:39] Rowan: Okay, so. That's a big moment. Let me think about how he takes that. Make me a, a Charisma check, Intimidation or Persuasion, your pick.
+[00:20:50] Theo: Persuasion. I'm not trying to scare him. Eleven, plus nothing. Eleven.
+[00:20:58] Rowan: Okay, eleven. It doesn't land as well as you'd like. Reeve's face closes up. He says, "Some of us have moved on, Sergeant. Some of us didn't run off." And he says, louder, "Tomorrow at low tide. If I find you down there, I'll take you in with the rest." And he goes past you up the Climb with his men.
+[00:21:25] Theo: Bran watches him go.
+[00:21:31] Mags: What was the Kestrel?
+[00:21:35] Theo: Bran says, "A ship." And that's all.
+[00:21:39] Mags: Wren's going to let that go. For now.
+[00:21:44] Jules: Okay. Okay okay. So the Watch is going to raid the Gull Steps tomorrow.
+[00:21:54] Priya: And they think the smugglers killed Tamsin, which we're pretty sure isn't true.
+[00:22:00] Jules: It isn't true.
+[00:22:05] Theo: How do you keep knowing that, Pip?
+[00:22:12] Jules: Pip sighs. Okay. Pip says, "Because I know them. The Gullwings. I grew up here. I ran messages for them when I was a kid. I know what they're like. Saltjaw Merrow is a lot of things but he doesn't kill keepers. Keepers keep his people alive."
+[00:22:32] Theo: Bran looks at him. "You grew up here."
+[00:22:39] Jules: "I grew up under the kitchen step of the Brined Eel. You saw."
+[00:22:49] Mags: Wren nods. "The old man. And the apothecary. The onions."
+[00:22:58] Jules: "Yeah. The onions." And Pip says, "So if you want to talk to the gull wings before Reeve goes in with twenty men and gets everyone killed, I can get us in. Probably. If they still use the same signs."
+[00:23:17] Theo: "When's low tide?"
+[00:23:23] Rowan: Low tide's about midday today. Then again around half midnight. Then tomorrow about one in the afternoon, which is when Reeve's going.
+[00:23:34] Theo: "Then we go today."
+[00:23:37] Priya: "Shouldn't we wait for Lindqvist? She said the afternoon."
+[00:23:45] Theo: "Lindquist will keep. The Gullwings won't, if Reeve gets there first."
+[00:23:53] Mags: I agree with Bran. Smugglers first.
+[00:23:58] Priya: Okay. Oriel agrees.
+[00:24:01] Rowan: Okay. So it's ten now. It's an hour's walk to the Gull Steps, south along the cliffs. If you go now you'll get there for low tide.
+[00:24:14] Jules: Pip leads the way. Pip knows the way.
+[00:24:22] Rowan: Okay, so, I'll put you on the region map again. You go south out of town, past the fish market, past the last houses, and the road climbs up onto the south cliffs. It's windy up here, the drizzle's coming in sideways, and the fog's down on the water below you. And after an hour you come to where the cliffs drop away in a sort of staircase of ledges, big flat shelves of grey rock going down to the sea like giant steps, and they're covered in gulls. Thousands of gulls. The noise is incredible. And the smell.
+[00:25:03] Mags: Wren loves it.
+[00:25:07] Rowan: Wren's in heaven. It's a seabird city.
+[00:25:13] Mags: Do any of them want to talk to me?
+[00:25:20] Rowan: They're all screaming. They're gulls. They're all talking at once and none of them are listening.
+[00:25:29] Mags: Like a group chat.
+[00:25:34] Jules: Like this group chat.
+[00:25:39] Rowan: Okay. Pip. You know this place. This is the Gull Steps. There's a path down the ledges, a goat path, and at the bottom, at low tide, there's a beach of black shingle and the mouths of three or four sea caves. Right now the tide's going out and you can see the caves opening up.
+[00:26:02] Jules: Okay. Pip looks for the signs. The chalk signs. Are there signs?
+[00:26:09] Rowan: Make me a, actually, you don't need to roll. You know where to look. On the rocks at the top of the path there's a chalk mark, fresh, a little three toed bird's foot. A gull's foot.
+[00:26:28] Jules: That's "safe way". That's the path that's safe.
+[00:26:36] Rowan: Correct. And then halfway down there's another one, a circle with a line through it.
+[00:26:45] Jules: That's "watch posted". So there's a lookout. Someone's watching the path.
+[00:26:54] Rowan: Right.
+[00:26:59] Jules: Pip tells everyone. Quietly. "They've got someone watching us. Don't do anything stupid. Keep your hands where people can see them."
+[00:27:09] Theo: Bran keeps his hands where people can see them. And his harpoon on his back.
+[00:27:18] Priya: Oriel keeps her lantern lit. Is that okay?
+[00:27:23] Jules: That's fine. Lanterns are fine. Everyone has a lantern.
+[00:27:29] Rowan: Okay. And at the bottom of the path, on a rock by the biggest cave mouth, there's a third sign. Three dots in a triangle.
+[00:27:42] Jules: "Ask for the captain." That means if you want business, you go in and ask for the captain. It's like a doorbell. Pip draws a mark under it. With his chalk. Can I do that?
+[00:28:00] Rowan: What mark?
+[00:28:05] Jules: Pip draws a little gull's foot, and next to it a P. That's what we used to do. When you'd been sent with a message, you put your mark under the three dots, so they know who's come.
+[00:28:23] Rowan: Oh, I love that. Okay. Pip draws his mark. A gull's foot and a P. And you all stand there on the shingle for a minute, with the gulls screaming and the waves going out.
+And then a voice from above says, "Well, I'll be damned."
+And you look up, and sitting on a ledge about ten feet above the cave mouth, where none of you saw her, there's a halfling woman. Older than Pip, maybe thirty. Copper hair, cropped short. A long oilskin coat and a crossbow across her knees, not pointed at you, but not not pointed at you. And she's staring at Pip.
+[00:29:05] Jules: Oh no. Oh no. Okay.
+[00:29:10] Rowan: She says, "That mark's not been drawn on these rocks in nine years."
+[00:29:17] Jules: Pip says. Um. Pip doesn't say anything. Pip is just staring.
+[00:29:25] Rowan: She drops down off the ledge. She lands on the shingle like a cat. She walks up to Pip. And she stands right in front of him. And she's about an inch taller than him. And she says, "Hello, Pip."
+[00:29:43] Jules: "Hello, Nell."
+[00:29:47] Rowan: And she slaps him. Not hard. But properly.
+[00:29:53] Jules: Pip deserved that.
+[00:29:58] Theo: Bran's hand is on his sword.
+[00:30:03] Rowan: She doesn't even look at Bran. She says, "Keep your hand off your sword, big man, there's six crossbows on you." And there are, you look up and there's people on the ledges, Gullwings, oilskins and scarves over their faces, crossbows. Six of them.
+[00:30:24] Theo: Bran takes his hand off his sword. Slowly.
+[00:30:28] Rowan: And she says to Pip, "Your friends wait here. You come with me."
+[00:30:36] Jules: Pip looks at the others.
+[00:30:41] Mags: Wren nods. "Go."
+[00:30:44] Theo: Bran says, "If you're not back in an hour."
+[00:30:51] Rowan: Nell says, "If he's not back in an hour he's dead and you can't do anything about it. Sit down. Have a sandwich."
+[00:31:02] Priya: Oriel does have a sandwich.
+[00:31:06] Rowan: Okay. So this next bit is a scene between Pip and Nell. Just Pip. The rest of you are sitting on the shingle with six crossbows on you, and you can't hear any of this. So I'm going to run it out loud, because it's easier than messaging, but the rest of you, your characters don't know any of this. Is everyone okay with that? Can you all play it like you didn't hear?
+[00:31:38] Theo: Yeah, of course.
+[00:31:42] Mags: Totally. I'll put my fingers in my ears.
+[00:31:46] Priya: I'm fine with that. Oriel will be eating her sandwich.
+[00:31:54] Rowan: Okay. Jules, you okay with the others hearing it out of character?
+[00:32:03] Jules: Yeah, that's fine. I trust them.
+[00:32:10] Rowan: Okay. Bot, this bit is just Pip. The others aren't there.
+[00:32:22] Rowan: So. Nell takes you into the cave. Not far. Just round the corner, out of sight, where there's an old boat pulled up on the rocks, and she sits on the side of it. It's dim and drippy. You can hear the sea and the gulls outside. And she looks at you for a really long time.
+[00:32:47] Jules: Pip sits on a rock. He's not sure if he's allowed to sit on the boat.
+[00:32:58] Rowan: She says, "Nine years."
+[00:33:01] Jules: "I know."
+[00:33:06] Rowan: "Nine years, Pip. You went off with a wizard and you didn't say goodbye. You left a note. It said, back soon. Back soon, Pip."
+[00:33:19] Jules: "I was fifteen."
+[00:33:24] Rowan: "I was twenty one and I had nobody." She's not shouting. She's very quiet. "I looked for you for a year. I thought the wizard'd sold you. I thought you were dead."
+[00:33:41] Jules: Okay, Pip says, "He didn't sell me. He taught me. Magic. Little things. I should've come back. I should've written. I didn't know how to. Every year it got harder."
+[00:33:54] Rowan: She looks at you. And her face does something complicated. And she says, "You look well. You look like Mum." And then she sort of laughs and rubs her face. "Gods. Pip Thistlewood. In my caves. With a soldier and a tiefling and a, what is that girl, is that an elf?"
+[00:34:15] Jules: "Ren. She's a druid. She gives people sea glass."
+[00:34:20] Rowan: "Of course she does." She shakes her head. "What are you doing here, Pip? Because it's a bad time. It's a very bad time. If you've come for the light, everyone's going to think it's us. Reeve's been round every tavern saying he'll hang Saltjaw."
+[00:34:39] Jules: "He's coming tomorrow. At low tide. With twenty men. I heard him say it."
+[00:34:45] Rowan: She goes very still. "Tomorrow."
+[00:34:48] Jules: "Tomorrow at one. That's what he said. Nell, we're working for the harbourmaster. Brask. We're trying to find out who's putting out the light. And we don't think it's you."
+[00:35:03] Rowan: "It isn't us." She leans forward. "Pip. We lost the Kittiwake and the Pearl. Five of ours. Five. I knew all of them. Little Sim Haddow, you remember Sim? He was on the Pearl. He was sixteen. Saltjaw's beside himself. He wants whoever did it. He wants them in the sea."
+[00:35:28] Jules: Pip remembers Sim.
+[00:35:31] Rowan: Pip remembers Sim. He was the little kid who followed you two around with a runny nose.
+[00:35:39] Jules: Oh no.
+[00:35:41] Rowan: Yeah. So, Nell says, "I'll tell you something, and you didn't hear it from me. We bring things in for the Guild. Lamp oil. Good oil, from the south, sea grade they call it, very fine. The Guild pays well and pays in silver. We drop it at the warehouse on the north pier at night, no questions, because the Guild doesn't want the Crown's tax men knowing how much oil they're buying. That's all. That's all it is."
+[00:36:15] Jules: "The warehouse. Silas Gorm's warehouse."
+[00:36:19] Rowan: "Gorm takes delivery. But I've seen someone else there. Twice. A woman. Tall, in a grey cloak, hood up. Gorm bows to her like she's the queen. I never saw her face." She looks at you. "Saltjaw keeps a book. Every cargo. Who paid. If you want to know about the oil, he's got it all written down. But you'll have to ask him yourself, and you'll have to give him a reason."
+[00:36:50] Jules: "Will he talk to us?"
+[00:36:57] Rowan: "He'll talk to you if I tell him to." She sits back. "But listen to me, Pip. Listen. He doesn't know you're my brother. Nobody here knows I've got a brother. And it stays that way. Because if Saltjaw knows, he'll use it. He uses everything. You understand? You're a dock rat I used to know, that's all."
+[00:37:22] Jules: "Okay."
+[00:37:26] Rowan: "Say it."
+[00:37:31] Jules: "I'm a dock rat you used to know."
+[00:37:37] Rowan: "Good." And then she reaches into her coat, and she takes out a pin. A little silver pin in the shape of a gull, with its wings out. And she pins it on your coat. On the inside, on the lining, where no one'll see. And she says, "That was Mum's. I was keeping it for you. In case you came back." And she stands up. "Back soon, Pip. Back soon."
+[00:38:07] Jules: Oh no. Okay. Pip. Okay, I'm actually a bit, okay. Pip hugs her.
+[00:38:13] Rowan: She lets you. For about two seconds. And then she pushes you off and says, "Right. That's enough of that. Come and meet the captain. And keep your mouth shut about me."
+[00:38:27] Jules: Pip wipes his face and follows her.
+[00:38:39] Rowan: Okay. Bot, that's the end of the private bit. Everyone else is back.
+[00:38:49] Mags: That was so sad.
+[00:38:52] Priya: That was really good, Jules.
+[00:38:59] Theo: I didn't hear any of that.
+[00:39:04] Mags: None of us heard any of that.
+[00:39:08] Jules: Thank you. Okay, Pip's going to come out and be very normal.
+[00:39:15] Rowan: Okay. So the rest of you have been sitting on the shingle for about twenty minutes. The tide's right out now. The gulls have calmed down a bit. The crossbows are still on you, but they've relaxed. Oriel's eaten her sandwich.
+[00:39:34] Priya: And a biscuit.
+[00:39:37] Rowan: And a biscuit. And Pip comes back out of the cave with the halfling woman. And Pip's eyes are a bit red, and he's very normal.
+[00:39:48] Mags: Wren notices the red eyes.
+[00:39:52] Theo: Bran notices the red eyes.
+[00:39:58] Priya: Oriel notices the red eyes.
+[00:40:03] Jules: Pip says, "Sea spray." Very normally.
+[00:40:08] Mags: Wren says nothing. And gives him a piece of sea glass. That's five given. Seven left.
+[00:40:19] Jules: Pip takes it. Very normally.
+[00:40:22] Rowan: The woman says, "Right. I'm Nell. I'm the captain's lieutenant. Your friend here's a dock rat I used to know. He says you're not the Watch and you're working for Brask, and he says you don't think it's us. If that's true, the captain'll see you. If it's not true, the tide comes back in at six and you'll be in the caves when it does." She smiles. "Come on."
+[00:40:52] Priya: "Thank you very much, Nell."
+[00:40:56] Rowan: She looks at you a bit oddly. People don't usually thank her.
+[00:41:02] Theo: Bran says, "Pip. Is this safe?"
+[00:41:05] Jules: "Safe as anything."
+[00:41:09] Theo: "That's not an answer."
+[00:41:12] Jules: "It's a dock rat answer."
+[00:41:16] Rowan: Okay. Out of character, so, Priya, Theo, Mags, what do your characters think the halfling woman is to Pip?
+[00:41:28] Priya: Oriel thinks she's someone Pip knew as a child. Maybe someone who looked after him. She saw them come out together and Pip had been crying, so she thinks it's someone important.
+[00:41:44] Theo: Bran thinks she's an old girlfriend.
+[00:41:50] Jules: Ew!
+[00:41:53] Theo: What? He doesn't know!
+[00:41:59] Mags: Wren noticed they have the same hair. But Wren doesn't really get human, well, halfling, families. So Wren's just storing it.
+[00:42:12] Rowan: That's great. Perfect. Okay. Let's go into the caves.
+[00:42:20] Rowan: Actually, let's take a quick break before the caves. Five minutes. I need a drink.
+[00:42:29] Jules: Break!
+[00:42:53] Mags: Theo, what are you eating?
+[00:42:57] Theo: Cheese on toast. I'm forty and I eat cheese on toast at nine at night.
+[00:43:06] Priya: That's the best time for cheese on toast.
+[00:43:12] Jules: Is anyone watching the baking show? The new series?
+[00:43:18] Mags: Yes! The man with the, the bread sculpture.
+[00:43:25] Jules: The lighthouse! He made a bread lighthouse!
+[00:43:31] Priya: Oh my God, he did make a bread lighthouse. It fell over.
+[00:43:40] Theo: That's an omen.
+[00:43:44] Jules: That's literally the campaign. A lighthouse that falls over.
+[00:43:52] Mags: Rowan, did you put a bread lighthouse in this campaign?
+[00:44:00] Rowan: I'm back. What? No. I didn't watch it.
+[00:44:07] Priya: There was a bread lighthouse and it fell over.
+[00:44:16] Rowan: Spoilers.
+[00:44:19] Jules: Is the lighthouse going to fall over?
+[00:44:25] Rowan: No comment.
+[00:48:30] Rowan: Okay, everyone back? Let's go into the caves.
+[00:48:38] Rowan: Okay. So Nell takes you into the big cave mouth. It's huge inside, a vaulted cave, the floor's wet shingle and rock pools, and it goes back into the dark. I'm going to put up the map now. This is the Gull Steps. You're coming in here, at the bottom, at the sea entrance.
+[00:49:01] Jules: Ooh. It's a proper cave map.
+[00:49:05] Rowan: It is. Okay, so Nell walks you back maybe sixty feet and then the cave splits. There's a passage going up to the left, dry, with steps cut in it, and there's a rope across it, and a Gullwing standing there with a crossbow. And there's a passage going down to the right, and it's full of water. Dark water, about waist deep on Bran, so neck deep on Pip.
+[00:49:34] Jules: Neck deep on Pip.
+[00:49:40] Rowan: Nell stops. And she says, "Captain's orders. Strangers come the wet way."
+[00:49:49] Theo: "What's the wet way?"
+[00:49:54] Rowan: "That way." She points at the water. "It goes through to the hall. Hundred feet or so. Bit of a swim at the end."
+[00:50:08] Theo: "And the dry way?"
+[00:50:14] Rowan: "Is for Gullwings." She shrugs. "It's a test. If you're the Watch you won't do it, they never do, they're too proud to get their boots wet. And if you're not the Watch, well. Captain likes to see who people are when they're cold."
+[00:50:33] Mags: "Is there anything in the water?"
+[00:50:37] Rowan: Nell looks at you. "It's the sea, love. There's always something in the water." And she goes off up the dry way. And the Gullwing on the rope smirks at you.
+[00:50:53] Jules: Okay. Okay. Pip can't do neck deep. Pip is going to ride on someone.
+[00:51:00] Theo: Pip can ride on Bran.
+[00:51:07] Jules: Pip rides on Bran's shoulders.
+[00:51:13] Theo: Bran has a halfling on his shoulders.
+[00:51:19] Mags: Wren is going to Wild Shape. Can I go into something that swims now?
+[00:51:28] Rowan: You're level three. Moon druids can't do swimming forms till level four. So the crab, the giant crab, that's not a swimming form, it's amphibious with a swim speed but you can take it at three? Hmm. Let me check.
+[00:51:47] Mags: The giant crab has a swim speed of thirty. And it's in my box.
+[00:51:55] Rowan: Okay, so the rule is no forms with a swim speed till level four. The crab's got a swim speed. So, technically, no crab yet.
+[00:52:09] Mags: But the app let me put it in.
+[00:52:15] Rowan: The app's not the boss of me. No crab till level four. Sorry.
+[00:52:25] Mags: Nooo. The crab.
+[00:52:28] Rowan: You can be a wolf or a bear and walk. Bear's tall enough.
+[00:52:37] Mags: Fine. Bear. Wren goes bear. That's one use.
+[00:52:43] Priya: Oreo holds her lantern up high and walks in. It's cold.
+[00:52:49] Rowan: It's freezing. Like, take your breath away cold. Okay, so you go in. Bran, with Pip on his shoulders, bear Wren, and Oriel holding a lantern up, wading, everything's echoing. And the passage goes down and down, the roof gets lower, and the water gets deeper. It's up to Oriel's chest. And the light from the lantern's bouncing off the water onto the roof.
+And then you all make Perception checks.
+[00:53:18] Mags: Bear has a good nose. Bear has, keen smell. Is that Perception?
+[00:53:26] Rowan: Advantage if it's smell. This isn't smell, it's sight. Roll normal.
+[00:53:33] Mags: Nine. Plus three. Twelve.
+[00:53:39] Theo: Fourteen. Plus one, fifteen.
+[00:53:45] Jules: Pip, from up high. Eighteen plus five. Twenty three.
+[00:53:50] Priya: Two. Plus one. Three.
+[00:53:56] Rowan: Okay, Pip. You're up on Bran's shoulders, so you're the highest, and you can see the water ahead in the lantern light, and you see it move. Not ripples. Like the surface of the water is boiling. Ahead of you, about twenty feet. And it's moving towards you. And it's eels. Hundreds of eels. A big black knot of them.
+[00:54:23] Jules: "EELS!"
+[00:54:25] Rowan: And at the same time, Bran, you see, on the left wall of the passage, there's a ledge just above the waterline. And something on it moves. Something big. It's a crab. A huge crab, the size of a cart, sort of mottled red and grey, and it's just unfolding itself from the rock where it was perfectly camouflaged. And there's another one, further along. Two giant crabs.
+[00:54:53] Theo: "Contact left!"
+[00:54:59] Rowan: Roll initiative!
+[00:55:01] Jules: Pip, sixteen plus three, nineteen.
+[00:55:04] Theo: Nine. Plus one. Ten.
+[00:55:08] Mags: Bear. Bear's dex. Seven plus nothing. Seven.
+[00:55:12] Priya: Seventeen plus two, nineteen!
+[00:55:17] Rowan: And the eels are on fourteen and the crabs are on twelve. So Pip and Oriel on nineteen, I'll do Oriel first, she's higher dex. Then the eels, then the crabs, then Bran, then Ren.
+[00:55:35] Priya: Okay. Oriel. The eels are coming at us. Can I see them?
+[00:55:42] Rowan: In the lantern light, yes.
+[00:55:45] Priya: Okay. I don't think Eldritch Blast is very good against a swarm. Hmm. Magic Missile? The wand?
+[00:55:57] Rowan: It's a swarm. Magic missile would work, it's force, it always hits.
+[00:56:05] Priya: Hmm. Or. Okay, I'm going to cast, I've got Guiding Bolt. Celestial warlocks get it. Guiding Bolt at the eels.
+[00:56:15] Rowan: Go for it. It's a spell attack.
+[00:56:19] Priya: Fourteen plus five, nineteen.
+[00:56:24] Rowan: Against twelve. Hits.
+[00:56:26] Priya: Four d six radiant. Three, four, six, two. Fifteen!
+[00:56:34] Rowan: Okay. A bolt of white light slams into the water and it goes right through the eels and the whole passage lights up white for a second and the eels go absolutely mad. Fifteen. That's a lot of them. And the next attack against them has advantage, because Guiding Bolt.
+[00:56:56] Priya: Pip! Pip, advantage!
+[00:57:01] Rowan: Pip.
+[00:57:03] Jules: Okay. Pip's on Bran's shoulders. Pip's going to throw a dagger at the eels.
+[00:57:11] Rowan: You've got two daggers equipped. Sure.
+[00:57:17] Jules: With advantage. Eighteen and four. Eighteen plus five, twenty three. And sneak attack, because I've got advantage.
+[00:57:29] Rowan: Yes.
+[00:57:32] Jules: Dagger, d four plus three, three plus three six. Sneak attack, two d six, eight. Fourteen.
+[00:57:42] Rowan: Fifteen plus fourteen is twenty nine. The swarm had twenty eight. That's the whole swarm!
+[00:57:52] Jules: YES.
+[00:57:56] Theo: Oh my God.
+[00:58:01] Rowan: The dagger goes into the middle of the eels, and the light's still sort of fizzing in the water from the Guiding Bolt, and they just scatter. Hundreds of eels just shoot off in every direction, past your legs, it's horrible, you can feel them going past, and they're gone. Into the dark. The swarm's broken. Your dagger's somewhere at the bottom of the passage.
+[00:58:29] Jules: RIP dagger.
+[00:58:31] Rowan: Okay, but the crabs. Crab one comes off the ledge, it's huge, it drops into the water right next to Bran with this enormous splash. Multiattack, two claws. At Bran. Thirteen plus four, seventeen. Is that a hit?
+[00:58:47] Theo: AC eighteen. No.
+[00:58:52] Rowan: Second claw, twenty two. Hits. Seven bludgeoning, and you're grappled. It's got you round the waist.
+[00:59:00] Theo: Pip's on my shoulders.
+[00:59:05] Rowan: Pip's still on your shoulders. And crab two comes the other way, goes for Oriel. Claws, nine plus four, thirteen. Oriel, your AC?
+[00:59:16] Priya: Thirteen.
+[00:59:18] Rowan: Hits. Six, and grappled. And the other claw, eleven plus four, fifteen. Also hits. Five more. Oriel takes eleven. And the crab has her in one claw by the arm and the other claw is just hitting her.
+[00:59:36] Priya: Ow. Oriel's at thirteen.
+[00:59:41] Rowan: Bran.
+[00:59:46] Theo: Okay. Bran's grappled by a crab and has a halfling on his shoulders. Bran's going to attack the crab. Longsword. Seventeen plus five, twenty two.
+[00:59:57] Rowan: AC fifteen. Hits.
+[01:00:03] Theo: Six plus three, nine. And, Menacing Attack. Superiority die. Plus seven. Sixteen damage. And it's got to make a Wisdom save or be frightened of me.
+[01:00:14] Rowan: Wisdom save. Crabs have bad wisdom. Six. Minus one. Five. It's frightened. Okay, so it's frightened. Frightened means it's got disadvantage on attacks while it can see you. It's still holding you though.
+[01:00:31] Theo: "LET GO."
+[01:00:34] Rowan: It does not let go. But it's very nervous about it. Wren.
+[01:00:43] Mags: Bear Wren goes for the crab that's got Oriel. Bite, fourteen plus six, twenty.
+[01:00:52] Rowan: Hits.
+[01:00:56] Mags: Eight. Claws, sixteen plus six, twenty two. Hits?
+[01:01:01] Rowan: Hits.
+[01:01:06] Mags: Two d six plus four, nine plus four, thirteen. Twenty one total.
+[01:01:14] Rowan: Okay. So that crab is hurting. It's at five. Round two. Oreo.
+[01:01:23] Priya: Oriel is grappled. Can I still cast?
+[01:01:28] Rowan: Yeah, you can cast. Grappled is just no moving.
+[01:01:36] Priya: Then Eldritch Blast at the crab holding me. Point blank. Do I get disadvantage? It's in melee.
+[01:01:47] Rowan: Yep, ranged spell attack within five feet of a hostile creature, disadvantage.
+[01:01:55] Priya: Twelve and nine. Nine plus five. Fourteen.
+[01:02:02] Rowan: AC fifteen. Misses. Oh no.
+[01:02:09] Priya: Ugh.
+[01:02:11] Rowan: Pip.
+[01:02:15] Jules: Pip is going to jump off Bran onto the crab that's got Bran. Is that a thing I can do?
+[01:02:25] Rowan: Ha. Acrobatics. DC twelve.
+[01:02:28] Jules: Fifteen plus five, twenty.
+[01:02:34] Rowan: You jump off Bran's shoulders and land on the crab's back. It's like riding a table. A slippery, angry table.
+[01:02:46] Jules: And then Pip stabs it. Shortsword. Is Bran next to it? Sneak attack?
+[01:02:53] Rowan: Bran's right there. Sneak attack.
+[01:02:56] Jules: Sixteen plus five twenty one.
+[01:03:00] Rowan: Hits.
+[01:03:05] Jules: Five plus three eight, sneak attack, two d six, seven. Fifteen.
+[01:03:14] Rowan: Sixteen from Bran and fifteen from you. Thirty one. It had twenty six. That crab's done. You stab it right down through the gap in its shell and it goes all stiff and its claws open and it sort of sinks. And you're standing on it as it goes down.
+[01:03:38] Jules: Pip is now swimming. Pip can swim.
+[01:03:43] Rowan: Pip is very wet. Crab two, the one with Oriel, at five hit points. It's going to try and get away. It lets go of Oriel and goes back to the ledge. Bear Wren gets an attack of opportunity.
+[01:03:59] Mags: Bite! Nineteen plus six. Twenty five.
+[01:04:03] Rowan: Hits.
+[01:04:06] Mags: Seven plus four, eleven.
+[01:04:11] Rowan: That's it. Bear Wren catches it by the leg as it goes and drags it back into the water and that's the end of it.
+[01:04:22] Mags: Bear Wren has crab for lunch.
+[01:04:27] Rowan: Ew.
+[01:04:30] Mags: Bears eat crabs. It's nature.
+[01:04:34] Rowan: Okay. That's the fight. You're standing in freezing water in a dark tunnel with two dead giant crabs and a lot of eels very far away.
+[01:04:45] Theo: Okay. Anybody hurt?
+[01:04:47] Priya: Oriel's at thirteen out of twenty four. Can I heal myself? I've got Healing Light.
+[01:04:54] Rowan: Bonus action, yes. You've got a pool of d6s.
+[01:05:01] Priya: I've got four d6s. Celestial, one plus my warlock level. I'll use two. Three and five. Eight. Oriel's at twenty one.
+[01:05:12] Theo: Bran took seven. Bran's at twenty one too.
+[01:05:20] Jules: Pip's fine. Pip lost a dagger.
+[01:05:26] Mags: Bear's fine. Bear's full of crab.
+[01:05:31] Rowan: Okay. Bran, you've still got your superiority dice?
+[01:05:38] Theo: I've used one. Three left.
+[01:05:43] Rowan: Okay. The passage keeps going. Ten minutes more of wading and then it goes deep, like over your heads, for about fifteen feet, and you have to swim under a low bit of rock. And you come up on the other side, gasping, in the hall.
+[01:06:04] Rowan: The hall. It's a big dry cave, high up above the tide line, with a natural chimney in the roof letting in a bit of grey daylight and letting out the smoke from a fire in the middle. There are three boats drawn up on a ramp of shingle, long low rowing boats painted black. Crates and barrels everywhere. Hammocks strung between the rocks. About fifteen gull wings, men and women, in oilskins, mending nets, playing dice, cleaning crossbows, and they all stop and look at you as you come up out of the water dripping like drowned rats.
+And there's a slow clap.
+By the fire, sitting in a big chair that's obviously the figurehead of a ship turned on its back, there's a man. Big. Bald. Grey beard, but only on the top half of his face, sort of. Because his lower jaw is iron. A hinged iron plate, riveted on, where his jaw used to be. It goes clack when he talks.
+[01:07:12] Theo: Oh, that's horrible. That's amazing.
+[01:07:18] Rowan: He says, and it's a sort of grinding, clanking voice, "The wet way. The tiefling and the big man and the bear and the dock rat. In the wet way. And they killed my crabs."
+[01:07:36] Mags: Bear Wren turns back. Wren's back. Wren says, "Your crabs attacked us."
+[01:07:44] Rowan: "My crabs attack everybody. That's why they're my crabs." Clack. "Nell tells me you're not the Watch."
+[01:07:54] Theo: "We're not the Watch. We're working for the harbourmaster."
+[01:08:02] Rowan: "Odile Brass." Clack. "I like Odile. She's honest. She'd hang me if she could catch me, but she'd do it honest." He leans forward. "What do you want?"
+[01:08:15] Theo: Bran looks at Pip.
+[01:08:17] Jules: Pip says, "Captain Marrow. We think someone's putting the light out on purpose. Someone at the Guild. And the Watch thinks it's you. Sergeant Reeve's coming tomorrow at low tide with twenty men to hang you."
+[01:08:35] Rowan: Okay. That gets a reaction. A murmur goes round the whole cave. Saltjaw looks at Nell. Nell nods. "I heard it from the dock rat," she says. "He heard it from Reeve's own mouth on the Climb this morning."
+Saltjaw sits back. Clack. Clack. "Dunstan Reeve couldn't hang a coat." But he says to someone behind him, "Move the brandy to the north cave. Tonight. And the silk." And three people get up and go.
+[01:09:07] Theo: Bran says, "We don't care about the brandy."
+[01:09:13] Rowan: "Everybody cares about the brandy." He looks at you. "Why do you think it's the Guild?"
+[01:09:23] Priya: Oriel tells him. The seawater in the oil. The sealed casks. Silas Gorm.
+[01:09:30] Rowan: When you say seawater in the oil, his face goes very dark. Well, the top half of it does. He says, "Sea grade lamp oil. Ten casks a time." He turns his head and spits into the fire. And he says, "Fetch me the book."
+And a boy runs and brings a big, battered ledger, leather bound, swollen with damp. And Saltjaw opens it on his knee and runs a thick finger down the pages. And he says, "We bring it in from the south. For the Guild. Oil. Sealed, in their own casks, they give us the empty casks to fill at the other end. The Guild pays twice the going rate, in good silver. I thought it was the tax they were dodging." Clack. "I've been bringing in their poison and leaving it on their doorstep."
+[01:10:26] Priya: "You didn't know."
+[01:10:29] Rowan: "Didn't know. Didn't ask." He looks up at you. "I lost the Kittiwake and the Pearl. Five of mine. One of them was sixteen."
+[01:10:39] Jules: Pip's very quiet.
+[01:10:42] Rowan: He shuts the book. And he looks at you a long time. And then he says, and I'm going to say this exactly, because it matters:
+"Find who's putting out the light, and the Gullwings carry you anywhere on this coast, once, no coin and no questions."
+[01:11:02] Theo: Oh. Okay. That's a good offer.
+[01:11:07] Mags: That's a really good offer.
+[01:11:11] Rowan: He holds out his hand. A big scarred hand with three rings on it.
+[01:11:20] Theo: Bran looks at everyone.
+[01:11:23] Priya: Oriel nods.
+[01:11:25] Mags: Ren nods.
+[01:11:26] Jules: Pip nods.
+[01:11:32] Theo: Bran shakes his hand. "Done."
+[01:11:38] Rowan: Clack. "Done." And then he opens the book again, and he finds a page, and he tears it right out. Rrrrip. And he holds it out. "You'll want that. Earnest money. It's not coin, it's better."
+[01:11:53] Priya: Oriel takes it. What is it?
+[01:11:59] Rowan: Okay. I'm going to give it to you as an item, the Gullwing ledger page. It's a page from the ledger. Dates, boats, cargo, who paid. And it says, six shipments since Greyfall, that's a few months ago, of "lamp oil, sea grade, ten casks". Delivered to the Guild warehouse on the north pier. Paid in Guild silver. And each one's signed for, in very elegant handwriting, with two letters. C. L.
+[01:12:29] Priya: C. L.
+[01:12:33] Theo: Corra Lindqvist.
+[01:12:38] Jules: Corra Lindquist!
+[01:12:43] Mags: The saint.
+[01:12:45] Priya: Oriel's face falls a bit. "It could be someone else. C L could be anyone."
+[01:12:56] Jules: It's not anyone.
+[01:12:59] Rowan: And there's two more lines on the page, from earlier, from last year. Tidesong and Netmend. Same cargo, ten casks of sea grade oil. And next to those it says, "On to Varrowgate. The hall cellars."
+[01:13:16] Jules: The cellars! The letter at the Guild hall! It was addressed to the cellars! The Guild house in Varrowgate, the cellars!
+[01:13:27] Rowan: You remember the letter.
+[01:13:30] Jules: So it's going to Varrowgate too. So it's not just here.
+[01:13:35] Theo: So it's bigger than one lighthouse.
+[01:13:42] Rowan: Saltjaw says, "Varrowgate. We took two cargoes upriver last summer, to the Guild house there. Same oil." He shrugs. "I don't know what they do with it in a city with no sea."
+[01:13:58] Jules: Can Pip ask something? "Captain, where do you land the oil? Exactly?"
+[01:14:05] Rowan: Saltjaw looks at you sideways. "Why does a dock rat want to know?"
+[01:14:15] Jules: "Because if we go and look at it, I want to know which bit of the pier not to fall off."
+[01:14:27] Rowan: Clack. That gets a laugh from a couple of the Gullwings. "North pier. The end. There's a trapdoor under the warehouse, right over the water. We row in under the pier at slack water, and they let a rope down, and we send the casks up. Gorm counts them. Never a word out of him. Never a drink, never a smile."
+[01:14:53] Theo: "He's gone. Gorm. His room's empty and there's wet footprints going to the trapdoor."
+[01:15:01] Rowan: Saltjaw goes still. "Into the sea?"
+[01:15:05] Theo: "Into the sea."
+[01:15:08] Rowan: Nell and Saltjaw look at each other. And Saltjaw says, quietly, "Like Davy."
+[01:15:18] Priya: "Who's Davy?"
+[01:15:23] Rowan: "I'll come to Davy." Clack.
+[01:15:29] Theo: "When's your next delivery to the Guild?"
+[01:15:35] Rowan: Saltjaw checks the book. "There was one due on the tenth. Ten casks. The night before the new moon." He shuts the book. "There won't be now."
+[01:15:49] Priya: Oriel says, "Actually, Captain. Could you still make it? Or pretend to? If the Guild's expecting it, they'll be waiting at the warehouse."
+[01:16:03] Rowan: Ooh. He looks at you with a lot more interest. "You want to set a trap with my boat."
+[01:16:14] Priya: "I'd just like to see who comes to collect it."
+[01:16:22] Rowan: Clack. Clack. "Maybe." He taps his iron jaw. "Ask me again nearer the time. If you're still alive."
+[01:16:34] Mags: Can I ask him about the singing? The drowned?
+[01:16:41] Rowan: Sure.
+[01:16:44] Mags: "Captain. The drowned men. On the lighthouse track. We fought some. Have your people seen them?"
+[01:16:54] Rowan: The cave goes very quiet. And he says, "Nell?" And Nell says, "We found Davy Penhallow on the shingle two nights after the Pearl went down. Walking. He'd been dead two days. He didn't know us. He tried to drag Mal into the sea." And Saltjaw says, "We put him back in the sea with a stone round his neck." Clack. "The sea gives and the sea takes. But it doesn't give back like that. Not ever. That's not the sea. That's something in the sea."
+[01:17:29] Mags: Wren goes very quiet.
+[01:17:35] Rowan: Okay. Wren. Make me a Wisdom save.
+[01:17:39] Mags: Oh no. Twelve. Plus five. Seventeen.
+[01:17:46] Rowan: Okay. That's fine. You're fine. Nothing happens.
+[01:17:52] Mags: Something happened.
+[01:17:57] Rowan: Nothing happened. You're fine.
+[01:18:02] Theo: Something definitely happened.
+[01:18:07] Priya: Oreo asks, "Captain, one more. Tamsin Rook. Do you know where she is?"
+[01:18:16] Rowan: "If I knew where she was, she'd be in my boat going somewhere safe." He looks at you. "She was a good keeper. She'd keep the light for us when she knew a boat was due, an extra hour. Never asked what was in it. The town says I killed her." Clack. "If I find who started that I'll take their jaw for mine."
+[01:18:42] Theo: Bran says, "We heard she might have gone to the marsh. To an old woman."
+[01:18:50] Rowan: Saltjaw laughs. A horrible clanking laugh. "Mother Sallow? Then she's alive and she's sorry she's alive. That old witch'll want paying."
+[01:19:00] Mags: "What does she want?"
+[01:19:02] Rowan: "Never the same thing twice. Never money." He shrugs. "Ask Ferret. Ferret trades with her."
+[01:19:11] Jules: Who's Ferret?
+[01:19:16] Rowan: Pip, you'd know the name. Ferret Lusk. He was a fence when you were a kid. He sold stolen goods for the Gullwings. He's still here, apparently.
+[01:19:30] Rowan: Saltjaw says, "Ferret's got his corner over there. Buy something, he likes customers." And he waves at the side of the cave. "And then get out before the tide. Nell'll take you up the dry way. You've earned it." Clack.
+[01:19:53] Rowan: Okay, so let's do Ferret. In a little side cave, sitting on a crate, with all his stuff laid out on an old sail, there's a thin man with a long nose and a moustache like a dropped comma. He's got a fur collar on his coat, it might be an actual ferret. He says, "Customers! Welcome, welcome. Everything legitimate. Mostly."
+[01:20:21] Jules: Pip says, "Hello, Ferret."
+[01:20:27] Rowan: He squints at you. "Do I know you?"
+[01:20:32] Jules: "You sold me a knife when I was ten. It was a broken knife."
+[01:20:40] Rowan: "Then it was a bargain!" He doesn't remember you at all.
+[01:20:47] Jules: Ha.
+[01:20:50] Rowan: Okay, he's got: a ring, a plain silver ring with a wave on it, which he says is a Ring of Swimming, two hundred and eighty gold. A disc of green glass in a brass ring, about the size of your palm, a hundred and fifty gold. Two potions of healing at sixty five each, which is a rip off. Daggers at one and a half gold. A set of thieves' tools at thirty. A grappling hook at three.
+[01:21:24] Jules: Pip needs a dagger. Pip lost a dagger to the eels.
+[01:21:32] Rowan: One and a half gold.
+[01:21:37] Jules: Pip buys a dagger. And says, "That's cheap for you, Ferret. Is it stolen?"
+[01:21:45] Rowan: "Everything's stolen, if you go back far enough."
+[01:21:51] Priya: What's the green glass?
+[01:21:55] Rowan: Ferret holds it up. "Ah! Driftglass. Very rare, very old, belonged to a lighthouse keeper's grandmother, so I'm told. You look through it," he holds it up to his eye, "and fog's no matter. You see right through it, clear as a summer day." He hands it to you.
+[01:22:17] Priya: Oriel looks through it.
+[01:22:23] Rowan: Okay. So you look through it, and it's green, and the cave goes clear and sharp, and the smoke from the fire, you can see straight through it like it's not there. It's magic. Arcana or just, you can tell it's magic. And there's a tiny mark on the brass ring. A lighthouse. A tiny engraved lighthouse with a red band.
+[01:22:49] Priya: Lamplight Point. It's got a red band.
+[01:22:53] Rowan: It's got a red band.
+[01:22:59] Priya: "Where did you get this?"
+[01:23:04] Rowan: "Estate sale."
+[01:23:09] Priya: Can Oriel tell if he's lying?
+[01:23:15] Rowan: Insight.
+[01:23:18] Priya: Fifteen plus three. Eighteen.
+[01:23:23] Rowan: He's lying. And you think he doesn't actually know where it's from. Someone sold it to him who didn't know what it was.
+[01:23:35] Priya: "I want it. But I don't have a hundred and fifty gold."
+[01:23:43] Rowan: "Then you don't want it."
+[01:23:48] Priya: Oriel has, um. Eleven gold and seven silver. Minus the room. Eleven gold two silver.
+[01:23:55] Jules: Can I haggle? Pip's going to haggle.
+[01:24:00] Theo: Pip's terrible at haggling.
+[01:24:03] Jules: Pip had a nat twenty at the apothecary!
+[01:24:08] Rowan: Okay. Pip haggles. Persuasion. Actually, Pip, you know something about Ferret. You know he's a fence for the Gullwings and the gull wings don't like it when their fence sells to the Watch. Which he does. Everyone knew it when you were a kid. If you want to use that, it's Intimidation.
+[01:24:32] Jules: Ooh. Okay. Pip leans in and says, very quietly, "Ferret. Remember Sergeant Bellweather? Back when? The night of the brandy? I remember who told him where the brandy was." Intimidation. Nineteen. Plus three. Twenty two.
+[01:24:49] Rowan: Ferret goes white. White as a sheet. And he looks over his shoulder, towards the hall, where Saltjaw is. And he says, "Ninety."
+[01:25:02] Jules: "Eighty."
+[01:25:05] Rowan: "Eighty five."
+[01:25:08] Jules: "Eighty. And I forget about Sergeant Bellweather."
+[01:25:13] Rowan: He swallows. "Eighty."
+[01:25:16] Jules: Pip turns round. "Eighty gold. Who's got eighty gold?"
+[01:25:21] Priya: Oriel's got eleven.
+[01:25:23] Mags: Wren will give money. Wren doesn't care about money. Wren has, thirty nine and a half, minus the room, thirty nine. Wren gives thirty five.
+[01:25:36] Jules: Pip will give, Pip has, okay, forty, minus one, minus five, minus five copper, minus the room, minus the dagger. Thirty two and, let's say thirty two. Pip gives thirty four. No. I can't give thirty four. Ugh. Pip gives thirty.
+[01:25:54] Priya: So that's eleven plus thirty five plus thirty. Seventy six.
+[01:25:59] Theo: Bran puts in four. That's all he's putting in.
+[01:26:06] Priya: "Thank you, Bran."
+[01:26:10] Theo: "Pay me back."
+[01:26:14] Priya: "I will."
+[01:26:16] Rowan: Okay, so Oriel gets the Driftglass Lens for eighty gold, eleven from Oriel, thirty five from Wren, thirty from Pip, four from Bran. Can you all update your coins?
+[01:26:32] Mags: Wren's at four gold. Ha.
+[01:26:36] Jules: Pip's at two gold and some silver.
+[01:26:41] Theo: Bran's at thirty nine.
+[01:26:44] Priya: Oriel is at nothing. Oriel has two silver.
+[01:26:49] Rowan: Okay. And it needs attunement. A short rest's worth of time holding it.
+[01:26:56] Priya: Oriel will attune to it as soon as we get a short rest.
+[01:27:03] Rowan: Okay. Write it on your sheet. It's in the items.
+[01:27:11] Priya: Done. Driftglass Lens. Needs attunement.
+[01:27:16] Rowan: And Ferret says, "Pleasure doing business," in a voice that means it was not a pleasure. And he doesn't look at Pip again.
+[01:27:29] Jules: Pip winks at him.
+[01:27:34] Rowan: Nell, at the door, says, "Very good, dock rat," very dryly.
+[01:27:41] Rowan: Okay. So Nell takes you up the dry way. It's a long passage with steps cut in it, a rope handrail, little lamps in niches every so often. And it comes out, you'd never guess, in the back of a ruined boathouse at the top of the cliffs, about a quarter mile from the Gull Steps. Very clever.
+[01:28:08] Jules: Pip didn't know about this. This is new.
+[01:28:15] Rowan: This is new since your time. Nell says, "We dug it the winter after you left." And she says it to the whole group, very casual, "the winter after you left," like she means you, Pip, specifically, and then she sort of catches herself and says, "you dock rats, I mean. All the little ones grew up and went."
+[01:28:39] Theo: Bran clocks that.
+[01:28:44] Jules: Pip says nothing.
+[01:28:49] Rowan: Okay, so Nell stops at the door. "Captain'll keep his word," she says. "He always does. Find who's doing it and you'll have your boat." And then she looks at Pip, and she says, "You did well in there, dock rat. Don't get yourself killed."
+[01:29:11] Jules: "You neither."
+[01:29:15] Rowan: And she goes back down into the dark. And that's the last you see of Nell, for now.
+[01:29:27] Priya: Who was she, Pip?
+[01:29:30] Jules: Pip says, "Someone who looked after me. When I was little. Down there."
+[01:29:40] Priya: Oriel says, "She cares about you a great deal."
+[01:29:45] Jules: "She slapped me."
+[01:29:48] Priya: "Exactly."
+[01:29:50] Mags: Ren laughs.
+[01:29:55] Theo: Bran says, "Old girlfriend?"
+[01:30:02] Jules: Pip says, "Absolutely not. Gods. No."
+[01:30:08] Theo: Bran shrugs.
+[01:30:12] Rowan: Okay. So, it's about two o'clock. You're up on the cliffs, in the drizzle, soaked through from the wet way, freezing. Does anyone want a short rest?
+[01:30:24] Mags: Yes. Wren's out of Wild Shape uses. One left, actually, I used one. And Oreo wants to attune.
+[01:30:34] Priya: And my warlock slots come back on a short rest. I used one for Guiding Bolt.
+[01:30:44] Theo: Bran used one superiority die. And Second Wind, no, I didn't use Second Wind this time. One die.
+[01:30:53] Rowan: Okay. There's the old boathouse, it's got a roof, mostly. You can light a fire with the old planks. An hour. Short rest.
+[01:31:06] Priya: Oriel sits by the fire with the lens and holds it and looks through it at the flames.
+[01:31:17] Rowan: Okay. While you attune. Oriel, you look through the driftglass at the fire, and the fire's very clear and very bright, and then you look out of the boathouse door at the sea, and the fog's lying on the sea all the way to the horizon, and through the glass it's just gone. You can see the sea, clear, grey, all the way out. The Teeth. The lighthouse on the headland, far up the coast. And on the water, near the lighthouse, out past the end of the Point, you see something.
+[01:31:55] Priya: What?
+[01:32:01] Rowan: It's very small at this distance. But there are shapes on the water. Standing on the water. Or in it, up to the waist. A lot of them. Twenty, thirty. In a ring. Around a spot of water just off the end of Lamplight Point. Not moving. And when you take the glass away from your eye, there's just fog.
+[01:32:26] Priya: Oriel puts the glass back up.
+[01:32:29] Rowan: Still there. Still not moving. Standing in a ring, facing in, like they're waiting for something.
+[01:32:39] Priya: Oriel says, "Everyone. Look." And passes it round.
+[01:32:46] Theo: Bran looks.
+[01:32:50] Rowan: You see the same thing. And then, Bran, as you're looking, one of them turns its head. Towards you. Across three miles of sea. And you feel like it's looking right at you. And you take the glass away.
+[01:33:09] Theo: "That's the drowned. That's a lot of drowned."
+[01:33:15] Mags: Wren doesn't want to look.
+[01:33:19] Theo: Bran puts the glass in Wren's hand.
+[01:33:25] Mags: Wren looks. Very quickly. And gives it back to Oriel.
+[01:33:34] Rowan: Wren, I'll just say, quietly, you hear it again. Just for a second, when you look. You know what.
+[01:33:46] Mags: Okay.
+[01:33:50] Jules: Pip looks too.
+[01:33:54] Rowan: Same thing. A ring of them, off the end of the Point. Like they're standing round a hole in the sea.
+[01:34:04] Jules: "What are they waiting for?"
+[01:34:09] Priya: "The new moon. The old woman in the pub said the cellar floods at the new moon."
+[01:34:19] Theo: "Seven days."
+[01:34:23] Rowan: Six now, actually. It's the fourth. New moon is the eleventh.
+[01:34:28] Theo: Wait, it's the fourth?
+[01:34:34] Rowan: Fourth of Rimewane. Netday. You arrived on the third.
+[01:34:41] Theo: Right. Seven days, then. Seven days counting today.
+[01:34:49] Rowan: Seven days, counting today. Six nights.
+[01:34:54] Priya: Okay. Short rest. Oriel's attuned to the Driftglass Lens. And she's got her slot back.
+[01:35:03] Rowan: Lovely. Hit dice, anyone?
+[01:35:10] Jules: Pip's fine. Pip's full.
+[01:35:15] Theo: Bran was at twenty one. I'll roll one hit die. D ten plus two. Seven plus two, nine. Twenty eight. Full.
+[01:35:26] Mags: Wren's fine. Bear took the hits.
+[01:35:30] Priya: Oriel healed with Healing Light. I'm at twenty one. I'll spend a hit die. D eight plus one. Four plus one. Five. Twenty four. Full.
+[01:35:42] Rowan: And Healing Light comes back on a long rest, not a short one, so you've got two d six left.
+[01:35:52] Priya: Two d six. Got it.
+[01:35:57] Rowan: Wren, Wild Shape comes back on a short rest. You've got both.
+[01:36:03] Mags: Ooh, great.
+[01:36:10] Rowan: Okay. So you're packing up. Putting the fire out. And everybody, Perception.
+[01:36:18] Mags: Eighteen plus six. Twenty four. Wait, I'm still level three. Plus five. Twenty three.
+[01:36:28] Jules: Twelve plus five, seventeen.
+[01:36:31] Theo: Three. Plus one. Four.
+[01:36:35] Priya: Fourteen plus one, fifteen.
+[01:36:40] Rowan: Wren. You hear someone on the shingle path outside the boathouse. Several someones. Trying to be quiet and not very good at it. And Pip, you hear the click of a crossbow being cocked.
+[01:36:56] Mags: "Someone's outside."
+[01:36:59] Jules: Pip goes flat against the wall.
+[01:37:03] Rowan: And then a voice outside, a woman's voice, very calm, sort of sing song. "Keeper. Little keeper. Come out. Come out and bring your light."
+[01:37:14] Priya: Me? Is that me?
+[01:37:18] Rowan: It's directed at the boathouse. You're the one in the keeper's coat.
+[01:37:25] Priya: Oriel does not come out.
+[01:37:31] Rowan: And then three people come through the door. Not Gullwings. They're in plain grey clothes, like dockhands, with scarves wrapped round their faces. And they've got knives. Strange knives, sort of grey and crusty, like they've been left in the sea. And one more stays outside, you can see her through the gap in the planks, with a crossbow. Roll initiative.
+[01:37:57] Jules: Eighteen plus three. Twenty one.
+[01:38:02] Mags: Ten plus two, twelve.
+[01:38:07] Theo: Fifteen plus one, sixteen.
+[01:38:12] Priya: Nineteen plus two, twenty one!
+[01:38:18] Rowan: They're on eleven. Pip and Oriel tied, Pip's dex is higher, Pip first.
+[01:38:28] Jules: Okay. Three of them inside. Pip's against the wall. Are any of them next to someone else?
+[01:38:37] Rowan: The first one through the door is right next to Bran. Bran's by the fire.
+[01:38:48] Jules: Shortsword at the one by Bran. Sneak attack. Sixteen plus five, twenty one.
+[01:38:57] Rowan: Hits. They're only in leather. AC twelve.
+[01:39:04] Jules: Four plus three, seven, sneak attack, nine. Sixteen.
+[01:39:09] Rowan: That one goes down. Just like that. It drops its knife and falls in the fire, well, next to the fire.
+[01:39:21] Jules: Oh. That was easy.
+[01:39:24] Rowan: These aren't drowned. They're people. They don't have many hit points.
+[01:39:30] Priya: Oriel. Okay, if they're people, I don't want to kill them if I don't have to.
+[01:39:37] Rowan: That's up to you.
+[01:39:43] Priya: I'm going to cast Sleep? No, I don't have Sleep. Pip has Sleep. Hmm. Oreo uses Eldritch Blast on the one with the crossbow outside. Through the gap.
+[01:39:56] Rowan: Three quarters cover. Plus five to their AC. Seventeen.
+[01:40:01] Priya: Twenty plus five. Twenty five. Hits.
+[01:40:07] Rowan: Okay, the bolt of energy goes through the gap in the planks and hits her and she goes over backwards. She's still up. She's hurt.
+[01:40:18] Priya: Seven damage.
+[01:40:21] Rowan: Okay. The two inside. One goes for Ren, one goes for Pip, who just stabbed his friend. Wren, knife, eleven plus three, fourteen. AC?
+[01:40:32] Mags: Fifteen. Wait. Am I a bear?
+[01:40:38] Rowan: You're not a bear. You're an elf.
+[01:40:43] Mags: Fifteen with my shield. Misses.
+[01:40:49] Rowan: Pip, sixteen plus three, nineteen. Hits. Five slashing. And it's cold. The knife's cold. Like it's been in the sea.
+[01:41:00] Jules: Pip's at sixteen.
+[01:41:03] Rowan: The crossbow woman outside, she's hurt. She doesn't shoot. She turns and runs. You hear her going down the cliff path.
+[01:41:15] Theo: Bran's turn. Bran attacks the one on Wren. Longsword. Nineteen plus five, twenty four.
+[01:41:25] Rowan: Hits.
+[01:41:30] Theo: I'm going to hit to knock out. Not kill. Can I do that?
+[01:41:39] Rowan: Melee, yes. When you drop them you can choose to knock them out.
+[01:41:46] Theo: Eight plus three. Eleven.
+[01:41:49] Rowan: That's it. Down. Unconscious. Bran clocks him on the head with the pommel.
+[01:41:55] Theo: "Stay down."
+[01:42:01] Mags: Wren. The one on Pip. Wren's going to cast Entangle? No. In a boathouse. Hmm. Shillelagh and hit him. No, that's a bonus action. Okay, Wren casts Shillelagh, bonus action, and hits him with her quarterstaff. With Wisdom. Seventeen plus five. Twenty two.
+[01:42:20] Rowan: Hits.
+[01:42:23] Mags: D eight plus three. Six plus three. Nine. Non lethal.
+[01:42:30] Rowan: He's at four. Still up. He looks around. His friends are down. He drops his knife and runs for the door.
+[01:42:42] Jules: Pip trips him. Can Pip trip him?
+[01:42:49] Rowan: Opportunity attack. Sure, you can grapple or shove instead. Athletics.
+[01:42:57] Jules: Pip doesn't have athletics. Nine. Minus one. Eight.
+[01:43:01] Rowan: He's too heavy. He shoves past you and out the door and down the path after the crossbow woman.
+[01:43:10] Theo: Bran goes after them.
+[01:43:15] Rowan: It's foggy and they're down the cliff path, they know it, they're gone. And you hear a splash, a big one, from below the cliff. Someone jumped into the sea.
+[01:43:30] Mags: From the cliff?
+[01:43:33] Rowan: From the cliff. Into the sea. In midwinter.
+[01:43:38] Theo: Bran comes back. "Gone. Jumped."
+[01:43:42] Rowan: So you've got two in the boathouse. One Pip stabbed, who's dying, and one Bran knocked out.
+[01:43:53] Priya: Oriel goes to the one Pip stabbed. Is he dead?
+[01:44:00] Rowan: He's dying. He's at zero, making death saves. You've got a round or two.
+[01:44:09] Priya: Oriel stabilises him. Spare the Dying. It's a cantrip.
+[01:44:14] Rowan: Okay, he's stable. Unconscious but stable.
+[01:44:22] Priya: "We're not killing anybody we don't have to."
+[01:44:30] Jules: He tried to stab me!
+[01:44:35] Priya: "He's stable. We can ask him questions."
+[01:44:42] Rowan: Okay. What do you want to do with them?
+[01:44:47] Theo: Search them. Bran searches the one he knocked out.
+[01:44:55] Rowan: Okay. Grey clothes, ordinary. A knife, the strange crusty one, it's iron but it's covered in barnacles. Actual barnacles, growing on it. A few silver coins. Guild silver, they're stamped with the lantern. And when you pull the scarf off his face, he's young, twenties, a dockhand, you'd say, rough hands. And his mouth's a bit open.
+[01:45:18] Jules: Pip looks in his mouth.
+[01:45:23] Rowan: Why?
+[01:45:27] Jules: I don't know! It said his mouth's a bit open!
+[01:45:33] Rowan: Okay. Fair. Investigation.
+[01:45:37] Jules: Fourteen plus two, sixteen.
+[01:45:44] Rowan: Inside his lower lip, tattooed. The barnacle sign. The closed eye in the ring of little circles. Small, blue, on the inside of his lip where nobody would ever see it.
+[01:45:58] Jules: There it is.
+[01:46:03] Priya: Oriel checks the other one. The one I saved.
+[01:46:10] Rowan: Same. Same tattoo inside the lip.
+[01:46:14] Theo: Bran wakes his one up. Slaps him. Not hard.
+[01:46:19] Rowan: He comes round. He looks at you, groggy, and then he sees where he is and who you are, and he smiles. It's a horrible smile, really calm. And he says, "You can't stop the tide."
+[01:46:34] Theo: "Who sent you?"
+[01:46:40] Rowan: "The tide."
+[01:46:43] Theo: "Who's she? 'She'll have them all back.' Who's she?"
+[01:46:51] Rowan: His eyes go wide when you say that. And then he starts singing. Under his breath. Low and slow. Wren, Pip, it's the same tune. The singing under the lighthouse.
+[01:47:06] Mags: Oh no.
+[01:47:08] Theo: Intimidate. Bran pins him against the wall. "WHO SENT YOU?"
+[01:47:15] Rowan: Intimidation. They've got an advantage against fear, I'll tell you, while they can hear the singing, so I'll say you've got a disadvantage while he's singing.
+[01:47:28] Theo: Eleven and four. Four. Plus nothing. Four.
+[01:47:32] Rowan: He just keeps singing. He's not scared. He's somewhere else.
+[01:47:39] Priya: Can Oriel tell anything? Insight?
+[01:47:45] Rowan: Insight.
+[01:47:48] Priya: Twelve plus three. Fifteen.
+[01:47:52] Rowan: He's not mad. He believes. He's completely, peacefully sure of whatever he's singing to. And he's happy. That's the scary bit.
+[01:48:01] Theo: Okay. Bran ties them both up. We take them back to town. To the Watch.
+[01:48:10] Rowan: Okay. That'll slow you down. You've got two of them, one walking and one being carried.
+[01:48:19] Theo: Bran carries one. Bran's strong.
+[01:48:23] Rowan: Okay.
+[01:48:27] Rowan: Okay. So you walk back towards town along the cliffs. It's about three. Talk while you walk?
+[01:48:35] Theo: Bran wants to talk about C L.
+[01:48:42] Priya: Oriel doesn't want to talk about C L.
+[01:48:49] Theo: Bran's going to talk about C L. "Corra Lindqvist. Guild mistress. Signed for six shipments of oil with seawater in it."
+[01:49:02] Priya: "We don't know she knew there was seawater in it. Saltjaw didn't know."
+[01:49:11] Theo: "Saltjaw didn't open the casks. Lindquist runs the Guild. She'd know."
+[01:49:19] Priya: "Gorm had the warehouse. Gorm put the seawater in. Gorm had the barnacle sign in his prayer book. And Gorm's gone."
+[01:49:31] Jules: "And the woman in the grey cloak that Gorm bowed to." Oh. Wait. Pip didn't hear that from anyone but Nell. Can Pip say that?
+[01:49:43] Rowan: Pip can say whatever Pip wants to say. Pip knows it.
+[01:49:51] Jules: Then Pip says, "Someone told me, down there. There's a woman who comes to the warehouse at night. Tall, grey cloak, hood up. Gorm bows to her like she's the queen."
+[01:50:05] Theo: "Grey. Lindqvist was in grey this morning, in the chapel. Oriel said."
+[01:50:11] Priya: Oriel's quiet. And then she says, "Lots of people wear grey. Lamplighters wear grey. I wear grey."
+[01:50:19] Mags: "You're tall too."
+[01:50:22] Priya: "Wren!"
+[01:50:23] Mags: "I'm just saying! It's not proof!"
+[01:50:29] Priya: Oriel laughs. "No. It's not." And then she says, "But she was facing the sea. Brother Aldous said."
+[01:50:37] Theo: "Facing the sea."
+[01:50:40] Priya: "I'd like to ask her myself. Face to face. Before we decide."
+[01:50:47] Theo: "That's fair. That's fair. But we don't tell her what we know."
+[01:50:55] Priya: "Of course not."
+[01:50:58] Jules: "And we don't tell her about Saltjaw. Or the Gullwings. Or anything."
+[01:51:05] Mags: "And we don't tell her about the ring in the sea."
+[01:51:13] Priya: "We don't tell her anything. We just ask about the oil."
+[01:51:21] Theo: Okay. Bran's happy with that.
+[01:51:27] Mags: What about Tamsin? She's still out there somewhere. With the old woman in the marsh.
+[01:51:37] Theo: And the Lantern of Saint Aubrel. Which isn't where it should be.
+[01:51:44] Priya: Maybe Tamsin has it. Maybe she took it with her.
+[01:51:50] Jules: Or maybe C L has it.
+[01:51:55] Priya: Pip.
+[01:51:58] Jules: What? It's a possibility.
+[01:52:03] Theo: And the people in the boathouse. With the barnacle tattoos. Who are they?
+[01:52:11] Priya: Some kind of cult. Old faith. The thing under the sea.
+[01:52:18] Mags: A choir. They sing. They're like a choir.
+[01:52:26] Rowan: Interesting word.
+[01:52:31] Rowan: Okay. Great. So. You get back to town at about five, with your two prisoners. It's dark already. You hand them to the Watch. Tobin's on the door, and he takes them, and puts them in the cells. Reeve's not there. And I'll tell you now, out of character, by the next morning they'll be gone. Tobin will tell you. Someone paid their fine. Someone from the Guild came with a letter.
+[01:53:01] Theo: Of course they did.
+[01:53:05] Jules: Of course they did.
+[01:53:12] Rowan: But you know what you know. The tattoo. The knives. The Guild silver. And the singing.
+[01:53:22] Mags: And they called Oriel little keeper.
+[01:53:29] Priya: They did call me that.
+[01:53:33] Rowan: Okay. So it's about half five. What do you want to do?
+[01:53:42] Priya: The Guild hall. Lindquist said afternoon.
+[01:53:49] Rowan: Okay. You go up the Climb. The Guild hall. Same clerk, with the inky fingers. And he looks a bit uncomfortable when he sees you. "Ah. Mistress Vane. I'm so sorry. Mistress Lindqvist got your message, and she was so pleased, truly. But she's had to go to Varrowgate. Guild business. She left at noon. She'll be back in two days, or three. She asked me to say she very much looks forward to meeting you, and to thank you for your concern for poor Keeper Rook."
+[01:54:26] Priya: "Varrowgate."
+[01:54:30] Rowan: "Yes, the Guild house there. She goes often."
+[01:54:37] Jules: To the cellars.
+[01:54:42] Rowan: Pip doesn't say that out loud I hope.
+[01:54:47] Jules: Pip doesn't say that out loud. Pip thinks it very loudly.
+[01:54:54] Priya: Oriel says, "Of course. Please tell her we'll call again."
+[01:55:01] Rowan: "I will. Oh, and, she left this for you." And he holds out a small purse. "From the Guild. For your trouble. With the Mistress's thanks to any sister of the Guild who takes an interest in the light." It's got ten gold in it.
+[01:55:22] Priya: Oh. Oh, that's kind.
+[01:55:28] Theo: That's a bribe.
+[01:55:33] Priya: It's not a bribe! It's a gift! From the Guild!
+[01:55:40] Theo: Ten gold to not take an interest in the light.
+[01:55:45] Priya: To take an interest in it! It said take an interest!
+[01:55:51] Jules: Oreo needs the money. Oriel has two silver.
+[01:55:59] Priya: Oriel takes it. And thanks him very much. "Please thank the Mistress."
+[01:56:06] Rowan: Okay. Ten gold to Oriel.
+[01:56:09] Priya: Oriel gives four to Bran right away.
+[01:56:15] Theo: Bran takes it. "Thank you."
+[01:56:22] Rowan: Okay. So Bran's back at forty three. Oriel's at six and two silver.
+[01:56:28] Mags: Six gold. We're so poor.
+[01:56:35] Theo: We're getting a hundred each.
+[01:56:40] Jules: If we live.
+[01:56:45] Theo: That's my line.
+[01:56:53] Rowan: Okay. Where next? It's about six. Dark.
+[01:57:01] Theo: Brask. We should tell Brask about the ledger. And about Reeve going in tomorrow.
+[01:57:11] Rowan: Okay. Brass's office. She's there, same as before, the stove's going. She listens to the whole thing. When you show her the ledger page, she reads it twice, and puts it down on her chart, very carefully, like it might go off.
+"C L," she says. "C L."
+[01:57:30] Theo: "Corra Lindquist."
+[01:57:35] Rowan: "Or Clement Lowe at the chandlery, or Cath Lake who does the Guild's accounts, or anyone with a C and an L." She rubs her eyes. "I know what it looks like. I'm saying what Lindqvist's lawyers will say. And she'll have lawyers. The Guild has very good lawyers." She looks at you. "This is good. This is a start. I'll want more than a smuggler's word and a torn page before I go up the hill with it. But it's a start."
+[01:58:10] Theo: "And Reeve?"
+[01:58:14] Rowan: She groans. "Reeve. Reeve's an idiot. Reeve's going into the Gull Steps at low tide with twenty men because the pubs told him to. Half of them can't swim. If the Gullwings are expecting him, and," she looks at Pip, "I suspect they might be, then he's going to get men drowned for nothing." She shakes her head. "He's not mine to order. The Watch answers to the Crown's reeve in Varrowgate, not to me."
+[01:58:44] Theo: "He served under me. In the Guard."
+[01:58:50] Rowan: She looks at you, Bran, for a long moment. "Then maybe he'll listen to you. He doesn't listen to me."
+[01:58:59] Theo: "He didn't listen this morning."
+[01:59:03] Rowan: "Then try again. Harder."
+[01:59:07] Theo: Bran nods. Bran's going to the Watch house.
+[01:59:12] Mags: Do we all go?
+[01:59:16] Theo: No. Bran goes alone. It's a soldier thing.
+[01:59:20] Rowan: Okay. Everyone else, what are you doing while Bran's gone?
+[01:59:27] Mags: Wren goes and sits on the harbour wall and looks at the sea.
+[01:59:34] Jules: Pip goes with Ren.
+[01:59:40] Priya: Oriel goes to find Wick. To tell him we cleaned the lens.
+[01:59:49] Rowan: Okay. Let's do Bran first. The Watch house. Tobin's on the door again, the young one, and he lets you in without asking. Reeve's in the back room, with a map of the Gull Steps on the table, and he's moving little wooden blocks around on it. Planning. He looks up. "Sergeant."
+[02:00:10] Theo: Bran sits down without being asked. And he says, "Dunstan. Listen to me. I've been in there. Today."
+[02:00:20] Rowan: Reeve's eyebrows go up. "In the Gull Steps?"
+[02:00:26] Theo: "In the hall. With Saltjaw. They know you're coming. Tomorrow at one. They know."
+[02:00:35] Rowan: Reeve goes red. "How?"
+[02:00:38] Theo: "Doesn't matter how. A pub. The town. Everyone knows everything on this quay by breakfast. They'll have moved everything. You'll go in the wet way with twenty men and half of them can't swim, and there's giant crabs in the water and eels and gods know what, and they'll be waiting on the ledges with crossbows, and you'll lose men. For nothing. For a theory."
+[02:01:05] Rowan: Okay. Persuasion. You've got a lot going for you this time. You've got actual information. Advantage.
+[02:01:14] Theo: Advantage. Eighteen and twelve. Eighteen. Plus nothing. Eighteen.
+[02:01:18] Rowan: Okay. Reeve looks at the map for a long time. At the little blocks. And he says, "They really killed her? Tamsin? You saw something?"
+[02:01:30] Theo: "They didn't kill her. They want whoever did it. Like you do. It's not them, Dunstan."
+[02:01:39] Rowan: He's quiet. And then he says, "Who, then?"
+[02:01:44] Theo: Hmm. Does Bran tell him?
+[02:01:51] Mags: Bran shouldn't tell him about Lindquist. Brask said lawyers.
+[02:01:59] Theo: Bran says, "I don't know yet. Someone who wants the light out. Give me a few days."
+[02:02:09] Rowan: Reeve puts the blocks back in a box, one by one. "I'll put it off," he says. "One day. Two. Not more. If I've got nothing better by Tideday, I go in." And then he says, not looking at you, "I'd have stayed on the wall that night, Sergeant. If I'd known. If you'd asked me to."
+[02:02:32] Theo: Oh. Okay. That. Bran doesn't say anything for a while. And then he says, "I know, Dunstan. It wasn't you." And he gets up and goes.
+[02:02:45] Rowan: That's a really good scene.
+[02:02:51] Theo: Thank you. I'm a bit sad now.
+[02:02:56] Mags: What happened on the wall, Theo?
+[02:03:01] Theo: Bran doesn't talk about it.
+[02:03:05] Mags: Theo doesn't talk about it either!
+[02:03:10] Theo: It'll come out.
+[02:03:16] Rowan: Okay. Oriel, Wick.
+[02:03:18] Priya: Oriel goes to Wick's mum's house. And knocks.
+[02:03:23] Rowan: Wick's mum answers, the big woman with the shawl. She looks at you suspiciously but she lets you in. It's a tiny house, two rooms, nets everywhere, half made. Wick's at the table eating soup. He looks up.
+[02:03:41] Priya: "Wick. We went up to the light. Yesterday. We cleaned the lens. The inside. It's ready. All it needs is good oil and a keeper."
+[02:03:54] Rowan: His eyes go huge. "You cleaned the second order lens?"
+[02:03:59] Priya: "It took an hour. It was very dirty."
+[02:04:07] Rowan: "Tamsin cleans it every morning! With vinegar and newspaper!" He's half off his chair. "Did you do the top prisms? You have to stand on the stool for the top prisms."
+[02:04:20] Priya: Oriel did not do the top prisms.
+[02:04:24] Rowan: He looks at you like you've told him you only washed half a plate. And then he laughs. The first time you've heard him laugh. "You missed the top prisms."
+[02:04:40] Priya: "I'll do them next time. Will you show me?"
+[02:04:47] Rowan: He looks at his mum. His mum says, "No."
+[02:04:54] Priya: Oriel looks at his mum. And she says, very gently, "Not until it's safe. I promise. When it's safe."
+[02:05:05] Rowan: His mum looks at you for a long time. And then she nods, once. "When it's safe."
+[02:05:16] Priya: Oreo shows Wick the logbook. Tamsin's logbook.
+[02:05:20] Rowan: Okay. He sees it and he goes really still. And he reads the last page. The last bit. "Wick, if you read this, go home to your mother." And he looks at his mum, who's standing at the stove, and he doesn't say anything. And he gives the book back to you. "You keep it safe," he says. "Till she comes back."
+[02:05:46] Priya: "I will."
+[02:05:48] Rowan: Okay. And Wren and Pip, on the harbour wall.
+[02:05:54] Mags: Wren is sitting on the wall with her feet hanging over the water.
+[02:06:01] Jules: Pip's sitting next to her. Pip's feet don't reach as far.
+[02:06:07] Rowan: It's dark and foggy and the water's black, slopping against the stones below you. You can hear the boats creaking.
+[02:06:16] Mags: Wren says, "Pip. The lady in the cave."
+[02:06:21] Jules: "Mm."
+[02:06:24] Mags: "You have the same hair."
+[02:06:31] Jules: Oh no. Okay. Pip looks at the water for a while. And then Pip says, "Lots of halflings have red hair."
+[02:06:41] Mags: "Mm." And Wren says, "I'm not going to tell anyone. Whatever she is. I just wanted you to know I saw." And Wren gives him a piece of sea glass. That's six.
+[02:06:56] Jules: Pip takes it. And says, "Thank you, Wren." And then he says, "Do you have anything? That you don't tell people?"
+[02:07:08] Mags: Wren looks at the sea. And says, "Yes."
+[02:07:12] Jules: "Okay." And Pip doesn't push.
+[02:07:19] Mags: And Wren doesn't say any more.
+[02:07:25] Rowan: Okay. That's lovely. Well done, both of you.
+[02:07:32] Rowan: Okay. So you all meet back at the Brined Eel around six. Bran, you tell the others about Reeve?
+[02:07:44] Theo: Bran says, "Reeve's holding off. Two days. Till Tideday. If we've nothing by then he goes in."
+[02:07:54] Jules: "Tideday. That's the, what, eighth?"
+[02:07:58] Rowan: Today's Netday the fourth. Sailday fifth, Hookday sixth, Tideday seventh.
+[02:08:04] Jules: The seventh. Okay.
+[02:08:08] Theo: So we've got till the seventh for Reeve, and the eleventh for the new moon, and the eleventh for my debt.
+[02:08:18] Mags: And the eleventh for whatever the drowned are waiting for.
+[02:08:24] Priya: Everything's on the eleventh.
+[02:08:28] Rowan: Everything's on the eleventh.
+[02:08:34] Jules: That's not a coincidence.
+[02:08:39] Theo: My debt's a coincidence.
+[02:08:44] Jules: Is it, though?
+[02:08:49] Theo: Yes!
+[02:08:54] Rowan: Okay. Gaffer Pell brings you dinner. Fish stew, it's on the house tonight because, he says, Marisol Teague told him you went into the Gull Steps the wet way and came out alive and nobody's done that in ten years. The whole pub knows. Some of the fishermen raise their tankards at you.
+[02:09:18] Jules: How does everyone know everything?
+[02:09:21] Rowan: It's a fishing town.
+[02:09:25] Theo: Bran raises his tankard back.
+[02:09:31] Rowan: And, I'll say, in the corner, there's Hosk. Crane's man. Just sitting there with a small beer. Not doing anything. He sees you see him, and he raises his glass to you, Bran. Very polite.
+[02:09:49] Theo: Bran raises his back. Very polite. Through his teeth.
+[02:09:56] Mags: Ren goes and sits next to Hosk.
+[02:10:03] Theo: Wren, no.
+[02:10:06] Mags: Wren goes and sits next to Hosk and says, "Hello. Do you like the sea?"
+[02:10:16] Rowan: Ha! Okay. Hosk looks at you. Long pause. "No," he says.
+[02:10:23] Mags: "Why not?"
+[02:10:27] Rowan: "Can't swim."
+[02:10:29] Mags: Wren gives him a piece of sea glass.
+[02:10:35] Theo: WREN.
+[02:10:36] Mags: That's seven. Five left.
+[02:10:41] Rowan: Hosk looks at the sea glass in his huge hand. And he puts it in his waistcoat pocket. And he says, "Thank you," very seriously. And then he says, "Tell your friend Mistress Crane takes part payments. If he's short. She'd rather have something than nothing. She's a reasonable woman." And he gets up and goes.
+[02:11:05] Mags: Wren comes back to the table. "He says Mistress Crane takes part payments."
+[02:11:13] Theo: Bran stares at Wren.
+[02:11:16] Mags: "He can't swim. He's not a bad man. He's just big."
+[02:11:23] Theo: Bran says, very slowly, "Part payments."
+[02:11:27] Jules: That's useful, though.
+[02:11:32] Theo: It is useful. Bran is grudgingly grateful.
+[02:11:36] Rowan: Okay. And, I'll say, the old woman with the knitting is back by the fire. The one from yesterday. And she starts singing. An old song, a fishing song, and some of the fishermen join in. Do you want to hear it?
+[02:11:53] Jules: Yes!
+[02:11:57] Rowan: I'm not going to sing it.
+[02:12:03] Jules: Boo!
+[02:12:08] Rowan: I'll say the words. It goes,
+"Keep the light, keeper, keep the light burning, the drowned are walking and the tide is turning.
+Keep the light, keeper, and never you sleep, for the Saint is below and the Saint is deep."
+[02:12:28] Priya: Wait. The Saint is below?
+[02:12:33] Rowan: Okay, so, that's the old version. Gaffer Pell, collecting your bowls, hears you ask. And he says, "Old song, that. My gran sang it. The Saint's Saint Aubrey, they say now. Up on the light. But the old folk sang it 'the Saint is below'. There was another saint, see, before Aubrel. Older. In the sea. The Reckoning was it waking up, my gran said. Rolled over in its sleep and drowned the world." He shrugs. "Fishermen's stories. Have another ale."
+[02:13:09] Mags: Wren goes very quiet.
+[02:13:14] Rowan: Wren. I'll say, the song, you know it. You don't know how you know it. You've never been to Saltreach in your life. But you know the tune. You know what comes next before they sing it.
+[02:13:31] Mags: Okay. Wren gets up and goes outside.
+[02:13:39] Theo: Bran watches her go.
+[02:13:43] Jules: Pip watches her go.
+[02:13:47] Priya: Oriel goes after her. After a minute.
+[02:13:50] Rowan: Okay. Outside, it's foggy and dark. Ren's standing at the edge of the quay, looking at the water.
+[02:13:59] Priya: Oriel stands next to her and doesn't say anything.
+[02:14:04] Mags: Wren says, "Do you ever hear things, Oriel? That nobody else hears?"
+[02:14:09] Priya: Oh. Okay. Oriel says, "Yes." And then she says, "Mine's a light. Not a voice. But. Yes."
+[02:14:19] Mags: Wren says, "Mine's a voice." And then she doesn't say anything else.
+[02:14:27] Priya: And Oriel takes her hand. And they stand there.
+[02:14:33] Rowan: Okay. After a few minutes, you go back inside. That's lovely.
+[02:14:38] Mags: I'm not saying any more than that.
+[02:14:42] Rowan: That's fine. That's yours.
+[02:14:47] Rowan: Okay. Let's stop the in-game there for a sec. It's about, it's half past nine. I want to do two bits of admin before we finish. Is that okay?
+[02:15:03] Mags: Admin!
+[02:15:08] Jules: Is it levelling up? Please say it's levelling up.
+[02:15:16] Rowan: One of them is levelling up.
+[02:15:23] Jules: YES.
+[02:15:27] Rowan: First, though. A house rule. I've been thinking about it and I'm going to make it official. Drinking a potion is a bonus action, not an action. Feeding a potion to someone else is still an action. That's it.
+[02:15:45] Theo: Oh, that's nice. That's a nice rule.
+[02:15:52] Mags: Is that a common one?
+[02:15:55] Rowan: Really common, yeah. Loads of tables do it. It makes potions worth having. I'll put it in the notes. Bonus action to drink a potion yourself, action to give one to someone else.
+[02:16:10] Priya: What if I drink it in someone else's mouth?
+[02:16:16] Rowan: What?
+[02:16:20] Priya: Nothing.
+[02:16:23] Rowan: Action. It's an action.
+[02:16:28] Theo: So Bran could drink a potion and attack in the same turn.
+[02:16:36] Rowan: Exactly. Drink and swing.
+[02:16:41] Theo: I've got two potions. That changes things.
+[02:16:47] Jules: Pip's got none.
+[02:16:51] Rowan: Pip could buy some.
+[02:16:57] Jules: With what? Pip has two gold.
+[02:17:00] Rowan: Okay. Second thing. Level up. You've done the lighthouse, the drowned, the warehouse, the Gull Steps, the crabs, Saltjaw. That's a lot. Everyone's level four. Milestone.
+[02:17:11] Jules: Milestone! Yes!
+[02:17:16] Mags: Yay!
+[02:17:21] Theo: Finally.
+[02:17:23] Rowan: So you can do it in the app now, or after. Level four is an Ability Score Improvement for everyone. Or a feat, if you want. Hit points, roll or take the average, your choice. Let's go round. Mags?
+[02:17:39] Mags: Okay. Wren. Level four druid. Hit points, I'll roll. D eight. Six! Plus two. Eight. So, twenty four plus eight, thirty two.
+[02:17:50] Rowan: Nice.
+[02:17:51] Mags: Ability score, I'm going to put two into Wisdom. Wisdom goes from sixteen to eighteen. So my spells get better.
+[02:18:02] Rowan: Spell save DC fourteen now. And spell attack plus six.
+[02:18:09] Mags: And I get another cantrip. I'll take, um, Thorn Whip.
+[02:18:17] Rowan: Good choice. Pulls things towards you.
+[02:18:22] Mags: And Wild Shape! Level four, I can go into things that swim!
+[02:18:31] Rowan: Level four, the swimming limit goes. So, giant crab, you're allowed now.
+[02:18:36] Mags: THE CRAB.
+[02:18:41] Rowan: The crab is back.
+[02:18:47] Mags: I'm going to the crab first next time we fight. Crab Wren.
+[02:18:55] Theo: Crab Wren.
+[02:18:58] Rowan: Okay. Theo.
+[02:19:01] Theo: Bran. Level four fighter. Hit points, I'll take the average. Six, plus two, eight. Twenty eight plus eight, thirty six.
+[02:19:12] Rowan: Thirty six. Nice.
+[02:19:14] Theo: Ability score, I was going to take a feat, but I think plus two Strength. Strength sixteen to eighteen. So plus six to hit with the longsword now, and plus four damage.
+[02:19:29] Rowan: Yep.
+[02:19:33] Theo: I'm going to put that in the app. Is the sheet going to work it out?
+[02:19:40] Rowan: The sheet should work it out if you change the number.
+[02:19:48] Theo: Okay. Yeah, it's done it. Longsword plus six, one d eight plus four. That's nice.
+[02:19:58] Rowan: Oh, and Mags, one thing. The app has your Wild Shape box. When you go into a form now it'll work out your hit points and stuff. Just tick the form. But the swimming thing, I don't think the app knows I said no crab at level three, so thank you for not arguing.
+[02:20:20] Mags: I wanted to argue.
+[02:20:26] Rowan: I know you did.
+[02:20:30] Mags: The app said I could have the crab!
+[02:20:36] Rowan: The app's very nice. I'm the DM.
+[02:20:40] Theo: The DM overrules the app.
+[02:20:47] Rowan: Always.
+[02:20:51] Rowan: Jules.
+[02:20:53] Jules: Pip. Level four rogue. Hit points, I'll roll. D eight. One. Ugh. Plus one. Two.
+[02:21:02] Mags: Oh no.
+[02:21:05] Rowan: Do you want to take the average instead?
+[02:21:11] Jules: Can I?
+[02:21:15] Rowan: I said you could pick. You picked roll. But it's the first time, I'll let you take the average. Just this once.
+[02:21:28] Jules: Rowan is very kind. Average is five, plus one, six. So twenty one plus six, twenty seven.
+[02:21:39] Rowan: Okay.
+[02:21:44] Jules: Ability score, plus two Dex. Seventeen to, well, I've only got one to go to eighteen, and then one into Int, fourteen to fifteen.
+[02:21:58] Rowan: That's allowed. Plus one Dex, plus one Int.
+[02:22:02] Jules: Dex eighteen, Int fifteen. So I'm plus four to hit now. Plus seven, no, proficiency is two, so plus six with the shortsword.
+[02:22:13] Rowan: Right. And a new spell. Arcane Tricksters get one at level four.
+[02:22:21] Jules: I want Tasha's Hideous Laughter. Is that on my list?
+[02:22:28] Rowan: Enchantment. Yes, that's fine.
+[02:22:31] Jules: Pip wants to make things laugh. I also get another cantrip, I think? No. Hmm.
+[02:22:40] Rowan: Arcane Trickster gets the third cantrip at level ten. You get one spell now.
+[02:22:47] Jules: Okay. Just Hideous Laughter.
+[02:22:51] Rowan: Priya.
+[02:22:55] Priya: Oriel. Level four warlock. Hit points, roll. D eight. Five. Plus two. Seven. Thirty one.
+[02:23:05] Rowan: Lovely.
+[02:23:08] Priya: Plus two Charisma. Seventeen to, hmm, I'll do plus one Charisma to eighteen and plus one Con to fifteen.
+[02:23:17] Rowan: Okay, then your hit points go up by one more, because your Con modifier went up? No, fifteen's still plus two. Same.
+[02:23:27] Priya: Okay. So thirty one. And I get a new cantrip and a new spell. Cantrip, I'll take Mage Hand. Because Pip has it and I'm jealous.
+[02:23:39] Jules: Mage Hand twins.
+[02:23:41] Priya: And a new spell, I'm going to take Lesser Restoration. That's on the Celestial list.
+[02:23:52] Rowan: Nice. And your Healing Light pool goes up to five dice. One plus your warlock level.
+[02:24:02] Priya: Five d six. Okay.
+[02:24:07] Rowan: And your slots. Warlock four still has two slots, but they're second level slots already from level three. So same.
+[02:24:19] Priya: Two second level slots. Okay.
+[02:24:22] Rowan: Okay. Great. Everyone level four. Put it in the app when you get a chance. I'd like you to do it this week so the app's up to date for next time.
+[02:24:38] Theo: Oh, about next time.
+[02:24:44] Rowan: Uh oh.
+[02:24:46] Theo: I can't make next week. I'm really sorry. It's my sister's wedding. I'm the best man. Well, I'm the best brother. It's a thing.
+[02:24:58] Rowan: Oh no, okay. That's fine. Congratulations to your sister.
+[02:25:04] Theo: Thank you. I'll be very hungover.
+[02:25:11] Rowan: Okay. So what do we do with Bran?
+[02:25:17] Theo: Can Bran just, stay in town? Sorting out his debt? Like, he's got the part payment thing now, he could go to Crane.
+[02:25:31] Rowan: Oh, that's perfect, actually. That works really well. Bran stays in Salt Reach for a couple of days, sorting out his business with Crane. And the others go to the marsh.
+[02:25:44] Mags: The marsh! We're going to the marsh!
+[02:25:48] Jules: Without Bran.
+[02:25:53] Priya: Without the person who carries the heavy things.
+[02:26:01] Theo: You'll be fine. You've got a bear.
+[02:26:07] Mags: I've got a crab now.
+[02:26:10] Rowan: Okay, so that's the plan, in game. Tomorrow, the fifth, Sailday, you lot set out for Fenwick and the Sallowmere to find Mother Sallow, and hopefully Tamsin. Bran stays in town and goes to see Crane. And I'll tell you next time how it went, Theo, or we'll do a little bit at the start of the session after.
+[02:26:36] Theo: Can I do it by message? Like, I tell you what Bran does and you tell me what happens?
+[02:26:46] Rowan: Sure. Let's do that. Message me during the week.
+[02:26:53] Theo: Okay.
+[02:26:57] Jules: Do we have to pay for rooms again tonight?
+[02:27:03] Rowan: Five silver.
+[02:27:05] Jules: Pip has two gold and three silver. Pip is going to be living under the kitchen step again at this rate.
+[02:27:15] Rowan: Okay. Long rest at the Eel. I'll move the clock on to the morning of the fifth. And let's call it there. That was great, everyone.
+[02:27:27] Mags: That was so good. The Nell scene!
+[02:27:35] Priya: The Nell scene was so good.
+[02:27:41] Jules: Thank you!
+[02:27:46] Theo: I didn't hear the Nell scene.
+[02:27:53] Mags: None of us heard the Nell scene.
+[02:28:00] Priya: Rowan, can I ask the app things about the lens? Like what it does?
+[02:28:09] Rowan: Yes, it's in the items. And if you ask it, it'll tell you what Oriel knows.
+[02:28:18] Jules: Can I ask it who the lady in the cave was?
+[02:28:26] Rowan: You can ask it what Pip knows. Which is everything.
+[02:28:33] Jules: Ha. Okay.
+[02:28:38] Theo: And if I ask it?
+[02:28:43] Rowan: You'll get, a halfling woman called Nell, the captain's lieutenant, who Pip knew as a child.
+[02:28:53] Theo: Old girlfriend.
+[02:28:57] Jules: NOT an old girlfriend!
+[02:29:02] Rowan: Okay. Night everyone. Good luck at the wedding, Theo.
+[02:29:07] Theo: Thanks. Night!
+[02:29:13] Priya: Night!
+[02:29:17] Jules: Bye bot! Spell Pip right this time!
+[02:29:22] Rowan: Stopping.
