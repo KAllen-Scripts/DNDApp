@@ -26,7 +26,7 @@
     besideSide: ['right', 'left'],
     tokenLabels: ['always', 'hover', 'never'],
     phone: ['auto', 'on', 'off'],
-    startTab: ['ask', 'notes', 'sheet', 'inventory', 'creatures', 'items', 'merchants', 'map', 'handouts', 'archivist', 'wiki'],
+    startTab: ['ask', 'notes', 'sheet', 'inventory', 'creatures', 'items', 'merchants', 'map', 'handouts', 'sessions', 'archivist', 'wiki'],
   };
   // The tabs, and the map tools that can be hidden (each is an element with data-tool on the map bar).
   var TABS = OPTIONS.startTab;

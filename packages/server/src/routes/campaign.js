@@ -5,7 +5,7 @@
 import { formatTimestamp, formatUtterance, parseTimestamp, parseTranscript } from '@dndapp/shared';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
-import { BadRequestError, NotFoundError } from '../store.js';
+import { BadRequestError, NotFoundError, sessionDateFor } from '../store.js';
 import { preparedTranscript } from '../pipeline/prepare.js';
 
 export function registerCampaign(app, r) {
@@ -56,6 +56,49 @@ export function registerCampaign(app, r) {
       .prepare('SELECT id, number, title, played_on, status, error, pipeline_version, created_at FROM sessions WHERE campaign_id = ? ORDER BY number')
       .all(cid)
       .map(({ id, ...s }) => forViewer(role, { ...s, attended: role === 'dm' || attended(id, request.user.id) }));
+  });
+
+  /**
+   * The DM's Sessions tab: each upload with its processing state and how many
+   * player notes its date picks up, plus dates that have notes but no
+   * transcript yet (notes are matched to a session by date; see sessionDateFor),
+   * and the members a transcript's names can be linked to.
+   */
+  app.get('/campaigns/:cid/sessions/overview', async (request) => {
+    const { cid } = access(request, { dm: true });
+    const notesByDate = new Map(
+      db
+        .prepare('SELECT session_date AS date, COUNT(*) AS notes, COUNT(DISTINCT user_id) AS authors FROM player_notes WHERE campaign_id = ? AND deleted_at IS NULL GROUP BY session_date')
+        .all(cid)
+        .map((r) => [r.date, r]),
+    );
+    const ingests = new Map();
+    for (const j of db.prepare("SELECT status, progress, message, error, params FROM jobs WHERE campaign_id = ? AND type = 'ingest' ORDER BY id").all(cid)) {
+      ingests.set(JSON.parse(j.params).session, { status: j.status, progress: j.progress, message: j.message, error: j.error });
+    }
+    const sessions = db
+      .prepare(
+        `SELECT s.id, s.number, s.title, s.played_on, s.status, s.error, s.created_at,
+           (SELECT COUNT(*) FROM attendance a WHERE a.session_id = s.id) AS attendees
+         FROM sessions s WHERE s.campaign_id = ? ORDER BY s.number DESC`,
+      )
+      .all(cid)
+      .map(({ id, ...s }) => ({
+        ...s,
+        notes: notesByDate.get(s.played_on)?.notes ?? 0,
+        note_authors: notesByDate.get(s.played_on)?.authors ?? 0,
+        job: ingests.get(s.number) ?? null,
+      }));
+    const dates = new Set(sessions.map((s) => s.played_on));
+    const waiting = [...notesByDate.values()].filter((r) => !dates.has(r.date)).sort((a, b) => b.date.localeCompare(a.date));
+    return {
+      sessions,
+      notes_waiting: waiting,
+      next_number: (sessions[0]?.number ?? 0) + 1,
+      today: sessionDateFor(new Date(), config.notes.rolloverHour),
+      rollover_hour: config.notes.rolloverHour,
+      members: store.roster(cid).map(({ user_id, name, role, character_name }) => ({ user_id, name, role, character_name })),
+    };
   });
 
   /**

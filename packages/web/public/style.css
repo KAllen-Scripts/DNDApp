@@ -908,8 +908,13 @@ label.check input { width: auto; flex: none; margin: 0; }
 .editor-row p { margin: 0 0 0.5rem; }
 .editor-buttons { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
 
-/* Sessions on a campaign card */
+/* The DM's Sessions tab (sessions.js) */
 .sessions { display: grid; gap: 0.6rem; }
+.sessions-panel .sessions { margin-top: 0.4rem; }
+#sessions-status:empty { display: none; }
+#sessions-status { margin: 0.4rem 0 0; }
+.sessions-campaign { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+.sessions-campaign select { padding: 0.3rem 0.45rem; max-width: 100%; }
 .sessions-table td { vertical-align: top; }
 .sessions-table .status-cell button { margin-top: 0.3rem; padding: 0.25rem 0.6rem; font-size: 0.85rem; }
 .notice { padding: 0.6rem 0.8rem; border-radius: 8px; background: var(--camp-soft); border: 1px solid var(--camp-line); font-size: 0.9rem; }

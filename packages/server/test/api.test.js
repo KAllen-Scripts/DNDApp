@@ -503,14 +503,16 @@ test('"must change password at next login": set by the admin, enforced by the se
   }
 });
 
-test('admin sessions view: uploads, processing state, notes matched by date, dates waiting for a transcript', async () => {
+test('DM sessions overview: uploads, processing state, notes matched by date, dates waiting for a transcript', async () => {
   const t = await setup();
   try {
     const cid = t.campaign.id;
-    const view = async () => (await t.request('GET', `/admin/campaigns/${cid}/sessions`)).json();
+    const view = async () => (await t.request('GET', `/campaigns/${cid}/sessions/overview`)).json();
     let v = await view();
     assert.deepEqual([v.sessions.length, v.next_number, v.notes_waiting.length], [0, 1, 0]);
     assert.match(v.today, /^\d{4}-\d{2}-\d{2}$/);
+    // The accounts a transcript's names can be linked to.
+    assert.deepEqual(v.members.map((m) => [m.name, m.role, m.character_name]), [['Kenny', 'dm', null], ['Alex', 'player', 'Lyra'], ['Sam', 'player', 'Thorin']]);
 
     // Notes on two dates; only the first gets a transcript.
     for (const [as, date] of [[t.sam.token, '2026-10-01'], [t.alex.token, '2026-10-01'], [t.sam.token, '2026-10-01'], [t.sam.token, '2026-10-08']]) {
@@ -532,8 +534,16 @@ test('admin sessions view: uploads, processing state, notes matched by date, dat
     assert.ok(s1.attendees >= 3);
     assert.deepEqual(v.notes_waiting, [{ date: '2026-10-08', notes: 1, authors: 1 }]);
 
-    // Admin only.
-    assert.equal((await t.request('GET', `/admin/campaigns/${cid}/sessions`, { as: t.sam.token })).statusCode, 403);
+    // The campaign's DM only: not its players, and not the DM of another campaign.
+    assert.equal((await t.request('GET', `/campaigns/${cid}/sessions/overview`, { as: t.sam.token })).statusCode, 403);
+    const other = t.store.createCampaign('Other');
+    const dana = await t.auth.createUser('Dana', { password: PASSWORD });
+    t.auth.addMember(other.id, dana.id, 'dm');
+    const { token } = await t.auth.login('Dana', PASSWORD);
+    assert.equal((await t.request('GET', `/campaigns/${cid}/sessions/overview`, { as: token })).statusCode, 403);
+    assert.equal((await t.request('GET', `/campaigns/${other.id}/sessions/overview`, { as: token })).statusCode, 200);
+    // It's gone from the admin's routes: the DM uploads.
+    assert.equal((await t.request('GET', `/admin/campaigns/${cid}/sessions`)).statusCode, 404);
   } finally {
     await t.cleanup();
   }

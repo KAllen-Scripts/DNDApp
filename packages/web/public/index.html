@@ -81,7 +81,7 @@
       <button class="ghost logout">Log out</button>
     </header>
     <p id="admin-message" class="banner" role="status" hidden></p>
-    <p class="muted small admin-intro">This login is only for managing the server. To play, create a player account for yourself below and log in with that.</p>
+    <p class="muted small admin-intro">This login is only for managing the server. To play, create a player account for yourself below and log in with that. Session transcripts are uploaded by each campaign's DM, from their Sessions tab.</p>
 
     <section class="card admin-section">
       <h2>Accounts</h2>
@@ -123,6 +123,7 @@
         <button role="tab" data-tab="merchants" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">⚖</span><span data-label="Merchants">Merchants</span></button>
         <button role="tab" data-tab="map" aria-selected="false"><span class="tab-icon" aria-hidden="true">⌖</span><span data-label="Map">Map</span></button>
         <button role="tab" data-tab="handouts" aria-selected="false"><span class="tab-icon" aria-hidden="true">✉</span><span data-label="Handouts">Handouts</span></button>
+        <button role="tab" data-tab="sessions" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">⇪</span><span data-label="Sessions">Sessions</span></button>
         <button role="tab" data-tab="archivist" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">☰</span><span data-label="Archivist">Archivist</span></button>
         <button role="tab" data-tab="wiki" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">❦</span><span data-label="Wiki">Wiki</span></button>
       </nav>
@@ -191,6 +192,14 @@
     <section id="tab-handouts" class="panel handouts-panel" hidden>
       <div id="handout-form-box"></div>
       <div id="handouts" class="handouts"></div>
+    </section>
+
+    <!-- The DM's session transcripts: upload one to any campaign they run, and see each one's processing (sessions.js). -->
+    <section id="tab-sessions" class="panel archivist-panel sessions-panel" hidden>
+      <h2>Session transcripts</h2>
+      <p class="muted small">Upload the transcript of each session you play. The archivist reads it to keep the campaign's records, and the names in it say who was there (and so who knows what).</p>
+      <p id="sessions-status" class="small" role="status"></p>
+      <div id="sessions" class="sessions camp"></div>
     </section>
 
     <!-- The DM's questions from the archivist and corrections (archivist.js). -->

@@ -18,6 +18,7 @@ import { loadTable, stopTable, handoutsOpened } from './table.js';
 import { setRestsCampaign, initRests } from './rests.js';
 import { setSettingsCampaign, initSettings } from './campaign-settings.js';
 import { loadArchivist, initArchivistActions } from './archivist.js';
+import { loadSessions, initSessionActions } from './sessions.js';
 import { loadWiki } from './wiki.js';
 import { setSpace, spaceInUrl, routeFromUrl, initSpace } from './wiki-space.js';
 import { initFind } from './wiki-find.js';
@@ -217,6 +218,8 @@ async function enterCampaign(campaign) {
   const isDm = campaign.role === 'dm';
   // The Archivist tab is the DM's; a player who was on it goes back to the first tab.
   $('[data-tab=archivist]').hidden = !isDm;
+  // ...and Sessions, to upload transcripts to any campaign they run.
+  $('[data-tab=sessions]').hidden = !isDm;
   // Everyone gets the Wiki: a player reads their own version of it, filtered on the server.
   $('[data-tab=wiki]').hidden = false;
   // The DM gets Creatures (enemies and NPCs to put on maps) instead of a character sheet.
@@ -273,6 +276,7 @@ async function enterCampaign(campaign) {
     loadMaps({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
     loadTable({ campaignId: campaign.id, guarded }),
     isDm ? loadArchivist({ campaignId: campaign.id, guarded }) : null,
+    isDm ? loadSessions({ campaigns: state.me.campaigns.filter((c) => c.role === 'dm'), campaignId: campaign.id, guarded }) : null,
     loadWiki({ campaignId: campaign.id, guarded, isDm, userId: state.me.user.id }),
     isDm ? loadCreatures({ campaignId: campaign.id, guarded }) : null,
     isDm ? loadItems({ campaignId: campaign.id, guarded }) : null,
@@ -855,6 +859,7 @@ showTab(currentTab);
 initMapActions();
 phoneSheet($('#map-main-bar'), $('#map-more')); // on a phone, ⋯ opens all the map's tools from the bottom
 initArchivistActions();
+initSessionActions();
 initCreatureActions({ place: placeCreature });
 initItemActions();
 initMerchantActions({ place: placeMerchant });

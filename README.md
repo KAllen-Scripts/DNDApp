@@ -38,7 +38,6 @@ When running through Claude Code, the server starts it with everything switched 
 The admin login is only for managing the server. It gets an admin screen instead of Ask/Notes:
 
 - **Accounts:** add accounts (name + password, and tick which campaigns they can access, with role and character for each), change an account's campaigns later ("Edit campaigns"), set a password (logs them out everywhere), require a new password at next login, log someone out everywhere, block/unblock, delete. An account can only be deleted while it's unused (no notes, questions, sessions or speaker-map links), because the archive refers to it; otherwise block it.
-- **Sessions** (on each campaign card): past uploads with date, title, how many player notes match their date, attendance and processing status (refreshing while it runs; Retry on failure), plus dates that have player notes but no transcript yet. Upload a transcript with its session number and the date it was played (pre-filled: next number, newest date with waiting notes). After choosing the file, link each transcript name to an account (guessed where possible); the links are saved before processing so the AI knows who was there.
 - **Campaigns:** each shown as its own colour-coded card; create (names must be unique) and delete campaigns; add accounts to them as player (with a character name) or DM; change roles (e.g. make someone the DM); remove people from a campaign (their account and notes are kept).
 
 **Must change password at next login** (like Active Directory): ticked by default when you add an account, offered when you set a password, and switchable per account ("Require new password" / "Don't require"). While it's on, that person's login can only choose a new password or log out; the server refuses everything else. They give the password you set plus a new one twice; after that their other devices are logged out. Anyone can also change their own password from "Change password" in the account menu (top right).
@@ -46,6 +45,8 @@ The admin login is only for managing the server. It gets an admin screen instead
 There's no sign-up: you create every account and tell each person their name and password. Names are what people log in with, so each must be unique (case doesn't matter). Passwords need at least 6 characters and are stored hashed.
 
 **Deleting a campaign** (you type its name to confirm) removes it from the database: its sessions, knowledge base, notes, questions and who's in it. Accounts are kept. Its archive folder is **not** deleted: it gets a `deleted.json` marker so it isn't restored on start-up. To bring a campaign back, delete that marker file and restart the server, then run a rebuild for it. Deleting is refused while that campaign has processing queued or running.
+
+**Session transcripts are the DM's to upload** (the owner, 2026-10-28), from the **Sessions** tab in the app, not here. The DM picks which of their campaigns it's for (any campaign they're the DM of; it starts on the one they're in), and sees past uploads with date, title, how many player notes match their date, attendance and processing status (refreshing while it runs; Retry on failure), plus dates that have player notes but no transcript yet. A transcript is uploaded with its session number and the date it was played (pre-filled: next number, newest date with waiting notes). After choosing the file, the DM links each transcript name to an account (guessed where possible); the links are saved before processing so the AI knows who was there.
 
 **Campaigns are separate.** Each has its own sessions, knowledge base, notes, speaker map and conversations, and the AI only ever searches the campaign the question was asked in. Players in more than one campaign choose which one after logging in (and can switch from the header); someone in just one goes straight in.
 
@@ -209,7 +210,7 @@ One line per utterance:
 
 ## API
 
-Log in with `POST /login`; send the token it returns as `Authorization: Bearer <token>` on every other request (except `/health` and the web page's files). DM-only and admin-only routes are marked. The admin login also passes DM checks (that's how the admin screen uploads transcripts).
+Log in with `POST /login`; send the token it returns as `Authorization: Bearer <token>` on every other request (except `/health` and the web page's files). DM-only and admin-only routes are marked. The admin login also passes DM checks.
 
 | Method | Path | |
 |---|---|---|
@@ -237,7 +238,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/sessions` | All sessions, processing status, and whether you attended |
 | POST | `/campaigns/:cid/sessions` | Upload transcript (DM). JSON `{number, played_on, title?, transcript}` or `text/plain` body with `?number=&played_on=`. `played_on` (YYYY-MM-DD) links it to that day's player notes. Optional `speakers: [{speaker, user_id}]` are merged into the speaker map before processing. The reply lists `unlinked_speakers` |
 | POST | `/campaigns/:cid/sessions/preview` | Check a transcript without saving it (DM) `{transcript}` → lines, first/last timestamp, speakers with their current account link |
-| GET | `/admin/campaigns/:cid/sessions` | Sessions with status, matched note counts and attendance; dates with notes but no transcript; next number; today's note date (admin) |
+| GET | `/campaigns/:cid/sessions/overview` | The Sessions tab (DM): sessions with status, matched note counts and attendance; dates with notes but no transcript; next number; today's note date; the members names can be linked to |
 | GET | `/campaigns/:cid/sessions/:n` | Session and who attended |
 | GET | `/campaigns/:cid/sessions/:n/transcript?from=&to=` | Transcript lines (players: only sessions they attended) |
 | POST | `/campaigns/:cid/sessions/:n/process` | Retry / reprocess a session (DM) |
