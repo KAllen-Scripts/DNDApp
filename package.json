@@ -8,7 +8,10 @@
   "scripts": {
     "start": "npm run start -w @dndapp/server",
     "dev": "npm run dev -w @dndapp/server",
-    "restart": "node scripts/restart-server.js",
+    "restart": "node scripts/restart-server.js restart",
+    "server:start": "node scripts/restart-server.js start",
+    "server:stop": "node scripts/restart-server.js stop",
+    "server:restart": "node scripts/restart-server.js restart",
     "test": "npm test --workspaces --if-present",
     "test:regressions": "npm run test:regressions --workspaces --if-present",
     "admin": "npm run admin -w @dndapp/server --",
