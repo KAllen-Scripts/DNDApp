@@ -52,4 +52,5 @@ seeded (sessions take the map and sheet changes made on their date, and the seed
 speakers on the first upload (left to you on purpose, to try the upload screen's guesses): Rowan is the DM
 (`test-rowan`), Mags plays Wren (`test-mags`), Theo plays Bran (`test-theo`), Jules plays Pip (`test-jules`),
 Priya plays Oriel (`test-priya`).
-`transcripts/README.md` has what each session covers and what to check after it.
+`transcripts/README.md` has what each session covers and what to check after it, and
+[ask-checks.md](ask-checks.md) has questions to ask as each player, with what must not come out.

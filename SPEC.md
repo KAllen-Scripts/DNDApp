@@ -287,7 +287,7 @@ DNDApp/
                   style.css, themes.css, mobile.css (the phone layout), icon.svg
       test/       page tests in jsdom against a real test server (page.js), fakes for the dice libraries
   example/        the example campaign (owner, 2026-10-28): campaign/ (its data as JS: accounts, settings, sheets, creatures, items, merchants, maps, wiki),
-                  pictures/ (public domain or CC0, credits.json), transcripts/ (four sessions to feed in), README.md
+                  pictures/ (public domain or CC0, credits.json), transcripts/ (four sessions to feed in, with a README), ask-checks.md, README.md
   docs/notes/     design notes, research and checklists from the first Claude project (README.md lists them)
   scripts/        restart-server.js (npm run restart); browser.js (real-browser checks: Playwright with the installed Chrome on a throwaway copy of data/, fake AI); art/ (build.js, picks.js, render-props.js: the map creator's CC0 art, see §6.6 Map art)
   docs/regressions.md  every bug found and fixed, and the `regression: …` test that keeps it fixed
