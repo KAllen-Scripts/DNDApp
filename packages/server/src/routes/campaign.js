@@ -33,6 +33,10 @@ export function registerCampaign(app, r) {
     const speakers = z
       .array(z.object({ speaker: z.string().min(1), display_name: z.string().min(1), user_id: z.number().int().nullish() }))
       .parse(request.body);
+    // Only this campaign's people: a link to someone from another campaign would put them in its known_by.
+    const members = new Set(store.roster(cid).map((m) => m.user_id));
+    const outsider = speakers.find((s) => s.user_id != null && !members.has(s.user_id));
+    if (outsider) throw new BadRequestError(`Account ${outsider.user_id} isn't in this campaign`);
     store.setSpeakers(cid, speakers);
     return store.getSpeakers(cid);
   });
