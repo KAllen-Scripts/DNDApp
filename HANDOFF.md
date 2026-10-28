@@ -1865,3 +1865,8 @@ The owner (2026-10-21 feedback, item 2): "some way of managing attacks and such 
 - `GET /campaigns/:cid/sessions/overview` (DM of that campaign; admins pass DM checks) replaces `GET /admin/campaigns/:cid/sessions` and also lists the members a name can be linked to. The admin screen's campaign cards no longer have Sessions.
 - `sessions` added to the tab list (Look's tab order, after Handouts).
 - Tests: `web/test/sessions.test.js` (the admin page's session tests moved there, plus the picker); the server's overview test checks a player and another campaign's DM are refused.
+
+### 2026-10-28: Server start, stop and restart scripts that outlive the Claude app
+- The live site went down at about 09:05: the Claude desktop app updated itself (Windows event log, 09:06:22) and took the server with it. On Windows the app runs its sessions in a job object, and a `detached` node child stays in that job, so it dies when the app closes.
+- `scripts/restart-server.js` now takes `start`, `stop` or `restart` (`npm run server:start`, `server:stop`, `server:restart`; `npm run restart` and `npm run restart -- stop` still work). Start and restart run `npm install` first. `start` does nothing when the server is already up.
+- On Windows the server is created through WMI (`Win32_Process.Create`), with this script's environment (so `DATA_SET` carries over) and no window. Checked on this PC: the server's parent is `cmd.exe` under `WmiPrvSE`, `IsProcessInJob` is false for it (true for the Claude shell that ran the script), and the site answered 200 after restart, stop and start.
