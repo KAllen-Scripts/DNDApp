@@ -17,7 +17,8 @@ function runner() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dndapp-cli-'));
   const run = (script, ...args) => {
     const r = spawnSync(process.execPath, [path.join(src, script), ...args], {
-      env: { ...process.env, DATA_DIR: dataDir, LLM_PROVIDER: 'claude-code', EMBEDDINGS: 'none' },
+      // DATA_SET=real: a .env with DATA_SET=example would otherwise send them to data-example/, ignoring DATA_DIR.
+      env: { ...process.env, DATA_SET: 'real', DATA_DIR: dataDir, LLM_PROVIDER: 'claude-code', EMBEDDINGS: 'none' },
       encoding: 'utf8',
     });
     return { code: r.status, out: r.stdout, err: r.stderr };
