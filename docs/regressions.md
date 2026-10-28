@@ -15,6 +15,7 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-28 | The sheet's "What Outlander gives" sat inside the narrow Background cell of the info grid (and inside its label), so its text ran a letter a line; and "Apply … to the sheet" stayed offered after it had been applied. | `web/test/backgrounds.test.js`: regression: what a background gives sits full width under the info grid, not in its narrow cell, and Apply goes once it would add nothing |
 | 2026-10-28 | Who knows: clicking a cell for a page the player can't see crashed the side panel (the server answers `page: null`, the page read it as a page). | `web/test/wiki-knows.test.js`: regression: a Who knows cell for a page the player can't see says so (it crashed on the server's empty page) |
 | 2026-10-28 | The DM's top bar squeezed a long campaign name into a 25 px column, a word a line, running under the tabs. | `web/test/layout.test.js`: regression: a long campaign name in the DM's bar is cut short with its tooltip, not spilled under the tabs |
 | 2026-10-28 | On a phone the wiki's Atlas map was a short strip at the top, and ☰ covered the wiki rail's last button. | `web/test/phone.test.js`: regression: on a phone the wiki's Atlas fills the screen and the rail's last button isn't under ☰ |
