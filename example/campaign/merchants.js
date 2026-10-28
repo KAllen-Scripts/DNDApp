@@ -1,0 +1,103 @@
+/**
+ * The merchants: what players see (description), the DM's notes, how they restock, and their stock by item name
+ * (from items.js). `price` in gold pieces when the merchant doesn't charge the usual price; `qty` null: no limit.
+ * `map` and `at` say where the seed puts the merchant's token (a map key from maps.js, and a square).
+ */
+
+export const MERCHANTS = [
+  {
+    name: "Teague's Provisions",
+    picture: 'marisol-teague.jpg',
+    description: 'A narrow shop on the quay that smells of tar, rope and smoked fish. Marisol Teague, brisk and sunburnt, sells everything a sailor or traveller needs and will tell you the weather for free.',
+    notes: 'Marisol knows every boat in the harbour. She saw Guild carts at the lighthouse track at night twice last month and thought nothing of it. Gives a 10% discount to anyone who helped find Tamsin.',
+    restock_every: 1,
+    map: 'harbour', at: [14, 9],
+    stock: [
+      { item: 'Hempen rope (50 feet)', qty: 6 },
+      { item: 'Hooded lantern', qty: 3 },
+      { item: 'Oil (flask)', qty: 20 },
+      { item: 'Rations (1 day)', qty: null },
+      { item: 'Caltrops (bag of 20)', qty: 4 },
+      { item: "Healer's kit", qty: 2 },
+      { item: 'Oilskin cloak', qty: 5 },
+      { item: 'Grappling hook', qty: 2 },
+      { item: 'Chalk (1 piece)', qty: null },
+      { item: 'Arrows (20)', qty: 6 },
+      { item: 'Crossbow bolts (20)', qty: 6 },
+    ],
+  },
+  {
+    name: 'Holt & Daughter',
+    picture: 'garrick-holt.jpg',
+    description: 'A smithy under the sea wall, ringing from dawn to dusk. Garrick Holt makes anchors and boat nails; his daughter Bess makes the blades, and she\'s better at it.',
+    notes: 'Bess Holt is sweet on Wick\'s older brother. Garrick fought in the Coast Guard with Bran Hale\'s old company and will recognise him.',
+    restock_days: 7,
+    map: 'harbour', at: [22, 6],
+    stock: [
+      { item: 'Longsword', qty: 2 },
+      { item: 'Shortsword', qty: 3 },
+      { item: 'Scimitar', qty: 1 },
+      { item: 'Dagger', qty: 10 },
+      { item: 'Handaxe', qty: 4 },
+      { item: 'Harpoon', qty: 3 },
+      { item: 'Light Crossbow', qty: 1, price: 30 },
+      { item: 'Leather Armor', qty: 2 },
+      { item: 'Studded Leather Armor', qty: 1 },
+      { item: 'Chain Shirt', qty: 1 },
+      { item: 'Shield', qty: 3 },
+    ],
+  },
+  {
+    name: 'The Green Bottle',
+    picture: 'auntie-brine.jpg',
+    description: 'An apothecary in a crooked house with green glass in every window. Auntie Brine, ancient and cheerful, brews potions in a back room full of jars of things floating in brine.',
+    notes: 'Only two Potions of Water Breathing; she needs three days and a fresh jellyfish to make another. Auntie Brine was Mother Sallow\'s apprentice sixty years ago and still sends her a jar of pickled eels every Lantern Night.',
+    restock_days: 3,
+    map: 'harbour', at: [8, 15],
+    stock: [
+      { item: 'Potion of Healing', qty: 5 },
+      { item: 'Potion of Greater Healing', qty: 1 },
+      { item: 'Potion of Water Breathing', qty: 2 },
+      { item: 'Antitoxin (vial)', qty: 3 },
+      { item: "Healer's kit", qty: 2, price: 6 },
+      { item: 'Spell Scroll of Cure Wounds', qty: 1 },
+    ],
+  },
+  {
+    name: 'The Brined Eel bar',
+    picture: 'gaffer-pell.jpg',
+    description: 'The bar of the Brined Eel, run by old Gaffer Pell. Eel pie, chowder, small beer, dark ale and rooms upstairs that are mostly dry.',
+    notes: 'Gaffer Pell hears everything. He used to leave scraps out the back for the street children, Pip and Nell among them.',
+    restock_every: 1,
+    map: 'tavern', at: [6, 4],
+    items: [
+      { name: 'Eel pie', kind: 'other', price: 4, weight: 1, text: 'A slab of eel pie with a crust like a roof tile. Tastes better than it looks.' },
+      { name: 'Fish chowder', kind: 'other', price: 3, weight: 0, text: 'A bowl of chowder with whatever came in on the morning boats.' },
+      { name: 'Dark ale (tankard)', kind: 'other', price: 4, weight: 0, text: 'Brewed in Varrowgate, watered in Saltreach.' },
+      { name: 'A room for the night', kind: 'other', price: 50, weight: 0, text: 'A room upstairs with a straw mattress, a washbasin and a window over the harbour. Breakfast included.' },
+    ],
+    stock: [
+      { item: 'Eel pie', qty: null },
+      { item: 'Fish chowder', qty: null },
+      { item: 'Dark ale (tankard)', qty: null },
+      { item: 'A room for the night', qty: 6 },
+      { item: 'Rations (1 day)', qty: 10, price: 0.6 },
+    ],
+  },
+  {
+    name: 'Ferret Lusk, fence',
+    picture: 'ferret-lusk.jpg',
+    description: 'A thin man with a moustache like a dropped comma, sitting on a crate in a side cave with his wares on an old sail. "Everything legitimate, friends. Mostly."',
+    notes: 'Fences for the Gullwings. Prices are whatever he thinks you\'ll pay; he drops by a third if you haggle well. Will sell the party out to Saltjaw for 5 gp, and to the Watch for 10.',
+    open: true,
+    map: 'caves', at: [12, 8],
+    stock: [
+      { item: 'Ring of Swimming', qty: 1, price: 280 },
+      { item: 'Driftglass Lens', qty: 1, price: 150 },
+      { item: 'Potion of Healing', qty: 2, price: 65 },
+      { item: 'Dagger', qty: 6, price: 1.5 },
+      { item: "Thieves' tools", qty: 1, price: 30 },
+      { item: 'Grappling hook', qty: 1, price: 3 },
+    ],
+  },
+];
