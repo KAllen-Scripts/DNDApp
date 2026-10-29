@@ -60,7 +60,7 @@ test('creatures tab: the DM makes a goblin with a picture, the AI fills its stat
     assert.equal(goblin.hp_max, 7, 'from the AI');
     assert.equal(goblin.size, 1, 'Small takes one square');
     assert.ok(goblin.picture);
-    assert.match(page.text('#creatures .creature'), /Goblin ?Enemy ?AC 15 · HP 7 · CR 1\/4 · Medium/);
+    assert.match(page.text('#creatures .creature'), /Goblin ?Hostile ?Humanoid · AC 15 · HP 7 · CR 1\/4 · Medium/);
     assert.ok(page.$('#creatures .creature-face img'), 'its picture is shown');
 
     // Place on map: switches to the map and asks how many.
@@ -231,5 +231,58 @@ test('creatures tab: "Stat block (AI)" takes it from the group\'s books and says
     assert.match(page.text('#creatures-status'), /Stat block for Goblin: Goblin, from Monster Manual, page 1/);
     page.click(button(page, '#creatures .creature', 'Stat block'));
     assert.match(page.text('#creature-dialog'), /From your books: Monster Manual, page 1\./);
+  });
+});
+
+test('bestiary: creatures sit under their type by challenge, people have their own list with their role, and Edit moves one across', async () => {
+  const block = (line, cr) => ({ text: `*${line}*\n\n**Challenge** ${cr}`, challenge: cr });
+  await withPage({
+    before: async (t) => {
+      const dana = await addDm(t);
+      const base = `/campaigns/${t.campaign.id}/creatures`;
+      for (const body of [
+        { name: 'Ghoul', kind: 'enemy', stats: block('Medium undead, chaotic evil', '1 (200 XP)') },
+        { name: 'Zombie', kind: 'enemy', stats: block('Medium undead, neutral evil', '1/4 (50 XP)') },
+        { name: 'Wolf', kind: 'enemy', stats: block('Medium beast, unaligned', '1/4') },
+        { name: 'Odd thing', kind: 'enemy' },
+        { name: 'Mira the innkeeper', kind: 'npc', role: 'Runs the Gilded Goose' },
+        { name: 'Lord Vane', kind: 'enemy', group: 'person', role: 'The villain' },
+      ]) await t.request('POST', base, { body });
+      await t.request('POST', `/campaigns/${t.campaign.id}/wiki`, { body: { title: 'Mira the innkeeper', kind: 'person' } });
+      return { dana };
+    },
+    page: (t, { dana }) => ({ as: dana }),
+  }, async (page, t) => {
+    page.click('[data-tab=creatures]');
+    await page.settle();
+    assert.match(page.text('[data-tab=creatures]'), /Bestiary/);
+    assert.deepEqual(page.$$('#bestiary-switch button').map((b) => b.textContent), ['Bestiary 4', 'People 2']);
+    assert.equal(page.text('#creature-new'), 'New creature');
+    // Under each type (5e order, none given last), weakest first.
+    assert.deepEqual(page.$$('#creatures .bestiary-head').map((x) => x.textContent), ['Beast · 1', 'Undead · 2', 'No type yet · 1']);
+    assert.deepEqual(page.$$('#creatures [data-type=undead] h3').map((x) => x.textContent), ['Zombie', 'Ghoul']);
+    assert.ok(!page.text('#creatures').includes('Mira'), 'people are not in the bestiary');
+    page.click(page.$$('#creatures .bestiary-type').find((b) => b.textContent.startsWith('Undead')));
+    assert.deepEqual(page.$$('#creatures .creature h3').map((x) => x.textContent), ['Zombie', 'Ghoul']);
+
+    page.click('#bestiary-switch [data-view=person]');
+    assert.equal(page.text('#creature-new'), 'New person');
+    assert.deepEqual(page.$$('#creatures .creature h3').map((x) => x.textContent), ['Lord Vane', 'Mira the innkeeper']);
+    assert.match(page.text('#creatures'), /Runs the Gilded Goose/);
+    assert.match(page.text('#creatures'), /The villain/);
+    const mira = page.$$('#creatures .creature').find((x) => x.textContent.includes('Mira'));
+    assert.ok([...mira.querySelectorAll('button')].some((b) => b.textContent === 'Wiki page'), 'her wiki page opens from her card');
+
+    // A creature moved to People from Edit.
+    page.click('#bestiary-switch [data-view=creature]');
+    page.click(button(page, '#creatures [data-id] ', 'Edit'));
+    const form = page.$('#creature-dialog form');
+    page.type(form.querySelector('[name=group]'), 'person');
+    page.type(form.querySelector('[name=role]'), 'Hunts the moors');
+    page.submit(form);
+    await page.settle();
+    const moved = (await t.request('GET', `/campaigns/${t.campaign.id}/creatures`)).json().creatures.find((c) => c.role === 'Hunts the moors');
+    assert.equal(moved.group, 'person');
+    assert.equal(page.$('#bestiary-switch [aria-selected=true]').dataset.view, 'person', 'shows where it went');
   });
 });

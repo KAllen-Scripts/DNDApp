@@ -1,22 +1,32 @@
 /**
- * The Creatures tab (the DM's, in place of a character sheet): enemies and
- * NPCs saved once, with a picture, hit points, a stat block and notes, and
- * put on the map as tokens (map.js, "Place on map" or Add token). Players
- * never see it.
+ * The Bestiary tab (the DM's, in place of a character sheet; its id is still
+ * "creatures"): two lists, the Bestiary (kinds of creature, under their type
+ * and by challenge) and People (one person each, with their role), saved once
+ * with a picture, hit points, a stat block and notes, and put on the map as
+ * tokens (map.js, "Place on map" or Add token). Friendly or hostile is apart
+ * from which list. Players never see it.
  */
 import { api, fileUrl, h, readBase64, LoggedOut, note } from './api.js';
 import { showStatBlock, statsFound } from './stat-block.js';
 import { markdownFragment } from './markdown.js';
 import { TOKEN_SIZES, TOKEN_SIZE_NAMES, TOKEN_COLORS } from './shared/map.js';
+import { CREATURE_TYPES, creatureType, challengeValue, challengeLabel } from './shared/bestiary.js';
+import { nav } from './wiki-data.js';
 
 const $ = (sel) => document.querySelector(sel);
-const KIND_NAMES = { enemy: 'Enemy', npc: 'Friendly NPC' };
+const KIND_NAMES = { enemy: 'Hostile', npc: 'Friendly' };
+const GROUP_NAMES = { creature: 'Bestiary', person: 'People' };
+const VIEW_KEY = 'dndapp.bestiary.view';
+const capital = (w) => w.charAt(0).toUpperCase() + w.slice(1);
 
 const state = {
   campaignId: null,
   guarded: (fn) => fn(),
   list: [],
   filter: '',
+  view: 'creature', // which list: 'creature' (the bestiary) or 'person' (People)
+  type: '', // the bestiary's type chip ('' all, 'other' none given)
+  pages: [], // the DM's wiki pages, to open a creature's or person's page
   pictures: new Map(), // `${id}:${key}` -> object URL
   place: null, // (creature) => void, from map.js
   poll: null, // timer while the AI is searching for one
@@ -38,11 +48,36 @@ export async function loadCreatures({ campaignId, guarded }) {
   for (const url of state.pictures.values()) URL.revokeObjectURL(url);
   state.pictures.clear();
   clearTimeout(state.poll);
-  Object.assign(state, { campaignId, guarded, list: [], filter: '' });
+  Object.assign(state, { campaignId, guarded, list: [], filter: '', type: '', pages: [] });
+  try {
+    state.view = localStorage.getItem(VIEW_KEY) === 'person' ? 'person' : 'creature';
+  } catch { /* no storage: the bestiary */ }
   $('#creatures-filter').value = '';
   status('');
   state.list = (await api('GET', base())).creatures;
   draw();
+  // Their wiki pages, so a card can open its page (none is fine).
+  api('GET', `/campaigns/${campaignId}/wiki`).then((res) => {
+    if (state.campaignId !== campaignId) return;
+    state.pages = res.pages ?? [];
+    draw();
+  }).catch(() => {});
+}
+
+/** Show the bestiary ('creature') or People ('person'). */
+function showView(view) {
+  state.view = view;
+  state.type = '';
+  try {
+    localStorage.setItem(VIEW_KEY, view);
+  } catch { /* per browser only */ }
+  draw();
+}
+
+/** The wiki page called what it's called (title or another name), or null. */
+function pageFor(c) {
+  const key = c.name.trim().toLowerCase();
+  return state.pages.find((p) => p.title.toLowerCase() === key) ?? state.pages.find((p) => p.aliases?.some((a) => a.toLowerCase() === key)) ?? null;
 }
 
 /** While the AI is searching the web for one, check back every few seconds. */
@@ -77,7 +112,7 @@ export const creatureList = () => state.list;
 /** Something else saved one (a token saved from the map): show it. */
 export function creatureSaved(c) {
   upsert(c);
-  status(`${c.name} is in your creatures now.`);
+  status(`${c.name} is in your ${c.group === 'person' ? 'people' : 'bestiary'} now.`);
 }
 
 function upsert(c) {
@@ -116,29 +151,71 @@ function summary(c) {
   return [
     st.ac != null ? `AC ${st.ac}` : '',
     c.hp_max ? `HP ${c.hp_max}` : '',
-    st.challenge ? `CR ${st.challenge.split(' ')[0]}` : '',
+    challengeValue(st.challenge) != null ? `CR ${challengeLabel(st.challenge)}` : '',
     TOKEN_SIZE_NAMES[c.size],
     c.speed ? `${c.speed} ft.` : '',
     c.darkvision ? `darkvision ${c.darkvision} ft.` : '',
   ].filter(Boolean).join(' · ');
 }
 
+/** Its type's heading in the bestiary: a 5e type, the DM's own word, or 'other'. */
+const typeKey = (c) => creatureType(c) || 'other';
+const typeName = (key) => (key === 'other' ? 'No type yet' : capital(key));
+
 function draw() {
   watchSearches();
+  drawSwitch();
   const box = $('#creatures');
+  box.classList.toggle('bestiary', state.view === 'creature'); // headings over grids, not one grid
   const q = state.filter.trim().toLowerCase();
-  const shown = state.list.filter((c) => !q || c.name.toLowerCase().includes(q) || c.notes.toLowerCase().includes(q));
-  if (!state.list.length) {
-    return box.replaceChildren(h('p', { class: 'muted' }, 'No creatures yet. Make the enemies and NPCs you need once here, then put them on any map with "Place on map" (or Add token on the map). You can also save a token that is already on a map.'));
+  const mine = state.list.filter((c) => c.group === state.view);
+  const matches = (c) => !q || [c.name, c.notes, c.role, creatureType(c)].some((x) => String(x ?? '').toLowerCase().includes(q));
+  if (!mine.length) {
+    return box.replaceChildren(h('p', { class: 'muted' }, state.view === 'person'
+      ? 'No people yet. Add the NPCs your players meet, one person each (Mira the innkeeper, the villain), with their role, picture, stat block and notes, then put them on any map with "Place on map".'
+      : 'No creatures yet. Your bestiary keeps each kind of creature once (Goblin, Giant Shore Crab), under its type and by challenge; put as many as you need on any map with "Place on map" (or Add token on the map). You can also save a token that is already on a map.'));
   }
-  if (!shown.length) return box.replaceChildren(h('p', { class: 'muted' }, 'None match.'));
-  box.replaceChildren(...shown.map((c) => (c.finding ? searchCard(c) : h('article', { class: `creature card ${c.kind}`, 'data-id': c.id },
+  if (state.view === 'person') {
+    const shown = mine.filter(matches);
+    return box.replaceChildren(...(shown.length ? shown.map(card) : [h('p', { class: 'muted' }, 'None match.')]));
+  }
+  // The bestiary: chips for each type, then a heading per type, weakest first.
+  const keys = [...new Set(mine.map(typeKey))].sort((a, b) => (a === 'other') - (b === 'other') || (CREATURE_TYPES.indexOf(a) + 1 || 99) - (CREATURE_TYPES.indexOf(b) + 1 || 99) || a.localeCompare(b));
+  if (state.type && !keys.includes(state.type)) state.type = '';
+  const chip = (key, label, count) => h('button', { type: 'button', class: `chip bestiary-type${state.type === key ? ' on' : ''}`, 'aria-pressed': String(state.type === key), onclick: () => { state.type = key; draw(); } }, label, h('span', { class: 'muted small' }, ` ${count}`));
+  const chips = keys.length > 1 ? h('div', { class: 'bestiary-types', role: 'group', 'aria-label': 'Show one type' },
+    chip('', 'All', mine.length), ...keys.map((k) => chip(k, typeName(k), mine.filter((c) => typeKey(c) === k).length))) : null;
+  const cr = (c) => challengeValue(c.stats?.challenge) ?? Infinity;
+  const groups = keys.filter((k) => !state.type || k === state.type)
+    .map((k) => [k, mine.filter((c) => typeKey(c) === k && matches(c)).sort((a, b) => cr(a) - cr(b) || a.name.localeCompare(b.name))])
+    .filter(([, list]) => list.length);
+  box.replaceChildren(...[chips, ...(groups.length
+    ? groups.map(([k, list]) => h('section', { class: 'bestiary-group', 'data-type': k }, h('h2', { class: 'bestiary-head' }, typeName(k), h('span', { class: 'muted small' }, ` · ${list.length}`)), h('div', { class: 'creatures' }, ...list.map(card))))
+    : [h('p', { class: 'muted' }, 'None match.')])].filter(Boolean));
+}
+
+/** The Bestiary | People switch, with how many each has, and the New button to match. */
+function drawSwitch() {
+  const bar = $('#bestiary-switch');
+  if (!bar) return;
+  const count = (g) => state.list.filter((c) => c.group === g).length;
+  bar.replaceChildren(...Object.entries(GROUP_NAMES).map(([g, label]) => h('button', { type: 'button', role: 'tab', 'data-view': g, 'aria-selected': String(state.view === g), onclick: () => showView(g) }, label, h('span', { class: 'muted small' }, ` ${count(g)}`))));
+  $('#creature-new').textContent = state.view === 'person' ? 'New person' : 'New creature';
+}
+
+/** One creature or person. */
+function card(c) {
+  if (c.finding) return searchCard(c);
+  const page = nav.drawer ? pageFor(c) : null;
+  const type = c.group === 'creature' ? creatureType(c) : '';
+  return h('article', { class: `creature card ${c.kind} ${c.group}`, 'data-id': c.id },
     face(c),
     h('div', { class: 'creature-body' },
       h('div', { class: 'creature-head' },
         h('h3', {}, c.name),
         h('span', { class: `chip creature-kind ${c.kind}` }, KIND_NAMES[c.kind])),
-      h('p', { class: 'muted small' }, summary(c)),
+      c.group === 'person' && c.role ? h('p', { class: 'creature-role small' }, c.role) : null,
+      h('p', { class: 'muted small' }, [type ? capital(type) : '', summary(c)].filter(Boolean).join(' · ')),
       sourceLine(c),
       c.notes ? h('p', { class: 'creature-notes small' }, c.notes) : null,
       h('div', { class: 'creature-actions' },
@@ -147,9 +224,9 @@ function draw() {
         c.stats
           ? h('button', { type: 'button', class: 'ghost', onclick: () => statsDialog(c) }, 'Stat block')
           : h('button', { type: 'button', class: 'ghost', title: 'Fill in its stat block, hit points and size with the AI', onclick: () => fillStats(c) }, 'Stat block (AI)'),
+        page ? h('button', { type: 'button', class: 'ghost', title: `Open "${page.title}" from your wiki at the side`, onclick: () => nav.drawer(page.id) }, 'Wiki page') : null,
         h('button', { type: 'button', class: 'ghost', onclick: () => choosePicture(c) }, c.picture ? 'New picture' : 'Picture'),
-        h('button', { type: 'button', class: 'ghost danger', onclick: () => remove(c) }, 'Remove'))),
-  ))));
+        h('button', { type: 'button', class: 'ghost danger', onclick: () => remove(c) }, 'Remove'))));
 }
 
 /** One the AI is still searching for, or couldn't find. */
@@ -184,7 +261,7 @@ function findDialog() {
       findOnline(query.value.trim());
       dialog.close();
     } },
-      h('h2', {}, 'Find a creature online'),
+      h('h2', {}, state.view === 'person' ? 'Find someone online' : 'Find a creature online'),
       field('What are you looking for?', query),
       h('p', { class: 'muted small' }, "The AI searches the web, official sources or not (homebrew sites, wikis, forums), writes up its stat block and brings a picture. Say where it's from if you know. Check what it found before you use it."),
       h('div', { class: 'map-dialog-actions' },
@@ -201,7 +278,7 @@ function findDialog() {
 async function findOnline(query, old = null) {
   if (query.length < 2) return;
   try {
-    const res = await state.guarded(() => api('POST', `${base()}/find`, { query }));
+    const res = await state.guarded(() => api('POST', `${base()}/find`, { query, group: old?.group ?? state.view }));
     if (!res) return;
     if (old) {
       await state.guarded(() => api('DELETE', `${base()}/${old.id}`)).catch(() => {});
@@ -222,9 +299,28 @@ const field = (label, input) => h('label', { class: 'map-field' }, h('span', {},
 /** New (c = null) or change one: everything but the picture, which is chosen here only for a new one. */
 function editDialog(c = null) {
   const dialog = $('#creature-dialog');
-  const name = h('input', { name: 'name', value: c?.name ?? '', maxLength: 80, required: true, placeholder: 'Goblin, Mira the innkeeper…' });
+  const name = h('input', { name: 'name', value: c?.name ?? '', maxLength: 80, required: true, placeholder: (c?.group ?? state.view) === 'person' ? 'Mira the innkeeper, Lord Vane…' : 'Goblin, Giant Shore Crab…' });
+  const group = h('select', { name: 'group' }, new Option('Bestiary: a kind of creature', 'creature'), new Option('People: one person', 'person'));
+  group.value = c?.group ?? state.view;
   const kind = h('select', { name: 'kind' }, ...Object.entries(KIND_NAMES).map(([k, label]) => new Option(label, k)));
-  kind.value = c?.kind ?? 'enemy';
+  kind.value = c?.kind ?? (group.value === 'person' ? 'npc' : 'enemy');
+  const typesId = `creature-types-${Math.random().toString(36).slice(2, 8)}`;
+  const type = h('input', { name: 'type', value: c?.type ?? '', maxLength: 40, list: typesId, placeholder: creatureType({ stats: c?.stats }) || 'from its stat block' });
+  const typeField = field('Type', h('span', {}, type, h('datalist', { id: typesId }, ...CREATURE_TYPES.map((t) => new Option(capital(t), t)))));
+  const role = h('input', { name: 'role', value: c?.role ?? '', maxLength: 120, placeholder: 'Innkeeper at the Gilded Goose' });
+  const roleField = field('Role', role);
+  const showGroup = () => {
+    typeField.hidden = group.value === 'person';
+    roleField.hidden = group.value !== 'person';
+  };
+  group.addEventListener('change', () => {
+    showGroup();
+    if (!c) {
+      kind.value = group.value === 'person' ? 'npc' : 'enemy';
+      kind.dispatchEvent(new Event('change'));
+    }
+  });
+  showGroup();
   const size = h('select', { name: 'size' }, ...TOKEN_SIZES.map((s) => new Option(TOKEN_SIZE_NAMES[s], s)));
   size.value = String(c?.size ?? 1);
   const color = h('input', { name: 'color', type: 'color', value: c?.color ?? TOKEN_COLORS[kind.value] });
@@ -263,6 +359,9 @@ function editDialog(c = null) {
     const body = {
       name: name.value.trim(),
       kind: kind.value,
+      group: group.value,
+      type: type.value.trim().toLowerCase(),
+      role: role.value.trim(),
       size: Number(size.value),
       color: color.value,
       hp_max: Number(hp.value) > 0 ? Math.round(Number(hp.value)) : null,
@@ -280,7 +379,8 @@ function editDialog(c = null) {
     const saved = await state.guarded(() => (c ? api('PATCH', `${base()}/${c.id}`, body) : api('POST', base(), body)));
     if (!saved) return;
     upsert(saved);
-    status(c ? `${saved.name} saved.` : `${saved.name} added to your creatures.`);
+    status(c ? `${saved.name} saved.` : `${saved.name} added to your ${saved.group === 'person' ? 'people' : 'bestiary'}.`);
+    if (saved.group !== state.view) showView(saved.group);
     if (!c && !saved.stats && lookUp.checked) fillStats(saved);
   };
 
@@ -293,9 +393,10 @@ function editDialog(c = null) {
         Object.assign(error, { hidden: false, textContent: err.message });
       });
     } },
-      h('h2', {}, c ? `Change ${c.name}` : 'New creature'),
+      h('h2', {}, c ? `Change ${c.name}` : group.value === 'person' ? 'New person' : 'New creature'),
       field('Name', name),
-      h('div', { class: 'map-row' }, field('Kind', kind), field('Size', size), field('Colour', color)),
+      h('div', { class: 'map-row' }, field('Goes in', group), typeField, roleField),
+      h('div', { class: 'map-row' }, field('Friendly or hostile', kind), field('Size', size), field('Colour', color)),
       h('div', { class: 'map-row' }, field('Max HP', hp), field('AC', ac), field('Speed (ft)', speed), field('Darkvision (ft)', darkvision)),
       h('div', { class: 'map-field' }, h('span', { class: 'stat-block-head' }, 'Stat block', editText), preview, stats),
       field('Notes', notes),
@@ -348,7 +449,7 @@ function choosePicture(c) {
 }
 
 async function remove(c) {
-  if (!confirm(`Remove ${c.name} from your creatures? Tokens already on maps stay.`)) return;
+  if (!confirm(`Remove ${c.name} from your ${c.group === 'person' ? 'people' : 'bestiary'}? Tokens already on maps stay.`)) return;
   try {
     const res = await state.guarded(() => api('DELETE', `${base()}/${c.id}`));
     if (!res) return;

@@ -118,7 +118,7 @@
         <button role="tab" data-tab="notes" aria-selected="false"><span class="tab-icon" aria-hidden="true">✎</span><span data-label="Notes">Notes</span></button>
         <button role="tab" data-tab="sheet" aria-selected="false"><span class="tab-icon" aria-hidden="true">⚔</span><span data-label="Sheet">Sheet</span></button>
         <button role="tab" data-tab="inventory" aria-selected="false"><span class="tab-icon" aria-hidden="true">⛨</span><span data-label="Inventory">Inventory</span></button>
-        <button role="tab" data-tab="creatures" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">☠</span><span data-label="Creatures">Creatures</span></button>
+        <button role="tab" data-tab="creatures" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">☠</span><span data-label="Bestiary">Bestiary</span></button>
         <button role="tab" data-tab="items" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">✧</span><span data-label="Items">Items</span></button>
         <button role="tab" data-tab="merchants" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">⚖</span><span data-label="Merchants">Merchants</span></button>
         <button role="tab" data-tab="map" aria-selected="false"><span class="tab-icon" aria-hidden="true">⌖</span><span data-label="Map">Map</span></button>
@@ -275,12 +275,13 @@
       <div id="inventory" class="inventory"></div>
     </section>
 
-    <!-- The DM's creatures (creatures.js): enemies and NPCs saved once, placed on any map. -->
+    <!-- The DM's bestiary and people (creatures.js): kinds of creature and NPCs saved once, placed on any map. -->
     <section id="tab-creatures" class="panel creatures-panel" hidden>
       <div class="creatures-bar">
+        <div id="bestiary-switch" class="bestiary-switch" role="tablist" aria-label="Bestiary or people"></div>
         <button id="creature-new" class="primary">New creature</button>
         <button id="creature-find" class="ghost" title="Have the AI find a creature on the web, official or not, with a picture">Find online</button>
-        <input id="creatures-filter" type="search" placeholder="Find…" aria-label="Find a creature">
+        <input id="creatures-filter" type="search" placeholder="Find…" aria-label="Find a creature or person">
         <span id="creatures-status" class="muted small" role="status"></span>
       </div>
       <div id="creatures" class="creatures"></div>
@@ -350,7 +351,7 @@
           <option value="">Nothing beside</option>
           <option value="sheet">Sheet beside</option>
           <option value="inventory">Inventory beside</option>
-          <option value="creatures">Creatures beside</option>
+          <option value="creatures">Bestiary beside</option>
           <option value="items">Items beside</option>
           <option value="merchants">Merchants beside</option>
           <option value="ask">Ask beside</option>

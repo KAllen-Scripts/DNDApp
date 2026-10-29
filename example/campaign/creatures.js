@@ -132,7 +132,7 @@ export const CREATURES = [
     notes: 'A stone knight with a bronze bell for a head, made by Saint Aubrel\'s first keepers to guard the chapel stair. Now it guards it for the wrong side. My notes said 45 hp at first; 60 is right.',
   },
   {
-    name: 'Corra Lindqvist, Voice of the Deep', kind: 'enemy', size: 1, color: '#1f4b5c', hp_max: 66, ac: 14, darkvision: 60, speed: 30, picture: 'corra-lindqvist.jpg',
+    name: 'Corra Lindqvist, Voice of the Deep', group: 'person', role: 'Voice of the Deep, leader of the Choir (her true face)', kind: 'enemy', size: 1, color: '#1f4b5c', hp_max: 66, ac: 14, darkvision: 60, speed: 30, picture: 'corra-lindqvist.jpg',
     stats: { ...block('Corra Lindqvist, Voice of the Deep', [
       '*Medium humanoid (human), lawful evil*',
       '**Armor Class** 14 (barnacled robes) · **Hit Points** 66 (12d8 + 12) · **Speed** 30 ft., swim 30 ft.',
@@ -151,7 +151,7 @@ export const CREATURES = [
     notes: 'Corra in the chapel, singing to the Saint. If she drops below 10 hp the Saint takes her: she is pulled under the water and her fate is left open.',
   },
   {
-    name: 'Gullwing Smuggler', kind: 'npc', size: 1, color: '#8a6d3b', hp_max: 11, ac: 12, darkvision: 0, speed: 30,
+    name: 'Gullwing Smuggler', group: 'creature', kind: 'npc', size: 1, color: '#8a6d3b', hp_max: 11, ac: 12, darkvision: 0, speed: 30,
     stats: { ...block('Gullwing Smuggler', [
       '*Medium humanoid (any race), chaotic neutral*',
       '**Armor Class** 12 (leather armor) · **Hit Points** 11 (2d8 + 2) · **Speed** 30 ft., swim 30 ft.',
@@ -164,7 +164,7 @@ export const CREATURES = [
     notes: 'About thirty Gullwings in all, ten at the Gull Steps at any time.',
   },
   {
-    name: 'Captain Saltjaw Merrow', kind: 'npc', size: 1, color: '#9c4d1f', hp_max: 65, ac: 15, darkvision: 0, speed: 30, picture: 'saltjaw-merrow.jpg',
+    name: 'Captain Saltjaw Merrow', group: 'person', role: 'Captain of the Gullwing smugglers', kind: 'npc', size: 1, color: '#9c4d1f', hp_max: 65, ac: 15, darkvision: 0, speed: 30, picture: 'saltjaw-merrow.jpg',
     stats: { ...block('Captain Saltjaw Merrow', [
       '*Medium humanoid (human), chaotic neutral*',
       '**Armor Class** 15 (studded leather) · **Hit Points** 65 (10d8 + 20) · **Speed** 30 ft., swim 30 ft.',
@@ -182,7 +182,7 @@ export const CREATURES = [
     notes: 'Captain of the Gullwings. Lost his jaw to the Varrow navy. Lost two boats on the Teeth in the last month and is furious. Didn\'t kill Tamsin; liked her, in fact.',
   },
   {
-    name: 'Nell Thistlewood', kind: 'npc', size: 1, color: '#b0702d', hp_max: 27, ac: 14, darkvision: 0, speed: 25, picture: 'nell-thistlewood.jpg',
+    name: 'Nell Thistlewood', group: 'person', role: "Saltjaw's second lieutenant, Pip's sister", kind: 'npc', size: 1, color: '#b0702d', hp_max: 27, ac: 14, darkvision: 0, speed: 25, picture: 'nell-thistlewood.jpg',
     stats: { ...block('Nell Thistlewood', [
       '*Small humanoid (halfling), chaotic good*',
       '**Armor Class** 14 (leather armor) · **Hit Points** 27 (6d6 + 6) · **Speed** 25 ft.',
@@ -196,7 +196,7 @@ export const CREATURES = [
     notes: 'Pip\'s older sister, Saltjaw\'s second lieutenant. Runs the boats\' signals. Thinks Pip abandoned her.',
   },
   {
-    name: 'Harbour Watch Guard', kind: 'npc', size: 1, color: '#55657a', hp_max: 11, ac: 16, darkvision: 0, speed: 30,
+    name: 'Harbour Watch Guard', group: 'creature', kind: 'npc', size: 1, color: '#55657a', hp_max: 11, ac: 16, darkvision: 0, speed: 30,
     stats: { ...block('Harbour Watch Guard', [
       '*Medium humanoid (human), lawful neutral*',
       '**Armor Class** 16 (chain shirt, shield) · **Hit Points** 11 (2d8 + 2) · **Speed** 30 ft.',
@@ -208,7 +208,7 @@ export const CREATURES = [
     notes: 'Twelve guards under Sergeant Dunstan Reeve.',
   },
   {
-    name: 'Mother Sallow', kind: 'npc', size: 1, color: '#556b2f', hp_max: 82, ac: 15, darkvision: 60, speed: 30, picture: 'mother-sallow.jpg',
+    name: 'Mother Sallow', group: 'person', role: 'A sea hag in the marsh', kind: 'npc', size: 1, color: '#556b2f', hp_max: 82, ac: 15, darkvision: 60, speed: 30, picture: 'mother-sallow.jpg',
     stats: { ...block('Mother Sallow', [
       '*Medium fey, neutral evil (mostly)*',
       '**Armor Class** 15 (natural armor) · **Hit Points** 82 (11d8 + 33) · **Speed** 30 ft., swim 40 ft.',
@@ -225,7 +225,7 @@ export const CREATURES = [
     notes: 'A sea hag who moved inland when the Saint began to stir; she hates it. Not a villain here, but never gives anything for free. Hiding Tamsin.',
   },
   {
-    name: 'Corra Lindqvist', kind: 'npc', size: 1, color: '#4c7a8c', hp_max: 66, ac: 11, darkvision: 0, speed: 30, picture: 'corra-lindqvist.jpg',
+    name: 'Corra Lindqvist', group: 'person', role: 'Guild Mistress of the Lamplighters', kind: 'npc', size: 1, color: '#4c7a8c', hp_max: 66, ac: 11, darkvision: 0, speed: 30, picture: 'corra-lindqvist.jpg',
     stats: { ...block('Corra Lindqvist', [
       '*Medium humanoid (human), lawful evil (seems lawful good)*',
       '**Armor Class** 11 · **Hit Points** 66 (12d8 + 12) · **Speed** 30 ft.',

@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { setup, createFakeLLM, fakeEmbedder, makePdf, terrain } from './helpers.js';
 import { createContext } from '../src/context.js';
-import { normalizeCreature, tokenNames } from '../src/creatures.js';
+import { normalizeCreature, tokenNames, creatureLabel } from '../src/creatures.js';
 
 const readOut = { readable: true, kind: 'battle', name: 'Cave', description: '', grid: { visible: false, columns: null, rows: null }, scale: { distance: null, unit: null, per: null }, notes: '' };
 const ogreBlock = {
@@ -45,6 +45,32 @@ test('normalizeCreature: fills in defaults and drops anything it does not know',
   assert.equal(c.stats, null);
   assert.equal(c.sneaky, undefined);
   assert.equal(normalizeCreature({ kind: 'npc' }).color, '#3f8a4a', 'friendly ones are green by default');
+});
+
+test('creatures: the bestiary or People, with a type and a role; old friendly ones are people; Find online into People', async () => {
+  const t = await setup({ llm: llm() });
+  try {
+    const base = `/campaigns/${t.campaign.id}/creatures`;
+    const make = async (body) => (await t.request('POST', base, { body })).json();
+    const goblin = await make({ name: 'Goblin', kind: 'enemy', type: ' Humanoid ' });
+    assert.deepEqual([goblin.group, goblin.type, goblin.role], ['creature', 'humanoid', '']);
+    const mira = await make({ name: 'Mira', kind: 'npc', role: 'Innkeeper' });
+    assert.deepEqual([mira.group, mira.role], ['person', 'Innkeeper'], 'friendly ones start as people');
+    const vane = await make({ name: 'Lord Vane', kind: 'enemy', group: 'person' });
+    assert.equal(vane.group, 'person', 'a hostile person');
+    assert.equal((await t.request('POST', base, { body: { name: 'X', kind: 'enemy', group: 'monster' } })).statusCode, 400);
+    const moved = (await t.request('PATCH', `${base}/${mira.id}`, { body: { group: 'creature' } })).json();
+    assert.equal(moved.group, 'creature');
+    assert.equal(normalizeCreature({ kind: 'npc' }).group, 'person', 'saved before the split');
+    assert.equal(creatureLabel({ group: 'creature', kind: 'enemy', stats: { text: '*Medium undead*' } }), 'creature (undead), hostile');
+    assert.equal(creatureLabel({ group: 'person', kind: 'npc' }), 'person, friendly');
+
+    const found = await t.request('POST', `${base}/find`, { body: { query: 'Strahd', group: 'person' } });
+    assert.equal(found.statusCode, 202, found.body);
+    assert.deepEqual([found.json().group, found.json().kind], ['person', 'npc']);
+  } finally {
+    await t.cleanup();
+  }
 });
 
 test('creatures: only the DM saves, sees, changes and removes them; a typed stat block is the DM\'s own', async () => {
@@ -190,6 +216,7 @@ test('creatures: a token already on a map is saved to the library with its pictu
     const saved = res.json();
     assert.equal(saved.name, 'Ogre');
     assert.equal(saved.kind, 'enemy');
+    assert.equal(saved.group, 'creature', 'an enemy token goes in the bestiary');
     assert.equal(saved.size, 2);
     assert.equal(saved.hp_max, 59);
     assert.equal(saved.stats.source, 'ai');
@@ -453,10 +480,10 @@ test("Ask: the DM's saved creatures come first when the DM asks about one; playe
     const dm = await t.request('POST', `/campaigns/${t.campaign.id}/ask`, { body: { question: "What's the Goblin Boss's AC?" } });
     assert.equal(dm.statusCode, 200, dm.body);
     const call = llm.calls.find((c) => c.purpose === 'qa');
-    assert.match(call.system, /<dm_creatures [^>]*>\n- Goblin Boss \(enemy\)\n- Mira \(NPC, no stat block\)\n<\/dm_creatures>/);
+    assert.match(call.system, /<dm_creatures [^>]*>\n- Goblin Boss \(creature, hostile\)\n- Mira \(person, friendly, no stat block\)\n<\/dm_creatures>/);
     assert.match(call.system, /take priority over the books/);
     assert.ok(call.tools.includes('get_my_creatures'));
-    assert.match(call.prompt, /<my_creatures [^>]*>\n--- Goblin Boss \(the DM's Creatures tab\)\nEnemy, Small or Medium, max HP 30\nStat block:\n\*\*Goblin Boss\*\*[\s\S]*the DM's own\)\nDM's notes: Hides behind his wolves\.\n<\/my_creatures>/);
+    assert.match(call.prompt, /<my_creatures [^>]*>\n--- Goblin Boss \(the DM's Bestiary tab\)\ncreature, hostile, Small or Medium, max HP 30\nStat block:\n\*\*Goblin Boss\*\*[\s\S]*the DM's own\)\nDM's notes: Hides behind his wolves\.\n<\/my_creatures>/);
     assert.match(call.toolResults[0].result, /--- Goblin Boss[\s\S]*--- Nobody: not one of the DM's creatures\./);
 
     await t.request('POST', `/campaigns/${t.campaign.id}/ask`, { as: t.sam.token, body: { question: "What's the Goblin Boss's AC?" } });

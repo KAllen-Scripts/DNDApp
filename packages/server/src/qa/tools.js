@@ -17,7 +17,7 @@ import { formatTimestamp, formatUtterance, parseTimestamp, CITATION_RE } from '@
 import { renderRecord } from '../kb/store.js';
 import { preparedTranscript } from '../pipeline/prepare.js';
 import { fitWhole } from '../fit.js';
-import { creatureKey } from '../creatures.js';
+import { creatureKey, creatureLabel } from '../creatures.js';
 import { unlink, unpicture, canonMarker } from '@dndapp/shared/wiki.js';
 import { whenText, whenKey } from '@dndapp/shared/wiki-time.js';
 
@@ -107,14 +107,15 @@ const SIZE_NAMES = { 0.5: 'Tiny', 1: 'Small or Medium', 2: 'Large', 3: 'Huge', 4
 /** One of the DM's creatures, for the model. */
 function renderCreature(c) {
   const facts = [
-    `${c.kind === 'npc' ? 'NPC' : 'Enemy'}, ${SIZE_NAMES[c.size] ?? 'Medium'}`,
+    `${creatureLabel(c)}, ${SIZE_NAMES[c.size] ?? 'Medium'}`,
+    c.role ? `role: ${c.role}` : '',
     c.hp_max ? `max HP ${c.hp_max}` : '',
     c.speed != null ? `speed ${c.speed} ft.` : '',
     c.darkvision ? `darkvision ${c.darkvision} ft.` : '',
   ].filter(Boolean).join(', ');
   const from = c.stats?.source === 'book' ? ` (copied from ${c.stats.from})` : c.stats?.source === 'web' ? ' (found on the web)' : c.stats?.source === 'ai' ? " (written by the AI from memory)" : '';
   return [
-    `--- ${c.name} (the DM's Creatures tab)`,
+    `--- ${c.name} (the DM's Bestiary tab)`,
     facts,
     c.stats ? `Stat block${from}:\n${c.stats.text}` : 'No stat block saved.',
     c.notes ? `DM's notes: ${c.notes}` : '',
