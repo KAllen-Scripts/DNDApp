@@ -12,6 +12,7 @@ import { ABILITIES, ABILITY_NAMES, SKILLS, formatBonus } from './shared/sheet.js
 import { d20Plus } from './shared/dice.js';
 import { activeForm, druidOf, endWildShape, formCost, formProblem, formStats, setFormHp, speedText, startWildShape, usesLeft, wildShapeRules } from './shared/wild-shape.js';
 import { roll, rollModeFromEvent, D20_ICON } from './dice.js';
+import { fold } from './sheet-fold.js';
 
 const SOURCE_NOTES = { srd: 'SRD', book: 'Your book', ai: 'AI memory (check it)', manual: 'Typed in' };
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -80,11 +81,14 @@ export function wildShapeBox({ state, changed, render }) {
     el.replaceChildren(...[
       h('p', { class: 'muted small ws-rules' }, `Druid ${rules.level}${rules.moon ? ' (Circle of the Moon)' : ''}, ${rules.edition} rules. ${limits}${rules.available ? '.' : ''}`),
       form ? activePanel(form, rules) : null,
-      formList(rules, left),
-      rules.known && w.forms.length > rules.known
-        ? h('p', { class: 'sheet-warn small' }, `At this level you know ${rules.known} forms; there are ${w.forms.length} here. You can swap one for another when you finish a long rest.`)
-        : null,
-      addForm(),
+      // The forms open when asked (they're long); with none yet it starts open, to add the first.
+      fold('ws-forms', w.forms.length ? `${form ? 'Forms' : 'Turn into a form'} (${w.forms.length})` : 'Forms (none yet)', [
+        formList(rules, left),
+        rules.known && w.forms.length > rules.known
+          ? h('p', { class: 'sheet-warn small' }, `At this level you know ${rules.known} forms; there are ${w.forms.length} here. You can swap one for another when you finish a long rest.`)
+          : null,
+        addForm(),
+      ], { open: !w.forms.length, cls: 'ws-fold' }),
     ].filter(Boolean));
   }
 
