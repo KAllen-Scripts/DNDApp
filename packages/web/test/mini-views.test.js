@@ -1,8 +1,8 @@
-/** mini-views.js: the small drawings draw only what they're given, in each family's colour. */
+/** page/mini-views.js: the small drawings draw only what they're given, in each family's colour. */
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { miniCrop, miniRing, miniRibbon, ringPoints } from '../public/mini-views.js';
+import { miniCrop, miniRing, miniRibbon, ringPoints } from '../public/page/mini-views.js';
 
 before(() => {
   globalThis.document = new JSDOM('').window.document;

@@ -1,5 +1,5 @@
 /**
- * The page's look (look-boot.js and look.js): themes, layouts, text size,
+ * The page's look (page/look-boot.js and page/look.js): themes, layouts, text size,
  * chat and sheet styles, kept in this browser and applied before drawing.
  */
 import { test } from 'node:test';

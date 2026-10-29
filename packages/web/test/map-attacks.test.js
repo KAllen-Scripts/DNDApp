@@ -1,5 +1,5 @@
 /**
- * Attacks and area spells from the map (map-attacks.js): pick an enemy and Attack, pick an action, the card;
+ * Attacks and area spells from the map (map/attacks.js): pick an enemy and Attack, pick an action, the card;
  * attacking from your own token and tapping the target; an area spell's template; the DM's Apply and Undo;
  * the campaign switch.
  *

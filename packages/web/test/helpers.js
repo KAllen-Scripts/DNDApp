@@ -108,7 +108,7 @@ export async function addToken(t, map, body) {
   return res.json().token;
 }
 
-/** The DM's Items or Merchants: views of the wiki's space now, not tabs (wiki-panels.js). */
+/** The DM's Items or Merchants: views of the wiki's space now, not tabs (wiki/panels.js). */
 export async function openWikiView(page, name) {
   if (page.document.documentElement.dataset.space !== 'wiki') page.click('[data-tab=wiki]');
   const label = { items: 'Items', merchants: 'Merchants' }[name];

@@ -1,6 +1,6 @@
 /**
- * Backgrounds on the sheet (sheet-background.js): picking one applies it,
- * says what changed, and can be undone; the DM's own (campaign-backgrounds.js)
+ * Backgrounds on the sheet (sheet/background.js): picking one applies it,
+ * says what changed, and can be undone; the DM's own (campaign/backgrounds.js)
  * are suggested on players' sheets and apply the same way.
  */
 import { test } from 'node:test';

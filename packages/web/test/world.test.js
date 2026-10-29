@@ -1,5 +1,5 @@
 /**
- * The world on the Map tab (map-places.js): places that open smaller maps, the breadcrumb, groups of
+ * The world on the Map tab (map/places.js): places that open smaller maps, the breadcrumb, groups of
  * places, and who the DM shows a map or a place to.
  *
  * Like map-more.test.js, the map view is 700 x 490 and fitted, so a point on screen is the same point on the map.

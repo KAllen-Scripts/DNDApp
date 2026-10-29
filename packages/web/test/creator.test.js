@@ -203,7 +203,7 @@ test("creator: the DM's own picture as an asset, placed on the map; closing with
     assert.ok(pressed(page, '#creator-own [data-asset^="u:"]'), 'the new asset is picked to place');
     assert.ok(pressed(page, '[data-creator-tool="place"]'));
     click(page, [5, 5]);
-    const placed = (await page.module('map-creator.js')).creatorDesign().assets;
+    const placed = (await page.module('map/creator/creator.js')).creatorDesign().assets;
     assert.equal(placed.length, 1);
     assert.deepEqual([placed[0].w, placed[0].h], [2, 1], 'a picture twice as wide as high starts 2 squares by 1');
 
@@ -254,7 +254,7 @@ test('creator: starting from a map the server makes (a tavern, another, then a c
     assert.equal(page.$('#creator-name').value, 'Cave');
     assert.equal(page.$('#creator-cols').value, '24');
     assert.match(page.text('#creator-status'), /Here's Cave/);
-    const design = (await page.module('map-creator.js')).creatorDesign();
+    const design = (await page.module('map/creator/creator.js')).creatorDesign();
     assert.ok(design.walls.length > 10 && design.walls.every((w) => w.style === 'cave'));
 
     await saveAndClose(page);
@@ -344,7 +344,7 @@ test('creator: unsaved work is kept in the browser and offered back; closing wit
     assert.ok(!page.$('#creator-start'), 'straight back to work');
     assert.equal(page.$('#creator-name').value, 'Lost work');
     assert.equal(page.$('#creator-cols').value, '20');
-    const creator = await page.module('map-creator.js');
+    const creator = await page.module('map/creator/creator.js');
     assert.equal(creator.creatorDesign().walls.length, kept.walls.length);
 
     // A change is kept a moment later.

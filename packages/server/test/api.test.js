@@ -120,7 +120,7 @@ test('the web page is served without logging in; API routes still need a login',
     const page = await t.app.inject({ method: 'GET', url: '/' });
     assert.equal(page.statusCode, 200);
     assert.match(page.headers['content-type'], /text\/html/);
-    assert.equal((await t.app.inject({ method: 'GET', url: '/app.js' })).statusCode, 200);
+    assert.equal((await t.app.inject({ method: 'GET', url: '/page/app.js' })).statusCode, 200);
     // Modules the page imports from packages: sheet rules, markdown + sanitising for answers, dice, map geometry.
     for (const url of ['/shared/sheet.js', '/shared/dice.js', '/shared/map.js', '/vendor/marked.js', '/vendor/purify.js', '/vendor/dice/dice-box.js', '/vendor/three/three.module.js', '/vendor/three/three.core.js', '/vendor/cannon-es.js']) {
       const res = await t.app.inject({ method: 'GET', url });

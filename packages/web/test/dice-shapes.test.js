@@ -1,11 +1,11 @@
 /**
- * The dice shapes' maths (dice-shapes.js, used by the Deluxe dice): every die
+ * The dice shapes' maths (dice/shapes.js, used by the Deluxe dice): every die
  * shape has the right faces, and a landed die's numbers can be turned so it
  * shows the server's number.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SHAPES, quat, restingRotation, parseForced, faceLabel, symmetries, relabel, readDie } from '../public/dice-shapes.js';
+import { SHAPES, quat, restingRotation, parseForced, faceLabel, symmetries, relabel, readDie } from '../public/dice/shapes.js';
 
 const close = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-6, `${msg}: ${a} vs ${b}`);
 

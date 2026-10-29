@@ -1,5 +1,5 @@
 /**
- * The map creator's drawing tools (map-creator.js, map-creator-panel.js):
+ * The map creator's drawing tools (map-creator.js, map/creator/panel.js):
  * walls, doors, secret doors, windows, curves, round towers, labels, roads
  * and rivers; picking, moving, turning and copying things with the pointer
  * and the keyboard; the fill, the rubber, scattering and placing; areas,
@@ -43,7 +43,7 @@ async function startBlank(page) {
   page.click('#map-new'); page.click('#map-create');
   await page.settle();
   page.click('#creator-blank');
-  const { creatorDesign } = await page.module('map-creator.js');
+  const { creatorDesign } = await page.module('map/creator/creator.js');
   return creatorDesign;
 }
 

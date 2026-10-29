@@ -186,7 +186,7 @@ test('regression: a 3D roller still loading when the page closes finishes first,
       page.click('#dice-open'); // starts loading Deluxe; the page closes straight away
     });
     // Let Deluxe's own load finish (the same module the page was loading), then give its failure time to land.
-    await closed.module('dice-deluxe.js').catch(() => {});
+    await closed.module('dice/deluxe.js').catch(() => {});
     await new Promise((r) => setTimeout(r, 300));
     assert.deepEqual(late.map(String), []);
   } finally {
@@ -231,7 +231,7 @@ test('dice: when the device asks for less motion, no 3D dice and no effects', as
 
 test('regression: dice: every roller\'s canvas sits on top of the others in the stage (a second 3D roller was pushed below the window)', async () => {
   const fs = await import('node:fs');
-  const css = fs.readFileSync(new URL('../public/style.css', import.meta.url), 'utf8');
+  const css = fs.readFileSync(new URL('../public/styles/style.css', import.meta.url), 'utf8');
   const rule = /\.dice-stage canvas\s*{([^}]*)}/.exec(css)?.[1] ?? '';
   assert.match(rule, /position:\s*absolute/);
   assert.match(rule, /inset:\s*0/);

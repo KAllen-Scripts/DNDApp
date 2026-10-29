@@ -25,7 +25,7 @@ register('./hooks.js', import.meta.url);
 
 const PUBLIC = new URL('../public/', import.meta.url);
 const HTML = fs.readFileSync(new URL('index.html', PUBLIC), 'utf8');
-const LOOK_BOOT = fs.readFileSync(new URL('look-boot.js', PUBLIC), 'utf8');
+const LOOK_BOOT = fs.readFileSync(new URL('page/look-boot.js', PUBLIC), 'utf8');
 
 // Node has its own versions of these, which must stay: the page's fetch is Node's (talking to the test server),
 // and with it Node's AbortController, streams, Blob and URL (URL.createObjectURL for fetched images).
@@ -180,7 +180,7 @@ export async function openPage(t, { as = null, campaign = null, storage = {}, an
         await new Promise((r) => setTimeout(r, 5));
       }
     },
-    /** One of the page's own modules (this page's copy of it), to read what isn't on screen, e.g. page.module('map-creator.js'). */
+    /** One of the page's own modules (this page's copy of it), to read what isn't on screen, e.g. page.module('map/creator/creator.js'). */
     module: (file) => import(new URL(`../public/${file}?page=${page.number}`, import.meta.url).href),
     /** Close the page: stop its live streams and put Node's globals back. */
     async close() {
@@ -198,7 +198,7 @@ export async function openPage(t, { as = null, campaign = null, storage = {}, an
       // dice settings, which needs this page's document. Under load it used to land after close ("document is
       // not defined") or in the next test's page.
       try {
-        const dice = await page.module('dice.js');
+        const dice = await page.module('dice/dice.js');
         await Promise.race([dice.rollersLoaded?.(), new Promise((r) => setTimeout(r, 20000).unref())]);
       } catch {}
       for (const handle of page.timers) clearTimeout(handle);
@@ -211,7 +211,7 @@ export async function openPage(t, { as = null, campaign = null, storage = {}, an
   pages += 1;
   page.number = pages;
   try {
-    await import(`../public/app.js?page=${pages}`);
+    await import(`../public/page/app.js?page=${pages}`);
     if (settle) await page.settle();
   } catch (err) {
     await page.close();

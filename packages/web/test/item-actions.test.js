@@ -1,5 +1,5 @@
 /**
- * The sheet's Item actions box (sheet-item-actions.js): Bag of Tricks'
+ * The sheet's Item actions box (sheet/item-actions.js): Bag of Tricks'
  * Use pulls out a creature (the server rolls), which joins Companions;
  * Wand of Fireballs spends extra charges; what stops an action is shown and
  * what the AI read is marked.
