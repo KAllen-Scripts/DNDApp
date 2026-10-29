@@ -184,6 +184,28 @@ export const config = {
     roller: env.DICE_ROLLER || 'deluxe',
   },
 
+  // The Discord bot that records sessions (src/recording/): off until DISCORD_BOT_TOKEN is set.
+  discord: {
+    token: env.DISCORD_BOT_TOKEN || '',
+    // A pause this long ends someone's burst of speech (one clip, one or more transcript lines).
+    silenceMs: num(env.DISCORD_SILENCE_MS, 1000),
+  },
+
+  // Speech-to-text for those recordings (src/recording/engines.js). Separate from the campaign's AI (Claude).
+  transcribe: {
+    // Always on this PC (owner, 2026-10-29: "We won't take it off server"): 'local' (Whisper through
+    // transformers.js, nothing to set up) or 'whisper-cpp' (whisper.cpp's program: much faster with an NVIDIA card).
+    engine: env.TRANSCRIBE_ENGINE || 'local',
+    language: env.TRANSCRIBE_LANGUAGE || 'en',
+    localModel: env.TRANSCRIBE_LOCAL_MODEL || 'onnx-community/whisper-large-v3-turbo',
+    localDtype: env.TRANSCRIBE_LOCAL_DTYPE || 'q8',
+    // 'cpu', or 'dml' for the graphics card through DirectX on Windows, 'cuda' on Linux.
+    localDevice: env.TRANSCRIBE_LOCAL_DEVICE || 'cpu',
+    whisperCppBin: env.WHISPER_CPP_BIN || '',
+    whisperCppModel: env.WHISPER_CPP_MODEL || '',
+    threads: num(env.TRANSCRIBE_THREADS, 0),
+  },
+
   // Applies to the API provider only (Claude Code runs on the subscription).
   monthlySpendCapUsd: num(env.MONTHLY_SPEND_CAP_USD, 50),
 };
@@ -191,6 +213,8 @@ export const config = {
 export const paths = {
   archive: path.join(config.dataDir, 'archive'),
   db: path.join(config.dataDir, 'dndapp.sqlite'),
+  // Discord recordings waiting to become transcripts (src/recording/recordings.js).
+  recordings: path.join(config.dataDir, 'recordings'),
   // The embedding model is the same whichever data set runs, so both share the real folder's copy.
   models: path.join(path.resolve(repoRoot, env.DATA_DIR || 'data'), 'models'),
 };

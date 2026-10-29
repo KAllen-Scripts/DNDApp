@@ -1,8 +1,12 @@
 import { createContext } from './context.js';
 import { buildApp, exposureWarnings } from './app.js';
 import { seedIfEmpty } from './example/startup.js';
+import { startDiscordBot } from './recording/discord-bot.js';
 
 const ctx = await createContext();
+// The Discord bot that records sessions (only when DISCORD_BOT_TOKEN is set). Recordings cut off by a restart are transcribed now.
+ctx.discordBot = await startDiscordBot(ctx);
+ctx.recordings.recover();
 const app = buildApp(ctx);
 
 if (ctx.restored.length) app.log.warn(`Restored campaigns from the archive: ${ctx.restored.join(', ')}. Run a rebuild to regenerate their notes.`);
@@ -31,6 +35,8 @@ if (noPassword.length) {
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, async () => {
     await app.close();
+    // A recording in progress keeps what was said so far (it's transcribed when the server next starts).
+    await ctx.discordBot.close().catch(() => {});
     ctx.db.close();
     process.exit(0);
   });

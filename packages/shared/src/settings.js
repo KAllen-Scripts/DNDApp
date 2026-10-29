@@ -75,7 +75,16 @@ export const LEVEL_UP_WHO = {
   player: 'Players level up when they’re ready',
   dm: 'Players level up when I give them a level',
 };
-export const DEFAULT_SETTINGS = Object.freeze({ weight: 'capacity', edition: null, level_up: 'player', clock: START_CLOCK, travel: DEFAULT_TRAVEL, attacks: DEFAULT_ATTACKS, backgrounds: Object.freeze([]), calendar: null, wiki: Object.freeze({ lanes: Object.freeze([]) }) });
+/**
+ * discord: the Discord server (guild_id) and voice channel (channel_id) the bot records this campaign's
+ * sessions in (the server's recording/discord-bot.js), or nulls while the DM hasn't linked one.
+ */
+const SNOWFLAKE = /^\d{5,25}$/;
+export const normalizeDiscordSettings = (d = {}) => {
+  const guild_id = SNOWFLAKE.test(String(d?.guild_id ?? '')) ? String(d.guild_id) : null;
+  return { guild_id, channel_id: guild_id && SNOWFLAKE.test(String(d?.channel_id ?? '')) ? String(d.channel_id) : null };
+};
+export const DEFAULT_SETTINGS = Object.freeze({ weight: 'capacity', edition: null, level_up: 'player', clock: START_CLOCK, travel: DEFAULT_TRAVEL, attacks: DEFAULT_ATTACKS, backgrounds: Object.freeze([]), calendar: null, wiki: Object.freeze({ lanes: Object.freeze([]) }), discord: Object.freeze({ guild_id: null, channel_id: null }) });
 /** The clock goes at most this far (about 27,000 years of days), so it stays a plain number. */
 export const MAX_CLOCK = 1440 * 10_000_000;
 
@@ -96,6 +105,7 @@ export function normalizeSettings(s = {}) {
     backgrounds: normalizeCustomBackgrounds(s?.backgrounds),
     calendar: normalizeCalendar(s?.calendar),
     wiki: normalizeWikiSettings(s?.wiki),
+    discord: normalizeDiscordSettings(s?.discord),
   };
 }
 

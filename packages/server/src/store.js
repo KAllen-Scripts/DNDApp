@@ -55,6 +55,7 @@ export function createStore({ db, archive, config }) {
 
   const store = {
     getCampaign,
+    getCampaignBySlug: (slug) => db.prepare('SELECT * FROM campaigns WHERE slug = ?').get(slug) ?? null,
 
     /** Hears 'settings' { campaign_id, settings } when the DM changes them. */
     events: new EventEmitter(),

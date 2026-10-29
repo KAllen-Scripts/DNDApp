@@ -42,6 +42,9 @@ import { createMapReader } from './maps/read.js';
 import { createDesignDrafter } from './maps/design-draft.js';
 import { createStatBlocks } from './maps/stats.js';
 import { createPictures, createPictureDescriber } from './characters/pictures.js';
+import { createRecordings } from './recording/recordings.js';
+import { createEngine } from './recording/engines.js';
+import path from 'node:path';
 
 export async function createContext({ config = defaultConfig, paths = defaultPaths, llm, embedder, log, fetchImage } = {}) {
   const db = openDb(paths.db);
@@ -114,6 +117,14 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   const statBlocks = createStatBlocks({ llm, books, creatures, editions });
   const creatureFinder = createCreatureFinder({ llm, books, editions, ...(fetchImage && { fetchImage }) });
   const itemFinder = createItemFinder({ llm, books, items, editions, ...(fetchImage && { fetchImage }) });
+  // Sessions recorded from Discord, transcribed on this PC (or by Groq). The bot itself starts with the server (index.js).
+  const recordings = createRecordings({
+    root: paths.recordings ?? path.join(path.dirname(paths.db), 'recordings'),
+    store,
+    config,
+    engine: () => createEngine(config.transcribe, { cacheDir: paths.models }),
+    log,
+  });
 
   // If the database was lost or replaced, bring back accounts and campaigns from the archive.
   const restored = store.restoreFromArchive();
@@ -130,5 +141,5 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   // Changes made while the server was off (or before its last run finished) still reach the archivist.
   for (const { id } of db.prepare('SELECT id FROM campaigns').all()) if (updates.pendingSince(id)) jobs.scheduleUpdates(id);
 
-  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, wiki, wikiAI, wikiPictures, wikiBoards, wikiAsOf, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, mapStamps, pipeline, jobs, qa, books, editions, spells, forms, sheets, sheetImport, sheetReview, maps, mapReader, designDrafter, statBlocks, creatureFinder, pictures, pictureDescriber, restored };
+  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, wiki, wikiAI, wikiPictures, wikiBoards, wikiAsOf, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, mapStamps, pipeline, jobs, qa, books, editions, spells, forms, sheets, sheetImport, sheetReview, maps, mapReader, designDrafter, statBlocks, creatureFinder, pictures, pictureDescriber, recordings, discordBot: null, restored };
 }
