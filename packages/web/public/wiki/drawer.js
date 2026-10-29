@@ -4,12 +4,11 @@
  * the table). It has the page's compass, Open in the wiki and Edit; Escape or
  * ✕ closes it. On a phone it's a sheet from the bottom. A player's has no Edit.
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { state, nav, base, report, fam, kindBadge } from './data.js';
 import { pageContent, hidePreview } from './page.js';
 import { drawCompass } from './compass.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { $, h } from '../page/dom.js';
 
 function drawerBox() {
   let box = $('#wiki-drawer');

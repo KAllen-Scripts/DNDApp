@@ -4,11 +4,10 @@
  * every block for the DM or chosen players. Optionally that part is made
  * available to them in the wiki too (POST …/wiki/:pid/handout).
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { state, nav, base, report, status, playerName } from './data.js';
 import { spoilerWords } from './views/waiting.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { $, h } from '../page/dom.js';
 
 function dialogBox() {
   let d = $('#wiki-handout-dialog');

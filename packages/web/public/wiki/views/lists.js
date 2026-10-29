@@ -3,11 +3,11 @@
  * value), or a list the AI picks from plain words (Make a list: "hostile NPCs in Millbrook"). They show on the Home
  * as rows of cards. The server keeps them (never in the settings players get) and says which pages each shows.
  */
-import { api, h } from '../../page/api.js';
+import { api } from '../../page/api.js';
 import { KIND_FAMILIES } from '/shared/wiki.js';
 import { state, nav, base, report, status, pictureImg, fam } from '../data.js';
+import { $, h } from '../../page/dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 const CANON_NAMES = { true: 'True', rumour: 'A rumour', false: 'False', planned: 'Planned', told: 'An account' };
 
 const mini = (p) => h('button', { type: 'button', class: `wiki-mini-card fam-${fam(p.kind)}`, title: p.title, onclick: () => nav.go(`#/page/${p.id}`) },

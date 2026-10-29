@@ -5,10 +5,9 @@
  * with the login), kinds, and `nav`: the moves between views, which wiki.js
  * fills in, so a page drawn anywhere can open another page.
  */
-import { api, h, LoggedOut, note, fileUrl, readBase64 } from '../page/api.js';
+import { api, LoggedOut, fileUrl } from '../page/api.js';
 import { wikiKey, kindFamily } from '/shared/wiki.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { $, h, note, readBase64 } from '../page/dom.js';
 
 export const state = {
   campaignId: null,
@@ -67,6 +66,10 @@ export const report = (err) => {
   if (err instanceof LoggedOut) throw err;
   status(err.message, true);
 };
+
+/** Whether the DM's Truth switch is on (wiki/canon.js): rumours and what's only believed are hidden, so only what's true is left. */
+export const truthOn = () => document.querySelector('#tab-wiki')?.hasAttribute('data-truth') ?? false;
+
 export const playerName = (id) => {
   const p = state.players.find((x) => x.id === id);
   return p ? p.character_name || p.name : `player ${id}`;

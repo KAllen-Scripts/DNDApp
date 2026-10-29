@@ -3,10 +3,11 @@
  * a card with Use, and Edit or Make my own), "Start from" in a new page's editor, and Save as a template. A
  * template gives a new page its kind, sections and facts, with writing prompts shown in them.
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { STARTER_TEMPLATES, templateFor, fromTemplate } from '/shared/wiki-templates.js';
 import { KIND_FAMILIES, wikiKey } from '/shared/wiki.js';
 import { state, nav, base, status, report, fam } from './data.js';
+import { h } from '../page/dom.js';
 
 let own = null; // the DM's own templates, fetched once per visit to the editor or the view
 

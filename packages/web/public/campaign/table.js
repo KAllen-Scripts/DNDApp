@@ -7,15 +7,14 @@
  *     gets them, and takes them back. A new one marks the tab until it's opened.
  *   - Rests: a short or long rest the DM called that includes you (rests.js).
  */
-import { api, listen, fileUrl, h, readBase64, LoggedOut } from '../page/api.js';
+import { api, listen, fileUrl, LoggedOut } from '../page/api.js';
 import { tableRoll } from '../dice/dice.js';
 import { markdownBox } from '../page/markdown.js';
 import { merchantChanged } from '../items/merchants.js';
 import { restHeard } from './rests.js';
 import { settingsHeard } from './settings.js';
 import { sheetHeard } from '../sheet/sheet.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { $, h, readBase64 } from '../page/dom.js';
 
 const state = {
   campaignId: null,

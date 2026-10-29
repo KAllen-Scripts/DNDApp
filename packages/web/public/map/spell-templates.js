@@ -3,13 +3,12 @@
  * moving and turning them, and who they catch.
  */
 import { onMap, render, renderMeasureTools, renderPinTool, renderPins, renderRuler, renderSelection, renderTokens, setTool, svgEl, toImage } from './map.js';
-import { LoggedOut, api, h } from '../page/api.js';
+import { LoggedOut, api } from '../page/api.js';
 import { TEMPLATE_COLOR, TEMPLATE_SHAPES, TEMPLATE_SHAPE_NAMES, snapTemplatePoint, spellArea, templateShape, tokensInTemplate } from '/shared/map.js';
 import { base, report, state, status } from './state.js';
 import { field } from './dm-tools.js';
 import { castAt, spellInPlay } from './attacks.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { $, h } from '../page/dom.js';
 
 // ---------- spell templates (areas of effect) ----------
 

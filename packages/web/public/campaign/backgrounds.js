@@ -4,9 +4,9 @@
  * so they're archived with them and reach every player's sheet live, where
  * the Background box suggests them beside the books' ones.
  */
-import { h } from '../page/api.js';
 import { ABILITIES, ABILITY_NAMES, SKILLS } from '/shared/sheet.js';
 import { MAX_CUSTOM_BACKGROUNDS, backgroundSummary } from '/shared/backgrounds.js';
+import { h } from '../page/dom.js';
 
 /**
  * The Backgrounds part of the settings dialog. `list()` gives the DM's

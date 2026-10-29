@@ -2,11 +2,10 @@
  * The turn order panel on the map (initiative): starting and ending a fight, rolling, turns.
  */
 import { onMap, select } from './map.js';
-import { api, h, storage } from '../page/api.js';
+import { api, storage } from '../page/api.js';
 import { base, report, state, status } from './state.js';
 import { roll, rollModeFromEvent } from '../dice/dice.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { $, h } from '../page/dom.js';
 
 // ---------- initiative (the turn order in a fight) ----------
 

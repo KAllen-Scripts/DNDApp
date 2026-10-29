@@ -5,14 +5,14 @@
  * the server finds who's in it. The server rolls everything (routes/attacks.js); this page shows the dice it
  * rolled and a card per attack, to everyone who can see it (the map's `attacks`, filtered by the server).
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { CONDITIONS, ownToken } from '/shared/map.js';
 import { campaignSettings } from '../campaign/settings.js';
 import { base, report, state, status } from './state.js';
 import { onMap, renderMeasureTools, renderPinTool, renderRuler, renderTokens, setTool } from './map.js';
 import { hideRollResult, nextD20Mode, showRolls } from '../dice/dice.js';
+import { $, h } from '../page/dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 const ABBR = { str: 'Str', dex: 'Dex', con: 'Con', int: 'Int', wis: 'Wis', cha: 'Cha' };
 const MODES = { normal: 'Normal', advantage: 'Advantage', disadvantage: 'Disadvantage' };
 const ORD = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];

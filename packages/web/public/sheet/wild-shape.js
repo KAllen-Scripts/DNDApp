@@ -7,15 +7,15 @@
  * rules (both editions) are in shared/wild-shape.js; sheet.js owns the sheet
  * and passes in what this needs.
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { ABILITIES, ABILITY_NAMES, SKILLS, formatBonus } from '/shared/sheet.js';
 import { d20Plus } from '/shared/dice.js';
 import { activeForm, druidOf, endWildShape, formCost, formProblem, formStats, setFormHp, speedText, startWildShape, usesLeft, wildShapeRules } from '/shared/wild-shape.js';
 import { roll, rollModeFromEvent, D20_ICON } from '../dice/dice.js';
 import { fold } from './fold.js';
+import { cap, h } from '../page/dom.js';
 
 const SOURCE_NOTES = { srd: 'SRD', book: 'Your book', ai: 'AI memory (check it)', manual: 'Typed in' };
-const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** A name you click to roll a d20 plus a bonus. */
 function rollName(content, bonus, label, cls = '') {

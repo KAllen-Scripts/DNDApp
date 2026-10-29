@@ -4,10 +4,9 @@
  * waits under Waiting for you. Also the link suggestions on a page: names that match another page, underlined
  * with Link it (worked out on the server, no AI).
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { state, nav, base, status, report } from './data.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { $, h } from '../page/dom.js';
 
 /** Ask the AI (POST …/wiki/draft); the result waits under Waiting. `button` shows it's working. */
 export async function askWriter(body, button = null) {

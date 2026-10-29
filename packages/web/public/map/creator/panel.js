@@ -12,11 +12,9 @@ import { drawBuiltIn, drawDesign, drawFloorSwatch, drawPathSwatch, drawWallSwatc
 import { MAP_ART, artRef, floorArt, propArt, wallArt } from '/shared/map-art-library.js';
 import { artImage, loadArt } from './art-loader.js';
 import { levelName } from '/shared/map.js';
-import { h } from '../../page/api.js';
 import { state } from '../state.js';
 import { renderLevels } from './start.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { $, h } from '../../page/dom.js';
 
 /** The tools: [key, name, shortcut key, what it does]. */
 export const TOOLS = [

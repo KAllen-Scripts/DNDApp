@@ -3,9 +3,10 @@
  * the sheet by the server (never copied into the wiki), with the player's choice of what the other players see;
  * and Waiting's offer of a page for each character that has none.
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { SHEET_PARTS } from '/shared/wiki.js';
 import { state, nav, base, status, report, playerName } from './data.js';
+import { h } from '../page/dom.js';
 
 /** The page's "From the sheet" box, or null. `fromSheet` is what the server sent; `page` the page. */
 export function drawFromSheet(fromSheet, page) {

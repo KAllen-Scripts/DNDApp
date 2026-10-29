@@ -4,9 +4,9 @@
  * come from the DM's page list, which only the DM gets, so a player's answers
  * are left as they are.
  */
-import { h } from '../page/api.js';
 import { state, fam } from './data.js';
 import { openDrawer } from './drawer.js';
+import { h } from '../page/dom.js';
 
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

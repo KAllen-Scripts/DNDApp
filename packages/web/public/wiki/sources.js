@@ -4,9 +4,10 @@
  * citations do (`GET …/wiki/evidence`, filtered by who is viewing), and the
  * editor's list of a part's sources, where one can be taken off.
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { sourceLabel } from '/shared/citations.js';
 import { base, report } from './data.js';
+import { h } from '../page/dom.js';
 
 /** The chips for a part's sources (null when it has none). `as` is the player a page is viewed as. */
 export function sourceChips(sources, { as = null } = {}) {

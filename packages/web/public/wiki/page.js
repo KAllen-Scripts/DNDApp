@@ -4,7 +4,7 @@
  * card on hover), the gallery, and the editor. Drawn into whatever holds it,
  * so the same page can show in the wiki or elsewhere.
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { markdownFragment } from '../page/markdown.js';
 import { wikiPieces, wikiKey, LINK_RE, EMBED_RE, APP_EMBED_RE, PICTURE_RE, pictureAlt, KIND_FAMILIES, TONES, guessTone, factLinks, factTone } from '/shared/wiki.js';
 import { sourceChips, sourcesEditor } from './sources.js';
@@ -14,6 +14,7 @@ import { templateChooser } from './templates.js';
 import { askWriter } from './write.js';
 import { appEmbedBox, chooseEmbed } from './embeds.js';
 import { state, nav, base, status, report, availableText, pictureImg, showPicture, uploadPictures, imageFiles, choosePicture, dropTarget, fam, kindBadge, byName } from './data.js';
+import { h } from '../page/dom.js';
 
 /** A picture in the text: ![caption|place](picture:id). */
 function figure({ id, caption, place }) {

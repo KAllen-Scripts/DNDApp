@@ -6,13 +6,14 @@
  * pinch to zoom from ages to hours. A click opens a card: Open page, Show on the map. On a phone it's a vertical
  * ribbon of cards.
  */
-import { api, h } from '../../page/api.js';
+import { api } from '../../page/api.js';
 import { timeTicks, fullMoons, whenText } from '/shared/wiki-time.js';
 import { KIND_FAMILIES, isArcPage } from '/shared/wiki.js';
 import { panZoom } from '../../page/pan-zoom.js';
 import { canonBadge } from '../canon.js';
 import { showOnMap } from './atlas.js';
-import { state, nav, base, report, pictureImg, playerName } from '../data.js';
+import { state, nav, base, report, pictureImg, playerName, truthOn } from '../data.js';
+import { h } from '../../page/dom.js';
 
 const DAY = 1440;
 const ROW = 34; // one row of items
@@ -22,7 +23,6 @@ const LABEL = 132; // the lanes' names down the left
 let pan = null;
 
 const phone = () => window.matchMedia?.('(max-width: 700px)').matches ?? false;
-const truthOn = () => document.querySelector('#tab-wiki')?.hasAttribute('data-truth') ?? false;
 
 /** About how wide an item is drawn, in pixels, at k pixels a minute (its span, or its card or label). */
 const widthOf = (x, k) => {

@@ -7,12 +7,12 @@
  * equipped (from their Inventory), so the DM can check it, and their class
  * features' uses left (Rage, Ki, Wild Shape...).
  */
-import { api, fileUrl, setChildren, h, readBase64, LoggedOut, note } from '../page/api.js';
+import { api, fileUrl, LoggedOut } from '../page/api.js';
 import { markdownBox, markdownEditor } from '../page/markdown.js';
 import { formatPrice, splitPrice, COIN_VALUES } from '/shared/coins.js';
 import { EFFECT_TARGETS, MAX_EFFECTS, itemStats } from '/shared/gear.js';
+import { $, h, note, readBase64, setChildren } from '../page/dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 export const ITEM_KIND_NAMES = { weapon: 'Weapon', armor: 'Armour', gear: 'Adventuring gear', tool: 'Tool', potion: 'Potion', scroll: 'Scroll', magic: 'Magic item', other: 'Other' };
 const RARITIES = ['', 'common', 'uncommon', 'rare', 'very rare', 'legendary', 'artifact'];
 const FROM = { yours: 'from your items', book: 'from the books', ai: "from the AI's memory; check it" };

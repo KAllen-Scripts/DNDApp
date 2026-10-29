@@ -11,7 +11,7 @@
  * The server works out the way, the times and what happens on the way, and moves everyone; the page shows
  * it and sends what people do.
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { MARCH_HOURS, PACES, TRAVEL_BY, isPinMap } from '/shared/map.js';
 import { clockText, durationText } from '/shared/settings.js';
 import { campaignSettings, onSettings } from '../campaign/settings.js';
@@ -19,8 +19,8 @@ import { dateText } from '/shared/calendar.js';
 import { base, report, state, status } from './state.js';
 import { field } from './dm-tools.js';
 import { onMap, select, svgEl } from './map.js';
+import { $, h } from '../page/dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 /** The campaign's calendar (Campaign settings), or null for "Day N". */
 const calendar = () => campaignSettings().calendar;
 

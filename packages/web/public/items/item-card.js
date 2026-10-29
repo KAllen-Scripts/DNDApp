@@ -5,14 +5,13 @@
  * The Inventory shows it before an item is added (Add / Cancel), so a
  * player can check an item's stats first.
  */
-import { h } from '../page/api.js';
 import { ABILITY_NAMES, formatBonus } from '/shared/sheet.js';
 import { EFFECT_TARGETS } from '/shared/gear.js';
 import { markdownBox } from '../page/markdown.js';
 import { actionSummary } from '/shared/item-actions.js';
+import { cap, h } from '../page/dom.js';
 
 export const GEAR_KINDS = { weapon: 'Weapon', armor: 'Armour', gear: 'Gear', tool: 'Tool', potion: 'Potion', scroll: 'Scroll', magic: 'Magic item', other: 'Other' };
-const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const lb = (n) => `${Math.round(n * 100) / 100} lb`;
 
 /** "+1 AC", "Strength becomes 19". */

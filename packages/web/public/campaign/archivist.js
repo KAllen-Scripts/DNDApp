@@ -3,9 +3,8 @@
  * disagreed, and corrections in plain words. Answers and corrections go to
  * the archivist, which applies them in the background.
  */
-import { api, h } from '../page/api.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { api } from '../page/api.js';
+import { $, h } from '../page/dom.js';
 
 const state = { campaignId: null, guarded: (fn) => fn(), questions: [], corrections: [] };
 const base = () => `/campaigns/${state.campaignId}`;

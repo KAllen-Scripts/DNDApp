@@ -9,12 +9,11 @@
  * token on the map and buy on their own. The coins come off their sheet and
  * the item goes into its inventory (the server does both).
  */
-import { api, h, readBase64, LoggedOut, note } from '../page/api.js';
+import { api, LoggedOut } from '../page/api.js';
 import { formatPrice, totalCp } from '/shared/coins.js';
 import { itemList, itemFace, itemSummary, detailsDialog, lookUpItem, priceInputs, itemForm, createItem } from './items.js';
 import { flush as flushSheet, reloadSheet } from '../sheet/sheet.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { $, h, note, readBase64 } from '../page/dom.js';
 
 const state = {
   campaignId: null,

@@ -4,9 +4,8 @@
  * who's in them, who's the DM, characters).
  * Shown instead of Ask/Notes when the admin login is used.
  */
-import { api, h } from '../page/api.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { api } from '../page/api.js';
+import { $, h } from '../page/dom.js';
 
 let guarded = (fn) => fn();
 let me = null;

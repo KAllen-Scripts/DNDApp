@@ -5,11 +5,12 @@
  * (the average, or roll the hit die), a subclass when the class picks one at that level, and an Ability Score
  * Improvement or a feat at the levels that give one; it shows what the level brings before it's taken.
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { ABILITIES, ABILITY_NAMES, CLASSES } from '/shared/sheet.js';
 import { levelUp, levelUpChanges, levelUpChoices } from '/shared/level-up.js';
 import { GENERAL_FEATS } from '/shared/feats.js';
 import { roll } from '../dice/dice.js';
+import { h } from '../page/dom.js';
 
 /**
  * The note and button under the name. ctx: { state, base, flush, adopt (res: show the sheet the server

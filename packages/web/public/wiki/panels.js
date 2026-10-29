@@ -7,8 +7,7 @@
  * it keeps everything it does, and goes back to its place on leaving.
  */
 import { state } from './data.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { $ } from '../page/dom.js';
 
 /** The wiki views that are a table page, with what the rail calls them. */
 export const PANEL_VIEWS = {

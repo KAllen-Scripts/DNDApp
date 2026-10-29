@@ -9,7 +9,7 @@
  * never changed by the rules. Every change is saved to the server shortly
  * after typing stops.
  */
-import { api, fileUrl, h, setChildren, storage, note } from '../page/api.js';
+import { api, fileUrl, storage } from '../page/api.js';
 import {
   ABILITIES, ABILITY_NAMES, SKILLS, CLASSES, RACES, ALIGNMENTS, SCHOOLS,
   WEAPONS, classKey, computeSheet, coerceDerived, formatBonus, newAttack, normalizeSheet, normalizeSpell, hitDice as hitDiceOf, rollDisadvantage,
@@ -42,8 +42,8 @@ import { fold, isOpen, setOpen } from './fold.js';
 import { itemNames } from '/shared/item-names.js';
 import { GEAR_KINDS, effectText, gearCard } from '../items/item-card.js';
 import { levelUpBanner } from './level-up.js';
+import { $, cap, h, note, setChildren } from '../page/dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 const LEVEL_NAMES = ['Cantrips', '1st level', '2nd level', '3rd level', '4th level', '5th level', '6th level', '7th level', '8th level', '9th level'];
 const SPELL_DETAILS = ['name', 'level', 'school', 'casting_time', 'range', 'components', 'material', 'duration', 'concentration', 'ritual', 'description', 'higher_levels', 'attack', 'save', 'damage', 'damage_mod', 'higher_damage', 'source', 'source_note'];
 const SOURCE_LABELS = { srd: 'SRD', book: 'Your book', ai: 'AI memory', import: 'Your sheet', manual: 'Typed in', custom: 'Your own' };
@@ -387,7 +387,6 @@ const row = (name, ...children) => h('div', { class: `sh-row row-${name}` }, chi
 const section = (title, ...content) => h('details', { class: 'sh-section', open: true }, h('summary', {}, title), ...content);
 const removeButton = (title, onclick) => h('button', { type: 'button', class: 'icon-x', title, 'aria-label': title, onclick }, '×');
 const addButton = (text, onclick) => h('button', { type: 'button', class: 'add-row', onclick }, `+ ${text}`);
-const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
  * A name you click to roll (a save, skill, ability...). get() gives

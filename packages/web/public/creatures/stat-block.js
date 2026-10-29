@@ -3,8 +3,8 @@
  * creature instead. Used for tokens on the map (map.js) and the DM's saved
  * creatures (creatures.js).
  */
-import { h } from '../page/api.js';
 import { markdownBox } from '../page/markdown.js';
+import { h } from '../page/dom.js';
 
 const SOURCES = {
   ai: () => "From the AI's memory of the 5e rules. Only you see this.",

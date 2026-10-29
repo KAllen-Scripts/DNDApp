@@ -8,7 +8,8 @@
  * sheet.js owns the sheet itself: it hands this module the campaign and is
  * told (onSheet) when another character's sheet should be shown.
  */
-import { api, h, storage } from '../page/api.js';
+import { api, storage } from '../page/api.js';
+import { $, h } from '../page/dom.js';
 
 const OPEN_KEY = 'dndapp.charactersOpen';
 
@@ -27,7 +28,6 @@ const state = {
   beforeSwitch: async () => {}, // save what's waiting on the sheet first
 };
 
-const $ = (sel) => document.querySelector(sel);
 const base = () => `/campaigns/${state.campaignId}`;
 
 /** Called by sheet.js when a campaign is entered (players only). */

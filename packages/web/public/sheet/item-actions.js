@@ -8,8 +8,8 @@
  * looked up are marked so the player checks them. sheet.js passes in `use`,
  * which saves the sheet first and rolls through the server.
  */
-import { h } from '../page/api.js';
 import { actionProblem, actionSummary } from '/shared/item-actions.js';
+import { h } from '../page/dom.js';
 
 /**
  * @param {object} ctx

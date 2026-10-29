@@ -4,9 +4,9 @@
  * the campaign's settings (`calendar`, shared/calendar.js), so the map's clock, travel, rests and the wiki
  * read the same dates.
  */
-import { h } from '../page/api.js';
 import { CALENDAR_CHOICES, calendarPreset, dateText, normalizeCalendar } from '/shared/calendar.js';
 import { clockText } from '/shared/settings.js';
+import { h } from '../page/dom.js';
 
 const num = (v, d = 0) => (v === '' || !Number.isFinite(Number(v)) ? d : Number(v));
 

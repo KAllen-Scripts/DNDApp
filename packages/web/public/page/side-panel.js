@@ -11,8 +11,8 @@
  * main window.
  */
 import { storage } from './api.js';
+import { $ } from './dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 const BESIDE_KEY = 'dndapp.beside';
 const OLD_KEY = 'dndapp.sheetBeside'; // before other panels could go beside the map: '1' meant the sheet
 const WIDTH_KEY = 'dndapp.sheetWidth';

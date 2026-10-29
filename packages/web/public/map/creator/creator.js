@@ -23,12 +23,12 @@ import { drawAsset, drawDesign, drawFloor, drawPaths } from '/shared/map-art.js'
 import { MAP_ART, artFiles, artRef, propArt } from '/shared/map-art-library.js';
 import { loadArt } from './art-loader.js';
 import { onMap, show } from '../map.js';
-import { api, fileUrl, h, readBase64, LoggedOut } from '../../page/api.js';
+import { api, fileUrl, LoggedOut } from '../../page/api.js';
 import { base, downloadUvtt, report, state } from '../state.js';
 import { TOOLS, renderPanel, renderProps } from './panel.js';
 import { renderStart } from './start.js';
+import { $, h, readBase64 } from '../../page/dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 const BASE_CELL = 28; // preview pixels per square at zoom 1
 const MAX_CANVAS = 4096; // the preview's longest side, in pixels, at most
 const UNDO_STEPS = 100;

@@ -6,18 +6,17 @@
  * tokens (map.js, "Place on map" or Add token). Friendly or hostile is apart
  * from which list. Players never see it.
  */
-import { api, fileUrl, h, readBase64, LoggedOut, note } from '../page/api.js';
+import { api, fileUrl, LoggedOut } from '../page/api.js';
 import { showStatBlock, statsFound } from './stat-block.js';
 import { markdownFragment } from '../page/markdown.js';
 import { TOKEN_SIZES, TOKEN_SIZE_NAMES, TOKEN_COLORS } from '/shared/map.js';
 import { CREATURE_TYPES, creatureType, challengeValue, challengeLabel } from '/shared/bestiary.js';
 import { nav } from '../wiki/data.js';
+import { $, cap, h, note, readBase64 } from '../page/dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 const KIND_NAMES = { enemy: 'Hostile', npc: 'Friendly' };
 const GROUP_NAMES = { creature: 'Bestiary', person: 'People' };
 const VIEW_KEY = 'dndapp.bestiary.view';
-const capital = (w) => w.charAt(0).toUpperCase() + w.slice(1);
 
 const state = {
   campaignId: null,
@@ -160,7 +159,7 @@ function summary(c) {
 
 /** Its type's heading in the bestiary: a 5e type, the DM's own word, or 'other'. */
 const typeKey = (c) => creatureType(c) || 'other';
-const typeName = (key) => (key === 'other' ? 'No type yet' : capital(key));
+const typeName = (key) => (key === 'other' ? 'No type yet' : cap(key));
 
 function draw() {
   watchSearches();
@@ -215,7 +214,7 @@ function card(c) {
         h('h3', {}, c.name),
         h('span', { class: `chip creature-kind ${c.kind}` }, KIND_NAMES[c.kind])),
       c.group === 'person' && c.role ? h('p', { class: 'creature-role small' }, c.role) : null,
-      h('p', { class: 'muted small' }, [type ? capital(type) : '', summary(c)].filter(Boolean).join(' · ')),
+      h('p', { class: 'muted small' }, [type ? cap(type) : '', summary(c)].filter(Boolean).join(' · ')),
       sourceLine(c),
       c.notes ? h('p', { class: 'creature-notes small' }, c.notes) : null,
       h('div', { class: 'creature-actions' },
@@ -306,7 +305,7 @@ function editDialog(c = null) {
   kind.value = c?.kind ?? (group.value === 'person' ? 'npc' : 'enemy');
   const typesId = `creature-types-${Math.random().toString(36).slice(2, 8)}`;
   const type = h('input', { name: 'type', value: c?.type ?? '', maxLength: 40, list: typesId, placeholder: creatureType({ stats: c?.stats }) || 'from its stat block' });
-  const typeField = field('Type', h('span', {}, type, h('datalist', { id: typesId }, ...CREATURE_TYPES.map((t) => new Option(capital(t), t)))));
+  const typeField = field('Type', h('span', {}, type, h('datalist', { id: typesId }, ...CREATURE_TYPES.map((t) => new Option(cap(t), t)))));
   const role = h('input', { name: 'role', value: c?.role ?? '', maxLength: 120, placeholder: 'Innkeeper at the Gilded Goose' });
   const roleField = field('Role', role);
   const showGroup = () => {

@@ -7,15 +7,7 @@
  * They draw only what they're given: the server has already left out what
  * the viewer may not see.
  */
-
-const NS = 'http://www.w3.org/2000/svg';
-
-function svg(tag, attrs = {}, ...children) {
-  const el = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs)) if (v != null) el.setAttribute(k, String(v));
-  for (const c of children) if (c) el.append(c);
-  return el;
-}
+import { svg } from './dom.js';
 
 const titled = (el, text) => {
   if (text) el.append(svg('title', {}, document.createTextNode(text)));

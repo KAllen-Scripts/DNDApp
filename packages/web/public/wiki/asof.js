@@ -2,8 +2,9 @@
  * Scrubbing through time (wiki space stage 11): a slider for the Atlas and the Web, from now back to the end of each
  * session played (GET …/wiki/moments). `onChange(at)` gets the moment (an ISO time), or null for now.
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { state, base } from './data.js';
+import { h } from '../page/dom.js';
 
 let moments = null; // the campaign's, fetched once a visit to the space
 

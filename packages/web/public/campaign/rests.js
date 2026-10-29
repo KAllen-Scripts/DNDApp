@@ -5,13 +5,12 @@
  * restHeard) and their sheet reloads. Players spend hit dice and take their
  * own short rests from the Hit dice box on their sheet (sheet.js).
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { showToast } from '../dice/dice.js';
 import { restCalled } from '../sheet/sheet.js';
 import { clockText } from '/shared/settings.js';
 import { campaignSettings } from './settings.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { $, h } from '../page/dom.js';
 
 const state = { campaignId: null, guarded: (fn) => fn(), isDm: false, userId: null };
 const base = () => `/campaigns/${state.campaignId}`;

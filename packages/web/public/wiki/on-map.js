@@ -6,9 +6,10 @@
  * are made from the map (the place's or token's Wiki page row), or from here
  * with Put it on a map (wiki/views/atlas.js).
  */
-import { api, h, fileUrl } from '../page/api.js';
+import { api, fileUrl } from '../page/api.js';
 import { state, nav, report, status } from './data.js';
 import { state as mapState } from '../map/state.js';
+import { h } from '../page/dom.js';
 
 const mapsBase = () => `/campaigns/${state.campaignId}/maps`;
 

@@ -7,7 +7,7 @@
  * The DM adds places with Place in Edit map (a click for a pin, a drag for an area). The server
  * decides what each player gets; the page only draws it.
  */
-import { api, h, storage } from '../page/api.js';
+import { api, storage } from '../page/api.js';
 import { atlasOrder, isPinMap, mapTrail } from '/shared/map.js';
 import { campaignSettings } from '../campaign/settings.js';
 import { base, report, state, status } from './state.js';
@@ -15,8 +15,8 @@ import { campaignPlayers, field, recordDialog } from './dm-tools.js';
 import { wikiPageField, offerShareAfterReveal } from './wiki-link.js';
 import { onMap, show, svgEl } from './map.js';
 import { travelPicked } from './travel.js';
+import { $, h } from '../page/dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 const HIDDEN_GROUPS_KEY = () => `dndapp.map.hiddenGroups.${state.campaignId}`;
 
 /** The groups of places this viewer hid (kept in this browser). */

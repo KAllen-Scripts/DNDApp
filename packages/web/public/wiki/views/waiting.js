@@ -3,13 +3,12 @@
  * AI proposes new pages, changed sections and reveals; each waits here for
  * Approve, Edit then approve, or Reject.
  */
-import { api, h } from '../../page/api.js';
+import { api } from '../../page/api.js';
 import { state, nav, base, status, report, availableText, playerName, sourceImg, SOURCE_NOUN } from '../data.js';
 import { sectionBody, availablePicker, richText } from '../page.js';
 import { characterOffers } from '../character-sheet.js';
 import { TONES } from '/shared/wiki.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { $, h } from '../../page/dom.js';
 
 const busy = (run) => run && (run.status === 'queued' || run.status === 'running');
 

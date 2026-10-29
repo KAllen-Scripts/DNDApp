@@ -7,11 +7,12 @@
  * pick a class, race or background, or put the starting equipment in the
  * Equipment box. SPEC §6.4 "Help making a character".
  */
-import { h, storage } from '../page/api.js';
+import { storage } from '../page/api.js';
 import { CLASSES, SKILLS, abilityMod, classKey } from '/shared/sheet.js';
 import { classHelp, raceHelp, racesFor, skillPicks } from '/shared/creation-help.js';
 import { backgroundSummary, backgroundsFor } from '/shared/backgrounds.js';
 import { pickBackground, sheetBackground } from './background.js';
+import { h } from '../page/dom.js';
 
 const OPEN_KEY = 'dndapp.sheetHelp';
 

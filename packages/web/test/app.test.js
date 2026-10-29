@@ -129,7 +129,7 @@ test('regression: logging out of the admin screen and in as a player shows only 
 // The element helper only flattened one level of children: pills showed "[object HTMLSpanElement]".
 test('regression: the element helper h() takes children nested to any depth', async () => {
   await withPage({}, async () => {
-    const { h } = await import('../public/page/api.js');
+    const { h } = await import('../public/page/dom.js');
     const el = h('p', {}, 'a', [h('span', {}, 'b'), ['c', [h('i', {}, 'd')]]]);
     assert.equal(el.textContent, 'abcd');
     assert.equal(el.querySelectorAll('span, i').length, 2);
@@ -139,7 +139,7 @@ test('regression: the element helper h() takes children nested to any depth', as
 // A status message ("Searching the web for …") floated over the Items page on a phone forever: no ✕, no timeout.
 test('regression: a status message can be dismissed and goes by itself', async () => {
   await withPage({}, async () => {
-    const { note, NOTE_MS } = await import('../public/page/api.js');
+    const { note, NOTE_MS } = await import('../public/page/dom.js');
     const saved = { ...NOTE_MS };
     Object.assign(NOTE_MS, { done: 20, working: 40, error: 30 });
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -2,10 +2,10 @@
  * Session prep (wiki space stage 7b): the Prep board on a prep page (a "session plan"): every page it names, as
  * cards, its clues first, then by family. Until the boards of stage 10 land, it's a grid of cards that open the pages.
  */
-import { h } from '../../page/api.js';
 import { wikiKey, wikiLinks, embedNames, kindFamily, KIND_FAMILIES } from '/shared/wiki.js';
 import { state, nav, pictureImg, fam, kindBadge } from '../data.js';
 import { makeBoard } from './boards.js';
+import { h } from '../../page/dom.js';
 
 export function prepBoard(page) {
   const find = (name) => state.pages.find((p) => [p.title, ...(p.aliases ?? [])].some((n) => wikiKey(n) === wikiKey(name)));

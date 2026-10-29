@@ -10,13 +10,13 @@
  * only shows them and rolls what they give back. sheet.js owns the sheet and
  * passes in what this needs.
  */
-import { h } from '../page/api.js';
 import { roll } from '../dice/dice.js';
 import {
   ACTIVE, MASTERY_PROPERTIES, WEAPON_MASTERY, masteryChoices, masteryLimit, normalizeCombat, planAttack, planSpell, spendForAttack, weaponMastery, weaponName,
 } from '/shared/attack-extras.js';
 import { featureRow, restText } from '/shared/class-features.js';
 import { rollDisadvantage } from '/shared/sheet.js';
+import { h } from '../page/dom.js';
 
 const editionOf = (state) => state.settings?.edition || state.edition || '2014';
 const combatOf = (state) => (state.sheet.combat = normalizeCombat(state.sheet.combat));

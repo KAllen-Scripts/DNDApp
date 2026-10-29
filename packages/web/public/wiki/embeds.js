@@ -3,13 +3,14 @@
  * and `[[map:…]]` drawn as the thing itself, from what the server sent with the page for this viewer (`embeds`,
  * keyed `kind:name`): a stat block with its rolls, an item's card, a shop to open, a handout, a map's picture.
  */
-import { h, api, fileUrl } from '../page/api.js';
+import { api, fileUrl } from '../page/api.js';
 import { markdownBox } from '../page/markdown.js';
 import { wikiKey } from '/shared/wiki.js';
 import { statBlockRolls } from '/shared/map.js';
 import { gearCard } from '../items/item-card.js';
 import { roll, rollModeFromEvent } from '../dice/dice.js';
 import { state, nav, base, report } from './data.js';
+import { h } from '../page/dom.js';
 
 const NOUNS = { creature: 'creature', item: 'item', merchant: 'merchant', handout: 'handout', map: 'map' };
 const signed = (n) => (n >= 0 ? `+${n}` : String(n));

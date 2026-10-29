@@ -10,9 +10,8 @@
  * Above them, recording from Discord: the server's bot joins a voice channel,
  * and a finished recording's transcript goes into the same upload form.
  */
-import { api, h } from '../page/api.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { api } from '../page/api.js';
+import { $, h } from '../page/dom.js';
 
 const MAX_BYTES = 50 * 1024 * 1024; // the server's upload limit (MAX_UPLOAD_MB)
 

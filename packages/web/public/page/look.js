@@ -5,6 +5,7 @@
  * (page/look-boot.js applies them on load). Previews reuse the real CSS: a theme
  * preview carries data-theme, a chat preview data-chat, and so on.
  */
+import { $ } from './dom.js';
 const look = window.dndLook;
 
 const THEMES = {
@@ -301,7 +302,6 @@ function tabsChanged(e) {
 }
 
 const $body = () => document.getElementById('look-body');
-const $ = (sel) => document.querySelector(sel);
 
 function choose(key, value) {
   look.save({ ...look.get(), [key]: value });

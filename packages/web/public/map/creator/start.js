@@ -8,11 +8,11 @@
 import { DESIGN_MAX, DESIGN_MIN, FLOORS, emptyDesign, normalizeDesign } from '/shared/map-design.js';
 import { drawDesign } from '/shared/map-art.js';
 import { levelName } from '/shared/map.js';
-import { LoggedOut, api, h, readBase64 } from '../../page/api.js';
+import { LoggedOut, api } from '../../page/api.js';
 import { onMap } from '../map.js';
 import { base, state } from '../state.js';
+import { $, h, readBase64 } from '../../page/dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 const POLL_MS = 2000; // how often the page asks how the AI's draft is getting on (the first time sooner)
 const GROUNDS = ['g', 's', 'f', 'w', 'd', 'r', 'a', 'n', 'c', '.'];
 
