@@ -119,8 +119,6 @@
         <button role="tab" data-tab="sheet" aria-selected="false"><span class="tab-icon" aria-hidden="true">⚔</span><span data-label="Sheet">Sheet</span></button>
         <button role="tab" data-tab="inventory" aria-selected="false"><span class="tab-icon" aria-hidden="true">⛨</span><span data-label="Inventory">Inventory</span></button>
         <button role="tab" data-tab="creatures" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">☠</span><span data-label="Bestiary">Bestiary</span></button>
-        <button role="tab" data-tab="items" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">✧</span><span data-label="Items">Items</span></button>
-        <button role="tab" data-tab="merchants" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">⚖</span><span data-label="Merchants">Merchants</span></button>
         <button role="tab" data-tab="map" aria-selected="false"><span class="tab-icon" aria-hidden="true">⌖</span><span data-label="Map">Map</span></button>
         <button role="tab" data-tab="handouts" aria-selected="false"><span class="tab-icon" aria-hidden="true">✉</span><span data-label="Handouts">Handouts</span></button>
         <button role="tab" data-tab="sessions" aria-selected="false" hidden><span class="tab-icon" aria-hidden="true">⇪</span><span data-label="Sessions">Sessions</span></button>
@@ -288,7 +286,7 @@
       <dialog id="creature-dialog" class="map-dialog"></dialog>
     </section>
 
-    <!-- The DM's items (items.js): what merchants sell, kept once. -->
+    <!-- The DM's items (items.js): what merchants sell, kept once. Shown in the wiki's space (#/items, wiki-panels.js), not as a tab. -->
     <section id="tab-items" class="panel creatures-panel" hidden>
       <div class="creatures-bar">
         <button id="item-new" class="primary">New item</button>
@@ -308,7 +306,7 @@
       <dialog id="item-dialog" class="map-dialog"></dialog>
     </section>
 
-    <!-- The DM's merchants (merchants.js): shops with stock and prices, put on maps as tokens. -->
+    <!-- The DM's merchants (merchants.js): shops with stock and prices, put on maps as tokens. Shown in the wiki's space (#/merchants). -->
     <section id="tab-merchants" class="panel creatures-panel" hidden>
       <div class="creatures-bar">
         <button id="merchant-new" class="primary">New merchant</button>
