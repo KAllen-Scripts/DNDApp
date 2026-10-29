@@ -2720,3 +2720,8 @@ button.wiki-tile { text-align: left; border: 1px solid var(--border); color: inh
 .wiki-insight.insight-previously { grid-column: 1 / -1; }
 .wiki-insight p { margin: 0; }
 .wiki-insight-recap { font-style: italic; line-height: 1.5; }
+
+/* The DM's Items and Merchants, moved into the wiki's space (wiki-panels.js): the page has the room, without the page list. */
+#wiki-view.wiki-panel-on { grid-template-columns: minmax(0, 1fr); }
+#wiki-view.wiki-panel-on .wiki-side { display: none; }
+#wiki-main > .creatures-panel { overflow: visible; }

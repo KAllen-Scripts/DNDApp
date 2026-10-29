@@ -1,7 +1,7 @@
 /**
- * Merchants. For the DM, the Merchants tab: shops with a picture, a
+ * Merchants. For the DM, the Merchants page (in the wiki's space): shops with a picture, a
  * description players see, notes only the DM sees, and stock (items from
- * the Items tab, each with a price, how many are left and what restocking
+ * the DM's Items, each with a price, how many are left and what restocking
  * brings it back up to). Put one on a map as a token; it restocks every so
  * many long rests, or when the DM says.
  *
@@ -96,7 +96,7 @@ function restockText(m) {
 const leftText = (l) => (l.qty == null ? 'no limit' : `${l.qty} left${l.full != null && l.full !== l.qty ? `, restocks to ${l.full}` : ''}`);
 
 function stockTable(m) {
-  if (!m.stock.length) return h('p', { class: 'muted small' }, 'Nothing for sale yet. Add items from your Items tab.');
+  if (!m.stock.length) return h('p', { class: 'muted small' }, 'Nothing for sale yet. Add items from your Items (in the wiki).');
   return h('table', { class: 'stock' },
     h('tbody', {}, ...m.stock.map((l) => h('tr', { 'data-line': l.id },
       h('td', {}, h('button', { type: 'button', class: 'link', onclick: () => detailsDialog(l.item, $('#merchant-dialog'), l.price) }, l.item.name)),
@@ -113,7 +113,7 @@ function draw() {
   const q = state.filter.trim().toLowerCase();
   const shown = state.list.filter((m) => !q || m.name.toLowerCase().includes(q) || m.notes.toLowerCase().includes(q) || m.stock.some((l) => l.item.name.toLowerCase().includes(q)));
   if (!state.list.length) {
-    return box.replaceChildren(h('p', { class: 'muted' }, 'No merchants yet. Set one up, stock it with items from the Items tab at your prices, then put it on a map. Players open its shop from the token and buy on their own: the coins come off their sheet and the item goes into their inventory, ready to equip.'));
+    return box.replaceChildren(h('p', { class: 'muted' }, 'No merchants yet. Set one up, stock it with items from your Items (in the wiki) at your prices, then put it on a map. Players open its shop from the token and buy on their own: the coins come off their sheet and the item goes into their inventory, ready to equip.'));
   }
   if (!shown.length) return box.replaceChildren(h('p', { class: 'muted' }, 'None match.'));
   box.replaceChildren(...shown.map((m) => h('article', { class: 'creature merchant card', 'data-id': m.id },
@@ -210,7 +210,7 @@ function editDialog(m = null) {
 function addDialog(m) {
   const items = itemList().filter((x) => !x.finding);
   const listId = `merchant-items-${m.id}`;
-  const name = h('input', { list: listId, maxLength: 100, required: true, placeholder: 'An item from your Items tab, or any name to look up' });
+  const name = h('input', { list: listId, maxLength: 100, required: true, placeholder: 'One of your items, or any name to look up' });
   const options = h('datalist', { id: listId }, ...items.map((x) => h('option', { value: x.name })));
   const price = priceInputs(null, { placeholder: 'usual price' });
   const qty = countInput(1, 'no limit');
@@ -218,7 +218,7 @@ function addDialog(m) {
   formDialog(`Sell something at ${m.name}`, [
     field('Item', name), options,
     h('div', { class: 'map-row' }, field('Price', price.el), field('In stock', qty), field('Restock to', full)),
-    h('p', { class: 'muted small' }, "An item that isn't in your Items tab yet is looked up (the books, then the AI) and added there. Leave the price empty for its usual price, and In stock empty for no limit."),
+    h('p', { class: 'muted small' }, "An item that isn't in your Items yet is looked up (the books, then the AI) and added there. Leave the price empty for its usual price, and In stock empty for no limit."),
     h('p', { class: 'small' }, h('button', { type: 'button', class: 'ghost', onclick: () => newItemDialog(m) }, 'Make a new item'), ' ', h('span', { class: 'muted' }, 'Type it in yourself, with a picture if you like.')),
   ], async () => {
     const want = name.value.trim().toLowerCase();
@@ -237,7 +237,7 @@ function addDialog(m) {
   }, 'Add');
 }
 
-/** Make an item by hand right here (it joins the Items tab too) and sell it at this merchant. */
+/** Make an item by hand right here (it joins the DM's Items too) and sell it at this merchant. */
 function newItemDialog(m) {
   const form = itemForm();
   const qty = countInput(1, 'no limit');
@@ -246,7 +246,7 @@ function newItemDialog(m) {
   formDialog(`A new item for ${m.name}`, [
     ...form.fields,
     h('div', { class: 'map-row' }, field('In stock', qty), field('Restock to', full)),
-    h('p', { class: 'muted small' }, `${m.name} sells it at its usual price (change that here later). It's added to your Items tab too. In stock empty: no limit.`),
+    h('p', { class: 'muted small' }, `${m.name} sells it at its usual price (change that here later). It's added to your Items too. In stock empty: no limit.`),
   ], async () => {
     made ??= await createItem(await form.body());
     if (!made) return null;

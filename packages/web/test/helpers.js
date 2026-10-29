@@ -107,3 +107,11 @@ export async function addToken(t, map, body) {
   if (res.statusCode !== 201) throw new Error(`token failed: ${res.body}`);
   return res.json().token;
 }
+
+/** The DM's Items or Merchants: views of the wiki's space now, not tabs (wiki-panels.js). */
+export async function openWikiView(page, name) {
+  if (page.document.documentElement.dataset.space !== 'wiki') page.click('[data-tab=wiki]');
+  const label = { items: 'Items', merchants: 'Merchants' }[name];
+  page.click(page.$$('#wiki-rail button').find((b) => b.querySelector('.wiki-rail-label')?.textContent === label));
+  await page.waitFor(() => page.visible(`#tab-${name}`) && !!page.$(`#wiki-main > #tab-${name}`));
+}

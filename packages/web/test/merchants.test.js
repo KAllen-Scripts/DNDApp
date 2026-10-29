@@ -7,27 +7,36 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { emptySheet } from '@dndapp/shared/sheet.js';
-import { withPage, addDm, importMap, createFakeLLM, mapReading, terrain } from './helpers.js';
+import { withPage, addDm, importMap, createFakeLLM, mapReading, terrain, openWikiView } from './helpers.js';
 
 const healing = { found: true, name: 'Potion of Healing', kind: 'potion', rarity: 'common', attunement: false, price: '50 gp', weight_lb: 0.5, description: 'You regain **2d4 + 2** hit points.' };
 const llm = () => createFakeLLM({ structured: (opts) => (opts.purpose === 'item:ai' ? healing : mapReading()) });
 const button = (page, scope, text) => page.$$(`${scope} button`).find((b) => b.textContent === text);
 
-test('items and merchants: the DM has the tabs, players never do', async () => {
+test('items and merchants: they are in the DM\'s wiki, not tabs at the table; players never get them', async () => {
   await withPage({
     before: async (t) => ({ dana: await addDm(t) }),
     page: (t, { dana }) => ({ as: dana }),
   }, async (page) => {
-    assert.ok(page.visible('[data-tab=items]'));
-    assert.ok(page.visible('[data-tab=merchants]'));
-    page.click('[data-tab=items]');
+    assert.ok(!page.$('[data-tab=items]') && !page.$('[data-tab=merchants]'), 'no tabs for them at the table');
+    await openWikiView(page, 'items');
+    assert.equal(page.window.location.hash, '#/items');
     assert.match(page.text('#items'), /No items yet/);
-    page.click('[data-tab=merchants]');
+    await openWikiView(page, 'merchants');
+    assert.equal(page.window.location.hash, '#/merchants');
     assert.match(page.text('#merchants'), /No merchants yet/);
+    assert.ok(!page.$('#wiki-main > #tab-items'), 'Items went back to its place');
+    // Back to the table: the page goes back where it was, and the map still works.
+    page.click('[data-tab=map]');
+    assert.equal(page.document.documentElement.dataset.space, 'table');
+    assert.ok(!page.visible('#tab-merchants'));
+    assert.ok(!page.$('#wiki-main #tab-merchants'));
+    assert.equal(page.errors.length, 0, page.errors.join('\n'));
   });
   await withPage({ page: (t) => ({ as: t.sam }) }, async (page) => {
-    assert.ok(!page.visible('[data-tab=items]'));
-    assert.ok(!page.visible('[data-tab=merchants]'));
+    page.click('[data-tab=wiki]');
+    const labels = page.$$('#wiki-rail .wiki-rail-label').map((l) => l.textContent);
+    assert.ok(!labels.includes('Items') && !labels.includes('Merchants'), 'not in a player\'s wiki');
     assert.ok(!page.requests.some((r) => r.path.endsWith('/merchants') || r.path.endsWith('/items')), 'the lists are never loaded');
   });
 });
@@ -38,7 +47,7 @@ test('items and merchants: the DM makes rope, sets up a shop that also sells a l
     before: async (t) => ({ dana: await addDm(t), map: await importMap(t, { patch: { shown: true } }) }),
     page: (t, { dana }) => ({ as: dana }),
   }, async (page, t, { map }) => {
-    page.click('[data-tab=items]');
+    await openWikiView(page, 'items');
     page.click('#item-new');
     let form = page.$('#item-dialog form');
     page.type(form.querySelector('[name=name]'), 'Rope');
@@ -48,7 +57,7 @@ test('items and merchants: the DM makes rope, sets up a shop that also sells a l
     await page.waitFor(() => page.text('#items').includes('Rope'));
     assert.match(page.text('#items .item'), /Rope ?Adventuring gear · 1 gp/);
 
-    page.click('[data-tab=merchants]');
+    await openWikiView(page, 'merchants');
     page.click('#merchant-new');
     form = page.$('#merchant-dialog form');
     page.type(form.querySelector('input'), 'Mira');
@@ -68,10 +77,10 @@ test('items and merchants: the DM makes rope, sets up a shop that also sells a l
     const [m] = (await t.request('GET', `/campaigns/${t.campaign.id}/merchants`)).json().merchants;
     assert.deepEqual(m.stock.map((l) => [l.item.name, l.price, l.qty]), [['Rope', 100, null], ['Potion of Healing', 5000, 3]]);
     assert.match(page.text('#merchants .stock'), /Rope ?1 gp ?no limit.*Potion of Healing ?50 gp ?3 left/);
-    page.click('[data-tab=items]');
+    await openWikiView(page, 'items');
     assert.match(page.text('#items'), /Potion of Healing/, 'the looked-up potion joined the items');
 
-    page.click('[data-tab=merchants]');
+    await openWikiView(page, 'merchants');
     page.click(button(page, '#merchants .merchant', 'Place on map'));
     await page.settle();
     assert.ok(page.visible('#tab-map'));
@@ -136,7 +145,7 @@ test('items and merchants: the DM makes a new item by hand right from the mercha
     },
     page: (t, { dana }) => ({ as: dana }),
   }, async (page, t, { m }) => {
-    page.click('[data-tab=merchants]');
+    await openWikiView(page, 'merchants');
     page.click(button(page, '#merchants .merchant', 'Add item'));
     page.click(button(page, '#merchant-dialog', 'Make a new item'));
     const form = page.$('#merchant-dialog form');
@@ -155,7 +164,7 @@ test('items and merchants: the DM makes a new item by hand right from the mercha
     assert.deepEqual([charm.name, charm.kind, charm.price, charm.text, charm.source.kind], ['Ember Charm', 'magic', 2500, 'Warm to the touch.', 'dm']);
     assert.ok(charm.picture, 'with its picture');
     assert.equal(t.merchants.get(t.campaign.id, m.id).stock[0].item, charm.id);
-    page.click('[data-tab=items]');
+    await openWikiView(page, 'items');
     assert.match(page.text('#items'), /Ember Charm/, 'it joined the Items tab');
   });
 
@@ -190,7 +199,7 @@ test('items: a description is shown formatted in the edit dialog (tables, bold);
     },
     page: (t, { dana }) => ({ as: dana }),
   }, async (page, t) => {
-    page.click('[data-tab=items]');
+    await openWikiView(page, 'items');
     await page.waitFor(() => page.text('#items').includes('Gauntlet'), { what: 'the item' });
     page.click(button(page, '#items .item', 'Edit'));
     const form = page.$('#item-dialog form');
@@ -222,7 +231,7 @@ test("items: the item form's fields follow its kind; numbers the DM changes are 
     before: async (t) => ({ dana: await addDm(t) }),
     page: (t, { dana }) => ({ as: dana }),
   }, async (page, t) => {
-    page.click('[data-tab=items]');
+    await openWikiView(page, 'items');
     page.click('#item-new');
     const form = page.$('#item-dialog form');
     const stats = () => form.querySelector('.item-stats');

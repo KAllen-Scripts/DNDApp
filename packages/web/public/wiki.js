@@ -41,6 +41,7 @@ import { pageDiff } from './wiki-diff.js';
 import { drawCompass } from './wiki-compass.js';
 import { drawOnMap } from './wiki-onmap.js';
 import { drawAtlas, leaveAtlas, pickAtlasMap } from './wiki-atlas.js';
+import { drawPanel, leavePanel, PANEL_VIEWS } from './wiki-panels.js';
 import './wiki-handout.js';
 import { drawFromSheet } from './wiki-sheet.js';
 import { drawLore } from './wiki-lore.js';
@@ -264,15 +265,17 @@ function phoneBack() {
 function drawMain() {
   const main = $('#wiki-main');
   hidePreview();
-  const reading = !!state.open || state.view === 'review' || state.view === 'wheel' || state.view === 'atlas' || state.view === 'web' || state.view === 'timeline' || state.view === 'templates' || state.view === 'quests' || state.view === 'knows' || state.view === 'tidy' || state.view === 'import' || state.view === 'boards';
+  const reading = !!state.open || state.view === 'review' || state.view === 'wheel' || state.view === 'atlas' || state.view === 'web' || state.view === 'timeline' || state.view === 'templates' || state.view === 'quests' || state.view === 'knows' || state.view === 'tidy' || state.view === 'import' || state.view === 'boards' || !!PANEL_VIEWS[state.view];
   $('#wiki-view').classList.toggle('wiki-reading', reading);
   drawReviewButton();
   if (state.view !== 'atlas') leaveAtlas();
   else pickAtlasMap();
+  if (!PANEL_VIEWS[state.view]) leavePanel();
   nav.routed();
   if (state.view !== 'web') leaveWeb();
   if (state.view !== 'timeline') leaveTimeline();
   if (state.view === 'atlas') return drawAtlas(main);
+  if (PANEL_VIEWS[state.view]) return drawPanel(main, state.view);
   if (state.view === 'web') return drawWebView(main);
   if (state.view === 'timeline') return drawTimeline(main);
   if (state.view === 'templates') return drawTemplates(main);

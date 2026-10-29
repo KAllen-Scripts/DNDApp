@@ -1,5 +1,5 @@
 /**
- * The Items tab (the DM's): weapons, armour, potions, gear and magic items
+ * Items (the DM's, in the wiki's space: wiki-panels.js): weapons, armour, potions, gear and magic items
  * kept once and stocked by merchants (merchants.js). Like Creatures: make
  * one by hand, look one up (your own items first, then the books, then the
  * AI), or have the AI find one online with a picture. Players never see
@@ -187,7 +187,7 @@ function draw() {
   const q = state.filter.trim().toLowerCase();
   const shown = state.list.filter((x) => !q || x.name.toLowerCase().includes(q) || x.text.toLowerCase().includes(q) || x.notes.toLowerCase().includes(q));
   if (!state.list.length) {
-    return box.replaceChildren(h('p', { class: 'muted' }, 'No items yet. Keep the things your merchants sell here: make one, look one up by name (your items first, then the books, then the AI), or find one online. Then stock them on the Merchants tab.'));
+    return box.replaceChildren(h('p', { class: 'muted' }, 'No items yet. Keep the things your merchants sell here: make one, look one up by name (your items first, then the books, then the AI), or find one online. Then stock them under Merchants, beside Items in the wiki.'));
   }
   if (!shown.length) return box.replaceChildren(h('p', { class: 'muted' }, 'None match.'));
   box.replaceChildren(...shown.map((x) => (x.finding ? searchCard(x) : h('article', { class: 'creature item card', 'data-id': x.id },

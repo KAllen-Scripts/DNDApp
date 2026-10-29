@@ -7,7 +7,8 @@
  *
  * The address says where you are, so Back, Forward and reload work:
  * ?space=wiki#/home, #/page/<id>, #/page/<id>/edit, #/page/<id>/history,
- * #/new, #/waiting, #/quests, #/knows, #/tidy, #/import and #/boards(/id). More views join the rail as they're built
+ * #/new, #/waiting, #/quests, #/knows, #/tidy, #/import, #/boards(/id), and the
+ * DM's #/items and #/merchants (table pages moved in, wiki-panels.js). More views join the rail as they're built
  * (docs/notes/wiki-space.md).
  */
 import { initTruthToggle } from './wiki-canon.js';
@@ -16,6 +17,7 @@ import { clockText } from './shared/settings.js';
 import { state, nav, pictureImg, fam } from './wiki-data.js';
 import { openFind } from './wiki-find.js';
 import { leaveAtlas } from './wiki-atlas.js';
+import { leavePanel, PANEL_VIEWS } from './wiki-panels.js';
 
 const $ = (sel) => document.querySelector(sel);
 const TRAIL_MAX = 8;
@@ -41,6 +43,7 @@ export function currentRoute() {
   if (state.view === 'knows') return '#/knows';
   if (state.view === 'tidy') return '#/tidy';
   if (state.view === 'import') return '#/import';
+  if (PANEL_VIEWS[state.view]) return `#/${state.view}`;
   if (state.view === 'boards') return `#/boards${state.boardId ? `/${state.boardId}` : ''}`;
   if (state.view === 'timeline') return `#/timeline${state.timelineFocus ? `/${state.timelineFocus}` : ''}`;
   if (!state.open) return '#/home';
@@ -62,7 +65,10 @@ function address(space, route = '') {
  * the browser's history (not when it came from Back or a reload).
  */
 export function setSpace(space, { push = true } = {}) {
-  if (space !== 'wiki') leaveAtlas();
+  if (space !== 'wiki') {
+    leaveAtlas();
+    leavePanel();
+  }
   document.documentElement.dataset.space = space;
   if (push) ready = true;
   if (space === 'wiki') {
@@ -79,11 +85,11 @@ export function setSpace(space, { push = true } = {}) {
 
 /** Draw what the address says (on entering the space from Back, Forward or a reload). */
 export async function routeFromUrl() {
-  const m = /^#\/(home|waiting|new|templates|quests|knows|tidy|import|wheel(?:\/([a-z]+))?|page\/([a-f0-9]+)(?:\/(edit|history))?|atlas(?:\/([A-Za-z0-9_-]+))?|web(?:\/([a-f0-9]{10}))?|timeline(?:\/([a-f0-9]{10}))?|boards(?:\/([a-f0-9]{10}))?)?$/.exec(location.hash) ?? [];
+  const m = /^#\/(home|waiting|new|templates|quests|knows|tidy|import|items|merchants|wheel(?:\/([a-z]+))?|page\/([a-f0-9]+)(?:\/(edit|history))?|atlas(?:\/([A-Za-z0-9_-]+))?|web(?:\/([a-f0-9]{10}))?|timeline(?:\/([a-f0-9]{10}))?|boards(?:\/([a-f0-9]{10}))?)?$/.exec(location.hash) ?? [];
   applying = true;
   ready = true;
   // A player only reads: the DM's tools (new, templates, waiting, edit, history) open the Home instead.
-  if (!state.dm && (['new', 'templates', 'waiting', 'knows', 'tidy'].includes(m[1]) || m[4])) m[1] = m[3] = m[4] = undefined;
+  if (!state.dm && (['new', 'templates', 'waiting', 'knows', 'tidy', ...Object.keys(PANEL_VIEWS)].includes(m[1]) || m[4])) m[1] = m[3] = m[4] = undefined;
   try {
     if (m[3]) {
       const id = m[3];
@@ -102,7 +108,7 @@ export async function routeFromUrl() {
       state.view = 'templates';
       nav.drawList();
       nav.drawMain();
-    } else if (['quests', 'knows', 'tidy', 'import'].includes(m[1])) {
+    } else if (['quests', 'knows', 'tidy', 'import', ...Object.keys(PANEL_VIEWS)].includes(m[1])) {
       state.open = null;
       state.view = m[1];
       nav.drawList();
@@ -194,6 +200,8 @@ function drawRail() {
     state.dm && item('#/knows', '◐', 'Who knows'),
     state.dm && item('#/tidy', '✧', 'Tidy up'),
     state.dm && item('#/templates', '▤', 'Templates'),
+    // The DM's table pages that live here now (wiki-panels.js).
+    ...Object.entries(PANEL_VIEWS).map(([name, v]) => state.dm && item(`#/${name}`, v.icon, v.label)),
     item('#/import', '⇅', state.dm ? 'Import and export' : 'Export and print'),
     state.dm && item('#/waiting', '✎', 'Waiting', { count: state.proposals }),
     h('span', { class: 'wiki-rail-gap' }),

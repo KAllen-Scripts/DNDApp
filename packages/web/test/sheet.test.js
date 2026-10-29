@@ -6,7 +6,7 @@
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { withPage, addDm, createFakeLLM, openPage } from './helpers.js';
+import { withPage, addDm, createFakeLLM, openPage, openWikiView } from './helpers.js';
 import { emptySheet, SHEET_FORMAT } from '@dndapp/shared/sheet.js';
 
 const NO_3D = { 'dndapp.dice': JSON.stringify({ threeD: false, sound: false }) };
@@ -889,7 +889,7 @@ test('inventory: the DM sees what each player has equipped in the Items tab, and
     },
     page: (t, { dana }) => ({ as: dana, storage: NO_3D }),
   }, async (page, t) => {
-    page.click('[data-tab=items]');
+    await openWikiView(page, 'items');
     await page.waitFor(() => page.$$('#items-equipped .equipped-player').length === 2, { what: 'the players\u2019 gear' });
     const card = (name) => page.$$('#items-equipped .equipped-player').find((p) => p.textContent.includes(name));
     assert.match(card('Thorin').textContent, /AC 12/);

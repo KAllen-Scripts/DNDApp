@@ -21,6 +21,7 @@ import { loadArchivist, initArchivistActions } from './archivist.js';
 import { loadSessions, initSessionActions } from './sessions.js';
 import { loadWiki } from './wiki.js';
 import { setSpace, spaceInUrl, routeFromUrl, initSpace } from './wiki-space.js';
+import { panelHooks } from './wiki-panels.js';
 import { initFind } from './wiki-find.js';
 import { markNames } from './wiki-names.js';
 import { nav as wikiNav } from './wiki-data.js';
@@ -227,9 +228,7 @@ async function enterCampaign(campaign) {
   $('[data-tab=sheet]').hidden = isDm;
   $('[data-tab=inventory]').hidden = isDm;
   $('[data-tab=creatures]').hidden = !isDm;
-  // ...and Items and Merchants, to set up shops players buy from.
-  $('[data-tab=items]').hidden = !isDm;
-  $('[data-tab=merchants]').hidden = !isDm;
+  // Items and Merchants (to set up shops players buy from) are in the DM's wiki (wiki-panels.js), not tabs.
   $('#map-sheet-window').hidden = isDm;
   // A tab this person doesn't have (now) goes to Creatures for the DM's sheet, else the first tab.
   const here = $(`[data-tab="${currentTab}"]`);
@@ -349,9 +348,8 @@ function showTab(name, { push = true } = {}) {
   }
   placeBeside(beside);
   if (beside === 'handouts') handoutsOpened();
-  if (name === 'merchants' || beside === 'merchants') merchantsOpened();
   // The sheet and maps need more room than Ask and Notes.
-  $('#app-view').classList.toggle('wide', name === 'sheet' || name === 'inventory' || name === 'map' || name === 'creatures' || name === 'items' || name === 'merchants' || name === 'wiki');
+  $('#app-view').classList.toggle('wide', name === 'sheet' || name === 'inventory' || name === 'map' || name === 'creatures' || name === 'wiki');
 }
 
 /** The first tab along the bar that's shown (tabs can be reordered and hidden under Look). */
@@ -840,6 +838,7 @@ initSheetActions();
 phoneMenu($('.sheet-bar'), { label: 'Sheet: review, upload, download, print, pop out', keep: '#sheet-status, .sheet-modes' });
 phoneMenu($('#gear-add'), { label: 'More ways to add', keep: '#gear-kind, #gear-name, #dl-gear, button[type=submit], #gear-status' });
 initSheetPlace({ onChange: () => showTab(currentTab), currentTab: () => currentTab });
+panelHooks.opened = (name) => { if (name === 'merchants') merchantsOpened(); };
 initSpace({ table: WINDOW_TAB ? null : () => showTab(tableTab), enter: () => { if (currentTab !== 'wiki') showTab('wiki'); } });
 // The wiki's On the map box opens a map on the Map tab, at the place.
 wikiNav.showMap = WINDOW_TAB ? null : (id, at) => { showTab('map'); return openMapAt(id, at); };

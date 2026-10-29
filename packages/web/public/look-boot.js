@@ -26,7 +26,7 @@
     besideSide: ['right', 'left'],
     tokenLabels: ['always', 'hover', 'never'],
     phone: ['auto', 'on', 'off'],
-    startTab: ['ask', 'notes', 'sheet', 'inventory', 'creatures', 'items', 'merchants', 'map', 'handouts', 'sessions', 'archivist', 'wiki'],
+    startTab: ['ask', 'notes', 'sheet', 'inventory', 'creatures', 'map', 'handouts', 'sessions', 'archivist', 'wiki'],
   };
   // The tabs, and the map tools that can be hidden (each is an element with data-tool on the map bar).
   var TABS = OPTIONS.startTab;
@@ -45,7 +45,7 @@
     return out;
   }
 
-  /** Does hiding these still leave a tab everyone has? (Sheet is the players'; Creatures, Items, Merchants, Archivist and Wiki the DM's.) */
+  /** Does hiding these still leave a tab everyone has? (Sheet is the players'; Creatures, Archivist and Wiki the DM's.) */
   var EVERYONE = ['ask', 'notes', 'map', 'handouts'];
   function keepsATab(hidden) {
     for (var i = 0; i < EVERYONE.length; i++) if (hidden.indexOf(EVERYONE[i]) < 0) return true;
