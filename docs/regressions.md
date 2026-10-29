@@ -15,6 +15,7 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-29 | Spells with nothing to roll (Bless, Mage Armor) weren't offered on the map at all, and Entangle's "20-foot square" had no area, so it couldn't be placed or restrain anyone. | `shared/test/spell-effects.test.js`: regression: spells with nothing to roll are offered on the map (Bless), and Entangle has its area and restrains |
 | 2026-10-28 | Casting a spell from the sheet (its to-hit or damage roll) never spent a spell slot; only casting on the map did. | `web/test/sheet.test.js`: regression: casting a spell from the sheet spends a spell slot (Cast, the to-hit roll or the damage roll), and with none left it asks before rolling |
 | 2026-10-28 | (same fix, the server side) | `server/test/rests.test.js`: regression: casting a spell from the sheet spends a spell slot (pact if that is all there is); cantrips, a slot too low and none left are refused |
 | 2026-10-28 | (same fix, the shared slot rules) | `shared/test/attacks.test.js`: regression: castLevels lists the slot levels a spell can use with what is left (pact included), and castWithSlot spends one or says why not |

@@ -2,6 +2,7 @@
  * Maps: the DM imports them and sets them up (grid, scale, fog, walls, lights, terrain, variants, links,
  * tokens and their pictures); players see shown maps, move their own token and keep private pins.
  */
+import { endConcentration } from '@dndapp/shared/spell-effects.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { MAX_CLOCK } from '@dndapp/shared/settings.js';
@@ -1379,7 +1380,10 @@ export function registerMaps(app, r) {
       ? maps.change(a.cid, map.id, (m) => {
         const t = m.tokens.find((x) => x.id === token.id);
         if (!t) return;
+        const wasConcentrating = t.conditions.includes('concentrating');
         Object.assign(t, body);
+        // Taking off Concentrating ends the spell it held (its area and the conditions it gave go too).
+        if (wasConcentrating && body.conditions && !t.conditions.includes('concentrating')) endConcentration(m, t.id);
         if (!PLAYER_KINDS.includes(t.kind)) t.user_id = null;
         Object.assign(t, snapToken(m, t, t.x, t.y));
         // Walking in under a bridge or up onto it (owner, 2026-10-18), unless it's set by hand.
