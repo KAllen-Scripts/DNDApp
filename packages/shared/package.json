@@ -23,6 +23,7 @@
     "./subclass-traits.js": "./src/subclass-traits.js",
     "./feats.js": "./src/feats.js",
     "./attacks.js": "./src/attacks.js",
+    "./spell-effects.js": "./src/spell-effects.js",
     "./attack-riders.js": "./src/attack-riders.js",
     "./gear.js": "./src/gear.js",
     "./item-actions.js": "./src/item-actions.js",

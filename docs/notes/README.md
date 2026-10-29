@@ -4,6 +4,7 @@ Written alongside the code in the first Claude project ("Interactive map for DND
 
 | File | What it is | State |
 |---|---|---|
+| [map-spells-research.md](map-spells-research.md) | Spells that aren't attacks on the map (Entangle, Hold Person, Bless): how Foundry, Fantasy Grounds, Roll20, D&D Beyond and Owlbear do it, and what we built (Kenny, 2026-10-28) | Built |
 | [wiki-space.md](wiki-space.md) | The wiki as its own space with visual navigation: the build plan, 35 PRs in stages 0 to 11 (Kenny, 2026-10-27) | Being built stage by stage; stage 0 done |
 | [ask-speed.md](ask-speed.md) | Why Ask was slow and what was done: the quick way, the campaign's edition only, Claude Code's quiet start, timings in the log (Kenny, 2026-10-21) | Built; a faster model for the quick way waits on Kenny |
 | [mobile-ui.md](mobile-ui.md) | The phone layout: how it works, and the order the pages are converted in (Kenny, 2026-10-14) | All 6 stages built; not yet tried on a real phone |
