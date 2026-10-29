@@ -60,6 +60,7 @@ const MODULES = {
   'shared/subclass-features-books.js': '@dndapp/shared/subclass-features-books.js',
   'shared/race-features.js': '@dndapp/shared/race-features.js',
   'shared/wild-shape.js': '@dndapp/shared/wild-shape.js',
+  'shared/level-up.js': '@dndapp/shared/level-up.js',
   'shared/citations.js': '@dndapp/shared/citations.js',
   'shared/calendar.js': '@dndapp/shared/calendar.js',
   'shared/wiki-time.js': '@dndapp/shared/wiki-time.js',

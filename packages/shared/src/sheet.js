@@ -207,6 +207,8 @@ export function emptySheet({ name = '', player_name = '' } = {}) {
     class_features: { spent: {}, max: {}, custom: [], rolled: {} }, // Rage, Ki, Wild Shape uses... and the player's own rows (class-features.js)
     combat: normalizeCombat(), // weapons with mastery, fighting styles and other choices, raging / Hunter's Mark / Hex now (attack-extras.js)
     point_buy: normalizePointBuy(), // the point buy calculator (point-buy.js): off until the player turns it on
+    levels_granted: 0, // levels the DM has given that the player hasn't taken yet (level-up.js); only the server changes it
+    level_log: [], // each level up taken with Level up: { class, level, die, hp (the die rolled, null: the average), asi, feat, at } (level-up.js)
     overrides: {},
   };
 }
@@ -341,6 +343,8 @@ export function normalizeSheet(input = {}) {
   }
   out.spellcasting.pact_used = int(s.spellcasting?.pact_used, { min: 0, max: 10, fallback: 0 });
   out.point_buy = normalizePointBuy(s.point_buy);
+  out.levels_granted = int(s.levels_granted, { min: 0, max: 20, fallback: 0 });
+  out.level_log = (Array.isArray(s.level_log) ? s.level_log : []).slice(-40).map(normalizeLevelEntry).filter(Boolean);
   out.spells = (Array.isArray(s.spells) ? s.spells : []).slice(0, 400).map(normalizeSpell).filter((sp) => sp.name);
   out.wild_shape = normalizeWildShape(s.wild_shape);
   out.companions = normalizeCompanions(s.companions);
@@ -357,6 +361,30 @@ export function normalizeSheet(input = {}) {
   const legacy = int(s.hit_dice_used, { min: 0, max: 40, fallback: 0 });
   if (legacy && s.hit_dice_spent == null) out.hit_dice_spent = spendFromBiggest(hitDicePool(computeSheet(out).values.hit_dice), {}, legacy);
   return out;
+}
+
+/** How sheet.level_log names a class: its PHB key ("wizard" for "Wizard (evoker)"), else the name as typed, lower case. */
+export const levelClass = (name) => classKey(name) ?? String(name ?? '').trim().toLowerCase();
+
+/** One level up from sheet.level_log, cleaned up (null if it makes no sense). */
+export function normalizeLevelEntry(e = {}) {
+  const level = int(e?.level, { min: 1, max: 20 });
+  const die = int(e?.die, { min: 4, max: 20 });
+  if (!level || !HIT_DIE_SIZES.includes(die)) return null;
+  const asi = {};
+  for (const a of ABILITIES) {
+    const n = int(e.asi?.[a], { min: 0, max: 2, fallback: 0 });
+    if (n) asi[a] = n;
+  }
+  return {
+    class: str(e.class, 60).trim().toLowerCase(),
+    level,
+    die,
+    hp: int(e.hp, { min: 1, max: die }),
+    asi,
+    feat: str(e.feat, 100).trim(),
+    at: str(e.at, 40),
+  };
 }
 
 // ---------- hit dice and rests ----------
@@ -635,6 +663,14 @@ export function computeSheet(sheet, { weight = 'capacity', edition = '2014' } = 
     }
   }
   if (draconic) hp += levelIn('sorcerer');
+  // Levels whose hit points were rolled at Level up (level-up.js) count the roll instead of the average, while
+  // the class still has that level.
+  for (const e of sheet.level_log ?? []) {
+    const has = classes.filter((c) => levelClass(c.name) === e.class).reduce((n, c) => n + c.level, 0);
+    if (e.hp == null || has < e.level) continue;
+    const extra = mod('con') + hillDwarf;
+    hp += Math.max(1, e.hp + extra) - Math.max(1, e.die / 2 + 1 + extra);
+  }
   // Tough: 2 more each level.
   if (feat('feat_tough')) hp += 2 * Math.min(20, classes.reduce((n, c) => n + c.level, 0));
   set('hp_max', classes.length ? hp : null);
