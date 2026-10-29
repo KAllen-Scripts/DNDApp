@@ -10,6 +10,7 @@ Before doing anything, read:
 Rules for this project:
 
 - All JavaScript (ES modules, Node 22+). npm packages are welcome.
+- **Where code goes** (SPEC §3.1 lists every folder): web page files go in the folder for their part of the page (`page/`, `sheet/`, `map/`, `wiki/`, `dice/`, `campaign/`, `items/`, `creatures/`…), named for what they do without repeating the folder (`map/combat.js`, not `map/map-combat.js`). Making elements and status messages (`h`, `svg`, `$`, `note`) comes from `page/dom.js` and talking to the server from `page/api.js`; don't define your own copies. Server files go in the folder for their feature (`wiki/`, `maps/`, `sheets/`, `items/`…), not loose in `src/`. `packages/shared/src` stays one flat folder, because the page loads it from `/shared/<file>`.
 - Clients are display-only. All processing, indexing and AI calls happen on the server. (One exception, the owner's call on 2026-10-14: a player's page works out their map fog from the walls the server sends, so it can follow a dragged token.)
 - The knowledge base belongs to the archivist AI. Don't add fixed human-readable structures to it; change the archivist's instructions or tools instead.
 - Privacy is enforced in server code (`known_by`, attendance, note ownership). Every new read path must filter by the viewer. On maps, players get the picture and the wall layout (the owner accepts that a determined player could see them in their browser); the server still decides which tokens and other things under the fog they get.
