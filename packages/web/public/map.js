@@ -19,7 +19,7 @@ import { openCreator } from './map-creator.js';
 import { chooseTokenPicture, fillStats, forgetPlayers, importMap, newMapDialog, recordDialog, removeToken, removeTokenPicture, saveCreature, settingsDialog, statsDialog, tokenDialog } from './map-dm.js';
 import { renderCombat } from './map-combat.js';
 import { companionDialog, companionRolls, dismissCompanion, myCompanion } from './map-companions.js';
-import { attackControls, attackLog, pickTarget, seeAttacks, spellTags, stopTargeting } from './map-attacks.js';
+import { attackControls, attackLog, customForm, pickTarget, seeAttacks, spellTags, stopTargeting } from './map-attacks.js';
 import { initMapFull } from './map-full.js';
 import { groupsDialog, mapOptions, placeEnd, placeMove, placeStart, renderPlaces, shownNote } from './map-places.js';
 import { clockDialog, journeyText, onClock, renderClock, renderRoads, renderRoutes, roadMode, roads, travelControls as journeyControls, travelPicked } from './map-travel.js';
@@ -2364,6 +2364,7 @@ export function initMapActions() {
     templateDialog().catch(report);
   });
   $('#map-attacks-log').addEventListener('click', attackLog);
+  $('#map-dm-effect').addEventListener('click', () => customForm());
   $('#map-combat-open').addEventListener('click', () => {
     state.combatOpen = !state.combatOpen;
     renderCombat();

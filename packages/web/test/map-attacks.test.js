@@ -260,3 +260,53 @@ test('spells that aren\'t attacks: Entangle places its area and restrains, it st
     assert.deepEqual([m.spells.map((x) => x.name), m.tokens.find((x) => x.id === goblin.id).conditions, m.templates.length], [['Bless'], [], 0]);
   });
 });
+
+test('the DM makes up their own effect: Effect, fill it in, tap who, Do it; and Something else in an NPC\'s picker', async () => {
+  const dice = scripted();
+  await withPage({
+    setup: { llm: mapLLM(), random: dice.random },
+    before: async (t) => {
+      const map = await importMap(t, { patch: SHOWN });
+      const goblin = await addToken(t, map, { kind: 'enemy', name: 'Goblin', x: 87.5, y: 52.5, hp: { current: 20, max: 20 }, stats: { text: GOBLIN } });
+      const wolf = await addToken(t, map, { kind: 'npc', name: 'Wolf', x: 157.5, y: 157.5, hp: { current: 11, max: 11 } });
+      return { map, goblin, wolf, dana: await addDm(t) };
+    },
+    page: (t, { dana }) => ({ as: dana, storage: NO_3D }),
+  }, async (page, t, { map, goblin, wolf }) => {
+    await openMapTab(page);
+    assert.equal(page.$('#map-dm-effect').hidden, false, 'the DM has Effect');
+    page.click('#map-dm-effect');
+    await page.waitFor(() => page.$('#map-dialog').open && page.$('#map-dialog .custom-action'), { what: 'the custom form' });
+    page.type('#map-dialog [name=name]', 'Poison gas');
+    page.type('#map-dialog [name=from]', 'The vents');
+    page.type('#map-dialog [name=dc]', '12');
+    page.type('#map-dialog [name=save]', 'con');
+    page.type('#map-dialog [name=damage]', '2d4 poison');
+    page.click('#map-dialog [data-condition="poisoned"]');
+    page.submit('#map-dialog form');
+    await page.waitFor(() => !page.$('#map-targeting').hidden, { what: 'tap who' });
+    assert.match(page.text('#map-targeting'), /Tap who gets Poison gas/);
+    tap(page, 'Goblin', 87, 52);
+    tap(page, 'Wolf', 157, 157);
+    await page.settle();
+    // 2d4 = 3 + 3; the goblin's Con save 5 fails, the wolf's 15 saves (half, ticked to start with).
+    dice.next(3, 3, 5, 15);
+    page.click('#map-targeting [data-cast]');
+    await page.waitFor(() => page.$('#map-attack-cards .attack-card'), { what: 'the card' });
+    assert.match(page.text('#map-attack-cards'), /The vents · Poison gas/);
+    assert.match(page.text('#map-attack-cards'), /Goblin: Con save 5 vs DC 12: failed, poisoned, 6 poison damage/);
+    const after = t.maps.get(t.campaign.id, map.id);
+    assert.deepEqual(after.tokens.find((x) => x.id === goblin.id).conditions, ['poisoned']);
+    assert.equal(after.tokens.find((x) => x.id === wolf.id).hp.current, 8);
+
+    // From the goblin's own picker: Something else… opens the same form, done by the goblin.
+    tap(page, 'Goblin', 87, 52);
+    await page.settle();
+    page.click('#map-selection [data-attack="with"]');
+    await page.waitFor(() => page.$('#map-dialog').open && page.$('#map-dialog [data-custom]'), { what: 'the picker' });
+    page.click('#map-dialog [data-custom]');
+    await page.waitFor(() => page.$('#map-dialog .custom-action'), { what: 'the custom form again' });
+    assert.equal(page.$('#map-dialog [name=by]').value, goblin.id);
+    assert.equal(page.$('#map-dialog [name=name]').value, 'Poison gas', 'the last one is filled in');
+  });
+});

@@ -838,7 +838,8 @@ export const MAX_MAP_SPELLS = 40;
  * shared/spell-effects.js ends them): { id, name, caster (token id), caster_name, user_id (who cast it),
  * action (the caster's action id), slot, concentration, rounds, ends: { round, turn } | null (in a fight),
  * template (its area's id) | null, save, dc, check (the ability a creature uses to break free, or ''),
- * affected: [{ id, conditions }], attack (the card's id), at }. A spell whose caster is gone stays until
+ * affected: [{ id, conditions }], attack (the card's id), at, custom? }. caster is null for the DM's own effect
+ * from no token (a trap: caster_name is its name). A spell whose caster is gone stays until
  * someone ends it; tokens no longer on the map drop out of `affected`.
  */
 export function normalizeMapSpells(list, map) {
@@ -869,6 +870,8 @@ export function normalizeMapSpells(list, map) {
         .map((a) => ({ id: a.id, conditions: [...new Set((Array.isArray(a.conditions) ? a.conditions : []).filter((c) => CONDITIONS.includes(c)))] })),
       attack: typeof sp.attack === 'string' && isTokenId(sp.attack) ? sp.attack : null,
       at: str(sp.at, 40),
+      // The DM's own effect (action 'custom'): what they filled in, to roll it again (the server checks it then).
+      ...(sp.custom && typeof sp.custom === 'object' && { custom: smallJson(sp.custom) }),
     });
   }
   return out;
