@@ -16,17 +16,11 @@
  */
 import { z } from 'zod';
 import { ABILITIES, ABILITY_NAMES, CLASSES, SKILLS, abilityMod, classKey, computeSheet } from '@dndapp/shared/sheet.js';
+import { MULTICLASS } from '@dndapp/shared/level-up.js';
 import { bookTools } from '../qa/tools.js';
 
 /** Total XP needed for each level (PHB, both editions). */
 export const XP_FOR_LEVEL = [0, 0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000];
-
-/** Ability scores of 13 needed to multiclass into or out of a class (PHB; "any" of them for the fighter). */
-const MULTICLASS = {
-  artificer: { all: ['int'] }, barbarian: { all: ['str'] }, bard: { all: ['cha'] }, cleric: { all: ['wis'] }, druid: { all: ['wis'] },
-  fighter: { any: ['str', 'dex'] }, monk: { all: ['dex', 'wis'] }, paladin: { all: ['str', 'cha'] }, ranger: { all: ['dex', 'wis'] },
-  rogue: { all: ['dex'] }, sorcerer: { all: ['cha'] }, warlock: { all: ['cha'] }, wizard: { all: ['int'] },
-};
 
 const ordinal = (n) => `${n}${n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'}`;
 const RULES = "The sheet's rules";

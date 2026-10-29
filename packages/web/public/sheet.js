@@ -40,6 +40,7 @@ import { backgroundBox, backgroundNames, forgetApplied } from './sheet-backgroun
 import { helpPanel } from './sheet-help.js';
 import { itemNames } from './shared/item-names.js';
 import { GEAR_KINDS, effectText, gearCard } from './gear-card.js';
+import { levelUpBanner } from './sheet-level-up.js';
 
 const $ = (sel) => document.querySelector(sel);
 const LEVEL_NAMES = ['Cantrips', '1st level', '2nd level', '3rd level', '4th level', '5th level', '6th level', '7th level', '8th level', '9th level'];
@@ -427,7 +428,8 @@ function header() {
     summary.textContent = [state.sheet.race.trim(), classes, `Level ${state.calc.level}`].filter(Boolean).join(' · ');
   });
   return h('header', { class: 'sh-head' },
-    h('section', { class: 'sh-box name-box' }, field('name', { label: 'Character name', cls: 'big' }), lbl('Character name'), summary, wildShapeBanner({ state })),
+    h('section', { class: 'sh-box name-box' }, field('name', { label: 'Character name', cls: 'big' }), lbl('Character name'), summary, wildShapeBanner({ state }),
+      levelUpBanner({ state, base, flush, status, edition: editionNow, adopt: (res) => { useSheet(res.sheet, res.version, res.number); announce(); } })),
     infoBox(),
   );
 }
@@ -848,8 +850,10 @@ export async function sheetHeard({ version, number }) {
   }
   // Keep what the status line says (a rest's or a purchase's note may be there).
   const note = $('#sheet-status').textContent;
+  const given = (res.sheet.levels_granted ?? 0) > (state.sheet.levels_granted ?? 0);
   useSheet(res.sheet, res.version, res.number);
-  if (note) status(note);
+  if (given) status('The DM has given you a level: press Level up under your name.');
+  else if (note) status(note);
   announce();
 }
 
