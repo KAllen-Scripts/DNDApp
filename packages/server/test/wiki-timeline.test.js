@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setup, terrain } from './helpers.js';
-import { timeline } from '../src/wiki-timeline.js';
+import { timeline } from '../src/wiki/timeline.js';
 
 const D = 1440;
 const all = (text) => [{ heading: '', text, available: 'all' }];

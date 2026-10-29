@@ -18,8 +18,8 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { NotFoundError, BadRequestError } from './store.js';
-import { ArchiveConflictError } from './archive.js';
+import { NotFoundError, BadRequestError } from '../store.js';
+import { ArchiveConflictError } from '../archive.js';
 import { wikiPieces, narrowest, canSeeAudience, audienceOf, blockAudience, unknownBlockNames, wikiLinks, unlink, unpicture, wikiKey, isPictureId, pagePictureIds, normalizeCanon, playerCanon, canonMarker, TONES, LINK_RE, EMBED_RE, APP_EMBED_RE, PICTURE_RE, normalizeSheetShare } from '@dndapp/shared/wiki.js';
 import { normalizeSources } from '@dndapp/shared/citations.js';
 import { parseWhen, whenText } from '@dndapp/shared/wiki-time.js';
@@ -287,7 +287,7 @@ export function createWiki({ db, archive, store, search, pictures = null }) {
        ON CONFLICT (id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
     ).run(page.id, cid, JSON.stringify(page), page.created_at, page.updated_at);
     cache.delete(cid);
-    // Maps keep a linked page's title (wiki-maps.js): they hear when it changes or the page goes.
+    // Maps keep a linked page's title (wiki/maps.js): they hear when it changes or the page goes.
     if (before && !before.removed && (page.removed || before.title !== page.title)) events.emit(page.removed ? 'removed' : 'renamed', { cid, page, before });
     return page;
   }

@@ -9,7 +9,7 @@
  * The campaign.
  */
 import { kindFamily, wikiKey, wikiLinks, normalizeCanon } from '@dndapp/shared/wiki.js';
-import { summary } from './wiki-views.js';
+import { summary } from './views.js';
 
 export const TIMELINE_LIMITS = { items: 600, undated: 200, lanes: 12 };
 

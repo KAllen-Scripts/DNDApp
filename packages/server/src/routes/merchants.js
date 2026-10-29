@@ -11,8 +11,8 @@ import { classKey } from '@dndapp/shared/sheet.js';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
 import { BadRequestError, NotFoundError } from '../store.js';
-import { MAX_MERCHANT_NOTES, MAX_SALES, MAX_STOCK, newStockId, restocked } from '../merchants.js';
-import { itemForPlayers } from '../items.js';
+import { MAX_MERCHANT_NOTES, MAX_SALES, MAX_STOCK, newStockId, restocked } from '../items/merchants.js';
+import { itemForPlayers } from '../items/store.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 import { newTokenId } from '../maps/store.js';
 

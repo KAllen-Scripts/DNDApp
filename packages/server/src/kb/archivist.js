@@ -13,7 +13,7 @@ import { formatTimestamp, formatTranscript, formatUtterance, parseTimestamp } fr
 import { estimateTokens } from '../config.js';
 import { renderRecord, KBError } from './store.js';
 import { preparedTranscript } from '../pipeline/prepare.js';
-import { fitWhole } from '../fit.js';
+import { fitWhole } from '../llm/fit.js';
 
 export const ARCHIVIST_SYSTEM = `You are the archivist for a Dungeons & Dragons campaign. You have full authority over the campaign's knowledge base: a store of records that you design, organise and maintain. No human reads it. Its only purpose is to let another AI answer players' questions accurately, quickly, and with sources, at any point in a long campaign.
 

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setup, callTool, fakeEmbedder, SAMPLE } from './helpers.js';
 import { config as baseConfig } from '../src/config.js';
-import { embedWindows, WINDOW_WORDS } from '../src/search.js';
+import { embedWindows, WINDOW_WORDS } from '../src/kb/search.js';
 import { sessionDateFor } from '../src/store.js';
 
 const NULLS = {

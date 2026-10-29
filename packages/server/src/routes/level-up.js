@@ -9,7 +9,7 @@ import { AuthError } from '../auth.js';
 import { BadRequestError } from '../store.js';
 import { ABILITIES, computeSheet, levelClass } from '@dndapp/shared/sheet.js';
 import { LevelUpError, levelUp } from '@dndapp/shared/level-up.js';
-import { ROLL_VISIBILITY } from '../rolls.js';
+import { ROLL_VISIBILITY } from '../table/rolls.js';
 
 export function registerLevelUp(app, r) {
   const { access, db, editions, rolls, sheets, store } = r;

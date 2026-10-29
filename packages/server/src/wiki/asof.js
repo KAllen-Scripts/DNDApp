@@ -8,8 +8,8 @@
  * couldn't see then or can't see now is left out.
  */
 import { normalizeMap } from '@dndapp/shared/map.js';
-import { applyJson } from './sheets/store.js';
-import { normalizeWikiPage } from './wiki.js';
+import { applyJson } from '../sheets/store.js';
+import { normalizeWikiPage } from './store.js';
 
 const CACHE_SIZE = 200;
 

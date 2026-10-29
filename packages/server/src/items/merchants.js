@@ -13,7 +13,7 @@
  */
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { createLibrary, normalizeArt } from './library.js';
+import { createLibrary, normalizeArt } from '../library.js';
 
 export const MAX_MERCHANTS = 200;
 export const MAX_STOCK = 200;

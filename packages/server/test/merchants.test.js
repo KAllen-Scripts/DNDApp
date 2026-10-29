@@ -11,8 +11,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { setup, createFakeLLM, fakeEmbedder, terrain, makePdf } from './helpers.js';
 import { createContext } from '../src/context.js';
-import { normalizeItem } from '../src/items.js';
-import { normalizeMerchant, afterLongRest } from '../src/merchants.js';
+import { normalizeItem } from '../src/items/store.js';
+import { normalizeMerchant, afterLongRest } from '../src/items/merchants.js';
 import { emptySheet } from '@dndapp/shared/sheet.js';
 
 const readOut = { readable: true, kind: 'battle', name: 'Market', description: '', grid: { visible: false, columns: null, rows: null }, scale: { distance: null, unit: null, per: null }, notes: '' };

@@ -5,7 +5,7 @@
  * it's exactly one), else 2014 like the sheet's rules. Rests, Ask's rules
  * answers and lookups in the books (spells, stat blocks, items) ask here.
  */
-import { handbookEditions } from './sheets/books.js';
+import { handbookEditions } from './books.js';
 
 export function createEditions({ store, books = null, config }) {
   /** The edition for a campaign whose DM hasn't chosen one. */

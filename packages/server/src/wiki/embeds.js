@@ -5,8 +5,8 @@
  * can see one of its tokens); a handout only when they got it; a map only when it's shown to them.
  */
 import { APP_EMBED_RE, wikiKey } from '@dndapp/shared/wiki.js';
-import { canSeeHandout } from './handouts.js';
-import { shownToViewer } from './wiki-maps.js';
+import { canSeeHandout } from '../table/handouts.js';
+import { shownToViewer } from './maps.js';
 
 export function createWikiEmbeds({ creatures, items, merchants, handouts, maps }) {
   const named = (list, name, field = 'name') => list.find((x) => wikiKey(x[field]) === wikiKey(name)) ?? null;

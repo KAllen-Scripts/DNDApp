@@ -16,9 +16,9 @@ import crypto from 'node:crypto';
 import sharp from 'sharp';
 import { z } from 'zod';
 import { EventEmitter } from 'node:events';
-import { NotFoundError } from './store.js';
-import { inspectPicture, createImageCache } from './images.js';
-import { localTime } from './kb/updates.js';
+import { NotFoundError } from '../store.js';
+import { inspectPicture, createImageCache } from '../images.js';
+import { localTime } from '../kb/updates.js';
 
 export const MAX_HANDOUT_TEXT = 20_000;
 const SHOW_PX = 2000;

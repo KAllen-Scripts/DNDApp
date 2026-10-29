@@ -15,8 +15,8 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import sharp from 'sharp';
-import { inspectPicture, createImageCache } from './images.js';
-import { NotFoundError, BadRequestError } from './store.js';
+import { inspectPicture, createImageCache } from '../images.js';
+import { NotFoundError, BadRequestError } from '../store.js';
 import { isPictureId, wikiKey } from '@dndapp/shared/wiki.js';
 
 /** The sizes the page is sent: a card or a gallery square, and the picture on the page. */

@@ -5,7 +5,7 @@
  * (shared/map-design.js copyArea). Archived like items (library.js); removing
  * one only takes it off the list. The DM's alone.
  */
-import { createLibrary } from './library.js';
+import { createLibrary } from '../library.js';
 import { normalizeClip } from '@dndapp/shared/map-design.js';
 
 export const MAX_MAP_STAMPS = 200;

@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setup } from './helpers.js';
-import { webGraph } from '../src/wiki-web.js';
+import { webGraph } from '../src/wiki/web.js';
 
 const page = (id, title, kind, { facts = [], parent = null, text = '' } = {}) => ({
   id, title, aliases: [], kind, parent, tags: [], sections: [{ id: 'aaaaaa', heading: '', text, canon: 'true', by: 'dm' }], facts, picture: null, banner: null, gallery: [],

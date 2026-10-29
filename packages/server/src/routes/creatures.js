@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import { MAX_TOKENS, TOKEN_SIZES, snapToken, squarePx } from '@dndapp/shared/map.js';
 import { z } from 'zod';
 import { BadRequestError, NotFoundError } from '../store.js';
-import { CREATURE_GROUPS, CREATURE_KINDS, MAX_CREATURE_NOTES, tokenNames } from '../creatures.js';
+import { CREATURE_GROUPS, CREATURE_KINDS, MAX_CREATURE_NOTES, tokenNames } from '../creatures/store.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 import { isMapId, newTokenId } from '../maps/store.js';
 

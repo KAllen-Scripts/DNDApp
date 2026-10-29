@@ -3,7 +3,7 @@
  * Every read is the viewer's: a card they can't see comes as `gone`.
  */
 import { z } from 'zod';
-import { BOARD_LIMITS as L, BOARD_ITEM_KINDS, BOARD_COLORS, CARD_SIZES } from '../wiki-boards.js';
+import { BOARD_LIMITS as L, BOARD_ITEM_KINDS, BOARD_COLORS, CARD_SIZES } from '../wiki/boards.js';
 
 export function registerWikiBoards(app, r) {
   const { access, wikiBoards } = r;

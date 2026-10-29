@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { AuthError } from '../auth.js';
 import { BadRequestError, NotFoundError } from '../store.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
-import { PICTURE_KINDS } from '../characters/pictures.js';
+import { PICTURE_KINDS } from '../sheets/pictures.js';
 import { pictureKey } from '../library.js';
 import { RateLimitError } from '../qa/agent.js';
 import { SheetConflictError } from '../sheets/store.js';

@@ -12,8 +12,8 @@
  */
 import crypto from 'node:crypto';
 import { unlink } from '@dndapp/shared/wiki.js';
-import { BadRequestError, NotFoundError } from './store.js';
-import { ArchiveConflictError } from './archive.js';
+import { BadRequestError, NotFoundError } from '../store.js';
+import { ArchiveConflictError } from '../archive.js';
 
 export const BOARD_LIMITS = { items: 500, arrows: 500, title: 120, text: 2000, label: 100, coord: 100_000 };
 export const BOARD_ITEM_KINDS = ['page', 'note', 'picture', 'board'];

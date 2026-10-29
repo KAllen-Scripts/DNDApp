@@ -4,7 +4,7 @@
  */
 import { z } from 'zod';
 import { NotFoundError } from '../store.js';
-import { ITEM_KINDS, RARITIES, MAX_ITEM_TEXT, MAX_ITEM_NOTES } from '../items.js';
+import { ITEM_KINDS, RARITIES, MAX_ITEM_TEXT, MAX_ITEM_NOTES } from '../items/store.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 import { AuthError } from '../auth.js';
 import { pictureKey } from '../library.js';

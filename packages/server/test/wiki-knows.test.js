@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setup } from './helpers.js';
-import { spoilers } from '../src/wiki-views.js';
+import { spoilers } from '../src/wiki/views.js';
 
 test('spoilers: names by link and written out, only those the player can\'t see, never the page itself', () => {
   const pages = [

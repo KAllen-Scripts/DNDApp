@@ -15,8 +15,8 @@
  */
 import crypto from 'node:crypto';
 import { TOKEN_SIZES, TOKEN_COLORS } from '@dndapp/shared/map.js';
-import { NotFoundError, BadRequestError } from './store.js';
-import { inspectPicture } from './images.js';
+import { NotFoundError, BadRequestError } from '../store.js';
+import { inspectPicture } from '../images.js';
 import { CREATURE_GROUPS, groupOf, creatureType } from '@dndapp/shared/bestiary.js';
 
 export const CREATURE_KINDS = ['enemy', 'npc'];

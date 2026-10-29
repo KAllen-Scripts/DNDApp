@@ -21,11 +21,11 @@
  */
 import crypto from 'node:crypto';
 import { z } from 'zod';
-import { renderRecord } from './kb/store.js';
-import { BadRequestError, NotFoundError } from './store.js';
-import { WIKI_LIMITS as L } from './wiki.js';
+import { renderRecord } from '../kb/store.js';
+import { BadRequestError, NotFoundError } from '../store.js';
+import { WIKI_LIMITS as L } from './store.js';
 import { narrowest, audienceOf, canSeeAudience, wikiKey, wikiPictures as picturesIn, PICTURE_RE, TONES, unlink, embedNames, openPrepPage, PREP_KIND, kindFamily } from '@dndapp/shared/wiki.js';
-import { json } from './db/index.js';
+import { json } from '../db/index.js';
 import { CITATION_RE, normalizeSources } from '@dndapp/shared/citations.js';
 import { parseWhen, whenText, whenKey } from '@dndapp/shared/wiki-time.js';
 import { clockText } from '@dndapp/shared/settings.js';

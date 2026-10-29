@@ -3,7 +3,7 @@
  *
  * Import: a Markdown or Obsidian folder as a zip becomes pages (one a file; front matter for kind, tags, aliases
  * and short facts; `[[links]]` kept; pictures into the wiki's pictures; folders become "inside"), all the DM's.
- * Messy notes (text, Markdown, a Word file) go to the AI instead (wiki-ai.js `importNotes`).
+ * Messy notes (text, Markdown, a Word file) go to the AI instead (wiki/ai.js `importNotes`).
  *
  * Export: a zip of Markdown files, one a page, as the viewer sees the wiki (the DM, or a player's version with
  * nothing hidden in it), in folders by what each page is inside; its pictures beside them. It imports back.
@@ -12,8 +12,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
 import { wikiKey, pagePictureIds } from '@dndapp/shared/wiki.js';
-import { BadRequestError } from './store.js';
-import { WIKI_LIMITS as L } from './wiki.js';
+import { BadRequestError } from '../store.js';
+import { WIKI_LIMITS as L } from './store.js';
 
 const MAX_FILES = 3000;
 const MAX_UNZIPPED = 300 * 1024 * 1024;

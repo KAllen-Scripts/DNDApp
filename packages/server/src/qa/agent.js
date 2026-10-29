@@ -14,7 +14,7 @@
 import { json } from '../db/index.js';
 import { renderRecord } from '../kb/store.js';
 import { createTools } from './tools.js';
-import { creatureLabel } from '../creatures.js';
+import { creatureLabel } from '../creatures/store.js';
 import { handbookEditions } from '../sheets/books.js';
 import { routeQuestion, pickModel } from './route.js';
 
