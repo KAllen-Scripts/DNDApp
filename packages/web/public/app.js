@@ -28,6 +28,7 @@ import { loadCreatures, initCreatureActions } from './creatures.js';
 import { loadItems, initItemActions } from './items.js';
 import { loadMerchants, initMerchantActions, merchantsOpened, openShop } from './merchants.js';
 import { initPhone, phoneMenu, phoneSheet } from './phone.js';
+import { initBarFit } from './topbar-fit.js';
 import { WINDOW_TAB, SHEET_WINDOW, windowCampaign, besidePanel, placeBeside, setSheetCampaign, initSheetPlace } from './sheet-place.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -839,6 +840,7 @@ $('#note-form textarea').addEventListener('keydown', (e) => {
 
 initPhone();
 initAccountMenu();
+initBarFit($('#app-view > .topbar'));
 phoneMenu($('#admin-view > .topbar'), { label: 'Look, change password, log out', keep: '.who' });
 phoneMenu($('.chat-actions'), { label: 'This chat: pin, rename, delete, new chat' });
 initSheetActions();

@@ -15,6 +15,7 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 
 | Date | What was wrong | Test |
 |---|---|---|
+| 2026-10-29 | Some themes broke the top bar: in Dungeon Crawl, Nine Hells, Synthwave and 8-bit (spaced capital tabs) the DM's bar ran onto two or three rows, the account button under the campaign's name, and the sidebar layout did it in every theme. The bar's steps went by the window's width, not by whether the bar fit. | `web/test/layout.test.js`: regression: in themes with wide capital tabs the top bar keeps to one row, stepping down until it fits |
 | 2026-10-28 | Casting a spell from the sheet (its to-hit or damage roll) never spent a spell slot; only casting on the map did. | `web/test/sheet.test.js`: regression: casting a spell from the sheet spends a spell slot (Cast, the to-hit roll or the damage roll), and with none left it asks before rolling |
 | 2026-10-28 | (same fix, the server side) | `server/test/rests.test.js`: regression: casting a spell from the sheet spends a spell slot (pact if that is all there is); cantrips, a slot too low and none left are refused |
 | 2026-10-28 | (same fix, the shared slot rules) | `shared/test/attacks.test.js`: regression: castLevels lists the slot levels a spell can use with what is left (pact included), and castWithSlot spends one or says why not |
