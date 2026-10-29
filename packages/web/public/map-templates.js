@@ -7,7 +7,7 @@ import { LoggedOut, api, h } from './api.js';
 import { TEMPLATE_COLOR, TEMPLATE_SHAPES, TEMPLATE_SHAPE_NAMES, snapTemplatePoint, spellArea, templateShape, tokensInTemplate } from './shared/map.js';
 import { base, report, state, status } from './map-state.js';
 import { field } from './map-dm.js';
-import { castAt } from './map-attacks.js';
+import { castAt, spellInPlay } from './map-attacks.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -126,6 +126,18 @@ export function templateControls(tpl) {
   const map = state.current;
   const caught = tokensInTemplate(map, tpl);
   const mine = canChangeTemplate(tpl);
+  // A lasting spell's area (Entangle): the spell in play, with its own buttons; removing the area ends it.
+  const sp = tpl.spell ? (map.spells ?? []).find((x) => x.id === tpl.spell) : null;
+  if (sp) {
+    return [
+      h('span', { class: 'swatch', style: `background:${tpl.color}` }),
+      spellInPlay(sp, { compact: true }),
+      h('span', { class: 'muted small' }, `${templateText(map, tpl)}${tpl.difficult ? ' · difficult terrain' : ''}`),
+      h('span', { class: 'spacer' }),
+      mine ? h('span', { class: 'muted small' }, 'Drag to move.') : null,
+      h('button', { class: 'ghost icon-btn', 'aria-label': 'Close', onclick: () => selectTemplate(null) }, '✕'),
+    ].filter(Boolean);
+  }
   return [
     h('span', { class: 'swatch', style: `background:${tpl.color}` }),
     h('strong', {}, tpl.label || TEMPLATE_SHAPE_NAMES[tpl.shape]),

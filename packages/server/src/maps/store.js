@@ -19,6 +19,7 @@ import { computeSheet } from '@dndapp/shared/sheet.js';
 import { activeForm, formHasHp, setFormHp } from '@dndapp/shared/wild-shape.js';
 import { companionTokenStats, setCompanionHp } from '@dndapp/shared/companions.js';
 import { attackLogFor } from '@dndapp/shared/attacks.js';
+import { mapSpellsFor } from '@dndapp/shared/spell-effects.js';
 import { createSight } from './sight.js';
 import { mapEvents, mapJourneys } from './events.js';
 import { diffJson, applyJson } from '../sheets/store.js';
@@ -366,6 +367,8 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
       const withHeights = { ...map, tokens: out.tokens };
       const tokens = out.tokens.filter((t) => ownToken(t, userId) || (!t.hidden && canSeeToken(withHeights, userId, seen.polygons, t)));
       const visible = new Set(tokens.map((t) => t.id));
+      // Areas of effect: their own, and ones whose point of origin they can see.
+      const areas = map.templates.filter((t) => t.user_id === userId || canSee(map, seen.polygons, t.x, t.y));
       return {
         ...out,
         description: '',
@@ -393,8 +396,9 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
         fog: { ...map.fog, explored: seen.explored },
         // Attacks made on the map: only ones where they can see someone in it, an enemy's AC only if the DM shows it.
         attacks: attackLogFor(map.attacks, { dm: false, visible, own: new Set(map.tokens.filter((t) => ownToken(t, userId)).map((t) => t.id)), showAc: settings.attacks.show_ac }),
-        // Areas of effect: their own, and ones whose point of origin they can see.
-        templates: map.templates.filter((t) => t.user_id === userId || canSee(map, seen.polygons, t.x, t.y)),
+        templates: areas,
+        // Spells in play: theirs, and ones where they can see the caster, someone under it or its area.
+        spells: mapSpellsFor(map.spells, { dm: false, visible, own: new Set(map.tokens.filter((t) => ownToken(t, userId)).map((t) => t.id)), templates: areas }),
         // The turn order holds only the tokens they can see; on an unseen token's turn, `turn` is null and `turn_unseen` says so.
         combat: map.combat && {
           ...map.combat,

@@ -4,6 +4,7 @@
 import crypto from 'node:crypto';
 import { MAX_TEMPLATES, MAX_TOKENS, TEMPLATE_SHAPES, dexModifier, stepTurn } from '@dndapp/shared/map.js';
 import { computeSheet } from '@dndapp/shared/sheet.js';
+import { endMapSpell, expireMapSpells } from '@dndapp/shared/spell-effects.js';
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
 import { BadRequestError, NotFoundError } from '../store.js';
@@ -93,6 +94,8 @@ export function registerCombat(app, r) {
         Object.assign(m.combat, stepTurn(m.combat, body.action === 'next' ? 1 : -1));
         // A new turn: its token hasn't moved yet.
         if (body.action === 'next') for (const e of m.combat.entries) if (e.id === m.combat.turn) e.moved = 0;
+        // Spells whose time is up end (Entangle's minute is 10 rounds), taking their areas and conditions with them.
+        if (body.action === 'next') expireMapSpells(m);
       } else if (body.action === 'add') {
         for (const id of body.ids ?? []) {
           if (m.tokens.some((t) => t.id === id) && !m.combat.entries.some((e) => e.id === id)) m.combat.entries.push({ id, init: null, mod: null });
@@ -163,6 +166,8 @@ export function registerCombat(app, r) {
     const a = access(request);
     const { map, tpl } = ownTemplate(request, a);
     const saved = maps.change(a.cid, map.id, (m) => {
+      // A lasting spell's area: removing it ends the spell.
+      if (tpl.spell) endMapSpell(m, tpl.spell);
       m.templates = m.templates.filter((t) => t.id !== tpl.id);
     }, { by: request.user.id, reason: 'template removed' });
     return { map: maps.view(saved, a) };

@@ -41,12 +41,29 @@ export function attackControls(token) {
   return [h('button', { class: 'primary', 'data-attack': 'at', title: `Attack ${token.name}, or cast a spell at it`, onclick: () => pickAction({ target: token }) }, 'Attack')];
 }
 
-/** What an action does, in a few words: "+6 · 1d8+3 piercing", "DC 15 Dex · 8d6 fire · 20 ft sphere". */
+/** What a condition does to someone, in a word: "restrains", "paralyzes". */
+const GIVES = { blinded: 'blinds', charmed: 'charms', deafened: 'deafens', frightened: 'frightens', grappled: 'grapples', incapacitated: 'incapacitates', invisible: 'makes invisible', paralyzed: 'paralyzes', petrified: 'petrifies', poisoned: 'poisons', prone: 'knocks prone', restrained: 'restrains', stunned: 'stuns', unconscious: 'knocks out' };
+
+/** How long a spell lasts, in a few words: "concentration, 1 minute". */
+function lastsText(x) {
+  if (!x.lasting || x.lasting.rounds === 0) return '';
+  const how = (x.duration || '').replace(/^concentration,?\s*(up to\s*)?/i, '').trim();
+  return [x.lasting.concentration ? 'concentration' : '', how].filter(Boolean).join(', ');
+}
+
+/**
+ * What an action does, in a few words: "+6 · 1d8+3 piercing", "DC 15 Dex · 8d6 fire · 20 ft sphere",
+ * "DC 13 Str save · restrains · difficult terrain · 20 ft cube · concentration, 1 minute".
+ */
 function actionText(x) {
   const area = x.area ? `${x.area.size} ft ${x.area.shape === 'circle' ? 'sphere' : x.area.shape}` : '';
-  const how = x.kind === 'attack' ? signed(x.bonus ?? 0) : x.kind === 'save' ? `DC ${x.dc} ${ABBR[x.save] ?? ''} save` : x.kind === 'heal' ? 'heals' : 'hits';
-  return [how, x.damage, area].filter(Boolean).join(' · ');
+  const how = x.kind === 'attack' ? signed(x.bonus ?? 0) : x.kind === 'save' ? `DC ${x.dc} ${ABBR[x.save] ?? ''} save` : x.kind === 'heal' ? 'heals' : x.kind === 'effect' ? (x.self ? 'on yourself' : (x.targets_max ?? 1) > 1 ? `up to ${x.targets_max}` : '') : 'hits';
+  const gives = (x.conditions ?? []).map((c) => GIVES[c] ?? c).join(', ');
+  return [how, x.damage, gives, x.difficult ? 'difficult terrain' : '', area, lastsText(x)].filter(Boolean).join(' · ');
 }
+
+/** A spell (not an attack roll) that can be cast on several, or on nobody: pick them on the map, then Cast. */
+const picksSeveral = (x) => x.source === 'spell' && x.kind !== 'attack' && !x.area && !x.self && ((x.targets_max ?? 1) > 1 || x.kind === 'effect');
 
 /**
  * The attack picker: who attacks (if there's a choice), Normal / Advantage / Disadvantage, and one big
@@ -100,7 +117,10 @@ export async function pickAction({ attacker = null, target = null }) {
       dialog.close();
       state.lastAttacker = attacker.id;
       nextD20Mode({ used: true });
-      if (x.area && !(target && x.kind !== 'save')) return placeArea(attacker, x, opts);
+      if (x.area && !(target && x.kind !== 'save' && x.kind !== 'effect')) return placeArea(attacker, x, opts);
+      // On yourself (range Self: Shield, Mage Armor on you, Misty Step).
+      if (x.self) return send({ attacker: attacker.id, action: x.id, targets: [attacker.id], ...opts });
+      if (picksSeveral(x)) return startTargeting(attacker, x, opts, target ? [target.id] : []);
       if (target) return send({ attacker: attacker.id, action: x.id, target: target.id, ...opts });
       startTargeting(attacker, x, opts);
     };
@@ -136,7 +156,7 @@ export async function pickAction({ attacker = null, target = null }) {
       ...attacks,
       spells.length ? h('h3', {}, 'Spells') : null,
       ...spells,
-      !rows.length ? h('p', { class: 'muted' }, attacker.kind === 'pc' ? 'Nothing on the character sheet rolls yet: equip a weapon in the Inventory, or add attacks and spells with damage.' : 'Its stat block has no attacks the app can read. Fill it in (Stat block) and try again.') : null,
+      !rows.length ? h('p', { class: 'muted' }, attacker.kind === 'pc' ? 'Nothing on the character sheet to use yet: equip a weapon in the Inventory, or add attacks and spells.' : 'Its stat block has no attacks the app can read. Fill it in (Stat block) and try again.') : null,
       h('div', { class: 'map-dialog-actions' }, h('span', { class: 'spacer' }), h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel')),
     ),
   );
@@ -146,17 +166,44 @@ export async function pickAction({ attacker = null, target = null }) {
 
 // ---------- picking who, or where ----------
 
-/** Waiting for a tap on the target. A bar over the map says so, with Cancel (no Escape key on a phone). */
-function startTargeting(attacker, action, opts) {
+/**
+ * Waiting for a tap on the target. A bar over the map says so, with Cancel (no Escape key on a phone). A
+ * spell that takes several (Bless's three) or none (Mage Armor's caster can pick nobody first) collects
+ * taps in `picked`, and its bar has Cast and On yourself.
+ */
+function startTargeting(attacker, action, opts, picked = null) {
   setTool({});
-  state.targeting = { attacker: attacker.id, action, opts };
-  const bar = $('#map-targeting');
-  bar.replaceChildren(
-    h('span', {}, `Tap who ${attacker.name} attacks with ${action.name}`),
-    h('button', { type: 'button', class: 'ghost', onclick: stopTargeting }, 'Cancel'),
-  );
-  bar.hidden = false;
+  state.targeting = { attacker: attacker.id, action, opts, ...(picked && { picked: [...picked] }) };
+  drawTargeting();
   renderTokens();
+}
+
+function drawTargeting() {
+  const t = state.targeting;
+  const bar = $('#map-targeting');
+  const attacker = state.current.tokens.find((x) => x.id === t.attacker);
+  const name = attacker?.name ?? 'They';
+  if (!t.picked) {
+    bar.replaceChildren(
+      h('span', {}, `Tap who ${name} ${t.action.source === 'spell' ? 'casts' : 'attacks with'} ${t.action.name}${t.action.source === 'spell' ? ' on' : ''}`),
+      h('button', { type: 'button', class: 'ghost', onclick: stopTargeting }, 'Cancel'),
+    );
+  } else {
+    const max = t.action.targets_max ?? 1;
+    const names = t.picked.map((id) => state.current.tokens.find((x) => x.id === id)?.name).filter(Boolean);
+    const cast = () => {
+      const { picked, action, opts } = t;
+      stopTargeting();
+      send({ attacker: t.attacker, action: action.id, ...(picked.length && { targets: picked }), ...opts });
+    };
+    bar.replaceChildren(...[
+      h('span', {}, names.length ? `${t.action.name} on ${names.join(', ')}${max > 1 ? ` (${names.length} of ${max})` : ''}` : `Tap who ${name} casts ${t.action.name} on${max > 1 ? ` (up to ${max})` : ''}`),
+      !t.picked.includes(t.attacker) && t.picked.length < max ? h('button', { type: 'button', class: 'ghost', onclick: () => { t.picked.push(t.attacker); drawTargeting(); renderTokens(); } }, 'On yourself') : null,
+      h('button', { type: 'button', class: 'primary', 'data-cast': '', disabled: !t.picked.length && t.action.kind !== 'effect', onclick: cast }, t.picked.length ? 'Cast' : 'Cast on nobody'),
+      h('button', { type: 'button', class: 'ghost', onclick: stopTargeting }, 'Cancel'),
+    ].filter(Boolean));
+  }
+  bar.hidden = false;
 }
 
 export function stopTargeting() {
@@ -169,6 +216,14 @@ export function stopTargeting() {
 /** A tap on a token while picking a target (map.js calls it before anything else a tap does). */
 export function pickTarget(token) {
   const t = state.targeting;
+  if (t?.picked) {
+    // Several: a tap adds them (up to the spell's number) or takes them off again.
+    const i = t.picked.indexOf(token.id);
+    if (i >= 0) t.picked.splice(i, 1);
+    else if (t.picked.length < (t.action.targets_max ?? 1)) t.picked.push(token.id);
+    drawTargeting();
+    return renderTokens();
+  }
   stopTargeting();
   if (!t) return;
   send({ attacker: t.attacker, action: t.action.id, target: token.id, ...t.opts });
@@ -199,17 +254,18 @@ export const castAt = (attack, templateId) => send({ ...attack, template: templa
 
 // ---------- attacking, and the cards ----------
 
-async function send(body) {
+async function send(body, path = 'attack') {
   const map = state.current;
   let res;
   try {
-    res = await state.guarded(() => api('POST', `${base()}/${map.id}/attack`, body));
+    res = await state.guarded(() => api('POST', `${base()}/${map.id}/${path}`, body));
   } catch (err) {
     return report(err);
   }
   if (!res) return;
   if (res.attack) seen(map.id).add(res.attack.id);
   onMap(res.map);
+  if (res.ended) status(`${res.ended} has ended.`);
   // The dice: to hit and damage; for an area, the damage (the saves are on the card).
   const rolls = res.rolls.filter((r) => !/: (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) save$/.test(r.label)).slice(0, 4);
   await showRolls(rolls);
@@ -232,7 +288,7 @@ export function seeAttacks(map) {
   const ids = seen(map.id);
   if (state.current?.id === map.id) {
     const btn = $('#map-attacks-log');
-    if (btn) btn.hidden = !attacksOn() && !log.length;
+    if (btn) btn.hidden = !attacksOn() && !log.length && !(map.spells ?? []).length;
   }
   for (const e of log) {
     if (ids.has(e.id)) {
@@ -267,14 +323,18 @@ function targetLine(e, t) {
     bits.push(`${t.attack.total}${d20}${t.ac != null ? ` vs AC ${t.ac}` : ''}`);
     bits.push(t.crit ? 'critical hit!' : t.hit === true ? 'hit' : t.hit === false ? (t.attack.natural === 1 ? 'natural 1, miss' : 'miss') : 'the DM decides');
   }
-  if (t.save) bits.push(`${ABBR[t.save.ability] ?? ''} save ${t.save.auto_fail ? 'fails (can’t move)' : `${t.save.total} vs DC ${t.save.dc}: ${t.save.success ? 'saved' : 'failed'}`}`);
+  if (t.save) bits.push(`${ABBR[t.save.ability] ?? ''} ${t.save.check ? 'check' : 'save'} ${t.save.auto_fail ? 'fails (can’t move)' : `${t.save.total} vs DC ${t.save.dc}: ${t.save.success ? (t.save.check ? 'breaks free' : 'saved') : 'failed'}`}`);
+  // What the spell did besides damage: Entangle's restrained, Invisibility's invisible.
+  if (t.conditions?.length) bits.push(t.conditions.join(', '));
+  else if (t.effect) bits.push('under the spell');
   const types = [...new Set((t.rolled ?? []).map((p) => p.type).filter(Boolean))].join(', ');
   if (t.amount > 0) bits.push(t.heal ? `heals ${t.amount}` : `${t.amount} ${types} damage`.replace(/\s+/g, ' '));
   else if (t.hit !== false && !t.heal && (t.rolled ?? []).length) bits.push('no damage');
   const hp = t.after && t.after.current != null ? ` (now ${t.after.current}${t.after.max != null ? ` / ${t.after.max}` : ''} HP)` : '';
   const state_ = { pending: ' · waiting for the DM', skipped: ' · not applied', undone: ' · undone', applied: hp }[t.status] ?? '';
   const notes = (t.notes ?? []).filter(Boolean);
-  const conc = t.concentration ? (t.concentration.rolled == null ? ` Concentration: Con save DC ${t.concentration.dc}.` : ` Concentration (DC ${t.concentration.dc}): ${t.concentration.rolled}, ${t.concentration.kept ? 'kept' : 'lost'}.`) : '';
+  const ended = t.concentration?.ended?.length ? `, ${t.concentration.ended.join(' and ')} ends` : '';
+  const conc = t.concentration ? (t.concentration.rolled == null ? ` Concentration: Con save DC ${t.concentration.dc}.` : ` Concentration (DC ${t.concentration.dc}): ${t.concentration.rolled}, ${t.concentration.kept ? 'kept' : 'lost'}${ended}.`) : '';
   return h('li', { class: `attack-target${t.hit === false || (t.save?.success && !t.amount) ? ' missed' : ''}${t.crit ? ' crit' : ''}` },
     h('strong', {}, t.name), ': ', bits.join(', '), state_,
     notes.length ? h('span', { class: 'muted small' }, ` (${notes.join('; ')})`) : null,
@@ -289,14 +349,16 @@ function targetLine(e, t) {
 
 /** A card: who did what to whom, a line per target; the DM's has Apply / Half / Skip and Undo. */
 export function card(e, { close = false } = {}) {
-  const what = [e.action.name, e.action.slot ? `${ORD[e.action.slot]} level` : '', e.action.riders?.length ? `+ ${e.action.riders.join(', ')}` : ''].filter(Boolean).join(' · ');
+  const what = [e.action.name, e.action.slot ? `${ORD[e.action.slot]} level` : '', e.action.riders?.length ? `+ ${e.action.riders.join(', ')}` : '', e.action.again ? 'again' : ''].filter(Boolean).join(' · ');
+  const lasts = e.action.lasting && !e.action.again ? lastsText({ lasting: e.action.lasting, duration: e.action.lasting.duration }) : '';
   const el = h('article', { class: `attack-card ${e.status}`, 'data-attack': e.id, 'data-v': cardKey(e) },
     h('header', {},
       h('span', {}, h('strong', {}, e.attacker.name), ` · ${what}`),
       close ? h('button', { type: 'button', class: 'ghost icon-btn', 'aria-label': 'Close', onclick: () => el.remove() }, '✕') : null,
     ),
-    e.targets.length ? h('ul', {}, e.targets.map((t) => targetLine(e, t))) : h('p', { class: 'muted small' }, 'Nobody was caught in it.'),
-    state.canEdit && e.status !== 'undone' ? h('footer', {},
+    e.targets.length ? h('ul', {}, e.targets.map((t) => targetLine(e, t))) : h('p', { class: 'muted small' }, e.action.kind === 'effect' ? 'Cast.' : 'Nobody was caught in it.'),
+    lasts || e.ended?.length ? h('p', { class: 'muted small' }, [lasts && `Lasts: ${lasts}.`, e.ended?.length && `${e.ended.join(' and ')} ended (concentration).`].filter(Boolean).join(' ')) : null,
+    state.canEdit && e.status !== 'undone' && e.action.kind !== 'break' ? h('footer', {},
       e.status === 'pending' && e.targets.filter((t) => t.status === 'pending').length > 1 ? h('button', { type: 'button', class: 'primary', onclick: () => settle(e, 'apply') }, 'Apply all') : null,
       h('button', { type: 'button', class: 'ghost', title: 'Put the hit points (and any spell slot) back', onclick: () => settle(e, 'undo') }, 'Undo'),
     ) : null,
@@ -325,10 +387,78 @@ export function attackLog() {
   dialog.replaceChildren(
     h('form', { method: 'dialog', class: 'map-dialog-inner attack-log' },
       h('h2', {}, 'Attack log'),
+      (map.spells ?? []).length ? h('section', { class: 'spells-in-play' }, h('h3', {}, 'Spells in play'), ...map.spells.map((sp) => spellInPlay(sp))) : null,
       log.length ? h('div', { class: 'attack-log-list' }, log.map((e) => card(e))) : h('p', { class: 'muted' }, 'No attacks on this map yet. Pick an enemy and press Attack.'),
       h('div', { class: 'map-dialog-actions' }, h('span', { class: 'spacer' }), h('button', { class: 'primary' }, 'Close')),
     ),
   );
   dialog.onclose = null;
   dialog.showModal();
+}
+
+// ---------- spells in play (lasting spells: Entangle's area, Hold Person, Bless) ----------
+
+const tokenName = (id) => state.current?.tokens.find((t) => t.id === id)?.name ?? 'someone';
+/** Whoever cast it (or the DM) ends it or rolls it again. */
+const runsSpell = (sp) => state.canEdit || sp.user_id === state.userId || ownToken(state.current?.tokens.find((t) => t.id === sp.caster), state.userId);
+
+/** Rounds left in the fight: "4 rounds left", or ''. */
+function spellTime(sp) {
+  const c = state.current?.combat;
+  if (!sp.ends || !c) return '';
+  const n = Math.max(0, sp.ends.round - c.round);
+  return n ? `${n} round${n === 1 ? '' : 's'} left` : 'ends this round';
+}
+
+/** Act on a spell in play: end it, roll it again for who's in its area, or roll for one under it to break free. */
+export async function spellAction(sp, what, target) {
+  const map = state.current;
+  if (!map) return;
+  if (what === 'end') {
+    try {
+      const res = await state.guarded(() => api('POST', `${base()}/${map.id}/spells/${sp.id}`, { do: 'end' }));
+      if (res) {
+        onMap(res.map);
+        status(`${sp.name} has ended.`);
+      }
+    } catch (err) {
+      report(err);
+    }
+    return;
+  }
+  $('#map-dialog').close?.();
+  await send({ do: what, ...(target && { target }) }, `spells/${sp.id}`);
+}
+
+/** One spell in play: who cast it, who's under it (with their conditions), time left, and its buttons. */
+export function spellInPlay(sp, { compact = false } = {}) {
+  const mine = runsSpell(sp);
+  const rolls = !!(sp.save || sp.check);
+  const who = sp.affected.map((a) => h('li', {},
+    h('strong', {}, tokenName(a.id)), a.conditions.length ? `: ${a.conditions.join(', ')}` : '',
+    rolls && (state.canEdit || ownToken(state.current.tokens.find((t) => t.id === a.id), state.userId))
+      ? h('button', { type: 'button', class: 'ghost small', 'data-spell-break': a.id, title: sp.check ? `Use the action to break free (a ${ABBR[sp.check]} check against the caster's spell save DC)` : 'Make the saving throw again', onclick: () => spellAction(sp, 'break', a.id) }, sp.check ? 'Break free' : 'Save again')
+      : null,
+  ));
+  return h('div', { class: 'spell-in-play', 'data-spell': sp.id },
+    h('div', {},
+      h('strong', {}, sp.name), h('span', { class: 'muted small' }, ` · ${sp.caster_name}${sp.concentration ? ' (concentrating)' : ''}${spellTime(sp) ? ` · ${spellTime(sp)}` : ''}`),
+    ),
+    who.length ? h('ul', { class: 'small' }, who) : compact ? null : h('p', { class: 'muted small' }, sp.template ? 'Nobody is held by it right now.' : 'Nobody is under it.'),
+    mine ? h('div', { class: 'spell-buttons' },
+      sp.template ? h('button', { type: 'button', class: 'ghost small', 'data-spell-again': '', title: 'Roll it for whoever is in the area now (someone walked in, or a new turn): no slot', onclick: () => spellAction(sp, 'again') }, 'Roll for who’s in it') : null,
+      h('button', { type: 'button', class: 'ghost small danger', 'data-spell-end': '', title: 'End the spell: its area goes and the conditions it gave come off', onclick: () => spellAction(sp, 'end') }, 'End spell'),
+    ) : null,
+  );
+}
+
+/** Spells a token is under, for its bar: "Under Entangle (restrained)". */
+export function spellTags(token) {
+  const list = (state.current?.spells ?? []).filter((sp) => sp.affected.some((a) => a.id === token.id));
+  if (!list.length) return [];
+  const text = list.map((sp) => {
+    const c = sp.affected.find((a) => a.id === token.id).conditions;
+    return `${sp.name}${c.length ? ` (${c.join(', ')})` : ''}`;
+  }).join(', ');
+  return [h('span', { class: 'small spell-tags', title: 'Spells in play on it: see the Attack log' }, `Under ${text}`)];
 }
