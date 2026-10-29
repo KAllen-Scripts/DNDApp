@@ -1,12 +1,12 @@
 /**
- * The DM's creatures: saved enemies and NPCs (picture, stat block, notes) placed on maps as tokens, and
+ * The DM's creatures: the bestiary and people, saved (picture, stat block, notes) placed on maps as tokens, and
  * found online by the AI.
  */
 import fs from 'node:fs';
 import { MAX_TOKENS, TOKEN_SIZES, snapToken, squarePx } from '@dndapp/shared/map.js';
 import { z } from 'zod';
 import { BadRequestError, NotFoundError } from '../store.js';
-import { CREATURE_KINDS, MAX_CREATURE_NOTES, tokenNames } from '../creatures.js';
+import { CREATURE_GROUPS, CREATURE_KINDS, MAX_CREATURE_NOTES, tokenNames } from '../creatures.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
 import { isMapId, newTokenId } from '../maps/store.js';
 
@@ -18,6 +18,9 @@ export function registerCreatures(app, r) {
   const CREATURE = z.object({
     name: z.string().trim().min(1).max(80),
     kind: z.enum(CREATURE_KINDS),
+    group: z.enum(CREATURE_GROUPS),
+    type: z.string().trim().max(40),
+    role: z.string().trim().max(120),
     size: z.number().refine((n) => TOKEN_SIZES.includes(n), 'must be 0.5, 1, 2, 3 or 4'),
     color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a colour like #b33a3a'),
     hp_max: z.number().int().positive().max(100_000).nullable(),
@@ -42,7 +45,7 @@ export function registerCreatures(app, r) {
   });
 
   /**
-   * Save a creature (DM): { name, kind, size?, color?, hp_max?, darkvision?,
+   * Save a creature (DM): { name, kind, group? ('creature' | 'person'), type?, role?, size?, color?, hp_max?, darkvision?,
    * speed?, stats?, record?, notes?, picture?: { filename, data (base64) } },
    * or { from: { map_id, token_id } } to save a token already on a map, with
    * its picture and stat block ("Goblin 3" is saved as "Goblin").
@@ -58,7 +61,7 @@ export function registerCreatures(app, r) {
       const t = map.tokens.find((x) => x.id === from.token_id);
       if (!t) throw new NotFoundError('No such token');
       if (t.kind === 'pc') throw new BadRequestError("A player's character can't be saved as a creature.");
-      fields = { name: t.name.replace(/ \d+$/, '') || t.name, kind: t.kind === 'companion' ? 'npc' : t.kind, size: t.size, color: t.color, hp_max: t.hp?.max ?? null, darkvision: t.darkvision ?? 0, speed: t.speed ?? null, stats: t.stats ?? null, record: t.record ?? null };
+      fields = { name: t.name.replace(/ \d+$/, '') || t.name, kind: t.kind === 'companion' ? 'npc' : t.kind, group: t.kind === 'npc' ? 'person' : 'creature', size: t.size, color: t.color, hp_max: t.hp?.max ?? null, darkvision: t.darkvision ?? 0, speed: t.speed ?? null, stats: t.stats ?? null, record: t.record ?? null };
       if (t.art) art = { buf: fs.readFileSync(archive.tokenImagePath(a.campaign.slug, map.id, t.art.file)) };
     } else {
       fields = CREATURE.partial().required({ name: true, kind: true }).parse(rest);
@@ -132,16 +135,16 @@ export function registerCreatures(app, r) {
 
   /**
    * Have the AI find a creature online (DM): { query }, e.g. "Hollow Knight
-   * from the Grimhollow book" or "a crystal golem". Official or not; it
+   * from the Grimhollow book" or "a crystal golem" (group: 'person' puts it under People). Official or not; it
    * searches the web, writes up the stat block and brings a picture. Runs in
    * the background: the creature is listed at once with finding.status
    * 'pending', then filled in (or 'failed', with an error). 202.
    */
   app.post('/campaigns/:cid/creatures/find', async (request, reply) => {
     const a = access(request, { dm: true });
-    const { query } = z.object({ query: z.string().trim().min(2).max(200) }).parse(request.body ?? {});
+    const { query, group } = z.object({ query: z.string().trim().min(2).max(200), group: z.enum(CREATURE_GROUPS).default('creature') }).parse(request.body ?? {});
     mapAiAllowed(request.user.id);
-    const c = creatures.create(a.cid, { name: query.slice(0, 80), kind: 'enemy', finding: { query, status: 'pending' } }, { by: request.user.id });
+    const c = creatures.create(a.cid, { name: query.slice(0, 80), kind: group === 'person' ? 'npc' : 'enemy', group, finding: { query, status: 'pending' } }, { by: request.user.id });
     const fail = (error) => {
       try {
         creatures.update(a.cid, c.id, { finding: { query, status: 'failed', error } });

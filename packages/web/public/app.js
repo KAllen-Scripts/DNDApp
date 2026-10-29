@@ -228,7 +228,7 @@ async function enterCampaign(campaign) {
   $('[data-tab=sessions]').hidden = !isDm;
   // Everyone gets the Wiki: a player reads their own version of it, filtered on the server.
   $('[data-tab=wiki]').hidden = false;
-  // The DM gets Creatures (enemies and NPCs to put on maps) instead of a character sheet.
+  // The DM gets the Bestiary (creatures and people to put on maps) instead of a character sheet.
   $('[data-tab=sheet]').hidden = isDm;
   $('[data-tab=inventory]').hidden = isDm;
   $('[data-tab=creatures]').hidden = !isDm;
@@ -244,7 +244,7 @@ async function enterCampaign(campaign) {
   if (SHEET_WINDOW && isDm) {
     // A sheet window left open from before someone became the DM: there's no sheet to show.
     $('#tab-sheet').hidden = false;
-    $('#sheet').replaceChildren(h('p', { class: 'muted' }, 'The DM has Creatures instead of a character sheet. Close this window.'));
+    $('#sheet').replaceChildren(h('p', { class: 'muted' }, 'The DM has the Bestiary instead of a character sheet. Close this window.'));
     $('.sheet-bar').hidden = true;
     return;
   }
@@ -871,7 +871,7 @@ initCreatureActions({ place: placeCreature });
 initItemActions();
 initMerchantActions({ place: placeMerchant });
 // The DM's lists: Find and New stay in the row on a phone; the rest go in ⋯.
-phoneMenu($('#tab-creatures > .creatures-bar'), { label: 'More: find a creature online', keep: 'input, .primary, [role=status]' });
+phoneMenu($('#tab-creatures > .creatures-bar'), { label: 'More: find a creature online', keep: 'input, .primary, .bestiary-switch, [role=status]' });
 phoneMenu($('#tab-items > .creatures-bar'), { label: 'More: look up, find online', keep: 'input, .primary, [role=status]' });
 initDice();
 initRests();

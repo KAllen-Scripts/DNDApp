@@ -1,5 +1,6 @@
 /**
- * The DM's creatures: enemies and NPCs saved once (name, hostile or
+ * The DM's creatures: kinds of creature for the bestiary (by type and
+ * challenge) and people (NPCs, with a role), saved once (name, hostile or
  * friendly, size, colour, hit points, darkvision, speed, a picture, a stat
  * block and the DM's own notes) and placed on any map as tokens, as many
  * at a time as needed. Only the DM ever sees them; a token placed from one
@@ -16,10 +17,12 @@ import crypto from 'node:crypto';
 import { TOKEN_SIZES, TOKEN_COLORS } from '@dndapp/shared/map.js';
 import { NotFoundError, BadRequestError } from './store.js';
 import { inspectPicture } from './images.js';
+import { CREATURE_GROUPS, groupOf, creatureType } from '@dndapp/shared/bestiary.js';
 
 export const CREATURE_KINDS = ['enemy', 'npc'];
 export const MAX_CREATURES = 500;
 export const MAX_CREATURE_NOTES = 4000;
+export { CREATURE_GROUPS };
 
 export const isCreatureId = (id) => /^[a-f0-9]{10}$/.test(String(id));
 
@@ -47,6 +50,10 @@ export function normalizeCreature(c = {}) {
     id: String(c.id),
     name: str(c.name, 80).trim() || 'Creature',
     kind,
+    // The bestiary's (a kind of creature) or People's (one person); friendly or hostile is `kind`.
+    group: groupOf(c),
+    type: str(c.type, 40).trim().toLowerCase(), // the DM's word for its type; empty: read from the stat block
+    role: str(c.role, 120).trim(), // a person's: "innkeeper at the Gilded Goose"
     size: TOKEN_SIZES.includes(Number(c.size)) ? Number(c.size) : 1,
     color: color ?? TOKEN_COLORS[kind],
     hp_max: hp == null ? null : Math.round(hp),
@@ -66,6 +73,12 @@ export function normalizeCreature(c = {}) {
     removed: !!c.removed,
   };
 }
+
+/** What it is, for the AI: "person, friendly", "creature (undead), hostile". */
+export const creatureLabel = (c) => {
+  const type = c.group === 'person' ? '' : creatureType(c);
+  return `${c.group === 'person' ? 'person' : 'creature'}${type ? ` (${type})` : ''}, ${c.kind === 'npc' ? 'friendly' : 'hostile'}`;
+};
 
 /** Names for `count` tokens of one creature: "Goblin" alone, "Goblin 1".."Goblin 4" for a group, carrying on from any already on the map. */
 export function tokenNames(name, count, existing = []) {

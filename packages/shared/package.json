@@ -30,6 +30,7 @@
     "./item-names.js": "./src/item-names.js",
     "./point-buy.js": "./src/point-buy.js",
     "./backgrounds.js": "./src/backgrounds.js",
+    "./bestiary.js": "./src/bestiary.js",
     "./creation-help.js": "./src/creation-help.js",
     "./map.js": "./src/map.js",
     "./map-design.js": "./src/map-design.js",

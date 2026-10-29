@@ -799,6 +799,18 @@ button.wiki-link.missing { color: var(--muted); text-decoration-style: dashed; }
 .creature-kind.enemy { color: var(--error); }
 .creature-notes { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 4.5em; overflow: hidden; }
 .creature-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.2rem; }
+.creature-role { margin: 0; font-style: italic; overflow-wrap: anywhere; }
+.bestiary-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; flex: none; }
+.bestiary-switch button { border: 0; border-radius: 0; background: transparent; padding: 0.35rem 0.85rem; }
+.bestiary-switch button[aria-selected="true"] { background: var(--accent); color: var(--accent-text); }
+.bestiary-switch button[aria-selected="true"] .muted { color: inherit; opacity: 0.8; }
+.creatures.bestiary { display: block; }
+.bestiary-types { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.6rem; }
+.bestiary-type { cursor: pointer; }
+.bestiary-type.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.bestiary-type.on .muted { color: inherit; }
+.bestiary-group { margin-bottom: 1rem; }
+.bestiary-head { font-size: 1.05rem; margin: 0.2rem 0 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.2rem; }
 .creature-actions button { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
 .creature.searching .creature-face { color: var(--muted); }
 .creature.pending .creature-face { animation: creature-wait 1.4s ease-in-out infinite; }

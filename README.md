@@ -147,7 +147,7 @@ Everyone can **Measure** distances, place **spell templates** (sphere, cone, lin
 
 ### The DM's Creatures tab
 
-In place of a character sheet, the DM keeps enemies and friendly NPCs: name, size, colour, hit points, AC, speed, darkvision, a stat block (typed, or filled in by the AI), a picture and private notes. **Place on map** (or picking one under **Who is it?** in Add token) puts one or a numbered group on the map; **Save to creatures** keeps a token from a map. **Find online** has the AI search the web (official or homebrew) for a creature and bring back its stat block, a link to where it found it, and a picture if it can download one. The server only downloads from the public internet, never from your PC or home network.
+In place of a character sheet, the DM keeps a **Bestiary** tab with two lists: the bestiary (kinds of creature, under their type and by challenge) and **People** (NPCs, one each, with their role). Each has a name, friendly or hostile, size, colour, hit points, AC, speed, darkvision, a stat block (typed, or filled in by the AI), a picture and private notes. **Place on map** (or picking one under **Who is it?** in Add token) puts one or a numbered group on the map; **Save to creatures** keeps a token from a map. **Find online** has the AI search the web (official or homebrew) for a creature and bring back its stat block, a link to where it found it, and a picture if it can download one. The server only downloads from the public internet, never from your PC or home network.
 
 Everyone can drop **pins** with a note on a map; only the person who placed them sees them, not even the DM.
 
@@ -389,7 +389,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/maps/:mid/tokens/:tid/picture` | That picture, 256 px square (for whoever can see the token) |
 | POST | `/campaigns/:cid/maps/:mid/tokens/:tid/stats` | Fill the token's stat block with the AI (DM, or a player for their own companion: never from the DM's creatures) `{name?}`; 404 if the AI doesn't know the creature |
 | POST | `/campaigns/:cid/maps/:mid/creatures/:crid` | Put one of the DM's creatures on a map (DM) `{count? (1-20), x?, y?, hidden?, name?}`; a group is numbered and set out in a row. Returns `{map, tokens}` |
-| GET / POST | `/campaigns/:cid/creatures` | The DM's creatures (DM only) `{creatures}` / save one `{name, kind: enemy \| npc, size?, color?, hp_max?, ac?, darkvision?, speed?, stats?, record?, notes?, picture?: {filename, data}}`, or `{from: {map_id, token_id}}` to save a token from a map |
+| GET / POST | `/campaigns/:cid/creatures` | The DM's creatures (DM only) `{creatures}` / save one `{name, kind: enemy \| npc, group?: creature \| person, type?, role?, size?, color?, hp_max?, ac?, darkvision?, speed?, stats?, record?, notes?, picture?: {filename, data}}`, or `{from: {map_id, token_id}}` to save a token from a map |
 | PATCH / DELETE | `/campaigns/:cid/creatures/:crid` | Change one (DM; placed tokens keep what they had) / remove it (DM; kept in the archive) |
 | GET / PUT / DELETE | `/campaigns/:cid/creatures/:crid/picture` | Its picture, cut to a square (DM) / give it one `{filename, data}` / back to initials |
 | POST | `/campaigns/:cid/creatures/:crid/stats` | Fill its stat block with the AI (DM) `{name?}`; 404 if the AI doesn't know the creature |
