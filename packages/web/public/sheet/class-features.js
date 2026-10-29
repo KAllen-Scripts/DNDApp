@@ -10,7 +10,6 @@
  * shared/subclass-features.js and shared/race-features.js; sheet.js owns the sheet and passes in what this needs. Every maximum can be typed over: the DM has the
  * last word.
  */
-import { h, setChildren } from '../page/api.js';
 import { CLASSES, classKey } from '/shared/sheet.js';
 import {
   RECHARGE_NAMES, SLOT_COST, MAX_CUSTOM, arcaneRecovery, featureRows, healsForm, newCustomFeature, pointsToSlot, regainPactSlots,
@@ -19,6 +18,7 @@ import {
 import { subclassOf } from '/shared/subclass-features.js';
 import { knownRace } from '/shared/race-features.js';
 import { isOpen, setOpen } from './fold.js';
+import { h, setChildren } from '../page/dom.js';
 
 const RECHARGE_SHORT = { short: 'Short rest', long: 'Long rest', short_one: 'Short rest: one', none: 'By hand' };
 const ordinal = (n) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);

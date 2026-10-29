@@ -8,7 +8,7 @@
  * while dragging use the same rules the server applies (./shared/map.js);
  * the server decides where a token really ends up.
  */
-import { api, listen, fileUrl, h, storage, LoggedOut, readBase64 } from '../page/api.js';
+import { api, listen, fileUrl, storage, LoggedOut } from '../page/api.js';
 import { TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, CONDITIONS, EFFORTS, playersMap, snapToken, tokenPx, measure, formatDistance, fogRect, healthOf, fogMask, playerFogMask, wallBetween, snapWallPoint, nearestWall, arcThrough, circlePoints, LIGHT_PRESETS, pxPerUnit, squarePx, pathCost, pointInPolygon, distanceToWall, inTemplate, snapTemplatePoint, groundAt, tokenTall, bridgeAt, isUnder, isPinMap, snapRoadPoint, parentOf } from '/shared/map.js';
 import { nav as wikiNav } from '../wiki/data.js';
 import { renderWikiLayers, initWikiLayers } from './wiki-layers.js';
@@ -24,8 +24,8 @@ import { initMapFull } from './full-screen.js';
 import { groupsDialog, mapOptions, placeEnd, placeMove, placeStart, renderPlaces, shownNote } from './places.js';
 import { clockDialog, journeyText, onClock, renderClock, renderRoads, renderRoutes, roadMode, roads, travelControls as journeyControls, travelPicked } from './travel.js';
 import { PIN_PX, followMyCharacter, myCharacterMap, partyDialog, pinFan, travelControls } from './world.js';
+import { $, h, readBase64 } from '../page/dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 export const KIND_LABELS = { battle: 'Battle map', dungeon: 'Dungeon', building: 'Building', town: 'Town', region: 'Region', world: 'World', other: 'Map' };
 const MAX_ZOOM = 8;
 

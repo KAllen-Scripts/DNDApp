@@ -3,8 +3,9 @@
  * Status (Rumoured, Active, Done, Failed, any others the DM wrote, and none), a row for each arc. The DM drags a
  * card to another column, or picks its status, and the page's Status fact changes (PUT …/:pid/status).
  */
-import { api, h } from '../../page/api.js';
+import { api } from '../../page/api.js';
 import { state, nav, base, report, status, pictureImg, fam } from '../data.js';
+import { h } from '../../page/dom.js';
 
 /** Draw the board into `main` (it fills in when the server answers). */
 export async function drawQuests(main) {

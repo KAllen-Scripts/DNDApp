@@ -11,7 +11,7 @@
  * Where the browser can't go full screen (an iPhone, or it says no), the map
  * still fills the window. Escape, or the button again, goes back.
  */
-const $ = (sel) => document.querySelector(sel);
+import { $ } from '../page/dom.js';
 const root = document.documentElement;
 
 /** Is the map full screen? */

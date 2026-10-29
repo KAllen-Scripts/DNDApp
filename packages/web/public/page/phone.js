@@ -10,7 +10,7 @@
  * list from the bottom. The buttons are the page's own, so everything they
  * do still works.
  */
-const $ = (sel) => document.querySelector(sel);
+import { $ } from './dom.js';
 const isPhone = () => document.documentElement.hasAttribute('data-phone');
 
 let openMenu = null; // the menu (the nav or a toolbar) open now

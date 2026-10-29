@@ -3,10 +3,11 @@
  * some or none, coloured. A click on a cell shows that player's version of the page beside the parts of it, to tick
  * and **Reveal to** them in one go; the spoiler check asks first when the parts name a page they can't see yet.
  */
-import { api, h } from '../../page/api.js';
+import { api } from '../../page/api.js';
 import { state, nav, base, report, status, fam, kindBadge } from '../data.js';
 import { pageContent } from '../page.js';
 import { spoilerWords } from './waiting.js';
+import { h } from '../../page/dom.js';
 
 const WORDS = { all: 'All of it', some: 'Some of it', none: 'Nothing' };
 let filter = '';

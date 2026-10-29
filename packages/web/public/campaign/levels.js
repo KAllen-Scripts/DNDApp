@@ -4,8 +4,9 @@
  * where the DM gives a level to one player or everyone (or takes back one not taken yet). The player hears it
  * live: their sheet shows Level up.
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { LEVEL_UP_WHO } from '/shared/settings.js';
+import { h } from '../page/dom.js';
 
 /** The section: { el }. get: the settings now; save(patch, done) saves settings. */
 export function levelsSection({ campaignId, guarded, get, save }) {

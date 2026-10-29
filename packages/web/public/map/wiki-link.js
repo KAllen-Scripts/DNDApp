@@ -5,9 +5,10 @@
  * drawer, or unlink it. Maps own where things are, the wiki what they are, so
  * only the link is kept (stage 2 of docs/notes/wiki-space.md).
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { nav } from '../wiki/data.js';
 import { state } from './state.js';
+import { h } from '../page/dom.js';
 
 const wikiBase = () => `/campaigns/${state.campaignId}/wiki`;
 

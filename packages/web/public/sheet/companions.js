@@ -10,15 +10,15 @@
  * stat block is worked out from the character. The rules are in
  * shared/companions.js; sheet.js owns the sheet and passes in what this needs.
  */
-import { api, h, setChildren } from '../page/api.js';
+import { api } from '../page/api.js';
 import { ABILITIES, ABILITY_NAMES, formatBonus } from '/shared/sheet.js';
 import { d20Plus } from '/shared/dice.js';
 import { speedText } from '/shared/wild-shape.js';
 import { COMPANION_KINDS, MAX_SHEET_COMPANIONS, builtStatBlock, companionSources, normalizeCompanion, rangersCompanion } from '/shared/companions.js';
 import { roll, rollModeFromEvent, D20_ICON } from '../dice/dice.js';
 import { fold } from './fold.js';
+import { cap, h, setChildren } from '../page/dom.js';
 
-const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const mod = (score) => Math.floor((score - 10) / 2);
 const SOURCE_NOTES = { srd: 'SRD', book: 'Your book', ai: 'AI memory (check it)', manual: 'Worked out' };
 const FROM_NAMES = { spell: 'spell', feature: 'feature', item: 'item' };

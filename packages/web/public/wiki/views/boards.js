@@ -5,9 +5,10 @@
  * saves after a pause; a page card opens the drawer. On a phone a board is for looking and moving, not building.
  * The server sends each card as this viewer may see it: one they can't see (now) is "gone".
  */
-import { api, h } from '../../page/api.js';
+import { api } from '../../page/api.js';
 import { state, nav, base, report, status, pictureImg, fam, kindBadge, choosePicture } from '../data.js';
 import { panZoom } from '../../page/pan-zoom.js';
+import { h } from '../../page/dom.js';
 
 const SIZES = { small: [160, 64], medium: [220, 150], large: [300, 260] };
 const COLORS = ['yellow', 'pink', 'blue', 'green', 'purple', 'grey'];

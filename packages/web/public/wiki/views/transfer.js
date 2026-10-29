@@ -4,9 +4,10 @@
  * Markdown zip as they see it (the DM also a player's version); and prints pages, one or a chosen set, for paper or
  * a PDF through the browser.
  */
-import { api, h, fileUrl, readBase64 } from '../../page/api.js';
+import { api, fileUrl } from '../../page/api.js';
 import { state, nav, base, report, status, playerName } from '../data.js';
 import { hero, pageContent } from '../page.js';
+import { h, readBase64 } from '../../page/dom.js';
 
 /** Download the wiki as a Markdown zip; `as` a player id for their version (the DM's), else as the viewer sees it. */
 export async function downloadWiki(as = null) {

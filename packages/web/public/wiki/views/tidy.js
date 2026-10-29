@@ -3,8 +3,9 @@
  * with a button that fixes it or opens the page where it's fixed: make a missing page, link the names written out,
  * put a place on a map, make a page for a place, choose a person's picture, or edit.
  */
-import { api, h } from '../../page/api.js';
+import { api } from '../../page/api.js';
 import { state, nav, base, report, status, choosePicture, kindBadge } from '../data.js';
+import { h } from '../../page/dom.js';
 
 /** Draw Tidy up into `main` (it fills in when the server answers). */
 export async function drawTidy(main) {

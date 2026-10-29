@@ -11,11 +11,11 @@
  * on the first roll. If one can't start here, the other is tried; without WebGL,
  * with reduced motion or with the dice switched off, the result just appears.
  */
-import { api, h, storage } from '../page/api.js';
+import { api, storage } from '../page/api.js';
 import { formatTerms, parseRoll } from '/shared/dice.js';
 import { createFx, banner, shake, chime } from './effects.js';
+import { $, h } from '../page/dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 const SETTINGS_KEY = 'dndapp.dice';
 const DICE = [4, 6, 8, 10, 12, 20, 100];
 const MAX_3D_DICE = 30;

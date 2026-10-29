@@ -2,9 +2,8 @@
  * What the Map tab's parts share: the page's map state and small helpers (map.js and its parts).
  */
 
-import { LoggedOut, fileUrl, h } from '../page/api.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { LoggedOut, fileUrl } from '../page/api.js';
+import { $, h } from '../page/dom.js';
 
 export const state = {
   campaignId: null,

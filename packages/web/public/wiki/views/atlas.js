@@ -5,15 +5,14 @@
  * (map/wiki-layers.js). Leaving puts it back where it was. View as a player filters
  * the layers to what they may see; their fog isn't recreated.
  */
-import { h } from '../../page/api.js';
 import { state, nav, playerName } from '../data.js';
 import { openMapAt, fitMap, setTool } from '../../map/map.js';
 import { setWikiLayers, pulseWikiPin } from '../../map/wiki-layers.js';
 import { state as mapState } from '../../map/state.js';
 import { atlasOrder } from '/shared/map.js';
 import { timeSlider } from '../asof.js';
+import { $, h } from '../../page/dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 let home = null; // where the map panel lives at the table: a marker left in its place
 
 /** Is the map in the wiki now? */

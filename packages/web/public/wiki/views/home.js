@@ -6,7 +6,7 @@
  * the DM. Its numbers come from the server (GET …/wiki/home). Below it,
  * wiki.js draws every page as a card.
  */
-import { api, h, fileUrl } from '../../page/api.js';
+import { api, fileUrl } from '../../page/api.js';
 import { atlasOrder } from '/shared/map.js';
 import { state as mapState } from '../../map/state.js';
 import { state, nav, base, report, pictureImg, fam, kindBadge } from '../data.js';
@@ -17,6 +17,7 @@ import { newFromTemplate } from '../templates.js';
 import { drawLists } from './lists.js';
 import { drawInsights } from './insights.js';
 import { STARTER_TEMPLATES } from '/shared/wiki-templates.js';
+import { h } from '../../page/dom.js';
 
 /** Draw the hub into `box` (it fills in when the server answers). */
 export async function drawHub(box) {

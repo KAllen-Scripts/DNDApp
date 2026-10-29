@@ -7,19 +7,12 @@
  * a card: Open page, Centre here, Add a link. On a phone, a page's web is a
  * ring round it, and a tap re-centres.
  */
-import { api, h } from '../../page/api.js';
+import { api } from '../../page/api.js';
 import { KIND_FAMILIES } from '/shared/wiki.js';
 import { panZoom } from '../../page/pan-zoom.js';
-import { state, nav, base, report, pictureImg, playerName } from '../data.js';
+import { state, nav, base, report, pictureImg, playerName, truthOn } from '../data.js';
 import { timeSlider } from '../asof.js';
-
-const SVG = 'http://www.w3.org/2000/svg';
-const svg = (tag, attrs = {}, ...kids) => {
-  const el = document.createElementNS(SVG, tag);
-  for (const [k, v] of Object.entries(attrs)) if (v != null) el.setAttribute(k, String(v));
-  el.append(...kids.filter(Boolean));
-  return el;
-};
+import { h, svg } from '../../page/dom.js';
 
 // What the Web shows, kept while the DM moves round the wiki.
 // `at`: the moment shown (stage 11), or null for now.
@@ -27,7 +20,6 @@ const opts = { steps: 2, families: [], mentions: false, preset: null, at: null }
 let pan = null;
 
 const phone = () => window.matchMedia?.('(max-width: 700px)').matches ?? false;
-const truthOn = () => document.querySelector('#tab-wiki')?.hasAttribute('data-truth') ?? false;
 
 /** On a phone: the page in the middle and the pages tied to it round it, the rest left out. */
 function ring(web) {

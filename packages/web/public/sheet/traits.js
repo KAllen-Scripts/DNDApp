@@ -9,9 +9,9 @@
  *
  * The lists are in shared/class-traits.js and shared/attack-extras.js; sheet.js passes in what this needs.
  */
-import { h } from '../page/api.js';
 import { traitRows } from '/shared/class-traits.js';
 import { choiceGroups, normalizeCombat } from '/shared/attack-extras.js';
+import { h } from '../page/dom.js';
 
 const HOW = { number: 'in your numbers', roll: 'in your rolls', choice: 'pick below' };
 

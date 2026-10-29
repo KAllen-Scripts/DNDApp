@@ -4,9 +4,9 @@
  * editor's picker, and the DM's Truth toggle in the space's bar. The server already gives a player a falsehood as a
  * rumour and never a planned part or the truth; this only draws what it gets.
  */
-import { h } from '../page/api.js';
 import { CANONS, normalizeCanon } from '/shared/wiki.js';
 import { state, nav, playerName } from './data.js';
+import { h } from '../page/dom.js';
 
 const TRUTH_KEY = 'dndapp.wiki.truth';
 

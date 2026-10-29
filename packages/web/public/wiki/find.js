@@ -5,12 +5,12 @@
  * guy with the eyepatch" finds Rennick. In the wiki a card opens its page; at
  * the table, the drawer.
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { state, nav, base, pictureImg, fam, kindBadge } from './data.js';
 import { openDrawer } from './drawer.js';
 import { openMakeUp } from './write.js';
+import { $, h } from '../page/dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 let timer = null;
 let asked = 0;
 

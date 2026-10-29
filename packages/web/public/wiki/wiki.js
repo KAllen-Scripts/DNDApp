@@ -18,7 +18,7 @@
  * This module runs the tab (the list, the front page, which view is shown);
  * a page is drawn by wiki/page.js and the AI's changes by wiki/views/waiting.js.
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { wikiKey, KIND_FAMILIES, isPrepPage } from '/shared/wiki.js';
 import { state, nav, base, status, report, availableText, playerName, pictureImg, clearPictures, fam, kindBadge, matchesFilter } from './data.js';
 import { pageLink, hidePreview, hero, pageContent, editor } from './page.js';
@@ -46,8 +46,7 @@ import './handout.js';
 import { drawFromSheet } from './character-sheet.js';
 import { drawLore } from './lore.js';
 import { prepBoard } from './views/prep.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { $, h } from '../page/dom.js';
 
 export async function loadWiki({ campaignId, guarded, isDm = true, userId = null }) {
   clearTimeout(state.poll);

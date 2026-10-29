@@ -3,10 +3,9 @@
  * page about their past, a relationship or an event), each for whoever they choose; it waits for the DM, who
  * approves it. Once approved, they can change their own parts; it applies at once.
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { state, nav, base, status, report } from './data.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { $, h } from '../page/dom.js';
 
 const TYPES = [
   ['section', 'A part of your story', 'Something about your character: where they come from, what they want, what happened to them.'],

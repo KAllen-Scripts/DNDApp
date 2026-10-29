@@ -7,15 +7,7 @@
  */
 import { fileUrl } from '../../page/api.js';
 import { nav } from '../data.js';
-
-const NS = 'http://www.w3.org/2000/svg';
-
-function svg(tag, attrs = {}, ...children) {
-  const el = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs)) if (v != null) el.setAttribute(k, String(v));
-  for (const c of children) if (c) el.append(typeof c === 'string' ? document.createTextNode(c) : c);
-  return el;
-}
+import { svg } from '../../page/dom.js';
 
 const at = (r, a) => [r * Math.cos(a), r * Math.sin(a)];
 

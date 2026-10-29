@@ -5,10 +5,11 @@
  * map of where it is (opening the Atlas), its ties (to the Web) and a ribbon of
  * its moments (to the Timeline). The server works it out for the viewer (GET …/wiki/:pid/compass).
  */
-import { api, h, fileUrl } from '../page/api.js';
+import { api, fileUrl } from '../page/api.js';
 import { miniCrop, miniRibbon } from '../page/mini-views.js';
 import { KIND_FAMILIES } from '/shared/wiki.js';
 import { state, nav, base, pictureImg, fam } from './data.js';
+import { h } from '../page/dom.js';
 
 const chip = (p) => h('button', { type: 'button', class: `wiki-compass-chip fam-${fam(p.kind)}`, title: p.title, onclick: () => nav.go(`#/page/${p.id}`) },
   h('span', { class: `wiki-compass-art${p.picture ? ' has-picture' : ''}`, 'aria-hidden': 'true' }, p.picture ? pictureImg(p.picture, { size: 'thumb' }) : null),

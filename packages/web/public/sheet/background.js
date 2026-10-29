@@ -7,8 +7,8 @@
  * Equipment and gold only where they're empty. It says what changed, with
  * Undo, and what the background gives.
  */
-import { h } from '../page/api.js';
 import { applyBackground, backgroundSummary, backgroundsFor, findBackground } from '/shared/backgrounds.js';
+import { h } from '../page/dom.js';
 
 // What was last applied, kept across redraws of the sheet: { name, changes, notes, before }.
 let applied = null;

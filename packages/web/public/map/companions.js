@@ -5,12 +5,12 @@
  */
 import { onMap, select, toImage } from './map.js';
 import { TOKEN_SIZES, TOKEN_SIZE_NAMES, statBlockRolls } from '/shared/map.js';
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { base, report, state, status } from './state.js';
 import { field, fillStats } from './dm-tools.js';
 import { roll, rollModeFromEvent } from '../dice/dice.js';
+import { $, h } from '../page/dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 const signed = (n) => (n < 0 ? `−${Math.abs(n)}` : `+${n}`);
 const plus = (n) => (n < 0 ? `-${Math.abs(n)}` : `+${n}`);
 

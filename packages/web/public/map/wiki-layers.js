@@ -7,14 +7,14 @@
  * always in the wiki's Atlas (wiki/views/atlas.js). The server works the layers out
  * from the pages the viewer may see (GET …/wiki/atlas?map=&as=).
  */
-import { api, h, storage } from '../page/api.js';
+import { api, storage } from '../page/api.js';
 import { KIND_FAMILIES } from '/shared/wiki.js';
 import { nav, pictureImg } from '../wiki/data.js';
 import { state } from './state.js';
 import { show, svgEl } from './map.js';
+import { $, h } from '../page/dom.js';
 
 const KEY = 'dndapp.map.wikiLayers';
-const $ = (sel) => document.querySelector(sel);
 
 const layer = {
   forced: false, // the Atlas has them on whatever the button says

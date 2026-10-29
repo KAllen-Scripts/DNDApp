@@ -3,14 +3,13 @@
  * Settings button in the top bar; everyone's page hears the change live
  * (table.js calls settingsHeard) and the sheet works itself out again.
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { ATTACK_DAMAGE, EDITIONS, TRAVEL_PARTS, TRAVEL_TIME, WEIGHT_RULES, normalizeSettings } from '/shared/settings.js';
 import { setSheetSettings } from '../sheet/sheet.js';
 import { backgroundsSection } from './backgrounds.js';
 import { calendarSection } from './calendar.js';
 import { levelsSection } from './levels.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { $, h } from '../page/dom.js';
 
 const state = { campaignId: null, guarded: (fn) => fn(), isDm: false, settings: normalizeSettings() };
 

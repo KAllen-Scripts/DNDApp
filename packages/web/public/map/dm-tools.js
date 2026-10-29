@@ -4,7 +4,7 @@
  */
 import { KIND_LABELS, onGone, onMap, renderGrid, select, show, toImage } from './map.js';
 import { PIN_MAP_KINDS, TOKEN_COLORS, TOKEN_KINDS, TOKEN_KIND_NAMES, TOKEN_SIZES, TOKEN_SIZE_NAMES, UNITS } from '/shared/map.js';
-import { api, h, readBase64 } from '../page/api.js';
+import { api } from '../page/api.js';
 import { base, downloadUvtt, report, state, status } from './state.js';
 import { creatureList, creatureSaved } from '../creatures/creatures.js';
 import { markdownBox } from '../page/markdown.js';
@@ -12,8 +12,7 @@ import { showStatBlock, statsFound } from '../creatures/stat-block.js';
 import { openCreator } from './creator/creator.js';
 import { encounterFields, whoField } from './places.js';
 import { wikiPageField } from './wiki-link.js';
-
-const $ = (sel) => document.querySelector(sel);
+import { $, h, readBase64 } from '../page/dom.js';
 
 // ---------- the DM's tools ----------
 

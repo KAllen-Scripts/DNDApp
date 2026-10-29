@@ -7,14 +7,14 @@
  *
  * The server moves the tokens; the page only shows them and sends what people do.
  */
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { characterMap, isPinMap, nearLink, nearPlace, parentOf } from '/shared/map.js';
 import { base, report, state, status } from './state.js';
 import { campaignPlayers } from './dm-tools.js';
 import { journeyText } from './travel.js';
 import { noteOnMap, onMap, patchToken, select, show, toImage } from './map.js';
+import { $, h } from '../page/dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 /** A pin's size on screen (px), and how far apart pins that meet fan out. */
 export const PIN_PX = 40;
 

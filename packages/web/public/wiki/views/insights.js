@@ -3,8 +3,9 @@
  * "Previously on…" to read aloud, loose threads and contradictions, each with Open, Dismiss and, for a
  * contradiction, Propose the fix (it then waits under Waiting).
  */
-import { api, h } from '../../page/api.js';
+import { api } from '../../page/api.js';
 import { state, nav, base, report, status } from '../data.js';
+import { h } from '../../page/dom.js';
 
 const LABELS = { previously: 'Previously on…', loose_thread: 'Loose thread', contradiction: 'The records disagree' };
 const ICONS = { previously: '☾', loose_thread: '⧖', contradiction: '⚠' };

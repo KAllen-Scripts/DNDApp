@@ -12,14 +12,14 @@
  * (docs/notes/wiki-space.md).
  */
 import { initTruthToggle } from './canon.js';
-import { api, h } from '../page/api.js';
+import { api } from '../page/api.js';
 import { clockText } from '/shared/settings.js';
 import { state, nav, pictureImg, fam } from './data.js';
 import { openFind } from './find.js';
 import { leaveAtlas } from './views/atlas.js';
 import { leavePanel, PANEL_VIEWS } from './panels.js';
+import { $, h } from '../page/dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 const TRAIL_MAX = 8;
 
 let trail = []; // pages opened, newest last: { id, title, kind, picture }

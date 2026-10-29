@@ -5,7 +5,7 @@
  * gets Creatures (creatures.js) in its place, and Items (items.js) and
  * Merchants (merchants.js) to set up shops.
  */
-import { api, stream, storage, getToken, setToken, LoggedOut, h } from './api.js';
+import { api, stream, storage, getToken, setToken, LoggedOut } from './api.js';
 import { showAdmin } from '../admin/admin.js';
 import { loadSheet, initSheetActions, flush as flushSheet } from '../sheet/sheet.js';
 import { markdownFragment } from './markdown.js';
@@ -31,8 +31,8 @@ import { loadMerchants, initMerchantActions, merchantsOpened, openShop } from '.
 import { initPhone, phoneMenu, phoneSheet } from './phone.js';
 import { initBarFit } from './topbar-fit.js';
 import { WINDOW_TAB, SHEET_WINDOW, windowCampaign, besidePanel, placeBeside, setSheetCampaign, initSheetPlace } from './side-panel.js';
+import { $, h } from './dom.js';
 
-const $ = (sel) => document.querySelector(sel);
 const APP_NAME = 'The Party Ledger'; // the site's name (the domain is thepartyledger.fyi)
 const CAMPAIGN_KEY = 'dndapp.campaign'; // last campaign chosen in this browser (pre-selected next time)
 

@@ -6,7 +6,7 @@
  * Opened and closed folds are remembered for this page only; on a fresh load
  * they start the way the sheet asks (closed, unless there's nothing yet).
  */
-import { h } from '../page/api.js';
+import { h } from '../page/dom.js';
 
 const opened = new Map();
 
