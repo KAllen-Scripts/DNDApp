@@ -28,6 +28,7 @@ import { registerMerchants } from './routes/merchants.js';
 import { registerMapCreator } from './routes/map-creator.js';
 import { LABEL_FONT_FILES } from './maps/fonts.js';
 import { registerRests } from './routes/rests.js';
+import { registerLevelUp } from './routes/level-up.js';
 import { registerCompanions } from './routes/companions.js';
 import { registerItemActions } from './routes/item-actions.js';
 import { registerWiki } from './routes/wiki.js';
@@ -112,6 +113,7 @@ const WEB_MODULES = {
   '/shared/attack-extras.js': '@dndapp/shared/attack-extras.js',
   '/shared/spell-slots.js': '@dndapp/shared/spell-slots.js',
   '/shared/class-traits.js': '@dndapp/shared/class-traits.js',
+  '/shared/level-up.js': '@dndapp/shared/level-up.js',
   '/shared/subclass-traits.js': '@dndapp/shared/subclass-traits.js',
   '/shared/feats.js': '@dndapp/shared/feats.js',
   '/shared/gear.js': '@dndapp/shared/gear.js',
@@ -450,6 +452,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   registerMerchants(app, r);
   registerMapCreator(app, r);
   registerRests(app, r);
+  registerLevelUp(app, r);
   registerCompanions(app, r);
   registerItemActions(app, r);
   registerWikiOverview(app, r);

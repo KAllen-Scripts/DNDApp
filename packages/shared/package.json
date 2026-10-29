@@ -48,6 +48,7 @@
     "./map-stamps.js": "./src/map-stamps.js",
     "./citations.js": "./src/citations.js",
     "./coins.js": "./src/coins.js",
+    "./level-up.js": "./src/level-up.js",
     "./settings.js": "./src/settings.js",
     "./wiki.js": "./src/wiki.js"
   },

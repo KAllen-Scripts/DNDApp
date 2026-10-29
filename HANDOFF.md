@@ -17,11 +17,12 @@ Read this first when picking the project up on another machine or with another A
 
 ---
 
-## Current state (2026-10-22)
+## Current state (2026-10-28)
 
 Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept current since. Everything below is on `main` unless it says otherwise. On 2026-10-13 it was checked against the whole first Claude project (its chat, every thread, its memory and shared files) before the owner moved to a new project; the design notes and research from that project are now in [docs/notes/](docs/notes/README.md).
 
 **What's built** (SPEC has the design of each; §6.1 is the list):
+- **Level up** (2026-10-28; the owner's feedback: "Triggered by the DM, or the player, depending on what the DM choose"): ⬆ Level up under the character's name takes a level in a class or a new one (average or rolled hit points, a subclass and an ASI or feat where the level gives one, a preview of what it brings). The DM picks in Campaign settings → Levelling up whether players level up when ready (default) or only once given a level, and gives levels there (SPEC §6.4).
 - **Example data** (2026-10-28): `DATA_SET=example` switches the server to `data-example/`, seeded by itself with a made-up campaign (sheets, wiki, creatures, items, merchants, linked maps) and four transcripts to feed in (`example/`).
 - **Server, end to end with real AI calls:** player notes → transcript upload (with date) → attendance → the **archivist** (an AI with full authority over the knowledge base) → per-player Q&A with privacy. Verified with a realistic two-session privacy scenario through Claude Code. Between sessions the archivist also reads character sheets (in full, then each change with its time), late note changes, handouts (text, and what the AI read in their pictures), and (with each session) what happened on the maps. **Archiving is thorough** (2026-10-14, the owner: "No truncating or shortening"): the archivist is told to keep every detail and never lose one, nothing it or Q&A reads is cut short (`fit.js`), and meaning search covers all of a long record (SPEC §5.1).
 - **Web page** (no Electron; served by the server at `/`): name + password logins set by the admin (who can force a password change), several campaigns per account, Ask (streamed answers, citations with transcript evidence, chats you can pin, rename, delete), Notes (edit and delete keep versions), an admin screen (accounts, campaigns, roles), and the DM's Sessions tab (transcript uploads to a campaign they pick, with speaker linking).
@@ -88,6 +89,7 @@ Rewritten (not appended to) on 2026-10-08 after a housekeeping audit, and kept c
 
 ## Next steps
 
+0. **Level up (2026-10-28 feedback): built.** The owner tries it (VS Code list). Defaults picked: players level up when ready (the DM can switch to giving levels); multiclass prerequisites only warn. Not built: picking new spells in the dialog, multiclass proficiencies.
 0. **Example data (2026-10-28): built.** The owner switches it on (`DATA_SET=example`, README) and feeds `example/transcripts/` in, in order, dated after the seed day. What each session should produce is in `example/transcripts/README.md`; questions to ask as each player in `example/ask-checks.md`.
 0. **Tidier pages (2026-10-21 feedback items 1, 4, 6, 14, 15): built.** The owner checks them on his PC and phone (VS Code list). If the top bar still wraps there (wider fonts), the next step is icons only for Pop out, Dice and Rest at more widths.
 0. **Item actions (2026-10-22): built.** The owner tries it (VS Code list). Open for him: should a summon's "until" (1 hour, 6 hours) also run out on the clock, not only dawn? Item charges still never come back by themselves (his 2026-10-10 call); a Recharge at dawn button per item could follow if he wants it.
@@ -166,6 +168,7 @@ When you change the web page, add or update a test in `packages/web/test/` (READ
 
 - **Switch campaign (2026-10-28):** with an account in two campaigns, on the PC and the phone: Switch campaign should be beside the campaign's name and in the ⚙ menu (on the phone, the ☰ sheet), and the Sessions tab should say "For" the campaign you're in, with no picker.
 - **Ask's faster model (2026-10-28):** with the real AI, ask the Bag of Tricks question, then a question naming someone in the records ("What does <NPC> want?"), then one naming nothing ("What happened at the last fight?"). In `data/server.log` the first two `Ask answered` lines should say `"model":"claude-sonnet-5-5"` and the third the main model; compare `total_ms` with older lines, and check the Sonnet answers are right. Press Look it up properly on the second and check it says the main model.
+- **Level up (2026-10-28):** as a player, Level up from under the name (average, then rolled: the dice show the roll), and a new class; as the DM, Campaign settings → Levelling up → "only when I give them a level", Give a level, and check the player's sheet shows the note and button live. Check the dialog on a phone.
 - **Transcript progress (2026-10-28, rest of the transcript upload check):** upload a transcript with the real AI running (the browser script's fake AI finishes at once): does the Sessions table show processing's progress, on the PC and the phone? (The picker, the speaker guesses and the phone layout were checked in Chrome on 2026-10-28.)
 - **Back to the real data (2026-10-28, rest of the example data check):** the live server was running on the example data on 2026-10-28 (`.env` has `DATA_SET=example`). Take the line out and `npm run restart`: the real data should be back. (The example campaign itself was checked in Chrome on 2026-10-28.)
 - **As of (2026-10-27, stage 11):** on the real campaign, in the Atlas and the Web, drag As of back through the sessions: do the tokens and pages look as they did then, and is it quick enough (the first time for each session is the slow one)? View as a player in the past. On the Timeline, try Lanes by character after a few journeys.
@@ -1911,3 +1914,9 @@ The owner (2026-10-21 feedback, item 2): "some way of managing attacks and such 
 - Not timed with the real AI. SPEC v0.99 (§5.3), docs/notes/ask-speed.md, `.env.example`.
 - Tests: server `ask-models.test.js` (which model, the model passed, thorough and off go to the main one); web `app.test.js` (the button under a fast answer from the records).
 
+### 2026-10-28: Level up
+- The owner's feedback (2026-10-28): "We want a 'level up' feature if not already. Triggered by the DM, or the player, depending on what the DM choose." There was none (only Review sheet's "Time to level up?").
+- `shared/src/level-up.js`: choices (each class's next level, new classes with the PHB multiclass 13s as a warning, subclass levels by edition, ASI levels with fighters' and rogues' extras), `levelUp` (the level, a subclass, ASI or a feat written as "Feat: …", hit points up by what the maximum goes up by, a typed maximum too, logged in `level_log`), `levelUpChanges` (the preview). Rolled hit points count instead of the average in `computeSheet` while the class keeps that level. `MULTICLASS` moved here from the sheet review.
+- Server `routes/level-up.js`: `POST /sheet/level-up` (rolls through the roll log, refuses before rolling), `GET /levels` and `POST /levels/grant` for the DM. New setting `level_up` (player | dm). `levels_granted` on the sheet changes only through these routes (`sheets.save(…, { levels: true })`).
+- Page: `sheet-level-up.js` (the button and note under the name, the dialog), `campaign-levels.js` (Levelling up in Campaign settings).
+- Tests: `shared/test/level-up.test.js`, `server/test/level-up.test.js`, `web/test/level-up.test.js`.

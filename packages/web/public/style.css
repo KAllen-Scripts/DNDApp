@@ -1638,6 +1638,20 @@ input.num, .sheet .num { text-align: center; }
 .ws-text { margin: 0.1rem 0; }
 .ws-banner { margin: 0.2rem 0 0; color: var(--accent); font-weight: 600; }
 .ws-banner[hidden] { display: none; }
+/* Level up (sheet-level-up.js): under the name; the DM's levels given stand out. */
+.level-up-banner { margin: 0.2rem 0 0; display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.level-up-banner[hidden] { display: none; }
+.level-up-banner.granted span { color: var(--accent); font-weight: 600; }
+.level-up-banner:not(.granted) span:empty { display: none; }
+@media print { .level-up-banner { display: none; } }
+.level-up-dialog fieldset { border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 0.6rem; margin: 0.5rem 0; display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem; }
+.level-up-dialog fieldset [hidden], .level-up-dialog [hidden] { display: none; }
+.level-up-warning { color: var(--warn, #b45309); }
+.level-up-changes { margin: 0.2rem 0 0.5rem; padding-left: 1.2rem; max-height: 14rem; overflow: auto; }
+.level-levels { list-style: none; padding: 0; margin: 0.3rem 0; }
+.level-levels li { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; padding: 0.2rem 0; }
+.level-levels li .spacer { flex: 1; }
+.level-given { color: var(--accent); }
 .ws-add { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .ws-add input { flex: 1 1 12rem; width: auto; }
 .ws-add button { height: var(--ctl); padding: 0 1rem; }
