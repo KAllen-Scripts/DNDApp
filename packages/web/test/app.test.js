@@ -459,6 +459,19 @@ test('a quick answer offers "Look it up properly", which asks again the thorough
   });
 });
 
+test('an answer the faster model wrote from the records offers "Look it up properly" too', async () => {
+  const llm = createFakeLLM({ qaScript: [[{ answer: 'Hal runs the inn.' }]] });
+  await withPage(
+    { setup: { llm }, before: (t) => t.kb.create(t.campaign.id, 'r', { kind: 'npc', title: 'Brother Hal', body: 'Innkeeper in Brindle.' }), page: (t) => ({ as: t.sam }) },
+    async (page) => {
+      page.type('#ask-form textarea', 'What does Brother Hal want?');
+      page.submit('#ask-form');
+      await page.settle();
+      assert.match(page.text('#thread .a'), /Quick answer from the records\. Look it up properly/);
+    },
+  );
+});
+
 // ---------- chats ----------
 
 test('chats: follow-ups stay in the chat; chats can be found, opened, pinned, renamed and deleted', async () => {

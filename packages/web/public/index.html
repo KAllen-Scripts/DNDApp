@@ -111,7 +111,7 @@
       <div class="who">
         <strong id="campaign-name"></strong>
         <span id="character" class="muted"></span>
-        <button id="switch-campaign" class="link" hidden>Switch campaign</button>
+        <button id="switch-campaign" class="link switch-campaign" hidden>Switch campaign</button>
       </div>
       <nav class="tabs" role="tablist">
         <button role="tab" data-tab="ask" aria-selected="true"><span class="tab-icon" aria-hidden="true">✦</span><span data-label="Ask">Ask</span></button>
@@ -135,6 +135,7 @@
         <button type="button" id="account-menu-open" class="ghost bar-tool" title="Settings, look, password, log out" aria-haspopup="true" aria-expanded="false" aria-controls="account-menu"><span class="bar-icon" aria-hidden="true">⚙</span><span id="account-name" class="bar-label">Account</span><span class="bar-caret" aria-hidden="true">▾</span></button>
         <div id="account-menu" class="account-menu-list">
           <button id="settings-open" class="ghost" title="Campaign settings: weight limits, travel, calendar" hidden>Campaign settings</button>
+          <button class="ghost switch-campaign" title="Go to another of your campaigns" hidden>Switch campaign</button>
           <button class="ghost look-open" title="Themes and layouts">Look</button>
           <button class="ghost change-password">Change password</button>
           <button class="ghost logout">Log out</button>
@@ -194,7 +195,7 @@
       <div id="handouts" class="handouts"></div>
     </section>
 
-    <!-- The DM's session transcripts: upload one to any campaign they run, and see each one's processing (sessions.js). -->
+    <!-- The DM's session transcripts for the campaign they're in: upload one, and see each one's processing (sessions.js). -->
     <section id="tab-sessions" class="panel archivist-panel sessions-panel" hidden>
       <h2>Session transcripts</h2>
       <p class="muted small">Upload the transcript of each session you play. The archivist reads it to keep the campaign's records, and the names in it say who was there (and so who knows what).</p>

@@ -365,10 +365,11 @@ export function createTools({ db, store, kb, search, books, wiki = null, config,
      * in one turn. Free and fast (local search only). A quick question
      * (qa/route.js) passes a smaller budget and only the records and wiki.
      * @param {{ tokens?: number, only?: ('kb' | 'chunk' | 'note' | 'wiki')[] }} [opts]
+     * @returns {Promise<{ text: string, found: string[] }>}  found: titles of the records and wiki pages shown
      */
     async preSearch(question, { tokens = config.qa.preSearchTokens, only = null } = {}) {
       const budget = tokens * 4;
-      if (budget <= 0) return '';
+      if (budget <= 0) return { text: '', found: [] };
       const want = (kind) => !only || only.includes(kind);
       const [kbHits, chunkHits, noteHits, wikiPages] = await Promise.all([
         want('kb') ? search.search(campaignId, question, { kinds: ['kb'], viewer, limit: 4 }) : [],
@@ -378,19 +379,21 @@ export function createTools({ db, store, kb, search, books, wiki = null, config,
       ]);
       // Best of each kind first, then the next best of each, and so on; each piece whole, never cut short.
       const lists = [
-        recordsFromHits(kbHits).map((r) => ({ text: renderRecord(r), ref: `record #${r.id} ${r.title}` })),
+        recordsFromHits(kbHits).map((r) => ({ text: renderRecord(r), ref: `record #${r.id} ${r.title}`, names: [r.title] })),
         chunkHits.map((h) => ({ text: formatChunks([h]), ref: `transcript ${chunkRef(h)}` })),
         noteHits.map((h) => ({ text: formatNotes([h]), ref: `your note ${h.title}` })),
-        wikiSections(wikiPages).map((x) => ({ text: renderWiki(x), ref: `wiki ${x.page.title}${x.section.heading ? ` › ${x.section.heading}` : ''}` })),
+        wikiSections(wikiPages).map((x) => ({ text: renderWiki(x), ref: `wiki ${x.page.title}${x.section.heading ? ` › ${x.section.heading}` : ''}`, names: [x.page.title] })),
       ];
       const parts = [];
       for (let i = 0; lists.some((l) => i < l.length); i++) for (const l of lists) if (l[i]) parts.push(l[i]);
-      if (!parts.length) return '';
-      return fitWhole(parts, budget, {
+      if (!parts.length) return { text: '', found: [] };
+      const { text, shown } = fitWhole(parts, budget, {
         sep: '\n\n',
         render: (p) => p.text,
         leftOver: (left) => `Also matched, not shown here: ${left.map((p) => p.ref).join('; ')}`,
-      }).text;
+      });
+      // The records and wiki pages shown, by name (qa/route.js pickModel: is the answer already here?).
+      return { text, found: [...new Set(shown.flatMap((p) => p.names ?? []))] };
     },
 
     /**

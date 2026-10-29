@@ -138,43 +138,8 @@ export function sheetActions(sheet, calc, { slots = {}, edition = '2014' } = {})
   return out.slice(0, 120);
 }
 
-/** Spell slots left: { 1: n, ..., 9: n } and pact: { level, left } (warlocks). */
-export function slotsLeft(sheet, calc) {
-  const out = {};
-  for (let n = 1; n <= 9; n++) out[n] = Math.max(0, (Number(calc.values[`slots.${n}`]) || 0) - (sheet.spellcasting?.slots_used?.[n] ?? 0));
-  const pactLevel = Number(calc.values.pact_level) || 0;
-  out.pact = { level: pactLevel, left: pactLevel ? Math.max(0, (Number(calc.values.pact_slots) || 0) - (sheet.spellcasting?.pact_used ?? 0)) : 0 };
-  return out;
-}
-
-/**
- * Spend a slot of `level` for a spell: an ordinary slot of that level, else a
- * Pact Magic slot of that level. Returns { sheet, used: 'slot' | 'pact' }, or
- * null when none is left.
- */
-export function spendSlot(sheet, calc, level) {
-  const left = slotsLeft(sheet, calc);
-  const out = structuredClone(sheet);
-  out.spellcasting ??= { class: '', slots_used: {}, pact_used: 0 };
-  out.spellcasting.slots_used ??= {};
-  if (left[level] > 0) {
-    out.spellcasting.slots_used[level] = (out.spellcasting.slots_used[level] ?? 0) + 1;
-    return { sheet: out, used: 'slot' };
-  }
-  if (left.pact.level === level && left.pact.left > 0) {
-    out.spellcasting.pact_used = (out.spellcasting.pact_used ?? 0) + 1;
-    return { sheet: out, used: 'pact' };
-  }
-  return null;
-}
-
-/** Give back a slot spent by spendSlot (Undo). */
-export function refundSlot(sheet, level, used) {
-  const out = structuredClone(sheet);
-  if (used === 'pact') out.spellcasting.pact_used = Math.max(0, (out.spellcasting.pact_used ?? 0) - 1);
-  else if (out.spellcasting?.slots_used?.[level]) out.spellcasting.slots_used[level] -= 1;
-  return out;
-}
+// Spell slots (left, spend, give back, cast with): spell-slots.js, shared with the sheet page.
+export { castLevels, castWithSlot, refundSlot, slotsLeft, spendSlot } from './spell-slots.js';
 
 // ---------- what a creature can do (from its stat block) ----------
 
