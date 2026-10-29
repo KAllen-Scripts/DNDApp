@@ -319,7 +319,7 @@ export function exposureWarnings({ host, publicUrl }) {
   if (!LOOPBACK.has(host)) {
     warnings.push(
       `HOST is ${host}, so other machines can reach this server directly over plain http, where passwords and logins can be read in transit. ` +
-        'Keep HOST=127.0.0.1 and let players in through an https tunnel or reverse proxy (see README, "Letting players in safely").',
+        'Keep HOST=127.0.0.1 and let players in through an https tunnel or reverse proxy (see docs/hosting.md, "Letting players in safely").',
     );
   }
   if (publicUrl && !publicUrl.startsWith('https://')) {

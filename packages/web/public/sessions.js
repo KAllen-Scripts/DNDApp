@@ -294,7 +294,7 @@ function renderRecorder() {
   const { bot, link, live, recordings } = state.rec;
   const out = [h('h3', {}, 'Record from Discord')];
   if (!bot.configured) {
-    out.push(h('p', { class: 'small muted' }, 'The Discord bot isn’t set up on this server. Whoever hosts the server adds the bot’s token (DISCORD_BOT_TOKEN) to its .env file; the README says how. Transcripts from anything else can still be uploaded below.'));
+    out.push(h('p', { class: 'small muted' }, 'The Discord bot isn’t set up on this server. Whoever hosts the server adds the bot’s token (DISCORD_BOT_TOKEN) to its .env file; docs/hosting.md in the app’s folder says how. Transcripts from anything else can still be uploaded below.'));
     return out;
   }
   if (bot.error) out.push(h('p', { class: 'small error' }, bot.error));
