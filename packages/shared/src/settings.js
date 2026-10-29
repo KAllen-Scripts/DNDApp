@@ -66,7 +66,16 @@ export const normalizeAttackSettings = (a = {}) => ({
   damage: a && a.damage in ATTACK_DAMAGE ? a.damage : DEFAULT_ATTACKS.damage,
   show_ac: typeof a?.show_ac === 'boolean' ? a.show_ac : DEFAULT_ATTACKS.show_ac,
 });
-export const DEFAULT_SETTINGS = Object.freeze({ weight: 'capacity', edition: null, clock: START_CLOCK, travel: DEFAULT_TRAVEL, attacks: DEFAULT_ATTACKS, backgrounds: Object.freeze([]), calendar: null, wiki: Object.freeze({ lanes: Object.freeze([]) }) });
+/**
+ * level_up: who starts a level up (level-up.js; owner, 2026-10-28: "Triggered by the DM, or the player, depending
+ * on what the DM choose"): 'player' (players level up when they're ready) or 'dm' (only once the DM has given them
+ * a level). The DM can give levels either way.
+ */
+export const LEVEL_UP_WHO = {
+  player: 'Players level up when they’re ready',
+  dm: 'Players level up when I give them a level',
+};
+export const DEFAULT_SETTINGS = Object.freeze({ weight: 'capacity', edition: null, level_up: 'player', clock: START_CLOCK, travel: DEFAULT_TRAVEL, attacks: DEFAULT_ATTACKS, backgrounds: Object.freeze([]), calendar: null, wiki: Object.freeze({ lanes: Object.freeze([]) }) });
 /** The clock goes at most this far (about 27,000 years of days), so it stays a plain number. */
 export const MAX_CLOCK = 1440 * 10_000_000;
 
@@ -80,6 +89,7 @@ export function normalizeSettings(s = {}) {
   return {
     weight: s && s.weight in WEIGHT_RULES ? s.weight : DEFAULT_SETTINGS.weight,
     edition: s && String(s.edition) in EDITIONS ? String(s.edition) : DEFAULT_SETTINGS.edition,
+    level_up: s && s.level_up in LEVEL_UP_WHO ? s.level_up : DEFAULT_SETTINGS.level_up,
     clock: Number.isInteger(s?.clock) && s.clock >= 0 && s.clock <= MAX_CLOCK ? s.clock : DEFAULT_SETTINGS.clock,
     travel: normalizeTravel(s?.travel),
     attacks: normalizeAttackSettings(s?.attacks),

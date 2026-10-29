@@ -8,6 +8,7 @@ import { ATTACK_DAMAGE, EDITIONS, TRAVEL_PARTS, TRAVEL_TIME, WEIGHT_RULES, norma
 import { setSheetSettings } from './sheet.js';
 import { backgroundsSection } from './campaign-backgrounds.js';
 import { calendarSection } from './campaign-calendar.js';
+import { levelsSection } from './campaign-levels.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -98,6 +99,8 @@ function openDialog() {
   // The DM's own backgrounds (campaign-backgrounds.js): every player's sheet suggests them.
   // The calendar (campaign-calendar.js): what the clock's days are called, everywhere.
   const calendar = calendarSection({ get: () => state.settings, save });
+  // Levelling up (campaign-levels.js): who starts it, and giving the party levels.
+  const levels = levelsSection({ campaignId: state.campaignId, guarded: state.guarded, get: () => state.settings, save });
   const backgrounds = backgroundsSection({ list: () => state.settings.backgrounds, save: (list, done) => save({ backgrounds: list }, done) });
   dialog.replaceChildren(
     h('form', { method: 'dialog', class: 'map-dialog-inner', onsubmit: (e) => e.preventDefault() },
@@ -106,6 +109,7 @@ function openDialog() {
       h('p', { class: 'muted small' }, EDITION_HELP),
       h('label', { class: 'fld' }, h('span', {}, 'Weight limits'), weight),
       help,
+      levels.el,
       h('h3', {}, 'Travel in the world'),
       h('label', { class: 'fld' }, h('span', {}, 'Travel time'), time),
       ...parts,

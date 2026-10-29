@@ -15,7 +15,7 @@ recaps, go off topic, and the transcription mishears names now and then ("Salt R
 ## How to upload them
 
 1. Run the server on the example data (see [../README.md](../README.md)) and log in as `test-rowan` (the DM).
-   Open the **Sessions** tab; the Campaign picker is already on *The Lanterns of Saltreach*.
+   Open the **Sessions** tab (it is for the campaign you're in, *The Lanterns of Saltreach*).
 2. Upload them in order, numbers 1 to 4, each with a played date **after** the day you seeded the example
    and later than the one before (for example the next four days, or four weeks in a row). Sessions take
    the map and sheet changes made on or before their date, and the seed made lots on its day.
