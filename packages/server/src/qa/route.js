@@ -75,3 +75,36 @@ export function routeQuestion(question, { names = [], mode = 'auto', previous = 
   if (DND_WORDS.test(q) || DND_SHAPES.test(q)) return { path: 'quick', reason: 'general D&D question' };
   return full('not clearly a general D&D question');
 }
+
+/**
+ * Which model answers (owner, 2026-10-28: "could we quickly decide if it's
+ * stored in the data we have, or needs looking up, then assign a fast model
+ * if we have it, or more intelligent model if we don't?"). Decided without
+ * the AI, after the automatic search, so it costs nothing:
+ *
+ *   fast: the quick way (a general D&D lookup), or a campaign question that
+ *         names something the automatic search found a record or wiki page
+ *         for ("What does Brother Hal want?" with Brother Hal's record in
+ *         front of the model).
+ *   main: anything else (it needs digging: transcripts, several records, the
+ *         books), and whenever the asker pressed "Look it up properly".
+ *
+ * The fast model still has every tool, so it can look further when the
+ * record isn't enough.
+ *
+ * @param {string} question
+ * @param {{ path: 'quick' | 'full' }} route  routeQuestion's answer
+ * @param {{ mode?: 'auto' | 'quick' | 'thorough', found?: string[], fast?: string | null }} [opts]
+ *   found: titles of the records and wiki pages the automatic search put in front of the model;
+ *   fast: the fast model (config.qa.fastModel), null when it's turned off.
+ * @returns {{ model: 'fast' | 'main', reason: string }}
+ */
+export function pickModel(question, route, { mode = 'auto', found = [], fast = null } = {}) {
+  if (!fast) return { model: 'main', reason: 'no fast model set' };
+  if (mode === 'thorough') return { model: 'main', reason: 'asked for a thorough answer' };
+  if (route.path === 'quick') return { model: 'fast', reason: 'general D&D question' };
+  const text = words(question);
+  const hit = found.find((t) => usableName(t) && text.includes(words(t)));
+  if (hit) return { model: 'fast', reason: 'the records have it' };
+  return { model: 'main', reason: 'needs looking up' };
+}

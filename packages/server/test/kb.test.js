@@ -178,7 +178,7 @@ test('regression: Q&A tools and the pre-search give whole records, never cut mid
     const qa = createTools({ db: t.db, store: t.store, kb: t.kb, search: t.search, config: t.config, campaignId: cid, viewer: { userId: t.sam.id, seesAll: false } });
     const get = qa.list.find((x) => x.name === 'get_records');
     assert.match(await get.run({ ids: [r.id] }), /He owes the Baron 200 gold\.$/);
-    assert.match(await qa.preSearch('Brother Hal innkeeper'), /He owes the Baron 200 gold\./);
+    assert.match((await qa.preSearch('Brother Hal innkeeper')).text, /He owes the Baron 200 gold\./);
   } finally {
     await t.cleanup();
   }
