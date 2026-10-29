@@ -16,6 +16,7 @@ import { d20Plus } from './shared/dice.js';
 import { speedText } from './shared/wild-shape.js';
 import { COMPANION_KINDS, MAX_SHEET_COMPANIONS, builtStatBlock, companionSources, normalizeCompanion, rangersCompanion } from './shared/companions.js';
 import { roll, rollModeFromEvent, D20_ICON } from './dice.js';
+import { fold } from './sheet-fold.js';
 
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const mod = (score) => Math.floor((score - 10) / 2);
@@ -59,9 +60,15 @@ export function companionsBox({ state, changed, flush }) {
     const cs = list();
     setChildren(el,
       h('h3', {}, 'Companions'),
-      cs.length ? h('div', { class: 'companion-list' }, cs.map(card)) : h('p', { class: 'muted small' }, 'Familiars, pets, mounts, summons and animal companions. Each keeps its stat block and hit points here, and goes on the map with you.'),
+      cs.length ? h('div', { class: 'companion-list' }, cs.map(card)) : null,
       note ? h('p', { class: 'small companion-note', role: 'status' }, note) : null,
-      cs.length < MAX_SHEET_COMPANIONS ? addForm() : null,
+      // Adding one opens when asked, to keep the sheet short.
+      cs.length < MAX_SHEET_COMPANIONS
+        ? fold('companion-add', cs.length ? '+ Add a companion' : 'None yet: + Add a companion', [
+            cs.length ? null : h('p', { class: 'muted small' }, 'Familiars, pets, mounts, summons and animal companions. Each keeps its stat block and hit points here, and goes on the map with you.'),
+            addForm(),
+          ], { cls: 'companion-fold' })
+        : null,
     );
   }
 
