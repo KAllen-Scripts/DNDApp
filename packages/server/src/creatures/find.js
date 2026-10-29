@@ -8,8 +8,8 @@
  * internet only, net/fetch-public.js). Only the DM ever sees the result.
  */
 import { z } from 'zod';
-import { inspectPicture } from './images.js';
-import { fetchPublic } from './net/fetch-public.js';
+import { inspectPicture } from '../images.js';
+import { fetchPublic } from '../net/fetch-public.js';
 
 const SIZES = { tiny: 0.5, small: 1, medium: 1, large: 2, huge: 3, gargantuan: 4 };
 

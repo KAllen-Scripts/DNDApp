@@ -4,7 +4,7 @@
  * their own version).
  */
 import { z } from 'zod';
-import { createWikiTransfer, isZip, docxText } from '../wiki-transfer.js';
+import { createWikiTransfer, isZip, docxText } from '../wiki/transfer.js';
 import { viewerPagesFor } from './wiki-viewer.js';
 
 const MAX_IMPORT_BYTES = 60 * 1024 * 1024;

@@ -7,18 +7,18 @@
 import { z } from 'zod';
 import { BadRequestError, NotFoundError } from '../store.js';
 import { AuthError } from '../auth.js';
-import { WIKI_LIMITS as L } from '../wiki.js';
+import { WIKI_LIMITS as L } from '../wiki/store.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
-import { SOURCE_KINDS } from '../wiki-pictures.js';
+import { SOURCE_KINDS } from '../wiki/pictures.js';
 import { wikiKey, wikiLinks, wikiPieces, unlink, unpicture, audienceOf, canSeeAudience, CANONS, TONES, SHEET_PARTS, sheetParts, openPrepPage } from '@dndapp/shared/wiki.js';
 import { MAX_SOURCES } from '@dndapp/shared/citations.js';
 import { createTools } from '../qa/tools.js';
-import { webGraph } from '../wiki-web.js';
-import { pageOnMaps, makePageFor, atlasLayers, pagePlaces, shownToViewer } from '../wiki-maps.js';
-import { timeline } from '../wiki-timeline.js';
+import { webGraph } from '../wiki/web.js';
+import { pageOnMaps, makePageFor, atlasLayers, pagePlaces, shownToViewer } from '../wiki/maps.js';
+import { timeline } from '../wiki/timeline.js';
 import { STARTER_TEMPLATES } from '@dndapp/shared/wiki-templates.js';
 import { viewerPagesFor, spoilerCheckFor, playersOf } from './wiki-viewer.js';
-import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass, embedsIn, prepMarks } from '../wiki-views.js';
+import { summary, wheelFamilies, lastSessionPage, recentPages, heroPicture, compass, embedsIn, prepMarks } from '../wiki/views.js';
 
 export function registerWiki(app, r) {
   const { access, auth, store, wiki, wikiAI, wikiPictures, wikiAsOf, jobs, pictures, search, maps, handouts, sheets, db, kb, config } = r;
@@ -118,7 +118,7 @@ export function registerWiki(app, r) {
     return { starters: STARTER_TEMPLATES, own: wiki.templates(cid) };
   });
 
-  // ---------- the space's views (wiki-views.js), as the DM sees them or ?as= a player ----------
+  // ---------- the space's views (wiki/views.js), as the DM sees them or ?as= a player ----------
 
   const viewerPages = viewerPagesFor(r);
   const spoilerCheck = spoilerCheckFor(r);

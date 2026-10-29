@@ -15,7 +15,7 @@ import { BadRequestError, NotFoundError } from '../store.js';
 import { MAX_PICTURE_BYTES, createImageCache, inspectMapImage, inspectPicture } from '../images.js';
 import { RateLimitError } from '../qa/agent.js';
 import { isMapId, newTokenId } from '../maps/store.js';
-import { mapCrop } from '../wiki-pictures.js';
+import { mapCrop } from '../wiki/pictures.js';
 import { isPdf, renderPdfPage } from '../maps/pdf.js';
 import { onTheWay, planJourney } from '../maps/travel.js';
 import { isUvtt, readUvtt, toUvtt, uvttImage, uvttContents } from '../maps/uvtt.js';

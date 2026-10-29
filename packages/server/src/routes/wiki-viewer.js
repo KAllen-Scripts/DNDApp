@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BadRequestError } from '../store.js';
-import { spoilers } from '../wiki-views.js';
+import { spoilers } from '../wiki/views.js';
 
 /**
  * The viewer of a wiki view and the pages they may see (a hidden parent left out): the DM, or the DM `?as=<player

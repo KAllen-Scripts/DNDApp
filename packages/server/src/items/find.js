@@ -9,9 +9,9 @@
  * stocked by a merchant.
  */
 import { z } from 'zod';
-import { inspectPicture } from './images.js';
-import { fetchPublic } from './net/fetch-public.js';
-import { ITEM_KINDS, RARITIES } from './items.js';
+import { inspectPicture } from '../images.js';
+import { fetchPublic } from '../net/fetch-public.js';
+import { ITEM_KINDS, RARITIES } from './store.js';
 import { parsePrice } from '@dndapp/shared/coins.js';
 import { normalizeActions } from '@dndapp/shared/item-actions.js';
 

@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate';
 import { setup, terrain, createFakeLLM } from './helpers.js';
-import { frontMatter } from '../src/wiki-transfer.js';
+import { frontMatter } from '../src/wiki/transfer.js';
 
 const zip = (files) => Buffer.from(zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, typeof v === 'string' ? strToU8(v) : v])))).toString('base64');
 

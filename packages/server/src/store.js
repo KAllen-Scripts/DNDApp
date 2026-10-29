@@ -9,15 +9,15 @@ import { json } from './db/index.js';
 import { replaySheet } from './sheets/store.js';
 import { replayMap } from './maps/store.js';
 import { normalizePins } from '@dndapp/shared/map.js';
-import { normalizePictures } from './characters/pictures.js';
-import { normalizeHandout } from './handouts.js';
-import { normalizeWikiPage } from './wiki.js';
-import { normalizeRest } from './rests.js';
-import { normalizeCreature } from './creatures.js';
-import { normalizeItem } from './items.js';
-import { normalizeMerchant } from './merchants.js';
-import { normalizeMapAsset } from './map-assets.js';
-import { normalizeMapStamp } from './map-stamps.js';
+import { normalizePictures } from './sheets/pictures.js';
+import { normalizeHandout } from './table/handouts.js';
+import { normalizeWikiPage } from './wiki/store.js';
+import { normalizeRest } from './sheets/rests.js';
+import { normalizeCreature } from './creatures/store.js';
+import { normalizeItem } from './items/store.js';
+import { normalizeMerchant } from './items/merchants.js';
+import { normalizeMapAsset } from './maps/assets.js';
+import { normalizeMapStamp } from './maps/stamps.js';
 
 export class NotFoundError extends Error {}
 export class BadRequestError extends Error {}

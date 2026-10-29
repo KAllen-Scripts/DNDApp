@@ -7,7 +7,7 @@
  * only takes it off the list: maps already made with it keep drawing it.
  * The DM's alone: players only ever see the map's finished picture.
  */
-import { createLibrary, normalizeArt } from './library.js';
+import { createLibrary, normalizeArt } from '../library.js';
 import { BLOCKS } from '@dndapp/shared/map-design.js';
 
 export const MAX_MAP_ASSETS = 300;

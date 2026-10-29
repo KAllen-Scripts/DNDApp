@@ -26,7 +26,7 @@ import { computeSheet, hitDice, longRest, shortRest, spendHitDie, formatBonus } 
 import { featureRow, healFeature, healWithSlot, restText, setRolled } from '@dndapp/shared/class-features.js';
 import { drinkPotion } from '@dndapp/shared/gear.js';
 import { castWithSlot } from '@dndapp/shared/spell-slots.js';
-import { BadRequestError } from './store.js';
+import { BadRequestError } from '../store.js';
 import { createEditions } from './editions.js';
 
 export const REST_KINDS = ['short', 'long'];

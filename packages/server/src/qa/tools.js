@@ -16,8 +16,8 @@ import { z } from 'zod';
 import { formatTimestamp, formatUtterance, parseTimestamp, CITATION_RE } from '@dndapp/shared';
 import { renderRecord } from '../kb/store.js';
 import { preparedTranscript } from '../pipeline/prepare.js';
-import { fitWhole } from '../fit.js';
-import { creatureKey, creatureLabel } from '../creatures.js';
+import { fitWhole } from '../llm/fit.js';
+import { creatureKey, creatureLabel } from '../creatures/store.js';
 import { unlink, unpicture, canonMarker } from '@dndapp/shared/wiki.js';
 import { whenText, whenKey } from '@dndapp/shared/wiki-time.js';
 

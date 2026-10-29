@@ -5,8 +5,8 @@
 import { z } from 'zod';
 import { AuthError } from '../auth.js';
 import { HIT_DIE_SIZES } from '@dndapp/shared/sheet.js';
-import { ROLL_VISIBILITY } from '../rolls.js';
-import { REST_KINDS } from '../rests.js';
+import { ROLL_VISIBILITY } from '../table/rolls.js';
+import { REST_KINDS } from '../sheets/rests.js';
 
 export function registerRests(app, r) {
   const { access, rests } = r;

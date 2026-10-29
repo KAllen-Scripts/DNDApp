@@ -15,7 +15,7 @@
  * word of it can be found by meaning, not just its opening.
  */
 import { toBlob, fromBlob, dot } from './embeddings.js';
-import { json } from './db/index.js';
+import { json } from '../db/index.js';
 
 const RRF_K = 60;
 const CANDIDATES = 40;

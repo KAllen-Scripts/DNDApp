@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setup, createFakeLLM } from './helpers.js';
-import { questColumn } from '../src/wiki-views.js';
+import { questColumn } from '../src/wiki/views.js';
 
 test('wiki quests: columns by status, grouped by arc, a move saves the status, a player sees only theirs', async () => {
   assert.equal(questColumn('Under way'), 'active');

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseTranscript } from '@dndapp/shared';
 import { applySpeakerMap, makeGlossaryFixer, chunkUtterances } from '../src/pipeline/prepare.js';
-import { ftsQuery } from '../src/search.js';
+import { ftsQuery } from '../src/kb/search.js';
 import { SAMPLE } from './helpers.js';
 
 test('speaker map is case-insensitive and leaves unknown speakers alone', () => {

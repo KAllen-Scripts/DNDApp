@@ -8,7 +8,7 @@
  */
 import { estimateTokens } from '../config.js';
 import { json } from '../db/index.js';
-import { canSee } from '../search.js';
+import { canSee } from './search.js';
 
 export const GUIDE_KIND = '_guide';
 

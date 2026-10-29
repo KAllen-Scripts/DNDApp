@@ -7,7 +7,7 @@
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { parseRoll, rollDice } from '@dndapp/shared/dice.js';
-import { BadRequestError } from './store.js';
+import { BadRequestError } from '../store.js';
 
 export const ROLL_VISIBILITY = ['party', 'dm', 'self'];
 

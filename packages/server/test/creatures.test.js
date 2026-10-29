@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { setup, createFakeLLM, fakeEmbedder, makePdf, terrain } from './helpers.js';
 import { createContext } from '../src/context.js';
-import { normalizeCreature, tokenNames, creatureLabel } from '../src/creatures.js';
+import { normalizeCreature, tokenNames, creatureLabel } from '../src/creatures/store.js';
 
 const readOut = { readable: true, kind: 'battle', name: 'Cave', description: '', grid: { visible: false, columns: null, rows: null }, scale: { distance: null, unit: null, per: null }, notes: '' };
 const ogreBlock = {

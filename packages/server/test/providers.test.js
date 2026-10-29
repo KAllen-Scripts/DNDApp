@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { openDb } from '../src/db/index.js';
 import { config } from '../src/config.js';
 import { createLLM } from '../src/llm/index.js';
-import { createEmbedder, toBlob, fromBlob, dot } from '../src/embeddings.js';
+import { createEmbedder, toBlob, fromBlob, dot } from '../src/kb/embeddings.js';
 
 test('createLLM: claude-code and api give a provider; anything else is refused by name', () => {
   const db = openDb(':memory:');

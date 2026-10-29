@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { setup, createFakeLLM, fakeEmbedder } from './helpers.js';
 import { createContext } from '../src/context.js';
-import { normalizeBoard } from '../src/wiki-boards.js';
+import { normalizeBoard } from '../src/wiki/boards.js';
 
 test('boards: anything unknown dropped, limits kept, arrows only between cards', () => {
   const b = normalizeBoard({ id: 'aaaaaaaaaa', owner: 3, title: '  ', items: [

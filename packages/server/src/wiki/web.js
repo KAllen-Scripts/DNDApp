@@ -10,7 +10,7 @@
 import { forceSimulation, forceLink, forceManyBody, forceCollide, forceX, forceY } from 'd3-force';
 import { packEnclose } from 'd3-hierarchy';
 import { kindFamily, wikiKey, wikiLinks, factLinks, factTone, normalizeCanon } from '@dndapp/shared/wiki.js';
-import { summary } from './wiki-views.js';
+import { summary } from './views.js';
 
 export const WEB_LIMITS = { around: 80, whole: 400, steps: 3 };
 

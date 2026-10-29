@@ -3,12 +3,12 @@
  * (name, kind, rarity, a usual price, weight, a description, the numbers
  * for its kind, a picture and the DM's own notes) and stocked by merchants (merchants.js). Made by hand,
  * looked up (the DM's own items first, then the group's books, then the
- * AI's knowledge: items-find.js), or found online by the AI.
+ * AI's knowledge: items/find.js), or found online by the AI.
  *
  * Players see an item only through a merchant that sells it, and never the
  * DM's notes. Archived like creatures (library.js).
  */
-import { createLibrary, normalizeArt } from './library.js';
+import { createLibrary, normalizeArt } from '../library.js';
 import { normalizeItemStats } from '@dndapp/shared/gear.js';
 import { normalizeActions } from '@dndapp/shared/item-actions.js';
 

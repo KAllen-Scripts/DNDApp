@@ -5,10 +5,10 @@
 import { z } from 'zod';
 import { KIND_FAMILIES, CANONS, narrowest, audienceOf, canSeeAudience } from '@dndapp/shared/wiki.js';
 import { BadRequestError, NotFoundError } from '../store.js';
-import { WIKI_LIMITS as L } from '../wiki.js';
+import { WIKI_LIMITS as L } from '../wiki/store.js';
 import { viewerPagesFor, spoilerCheckFor, playersOf } from './wiki-viewer.js';
-import { summary, questBoard, listPages, knowsGrid, tidyItems, TIDY_RULES, QUEST_COLUMNS } from '../wiki-views.js';
-import { pagePlaces } from '../wiki-maps.js';
+import { summary, questBoard, listPages, knowsGrid, tidyItems, TIDY_RULES, QUEST_COLUMNS } from '../wiki/views.js';
+import { pagePlaces } from '../wiki/maps.js';
 
 export function registerWikiOverview(app, r) {
   const { access, wiki, wikiAI, store, maps, db } = r;

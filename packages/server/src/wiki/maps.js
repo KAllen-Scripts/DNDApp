@@ -1,6 +1,6 @@
-import { NotFoundError } from './store.js';
+import { NotFoundError } from '../store.js';
 import { kindFamily, wikiKey, wikiLinks } from '@dndapp/shared/wiki.js';
-import { summary } from './wiki-views.js';
+import { summary } from './views.js';
 
 /**
  * Where the wiki meets the maps. Maps own the geography and the wiki owns the

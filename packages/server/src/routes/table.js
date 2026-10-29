@@ -5,10 +5,10 @@
 import { ROLL_MODES, d20Plus } from '@dndapp/shared/dice.js';
 import { z } from 'zod';
 import { BadRequestError, NotFoundError } from '../store.js';
-import { MAX_HANDOUT_TEXT, canSeeHandout } from '../handouts.js';
+import { MAX_HANDOUT_TEXT, canSeeHandout } from '../table/handouts.js';
 import { MAX_PICTURE_BYTES } from '../images.js';
-import { ROLL_VISIBILITY, canSeeRoll } from '../rolls.js';
-import { canHearRest } from '../rests.js';
+import { ROLL_VISIBILITY, canSeeRoll } from '../table/rolls.js';
+import { canHearRest } from '../sheets/rests.js';
 import { sheetInitiative } from './combat.js';
 
 export function registerTable(app, r) {
