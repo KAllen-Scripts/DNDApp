@@ -2798,3 +2798,18 @@ button.wiki-tile { text-align: left; border: 1px solid var(--border); color: inh
 #wiki-view.wiki-panel-on { grid-template-columns: minmax(0, 1fr); }
 #wiki-view.wiki-panel-on .wiki-side { display: none; }
 #wiki-main > .creatures-panel { overflow: visible; }
+
+/* Recording from Discord, on the Sessions tab (sessions.js) */
+.recorder { display: grid; gap: 0.5rem; padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid var(--camp-line); background: var(--surface); }
+.recorder h3 { margin: 0; font-size: 1rem; }
+.recorder p { margin: 0; }
+.recorder-link { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.6rem; }
+.recorder-link label { display: grid; gap: 0.25rem; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+.recorder-live { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.rec-dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; background: #d32f2f; animation: rec-pulse 1.4s ease-in-out infinite; }
+@keyframes rec-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .rec-dot { animation: none; } }
+.recordings { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.recording { display: grid; gap: 0.25rem; padding: 0.4rem 0.6rem; border-radius: 6px; background: var(--surface-2); }
+.recording-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.recording-actions button { padding: 0.25rem 0.6rem; font-size: 0.85rem; }

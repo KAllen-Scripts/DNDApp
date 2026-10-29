@@ -180,12 +180,37 @@ What the server does on its own: every page and API response carries security he
 
 The first time a transcript is processed, the server downloads a small search model (~25 MB) into `data/models`.
 
+### Recording sessions from Discord
+
+If the group plays on Discord, the server's own bot can record the session and write the transcript; transcripts from anything else (a phone on the table, another program) are still uploaded the usual way. Discord sends each person's voice separately, so every line knows who said it, and people talking over each other doesn't garble it. **The audio never leaves this PC**: it's saved in `data/recordings/` and transcribed here (the owner, 2026-10-29).
+
+**Setting it up (once, the host):**
+
+1. At https://discord.com/developers/applications: **New Application** (e.g. "Party Ledger"), then **Bot** → **Reset Token**, and copy the token.
+2. Put it in `.env` as `DISCORD_BOT_TOKEN=...` and restart the server. The log says `Discord bot: logged in as …`.
+3. The DM's **Sessions** tab now has **Record from Discord** with an invite link. Whoever manages the group's Discord server opens it and adds the bot (it asks to see channels, join voice, send messages and change its own nickname).
+4. On the Sessions tab, the DM picks the Discord server and voice channel.
+
+**Recording:** the DM presses **Start recording** on the Sessions tab, or types `/record` in Discord (the bot joins the voice channel they're in). It posts that the session is being recorded and its nickname shows 🔴 Recording. Anyone can type `/norecord` to leave their voice out (again to be recorded). **Stop** or `/stop` ends it; it also stops by itself 5 minutes after everyone leaves, after 8 hours, or if Discord disconnects it. `/record` and `/stop` work for whoever manages the Discord server and for the DM once their Discord name is linked to their account (after the first recording's upload).
+
+**After:** the recording is transcribed on this PC, and appears under **Record from Discord** with its progress. **Use for upload** puts its transcript into the upload form with the date it was played: the DM checks the session number and who's who (the names are Discord usernames, linked to accounts once and remembered), then uploads it like any transcript. **Delete** removes a recording and its audio (an uploaded transcript stays in the archive).
+
+**Speech-to-text** (`TRANSCRIBE_ENGINE`):
+
+- `local` (the default): Whisper large-v3-turbo through transformers.js. Nothing to install; the model (about 1 GB) downloads into `data/models` the first time. It runs on the CPU, which is slow for a long session (likely hours). `TRANSCRIBE_LOCAL_DEVICE=dml` tries the graphics card through DirectX on Windows.
+- `whisper-cpp`: whisper.cpp's own program, much faster with an NVIDIA card (minutes for a session). Download a release from https://github.com/ggml-org/whisper.cpp/releases (the `cublas` build for NVIDIA) and a model such as `ggml-large-v3-turbo.bin` from https://huggingface.co/ggerganov/whisper.cpp, then set `WHISPER_CPP_BIN` (the `whisper-cli.exe` path) and `WHISPER_CPP_MODEL`.
+
+Either way it's told the campaign's character names and glossary terms so it spells them right, and the glossary's fixes still run when the transcript is processed. Recordings cut off by a restart are transcribed when the server starts again.
+
+Discord encrypts calls end to end (since March 2026); the bot uses `@discordjs/voice` 0.19.2 or later, which handles that. Discord never officially supported bots hearing calls, so if it ever stops working, upload transcripts from another recorder meanwhile.
+
 ### Data
 
 Everything lives in `data/` (git-ignored):
 
 - `data/archive/` is the permanent record: accounts, original transcripts, player notes (every version), character sheets (every change, plus uploaded files), character pictures, maps (the images or PDFs as imported, the pictures drawn for maps made in the creator, other pictures of them, token pictures, every change, and everyone's private pins), handouts, the DM's creatures, items and merchants (with recent sales), the DM's own map creator assets, the rests the DM called (`rests.jsonl`), the campaign's settings (`settings.json`), speaker map, glossary, DM corrections, and a snapshot of the knowledge base after every archivist run. **Back this folder up.**
 - `data/dndapp.sqlite` is the working database. It can be rebuilt from the archive.
+- `data/recordings/` holds Discord recordings (each person's speech as Ogg Opus files, and the transcript once written) until the DM deletes them. Not part of the archive: a recording becomes part of the campaign when its transcript is uploaded.
 
 **Example data.** `DATA_SET=example` in `.env` runs the server on `data-example/` instead: a made-up campaign (The Lanterns of Saltreach) with accounts, sheets, a wiki, creatures, items, merchants and linked maps, seeded the first time it starts, plus four session transcripts to feed in. Remove the line to go back to the real data; the two folders never mix. See [example/README.md](example/README.md).
 
@@ -243,6 +268,11 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/sessions/overview` | The Sessions tab (DM): sessions with status, matched note counts and attendance; dates with notes but no transcript; next number; today's note date; the members names can be linked to |
 | GET | `/campaigns/:cid/sessions/:n` | Session and who attended |
 | GET | `/campaigns/:cid/sessions/:n/transcript?from=&to=` | Transcript lines (players: only sessions they attended) |
+| GET | `/campaigns/:cid/recordings` | Recording from Discord (DM): `{bot: {configured, ready, error, invite_url, guilds: [{id, name, voice_channels: [{id, name, people}]}]}, link: {guild_id, channel_id}, live, engine, recordings}` |
+| PUT | `/campaigns/:cid/recordings/link` | Which Discord server and voice channel the campaign records in (DM) `{guild_id, channel_id}` (nulls to unlink) |
+| POST | `/campaigns/:cid/recordings/start` / `stop` | The bot joins the linked channel and records / stops, and the recording is transcribed (DM) |
+| GET | `/campaigns/:cid/recordings/:id/transcript` | A finished recording's transcript, in the upload format (DM) `{recording, transcript}` |
+| POST / DELETE | `/campaigns/:cid/recordings/:id/retry`, `/campaigns/:cid/recordings/:id` | Transcribe again / delete the recording and its audio (DM) |
 | POST | `/campaigns/:cid/sessions/:n/process` | Retry / reprocess a session (DM) |
 | POST | `/campaigns/:cid/notes` | Take a private note `{text, session_date?}` (default: today; before 6am counts as the previous day) |
 | GET | `/campaigns/:cid/notes?date=` | Your own notes only (nobody else can list them, including the DM) |

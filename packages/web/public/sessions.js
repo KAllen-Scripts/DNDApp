@@ -6,6 +6,9 @@
  *
  * Player notes are matched to a session by date, so the date chosen here is
  * what connects a transcript to the notes players took while it was played.
+ *
+ * Above them, recording from Discord: the server's bot joins a voice channel,
+ * and a finished recording's transcript goes into the same upload form.
  */
 import { api, h } from './api.js';
 
@@ -18,13 +21,16 @@ const longDate = (d) =>
   new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 const notesText = (notes, authors) => (notes ? `${plural(notes, 'note')} from ${plural(authors, 'player')}` : null);
 
-// campaign: the one the DM is in ({ id, name }). view: its GET .../sessions/overview.
-const state = { campaign: null, view: null, guarded: (fn) => fn() };
+// campaign: the one the DM is in ({ id, name }). view: its GET .../sessions/overview. rec: its GET .../recordings.
+const state = { campaign: null, view: null, rec: null, guarded: (fn) => fn() };
 let timer = null;
 let list = null; // the element holding the sessions list
+let recorder = null; // the element holding the Discord recorder
+let fillUpload = null; // puts a transcript into the upload form (set by uploadForm)
 
 const base = () => `/campaigns/${state.campaign.id}`;
-const busy = (v) => v.sessions.some((s) => ['queued', 'processing'].includes(s.status) || ['queued', 'running'].includes(s.job?.status));
+const recBusy = (rec) => !!rec && (!!rec.live || rec.recordings.some((r) => ['recording', 'queued', 'transcribing'].includes(r.status)) || (rec.bot.configured && !rec.bot.ready && !rec.bot.error));
+const busy = (v) => v.sessions.some((s) => ['queued', 'processing'].includes(s.status) || ['queued', 'running'].includes(s.job?.status)) || recBusy(state.rec);
 
 /** Enter a campaign as its DM. Players never call this. */
 export async function loadSessions({ campaign, guarded }) {
@@ -33,7 +39,7 @@ export async function loadSessions({ campaign, guarded }) {
 }
 
 async function refresh() {
-  state.view = await api('GET', `${base()}/sessions/overview`);
+  [state.view, state.rec] = await Promise.all([api('GET', `${base()}/sessions/overview`), api('GET', `${base()}/recordings`)]);
   draw();
   poll();
 }
@@ -61,10 +67,12 @@ async function run(fn, done) {
 /** Refresh just the sessions list, leaving a half-filled upload form alone. */
 async function refreshList() {
   const cid = state.campaign.id;
-  const v = await api('GET', `${base()}/sessions/overview`);
+  const [v, rec] = await Promise.all([api('GET', `${base()}/sessions/overview`), api('GET', `${base()}/recordings`)]);
   if (cid !== state.campaign.id) return; // the DM switched campaign meanwhile
   state.view = v;
+  state.rec = rec;
   if (list?.isConnected) list.replaceChildren(...renderList());
+  if (recorder?.isConnected && !recorder.contains(document.activeElement)) recorder.replaceChildren(...renderRecorder());
 }
 
 /** While anything is processing, refresh the list every few seconds. */
@@ -141,6 +149,17 @@ function uploadForm() {
   const button = h('button', { type: 'submit', class: 'primary', disabled: true }, 'Upload session');
   let transcript = '';
   let speakerRows = [];
+  // A finished Discord recording: its transcript and the date it was played go in, ready to check.
+  fillUpload = (text, playedOn) => {
+    file.value = '';
+    paste.value = text;
+    paste.closest('details').open = true;
+    if (playedOn) {
+      date.value = playedOn;
+      updateDateHint();
+    }
+    readTranscript(text);
+  };
 
   // What this date means for player notes.
   const updateDateHint = () => {
@@ -262,13 +281,107 @@ function uploadForm() {
 // Each campaign's own colour, the same as on the admin screen (by id, so it never changes).
 const HUES = [8, 212, 145, 275, 32, 182, 330, 95];
 
+// ---------- recording from Discord ----------
+
+const clockTime = (iso) => new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+const lengthText = (ms) => {
+  const m = Math.round(ms / 60000);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
+};
+
+/** Link the campaign to a Discord server and voice channel; Start and Stop; recordings waiting to be uploaded. */
+function renderRecorder() {
+  const { bot, link, live, recordings } = state.rec;
+  const out = [h('h3', {}, 'Record from Discord')];
+  if (!bot.configured) {
+    out.push(h('p', { class: 'small muted' }, 'The Discord bot isn’t set up on this server. Whoever hosts the server adds the bot’s token (DISCORD_BOT_TOKEN) to its .env file; the README says how. Transcripts from anything else can still be uploaded below.'));
+    return out;
+  }
+  if (bot.error) out.push(h('p', { class: 'small error' }, bot.error));
+  else if (!bot.ready) out.push(h('p', { class: 'small muted' }, 'The bot is connecting to Discord…'));
+  if (bot.ready && !bot.guilds.length) {
+    out.push(h('p', { class: 'small' }, 'The bot isn’t in any Discord server yet. Whoever manages your group’s server opens ',
+      bot.invite_url ? h('a', { href: bot.invite_url, target: '_blank', rel: 'noopener' }, 'this invite link') : 'the invite link', ' and picks the server.'));
+  }
+  if (bot.ready && bot.guilds.length) {
+    const guild = bot.guilds.find((g) => g.id === link.guild_id) ?? null;
+    const save = (guild_id, channel_id) =>
+      run(() => api('PUT', `${base()}/recordings/link`, { guild_id: guild_id || null, channel_id: channel_id || null }), 'Saved where sessions are recorded.');
+    const guildSelect = h('select', { 'aria-label': 'Discord server', disabled: !!live, onchange: (e) => save(e.target.value, null) },
+      h('option', { value: '' }, 'Choose a Discord server…'),
+      bot.guilds.map((g) => h('option', { value: g.id, selected: g.id === link.guild_id }, g.name)));
+    const channelSelect = h('select', { 'aria-label': 'Voice channel', disabled: !guild || !!live, onchange: (e) => save(link.guild_id, e.target.value) },
+      h('option', { value: '' }, 'Choose a voice channel…'),
+      (guild?.voice_channels ?? []).map((c) => h('option', { value: c.id, selected: c.id === link.channel_id }, c.people.length ? `${c.name} (${c.people.join(', ')})` : c.name)));
+    out.push(h('div', { class: 'recorder-link' }, h('label', {}, 'Discord server', guildSelect), h('label', {}, 'Voice channel', channelSelect)));
+    const current = live && recordings.find((r) => r.id === live.recording);
+    if (current) {
+      out.push(h('div', { class: 'recorder-live' },
+        h('span', { class: 'rec-dot', 'aria-hidden': 'true' }),
+        h('span', {}, h('strong', {}, 'Recording'), ` in ${current.channel_name} since ${clockTime(current.started_at)} · ${Object.keys(current.speakers).length} ${Object.keys(current.speakers).length === 1 ? 'person' : 'people'} heard so far`),
+        h('button', { class: 'primary', onclick: () => run(() => api('POST', `${base()}/recordings/stop`), 'Recording stopped. It’s being transcribed on the server now.') }, 'Stop')));
+    } else {
+      out.push(h('div', { class: 'recorder-live' },
+        h('button', {
+          class: 'primary',
+          disabled: !link.guild_id || !link.channel_id,
+          onclick: () => run(() => api('POST', `${base()}/recordings/start`), 'Recording. Everyone in the voice channel is told the session is being recorded.'),
+        }, 'Start recording'),
+        h('span', { class: 'small muted' }, 'Or type /record in Discord (and /stop at the end). Anyone can type /norecord to leave their voice out.')));
+    }
+  }
+  const done = recordings.filter((r) => r.status !== 'recording');
+  if (done.length) out.push(h('ul', { class: 'recordings' }, done.map(recordingRow)));
+  out.push(h('p', { class: 'small muted' }, 'Recordings are transcribed on the server’s own computer; the audio never leaves it.'));
+  return out;
+}
+
+function recordingRow(r) {
+  const when = `${longDate(r.played_on)}, ${clockTime(r.started_at)}`;
+  const length = r.stopped_at ? lengthText(new Date(r.stopped_at) - new Date(r.started_at)) : '';
+  const people = Object.values(r.speakers);
+  const remove = h('button', {
+    class: 'ghost',
+    onclick: () => confirm(`Delete the recording from ${when}? Its audio is deleted for good (a transcript you already uploaded stays).`) && run(() => api('DELETE', `${base()}/recordings/${r.id}`), 'Recording deleted.'),
+  }, 'Delete');
+  const status =
+    r.status === 'ready' ? [
+      h('span', { class: 'badge ok' }, r.lines ? `transcribed, ${r.lines} lines` : 'nothing was said'),
+      r.lines ? h('button', { class: 'primary', onclick: () => useRecording(r) }, 'Use for upload') : null,
+      remove,
+    ]
+    : r.status === 'failed' ? [h('span', { class: 'badge bad' }, 'transcribing failed'), h('span', { class: 'small error' }, r.error ?? ''),
+      h('button', { class: 'ghost', onclick: () => run(() => api('POST', `${base()}/recordings/${r.id}/retry`), 'Transcribing again.') }, 'Retry'), remove]
+    : [h('span', { class: 'badge warn' }, r.status === 'queued' ? 'waiting to transcribe' : `transcribing ${Math.round((r.progress ?? 0) * 100)}%`), h('span', { class: 'small muted' }, r.message ?? '')];
+  return h('li', { class: 'recording' },
+    h('div', {}, h('strong', {}, when), h('span', { class: 'small muted' }, ` · ${[length, r.channel_name, people.length ? people.join(', ') : 'nobody spoke'].filter(Boolean).join(' · ')}`)),
+    r.note ? h('div', { class: 'small muted' }, r.note) : null,
+    h('div', { class: 'recording-actions' }, status));
+}
+
+/** The recording's transcript goes into the upload form, to check and upload like any other. */
+async function useRecording(r) {
+  try {
+    const { transcript } = await state.guarded(() => api('GET', `${base()}/recordings/${r.id}/transcript`));
+    const box = $('#sessions details.upload');
+    box.open = true;
+    fillUpload?.(transcript, r.played_on);
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    say('The recording’s transcript is in the upload form. Check the session number, date and who’s who, then upload it.');
+  } catch (err) {
+    say(err.message, true);
+  }
+}
+
 function draw() {
   list = h('div', { class: 'sessions-list' }, renderList());
+  recorder = h('section', { class: 'recorder' }, renderRecorder());
   const box = $('#sessions');
   box.style.setProperty('--hue', HUES[(state.campaign.id - 1) % HUES.length]);
   box.replaceChildren(
     // Which campaign this is: the one in the top bar. Another one is a Switch campaign away.
     h('p', { class: 'sessions-campaign' }, 'For ', h('strong', {}, state.campaign.name)),
+    recorder,
     list,
     h('details', { class: 'upload', open: !state.view.sessions.length },
       h('summary', {}, 'Upload a session transcript'),
