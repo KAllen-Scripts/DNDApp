@@ -561,9 +561,9 @@ test('sheet: spells are looked up when added, grouped by level, can be edited, p
     page.type('#sheet .add-spell input', 'Zorblax\'s Whimsy');
     page.submit('#sheet .add-spell');
     await page.settle();
-    assert.match(page.text('#sheet .add-spell'), /Couldn't find details for Zorblax's Whimsy/);
+    assert.match(page.text('#sheet .add-spell-wrap'), /Couldn't find details for Zorblax's Whimsy/);
     assert.equal(page.text(page.$$('#sheet .spell-group h4').at(-1)), 'Level not set');
-    assert.match(page.text('#sheet .add-spell .fill-missing'), /Fill in missing details \(1\)/);
+    assert.match(page.text('#sheet .add-spell-wrap .fill-missing'), /Fill in missing details \(1\)/);
 
     // Open the unknown one, set its level and description.
     const whimsy = page.$$('#sheet .spell').find((c) => c.textContent.includes('Zorblax'));
@@ -599,7 +599,7 @@ test('sheet: a spell of your own is added without a lookup, opened to fill in, a
     page.click('[data-tab=sheet]');
     const make = () => page.click(page.$$('#sheet .add-spell button').find((b) => b.textContent === 'Make my own'));
     make();
-    assert.match(page.text('#sheet .add-spell'), /Type the name of your spell first/);
+    assert.match(page.text('#sheet .add-spell-wrap'), /Type the name of your spell first/);
     assert.match(page.text('#sheet .spell-list'), /No spells yet/);
 
     // Even a name the SRD knows: the player's own version, not looked up.
@@ -609,7 +609,7 @@ test('sheet: a spell of your own is added without a lookup, opened to fill in, a
     assert.ok(card.open, 'opened to fill in');
     assert.equal(page.text(card.querySelector('.source')), 'Your own');
     assert.equal(page.el('#sheet .add-spell input').value, '');
-    assert.equal(page.$('#sheet .add-spell .fill-missing').hidden, true, 'not a spell waiting for a lookup');
+    assert.equal(page.$('#sheet .add-spell-wrap .fill-missing').hidden, true, 'not a spell waiting for a lookup');
     page.type(card.querySelector('[aria-label="Spell level"]'), '2');
     page.type(card.querySelector('[aria-label="Description"]'), 'A small, cold fireball. Each creature in a 10-foot sphere makes a Dexterity saving throw, taking 3d6 cold damage.');
     page.type(card.querySelector('[aria-label="Spell damage"]'), '3d6 cold');
@@ -825,16 +825,16 @@ test('sheet: "Fill in missing details" and "Look up details" ask the server agai
     page.type('#sheet .add-spell input', 'Booming Blade');
     page.submit('#sheet .add-spell');
     await page.settle();
-    assert.match(page.text('#sheet .add-spell'), /Couldn't find details for Booming Blade/);
+    assert.match(page.text('#sheet .add-spell-wrap'), /Couldn't find details for Booming Blade/);
 
     // Found the second time.
     known = true;
-    page.click(page.$$('#sheet .add-spell button').find((b) => b.textContent.startsWith('Fill in missing details')));
-    await page.waitFor(() => /Done\./.test(page.text('#sheet .add-spell')), { what: 'the lookups' });
+    page.click(page.$$('#sheet .add-spell-wrap button').find((b) => b.textContent.startsWith('Fill in missing details')));
+    await page.waitFor(() => /Done\./.test(page.text('#sheet .add-spell-wrap')), { what: 'the lookups' });
     const card = () => page.$$('#sheet .spell').find((c) => c.textContent.includes('Booming Blade'));
     assert.equal(page.text(card().closest('.spell-group').querySelector('h4')), 'Cantrips');
     assert.equal(page.text(card().querySelector('.source')), 'AI memory');
-    assert.ok(page.$('#sheet .add-spell .fill-missing').hidden, 'nothing left to fill in');
+    assert.ok(page.$('#sheet .add-spell-wrap .fill-missing').hidden, 'nothing left to fill in');
 
     // Look up again from the card: it has details now, so it asks first.
     card().open = true;
@@ -1286,5 +1286,32 @@ test("feats and subclass features on the sheet: a feat named in Features & trait
     page.click(save);
     await page.settle();
     assert.match(page.requests.filter((r) => r.path.endsWith('/roll')).at(-1).body.notation, /^1d20ro1/);
+  });
+});
+
+test('sheet: options open when asked (adding a spell, spell levels with no slots), and stay open when the sheet redraws', async () => {
+  await withPage(sheetPage(), async (page) => {
+    page.click('[data-tab=sheet]');
+    await page.settle();
+    // No spells yet: adding one starts open. No class: every level has no slots, so they're hidden.
+    const add = page.$('#sheet .spell-fold');
+    assert.ok(add.open, 'adding the first spell starts open');
+    const slots = page.$('#sheet .slots');
+    const toggle = page.$('#sheet .slot-levels');
+    assert.ok(slots.classList.contains('only-used'));
+    assert.match(page.text(toggle), /Show all levels \(9 with no slots\)/);
+    page.click(toggle);
+    assert.ok(!slots.classList.contains('only-used'));
+    assert.match(page.text(toggle), /Hide levels with no slots/);
+
+    // A Wizard 3 has 1st- and 2nd-level slots: those show, and "all levels" stays as chosen through the redraw.
+    page.click(toggle);
+    page.type('#sheet [aria-label="Class"]', 'Wizard');
+    page.type('#sheet [aria-label="Level"]', '3');
+    await page.settle();
+    const shown = page.$$('#sheet .slots > .slot:not(.pact)').filter((s) => !s.classList.contains('none')).map((s) => page.text(s.querySelector('.slot-level')));
+    assert.deepEqual(shown, ['1st', '2nd']);
+    assert.ok(slots.classList.contains('only-used'));
+    assert.match(page.text(toggle), /7 with no slots/);
   });
 });

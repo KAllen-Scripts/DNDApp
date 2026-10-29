@@ -149,6 +149,17 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
   :root:not([data-phone]) #app-view > .topbar:has([data-tab="sessions"]:not([hidden])) .bar-tool:not(#account-menu-open) .bar-label,
   :root:not([data-phone]) #app-view > .topbar:has([data-tab="sessions"]:not([hidden])) .dice-open span { display: none; }
 }
+/* Whatever the theme or window, the bar keeps to one row (topbar-fit.js): when it would run onto another, the
+   tools drop their names, then the tabs close up, then the tabs go onto two lines in their own box. The campaign's
+   name keeps 8rem before that happens, so it's never squeezed to nothing. */
+:root:not([data-phone]) #app-view > .topbar .who { flex: 1 1 8rem; }
+:root:not([data-phone]) #app-view > .topbar.fit-icons .bar-tool:not(#account-menu-open) .bar-label,
+:root:not([data-phone]) #app-view > .topbar.fit-icons .dice-open span { display: none; }
+:root:not([data-phone]) #app-view > .topbar.fit-tight .tabs button { padding-inline: 0.45rem; letter-spacing: 0.02em; }
+:root:not([data-phone]) #app-view > .topbar.fit-wrap { flex-wrap: nowrap; }
+:root:not([data-phone]) #app-view > .topbar.fit-wrap .who { flex: 0 1 auto; min-width: 6rem; max-width: 10rem; }
+:root:not([data-phone]) #app-view > .topbar.fit-wrap .tabs { flex: 1 1 0; min-width: 0; flex-wrap: wrap; }
+:root:not([data-phone]) #app-view > .topbar.fit-wrap > :not(.who, .tabs) { flex: none; }
 
 .panel { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0.75rem 16px 16px; gap: 0.75rem; }
 .panel-head { display: flex; gap: 0.5rem; align-items: center; }
@@ -1580,6 +1591,18 @@ input.num, .sheet .num { text-align: center; }
 .add-spell .muted { flex-basis: 100%; }
 .add-spell .muted:empty { display: none; }
 .spell-list { display: grid; gap: 0.6rem; }
+/* Folds (sheet-fold.js): options that open when asked, to keep the sheet short. */
+.sh-fold > summary { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; color: var(--accent); font-size: 0.9rem; font-weight: 600; list-style: none; }
+.sh-fold > summary::-webkit-details-marker { display: none; }
+.sh-fold > summary::before { content: "▸"; font-size: 0.8em; transition: transform 0.15s; }
+.sh-fold[open] > summary::before { transform: rotate(90deg); }
+.sh-fold[open] { display: grid; gap: 0.5rem; }
+.slots.only-used > .slot.none { display: none; }
+.slot-levels { font-size: 0.85rem; }
+.add-spell-wrap { display: grid; gap: 0.35rem; }
+.add-spell-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.add-spell-foot .muted:empty, .add-spell-foot button[hidden] { display: none; }
+.add-spell-foot:not(:has(> :not([hidden]):not(:empty))) { display: none; }
 /* Class features (sheet-class-features.js): a row per feature with its uses or points, and the player's own rows. */
 .class-features { display: grid; gap: 0.5rem; align-content: start; }
 .cf-rows { display: grid; gap: 0.4rem; }
@@ -1594,8 +1617,15 @@ input.num, .sheet .num { text-align: center; }
 .cf-step { height: 1.8rem; min-width: 1.8rem; padding: 0 0.4rem; }
 .cf-recharge { white-space: nowrap; }
 .cf-note, .cf-rules { margin: 0; }
+/* A feature's text is one line until its name or the line is clicked. */
+.cf-note { cursor: pointer; }
+.cf-note.folded { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cf-name-toggle { border: none; background: none; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.cf-name-toggle::after { content: " ▾"; font-size: 0.7em; color: var(--muted, currentColor); }
+.cf-name-toggle[aria-expanded="true"]::after { content: " ▴"; }
 .cf-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
 .cf-actions button.small, .cf-actions select { height: 1.8rem; padding: 0 0.6rem; }
+.cf-actions select { width: auto; max-width: 100%; }
 .cf-actions input.num { width: 3rem; }
 .cf-add { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
 .cf-add input[type="text"] { flex: 1 1 10rem; width: auto; }
@@ -1700,7 +1730,8 @@ details.spell > summary::-webkit-details-marker { display: none; }
 
 @media print {
   body { background: #fff; color: #000; }
-  .topbar, .sheet-bar, .sheet-review, .add-spell, .ws-add, .cf-add, .cf-add-open, .cf-actions, .cf-step, .spell-actions, .slot-help, .reset, .add-row, .icon-x, .icon-roll, .spell-rolls select, .sh-tabbar, button.link { display: none !important; }
+  .topbar, .sheet-bar, .sheet-review, .add-spell, .sh-fold > summary, .ws-add, .cf-add, .cf-add-open, .cf-actions, .cf-step, .spell-actions, .slot-help, .reset, .add-row, .icon-x, .icon-roll, .spell-rolls select, .sh-tabbar, button.link { display: none !important; }
+  .cf-note.folded { white-space: normal; }
   #app-view, #app-view.wide { --page-width: none; height: auto; display: block; }
   .panel { display: block; overflow: visible; padding: 0; }
   .panel:not(#tab-sheet) { display: none !important; }
@@ -2423,6 +2454,16 @@ button.busy:disabled { opacity: 1; }
 .attack-card .attack-dm, .attack-card footer { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; margin-left: 0.4rem; }
 .attack-card footer { display: flex; justify-content: flex-end; margin: 0.3rem 0 0; }
 .attack-card button { min-height: 2rem; padding: 0.15rem 0.6rem; }
+.spells-in-play { display: grid; gap: 0.4rem; margin-bottom: 0.6rem; }
+.spells-in-play h3 { margin: 0 0 0.1rem; font-size: 0.95rem; }
+.spell-in-play { border: 1px solid var(--border); border-left: 4px solid #6aa84f; border-radius: var(--radius); padding: 0.4rem 0.6rem; font-size: 0.9rem; }
+.spell-in-play ul { list-style: none; margin: 0.25rem 0 0; padding: 0; display: grid; gap: 0.2rem; }
+.spell-in-play li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+.spell-in-play .spell-buttons { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.3rem; }
+.spell-in-play button { min-height: 2rem; padding: 0.15rem 0.6rem; }
+#map-selection .spell-in-play { border: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.6rem; }
+#map-selection .spell-in-play ul, #map-selection .spell-in-play .spell-buttons { margin: 0; }
+.spell-tags { color: var(--accent); }
 .attack-picker .attack-modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem; margin: 0.3rem 0 0.4rem; }
 .attack-picker .attack-modes button { min-height: 2.6rem; }
 .attack-picker h3 { margin: 0.6rem 0 0.25rem; font-size: 0.95rem; }

@@ -197,3 +197,66 @@ test('the DM gets Apply buttons when damage waits, sees AC, and can Undo; the sw
     await page.waitFor(() => !page.$('#map-selection [data-attack]') || (tap(page, 'Goblin', 87, 52), false), { what: 'Attack to go' });
   });
 });
+
+test('spells that aren\'t attacks: Entangle places its area and restrains, it stays in play with Break free; Bless picks several, then Cast', async () => {
+  const dice = scripted();
+  const ENTANGLE = { name: 'Entangle', level: 1, range: '90 feet', duration: 'Concentration, up to 1 minute', concentration: true, description: 'Grasping weeds and vines sprout from the ground in a 20-foot square starting from a point within range. For the duration, these plants turn the ground in the area into difficult terrain. A creature in the area when you cast the spell must succeed on a Strength saving throw or be restrained by the entangling plants until the spell ends. A creature restrained by the plants can use its action to make a Strength check against your spell save DC.' };
+  const BLESS = { name: 'Bless', level: 1, range: '30 feet', duration: 'Concentration, up to 1 minute', concentration: true, description: 'You bless up to three creatures of your choice within range.' };
+  await withPage({
+    setup: { llm: mapLLM(), random: dice.random },
+    before: async (t) => {
+      const map = await importMap(t, { patch: SHOWN });
+      await sheet(t, t.alex, { classes: [{ name: 'Druid', subclass: '', level: 3 }], abilities: { str: 10, dex: 12, con: 14, int: 10, wis: 16, cha: 10 }, spells: [ENTANGLE, BLESS] });
+      await addToken(t, map, { kind: 'pc', name: 'Lyra', user_id: t.alex.id, x: 437.5, y: 437.5 });
+      const goblin = await addToken(t, map, { kind: 'enemy', name: 'Goblin', x: 157.5, y: 157.5, hp: { current: 7, max: 7 }, stats: { text: GOBLIN } });
+      return { map, goblin };
+    },
+    page: (t) => ({ as: t.alex, storage: NO_3D }),
+  }, async (page, t, { map, goblin }) => {
+    await openMapTab(page);
+    const pick = async (name) => {
+      tap(page, 'Lyra', 437, 437);
+      await page.settle();
+      page.click(page.$('#map-selection [data-attack="with"]'));
+      await page.waitFor(() => actionButton(page, name), { what: 'the picker' });
+    };
+    await pick('Entangle');
+    assert.match(actionButton(page, 'Entangle').textContent, /DC 13 Str save · restrains · difficult terrain · 20 ft cube · concentration, 1 minute/);
+    assert.match(actionButton(page, 'Bless').textContent, /up to 3 · concentration, 1 minute/);
+    page.click(actionButton(page, 'Entangle'));
+    await page.settle();
+    // The goblin's Strength save: 5 - 1 = 4, restrained.
+    dice.next(5);
+    page.pointer('#map-view', 'pointerdown', { clientX: 140, clientY: 140 });
+    page.pointer('#map-view', 'pointerup', { clientX: 140, clientY: 140 });
+    await page.waitFor(() => /Entangle/.test(page.text('#map-attack-cards')), { what: 'the Entangle card' });
+    assert.match(page.text('#map-attack-cards'), /Goblin: Str save 4 vs DC 13: failed, restrained/);
+    assert.match(page.text('#map-attack-cards'), /Lasts: concentration, 1 minute/);
+    assert.deepEqual(t.maps.get(t.campaign.id, map.id).tokens.find((x) => x.id === goblin.id).conditions, ['restrained']);
+    // In play: the log lists it, with Break free for the goblin (the DM's, not Alex's) and End spell for Alex.
+    page.click('#map-attacks-log');
+    await page.waitFor(() => page.$('#map-dialog .spell-in-play'), { what: 'spells in play' });
+    assert.match(page.text('#map-dialog .spell-in-play'), /Entangle · Lyra \(concentrating\).*Goblin: restrained/s);
+    assert.ok(!page.$('#map-dialog [data-spell-break]'), 'not Alex\'s goblin to roll for');
+    assert.ok(page.$('#map-dialog [data-spell-end]'));
+    assert.ok(page.$('#map-dialog [data-spell-again]'));
+    page.$('#map-dialog').close();
+
+    // Bless: tap the goblin (why not) and On yourself, then Cast. Entangle ends (concentration).
+    await pick('Bless');
+    page.click(actionButton(page, 'Bless'));
+    await page.settle();
+    assert.match(page.text('#map-targeting'), /Tap who Lyra casts Bless on \(up to 3\)/);
+    tap(page, 'Goblin', 157, 157);
+    await page.settle();
+    assert.ok(tokenEl(page, 'Goblin').classList.contains('caught'), 'picked ones light up');
+    page.click([...page.$('#map-targeting').querySelectorAll('button')].find((b) => b.textContent === 'On yourself'));
+    assert.match(page.text('#map-targeting'), /Bless on Goblin, Lyra \(2 of 3\)/);
+    page.click(page.$('#map-targeting [data-cast]'));
+    await page.waitFor(() => /Bless/.test(page.text('#map-attack-cards')), { what: 'the Bless card' });
+    assert.deepEqual(page.requests.filter((r) => r.path.endsWith('/attack')).at(-1).body.targets.length, 2);
+    assert.match(page.text('#map-attack-cards'), /Entangle ended \(concentration\)/);
+    const m = t.maps.get(t.campaign.id, map.id);
+    assert.deepEqual([m.spells.map((x) => x.name), m.tokens.find((x) => x.id === goblin.id).conditions, m.templates.length], [['Bless'], [], 0]);
+  });
+});

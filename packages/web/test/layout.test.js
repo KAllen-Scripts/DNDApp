@@ -291,3 +291,28 @@ test("regression: the Sessions tab's table scrolls in its own box on a phone ins
   const rule = css.split('}').find((r) => r.split('{')[0].trim() === '.sessions') ?? '';
   assert.match(rule, /grid-template-columns:\s*minmax\(0,\s*1fr\)/);
 });
+
+test('regression: in themes with wide capital tabs the top bar keeps to one row, stepping down until it fits', async () => {
+  // Dungeon Crawl, Nine Hells, Synthwave and 8-bit write the tabs in spaced capitals, so the DM's bar ran onto two
+  // or three rows (the account button under the campaign's name) at widths where the plain themes fit; the sidebar
+  // layout's narrower bar did it in every theme. The bar's steps were picked by the window's width, not by the bar.
+  const { JSDOM } = await import('jsdom');
+  const { fitBar, FIT_STEPS } = await import('../public/topbar-fit.js');
+  const { document } = new JSDOM('<header class="topbar fit-wrap"><div class="who"></div><nav class="tabs"></nav></header>').window;
+  const bar = document.querySelector('.topbar');
+  // It wraps until the tabs are allowed onto two lines in their own box.
+  assert.deepEqual(fitBar(bar, (b) => !b.classList.contains('fit-wrap')), ['fit-icons', 'fit-tight', 'fit-wrap']);
+  // It stops at the first step that fits, and starts again from nothing each time.
+  assert.deepEqual(fitBar(bar, (b) => !b.classList.contains('fit-icons')), ['fit-icons']);
+  assert.deepEqual([...bar.classList], ['topbar', 'fit-icons']);
+  assert.deepEqual(fitBar(bar, () => false), []);
+  assert.deepEqual([...bar.classList], ['topbar']);
+
+  const css = fs.readFileSync(new URL('../public/style.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const step of FIT_STEPS) assert.ok(css.includes(`#app-view > .topbar.${step}`), `style.css has the ${step} step`);
+  assert.match(css, /\.topbar\.fit-wrap \.tabs \{[^}]*flex-wrap:\s*wrap/, 'the last step puts the tabs on two lines, it never hides them');
+  // The campaign's name has room of its own before the bar has to step down, so it isn't squeezed to nothing.
+  assert.match(css, /#app-view > \.topbar \.who \{ flex: 1 1 8rem; \}/);
+  const app = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(app, /initBarFit\(\$\('#app-view > \.topbar'\)\)/, 'the page fits its bar');
+});

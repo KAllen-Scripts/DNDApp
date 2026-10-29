@@ -826,6 +826,51 @@ export function normalizeMap(input = {}) {
   out.templates = normalizeTemplates(m.templates, image);
   out.combat = normalizeCombat(m.combat, out.tokens);
   out.attacks = normalizeAttackLog(m.attacks);
+  out.spells = normalizeMapSpells(m.spells, out);
+  return out;
+}
+
+/** How many lasting spells a map keeps in play at once. */
+export const MAX_MAP_SPELLS = 40;
+
+/**
+ * Spells in play on a map (lasting spells cast from it; the server writes them, routes/attacks.js, and
+ * shared/spell-effects.js ends them): { id, name, caster (token id), caster_name, user_id (who cast it),
+ * action (the caster's action id), slot, concentration, rounds, ends: { round, turn } | null (in a fight),
+ * template (its area's id) | null, save, dc, check (the ability a creature uses to break free, or ''),
+ * affected: [{ id, conditions }], attack (the card's id), at }. A spell whose caster is gone stays until
+ * someone ends it; tokens no longer on the map drop out of `affected`.
+ */
+export function normalizeMapSpells(list, map) {
+  const ids = new Set(map.tokens.map((t) => t.id));
+  const areas = new Set(map.templates.map((t) => t.id));
+  const out = [];
+  const seen = new Set();
+  for (const sp of Array.isArray(list) ? list : []) {
+    if (!sp || !isTokenId(sp.id) || seen.has(sp.id) || out.length >= MAX_MAP_SPELLS) continue;
+    seen.add(sp.id);
+    const ends = sp.ends && Number.isInteger(sp.ends.round) ? { round: sp.ends.round, turn: typeof sp.ends.turn === 'string' && isTokenId(sp.ends.turn) ? sp.ends.turn : null } : null;
+    out.push({
+      id: String(sp.id),
+      name: str(sp.name, 120),
+      caster: typeof sp.caster === 'string' && isTokenId(sp.caster) ? sp.caster : null,
+      caster_name: str(sp.caster_name, 80),
+      user_id: Number.isInteger(sp.user_id) && sp.user_id > 0 ? sp.user_id : null,
+      action: str(sp.action, 80),
+      slot: Number.isInteger(sp.slot) && sp.slot >= 1 && sp.slot <= 9 ? sp.slot : null,
+      concentration: !!sp.concentration,
+      rounds: Number.isInteger(sp.rounds) && sp.rounds > 0 ? sp.rounds : null,
+      ends,
+      template: areas.has(sp.template) ? sp.template : null,
+      save: ['str', 'dex', 'con', 'int', 'wis', 'cha'].includes(sp.save) ? sp.save : '',
+      dc: num(sp.dc, { min: 1, max: 40, fallback: null }),
+      check: ['str', 'dex', 'con', 'int', 'wis', 'cha'].includes(sp.check) ? sp.check : '',
+      affected: (Array.isArray(sp.affected) ? sp.affected : []).filter((a) => ids.has(a?.id)).slice(0, 60)
+        .map((a) => ({ id: a.id, conditions: [...new Set((Array.isArray(a.conditions) ? a.conditions : []).filter((c) => CONDITIONS.includes(c)))] })),
+      attack: typeof sp.attack === 'string' && isTokenId(sp.attack) ? sp.attack : null,
+      at: str(sp.at, 40),
+    });
+  }
   return out;
 }
 
@@ -1574,6 +1619,8 @@ export function normalizeTemplates(list, image = {}) {
       label: str(t.label, 80),
       color: color(t.color, TEMPLATE_COLOR),
       user_id: Number.isInteger(Number(t.user_id)) && Number(t.user_id) > 0 ? Number(t.user_id) : null,
+      // A lasting spell's area (spells in play, `spell` its id): Entangle's is difficult terrain while it lasts.
+      ...(typeof t.spell === 'string' && isTokenId(t.spell) && { spell: String(t.spell), ...(t.difficult === true && { difficult: true }) }),
     });
   }
   return out;
@@ -1669,6 +1716,8 @@ export function spellArea(spell) {
       [/radius of (\d+) (?:foot|feet)/i, (m) => ({ shape: 'circle', size: +m[1] })],
       [/(\d+)[- ](?:foot|feet|ft\.?)(?:[- ]long)?[- ]cone/i, (m) => ({ shape: 'cone', size: +m[1] })],
       [/(\d+)[- ](?:foot|feet|ft\.?)[- ]cube/i, (m) => ({ shape: 'cube', size: +m[1] })],
+      // A square on the ground (Entangle, Grease): a cube's footprint.
+      [/(\d+)[- ](?:foot|feet|ft\.?)[- ]square/i, (m) => ({ shape: 'cube', size: +m[1] })],
       [/\bline\b[^.]{0,40}?(\d+) (?:foot|feet) long and (\d+) (?:foot|feet) wide/i, (m) => ({ shape: 'line', size: +m[1], width: +m[2] })],
       [/(\d+)[- ](?:foot|feet|ft\.?)[- ]line/i, (m) => ({ shape: 'line', size: +m[1], width: 5 })],
     ]
@@ -2148,7 +2197,8 @@ export function heightShadows(map, userId, polygons, explored = []) {
 }
 
 /** Is this point in difficult terrain? */
-export const isDifficult = (map, x, y) => (map.terrain ?? []).some((a) => pointInPolygon(x, y, a.points));
+export const isDifficult = (map, x, y) => (map.terrain ?? []).some((a) => pointInPolygon(x, y, a.points))
+  || (map.templates ?? []).some((t) => t.difficult && inTemplate(map, t, x, y));
 
 /** Feet in one of each unit (a climb is in feet; a move is in the map's unit). */
 const FEET_PER = { ft: 1, m: 3.28084, mi: 5280, km: 3280.84 };

@@ -19,7 +19,7 @@ import { openCreator } from './map-creator.js';
 import { chooseTokenPicture, fillStats, forgetPlayers, importMap, newMapDialog, recordDialog, removeToken, removeTokenPicture, saveCreature, settingsDialog, statsDialog, tokenDialog } from './map-dm.js';
 import { renderCombat } from './map-combat.js';
 import { companionDialog, companionRolls, dismissCompanion, myCompanion } from './map-companions.js';
-import { attackControls, attackLog, pickTarget, seeAttacks, stopTargeting } from './map-attacks.js';
+import { attackControls, attackLog, pickTarget, seeAttacks, spellTags, stopTargeting } from './map-attacks.js';
 import { initMapFull } from './map-full.js';
 import { groupsDialog, mapOptions, placeEnd, placeMove, placeStart, renderPlaces, shownNote } from './map-places.js';
 import { clockDialog, journeyText, onClock, renderClock, renderRoads, renderRoutes, roadMode, roads, travelControls as journeyControls, travelPicked } from './map-travel.js';
@@ -949,7 +949,7 @@ export function renderTokens() {
       const health = t.hp ? healthOf(t.hp) : t.health;
       const picture = tokenPicture(t);
       const el = h('div', {
-        class: `token token-${t.kind}${picture ? ' has-picture' : ''}${canMove(t) ? ' movable' : ''}${t.user_id === state.userId ? ' mine' : ''}${state.selected === t.id ? ' selected' : ''}${dragging ? ' dragging' : ''}${t.hidden ? ' hidden-token' : ''}${health === 'down' ? ' down' : ''}${state.caught.has(t.id) ? ' caught' : ''}${state.targeting && state.targeting.attacker !== t.id ? ' targetable' : ''}${map.combat?.turn === t.id ? ' turn' : ''}${isUnder(map, t) ? ' under' : ''}${pins ? ' token-pin' : ''}${t.follows ? ' following' : ''}`,
+        class: `token token-${t.kind}${picture ? ' has-picture' : ''}${canMove(t) ? ' movable' : ''}${t.user_id === state.userId ? ' mine' : ''}${state.selected === t.id ? ' selected' : ''}${dragging ? ' dragging' : ''}${t.hidden ? ' hidden-token' : ''}${health === 'down' ? ' down' : ''}${state.caught.has(t.id) || state.targeting?.picked?.includes(t.id) ? ' caught' : ''}${state.targeting && state.targeting.attacker !== t.id ? ' targetable' : ''}${map.combat?.turn === t.id ? ' turn' : ''}${isUnder(map, t) ? ' under' : ''}${pins ? ' token-pin' : ''}${t.follows ? ' following' : ''}`,
         title: [t.name, t.merchant ? 'Merchant: pick to shop' : TOKEN_KIND_NAMES[t.kind], hpText(t), ...t.conditions, t.journey ? journeyText(t.journey) : ''].filter(Boolean).join(' · '),
         role: 'button',
         tabindex: '0',
@@ -1328,6 +1328,7 @@ export function renderSelection() {
       ...tokenControls(token),
       ...travelControls(token),
       ...journeyControls(token),
+      ...spellTags(token),
       h('span', { class: 'spacer' }),
       editable && !state.canEdit ? h('span', { class: 'muted small' }, 'Drag to move') : null,
       ...attackControls(token),

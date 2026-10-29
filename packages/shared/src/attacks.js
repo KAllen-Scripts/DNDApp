@@ -19,10 +19,11 @@ import { ABILITIES, ABILITY_NAMES, DAMAGE_TYPES, rollDisadvantage } from './shee
 import { activeForm, formStats } from './wild-shape.js';
 import { attackRiders } from './attack-riders.js';
 import { offhandWeapon, planAttack, planSpell } from './attack-extras.js';
+import { spellConditions, spellEffects } from './spell-effects.js';
 
 export { attackRiders };
 
-export const ACTION_KINDS = ['attack', 'save', 'auto', 'heal'];
+export const ACTION_KINDS = ['attack', 'save', 'auto', 'heal', 'effect'];
 
 const ABBR = { str: 'Str', dex: 'Dex', con: 'Con', int: 'Int', wis: 'Wis', cha: 'Cha' };
 const ABILITY_BY_WORD = Object.fromEntries(ABILITIES.flatMap((a) => [[a, a], [ABILITY_NAMES[a].toLowerCase(), a]]));
@@ -46,6 +47,12 @@ export const halvesOnSave = (text, { cantrip = false } = {}) => {
   if (/no damage|takes? no\b/i.test(s)) return false;
   return !cantrip && !s.trim();
 };
+
+/** The ability a creature uses to break free of a spell with its action ("make a Strength check against your spell save DC"), or ''. */
+export function breakFree(text) {
+  const m = /\bmake an? (strength|dexterity|constitution|intelligence|wisdom|charisma)(?: \([a-z ]+\))? check against your spell save DC/i.exec(String(text ?? ''));
+  return m ? ABILITY_BY_WORD[m[1].toLowerCase()] : '';
+}
 
 // ---------- what a character can do (from their sheet) ----------
 
@@ -120,16 +127,22 @@ export function sheetActions(sheet, calc, { slots = {}, edition = '2014' } = {})
       ability: a.ability === 'finesse' ? 'dex' : a.ability === 'spell' ? calc.values.spell_ability ?? '' : a.ability, text: a.notes,
     });
   }
+  // Every spell (owner, 2026-10-28: "no way to cast spells such as 'Entangle', that aren't an attack"):
+  // ones with no roll at all are 'effect' (Bless, Invisibility, Mage Armor).
   for (const sp of sheet.spells ?? []) {
-    if (!sp.attack && !sp.damage.trim()) continue;
+    if (!sp.name.trim()) continue;
     const level = sp.level >= 1 ? Math.max(sp.level, Math.min(9, Number(slots[sp.id]) || sp.level)) : sp.level;
     const r = spellRolls(sp, calc, level);
     const heal = /heal/i.test(sp.damage);
-    const kind = sp.attack === 'attack' ? 'attack' : sp.attack === 'save' ? 'save' : heal ? 'heal' : 'auto';
+    const kind = sp.attack === 'attack' ? 'attack' : sp.attack === 'save' ? 'save' : sp.damage.trim() ? (heal ? 'heal' : 'auto') : 'effect';
+    const area = spellArea(sp);
+    const fx = spellEffects(sp, level);
     out.push({
       id: `spell:${sp.id}`, name: sp.name, source: 'spell', kind, bonus: r.kind === 'attack' ? r.bonus : null, dc: r.kind === 'save' ? r.dc : null, save: r.save || '',
       damage: r.damage ? [{ dice: r.damage, type: heal ? 'healing' : damageType(r.type) }] : [], damage2: null,
-      ranged: /ranged spell attack/i.test(sp.description), finesse: false, magical: true, area: spellArea(sp),
+      ranged: /ranged spell attack/i.test(sp.description), finesse: false, magical: true, area,
+      conditions: fx.conditions, lasting: fx.lasting, difficult: !!area && fx.difficult, targets_max: area ? null : fx.targets.max, self: !area && fx.targets.self,
+      check: breakFree(sp.description), duration: sp.duration,
       half: kind === 'save' ? halvesOnSave(sp.description, { cantrip: sp.level === 0 }) : false,
       level: sp.level, slot: level, upcast: sp.level >= 1 && !!sp.higher_damage.trim(), prepared: sp.prepared, ability: calc.values.spell_ability ?? '', text: '',
       d20: kind === 'attack' ? /^1d20([a-z0-9]*)/i.exec(planSpell(sheet, calc, sp, { edition, slot: level }).hit ?? '')?.[1] ?? '' : '',
@@ -194,6 +207,7 @@ export function creatureActions(text) {
         id, name, source: 'stat', kind: 'save', bonus: null, dc: Number(dc), save: ABILITY_BY_WORD[ability.toLowerCase()],
         damage: damageIn(fail >= 0 ? line.slice(fail) : line), damage2: null, ranged: false, finesse: false, magical: true,
         area: spellArea({ description: line }), half: halvesOnSave(line), level: null, upcast: false, ability: '', text: line.slice(0, 600),
+        conditions: spellConditions(line),
       });
     }
     if (out.length >= 16) break;
@@ -229,7 +243,8 @@ export function creatureDefenses(stats) {
     saves[a] = m ? Number(m[1].replace(/\s+/g, '')) : statBlockModifier(text, a.toUpperCase()) ?? 0;
   }
   const lineOf = (words) => text.split('\n').filter((l) => new RegExp(`^[\\s>*_|-]*(?:Damage\\s+)?${words}\\b`, 'i').test(l)).map((l) => l.replace(new RegExp(`^.*?${words}`, 'i'), '')).join(';');
-  return { ac, saves, resist: typesIn(lineOf('Resistances?')), immune: typesIn(lineOf('Immunit(?:y|ies)')), vulnerable: typesIn(lineOf('Vulnerabilit(?:y|ies)')) };
+  const mods = Object.fromEntries(ABILITIES.map((a) => [a, statBlockModifier(text, a.toUpperCase()) ?? 0]));
+  return { ac, saves, mods, resist: typesIn(lineOf('Resistances?')), immune: typesIn(lineOf('Immunit(?:y|ies)')), vulnerable: typesIn(lineOf('Vulnerabilit(?:y|ies)')) };
 }
 
 /**
@@ -245,7 +260,8 @@ export function sheetDefenses(sheet, calc, edition = '2014') {
   const text = [sheet.features, sheet.additional_features].join('\n');
   const resist = [];
   for (const m of text.matchAll(/resistan(?:ce|t) to ([a-z ,]+?) damage/gi)) for (const t of typesIn(m[1])) resist.push(t);
-  return { ac: stats ? stats.ac : Number(calc.values.ac) || null, saves, resist, immune: [], vulnerable: [], disadvantage: (ability) => rollDisadvantage(calc, { ability }) };
+  const mods = Object.fromEntries(ABILITIES.map((a) => [a, Number(calc.values[`mod.${a}`]) || 0]));
+  return { ac: stats ? stats.ac : Number(calc.values.ac) || null, saves, mods, resist, immune: [], vulnerable: [], disadvantage: (ability) => rollDisadvantage(calc, { ability }) };
 }
 
 /** Damage after resistance, immunity and vulnerability: { amount, note: 'immune' | 'resistant' | 'vulnerable' | '' }. */
@@ -445,7 +461,11 @@ export function resolveAttack({ action, attacker = null, targets, mode = 'normal
   out.damage = rolled;
   for (const t of targets) {
     const entry = { id: t.id, name: t.name, ac: null, hit: null, crit: false, rolled, amount: 0, notes: [] };
-    if (action.kind === 'heal') {
+    if (action.kind === 'effect') {
+      // No roll: whoever it's cast on is under it (Invisibility makes them invisible).
+      entry.conditions = [...(action.conditions ?? [])];
+      entry.effect = true;
+    } else if (action.kind === 'heal') {
       entry.amount = rolled.reduce((n, p) => n + p.total, 0);
       entry.heal = true;
     } else if (action.kind === 'auto') {
@@ -458,12 +478,29 @@ export function resolveAttack({ action, attacker = null, targets, mode = 'normal
       const success = !sit.autoFail && d20.total >= action.dc;
       entry.save = { ability: action.save, d20: d20.terms.find((x) => x.sides === 20).dice.map((d) => d.value), bonus, total: d20.total, dc: action.dc, success, auto_fail: sit.autoFail, mode: d20.mode };
       entry.notes.push(...sit.reasons);
+      // What a failed save does besides damage (Entangle restrains, Hold Person paralyzes).
+      if (!success && action.conditions?.length) entry.conditions = [...action.conditions];
       if (!success) Object.assign(entry, (({ amount, notes }) => ({ amount, notes: [...entry.notes, ...notes] }))(land(rolled, t)));
       else if (action.half) Object.assign(entry, (({ amount, notes }) => ({ amount, notes: [...entry.notes, 'half on a save', ...notes] }))(land(rolled, t, { halve: true })));
     }
     out.targets.push(entry);
   }
   return out;
+}
+
+/**
+ * A creature under a spell tries to shake it off: the saving throw again (Hold Person, at the end of each of
+ * its turns), or an ability check with its action when the spell says so (Entangle's Strength check).
+ * target: { name, conditions, saves, mods, sheetSave? }. Returns { kind: save | check, ability, d20, bonus,
+ * total, dc, success, result } (result: rollDice's, for showing the dice).
+ */
+export function rollToEnd({ target, ability, check = '', dc, random }) {
+  const by = check || ability;
+  const bonus = check ? target.mods?.[check] ?? 0 : target.saves?.[ability] ?? 0;
+  const sit = check ? { autoFail: false, mode: 'normal' } : saveSituation(target, ability, { sheetWhy: target.sheetSave?.(ability) ?? '' });
+  const result = rollDice(parseRoll(`1d20${bonus ? signed(bonus) : ''}`), { mode: sit.mode, random });
+  const success = !sit.autoFail && result.total >= dc;
+  return { kind: check ? 'check' : 'save', ability: by, d20: result.terms.find((x) => x.sides === 20).dice.map((d) => d.value), bonus, total: result.total, dc, success, auto_fail: sit.autoFail, result };
 }
 
 /**
