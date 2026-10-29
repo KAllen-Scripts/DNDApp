@@ -1,5 +1,5 @@
 /**
- * Full screen map (map-full.js): the map fills the screen with its toolbars
+ * Full screen map (map/full-screen.js): the map fills the screen with its toolbars
  * floating over it, see-through until pointed at.
  *
  * jsdom has no Fullscreen API, which is like an iPhone: the map still fills
@@ -171,12 +171,12 @@ test('regression: edit mode: Edit map swaps the play tools for the walls, height
     await page.settle();
     assert.ok(!page.$('#tab-map').classList.contains('editing'));
   });
-  const css = await readFile(new URL('../public/style.css', import.meta.url), 'utf8');
+  const css = await readFile(new URL('../public/styles/style.css', import.meta.url), 'utf8');
   assert.match(css, /\.map-panel\.editing #map-main-bar > :is\([^)]*#map-ping[^)]*\.map-play-tool\) \{ display: none; \}/);
 });
 
 test('full screen: the floating tools are see-through, solid when pointed at, focused or switched on', async () => {
-  const css = await readFile(new URL('../public/style.css', import.meta.url), 'utf8');
+  const css = await readFile(new URL('../public/styles/style.css', import.meta.url), 'utf8');
   const rule = (selector) => {
     const at = css.indexOf(`${selector} {`) >= 0 ? css.indexOf(`${selector} {`) : css.indexOf(`${selector},`);
     assert.ok(at >= 0, `no rule for ${selector}`);

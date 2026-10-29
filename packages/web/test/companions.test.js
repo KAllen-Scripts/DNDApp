@@ -1,5 +1,5 @@
 /**
- * The sheet's Companions box (sheet-companions.js): a familiar from Find
+ * The sheet's Companions box (sheet/companions.js): a familiar from Find
  * Familiar, a Steel Defender worked out from the sheet, rolling their
  * attacks, Put on the map and Dismiss.
  */

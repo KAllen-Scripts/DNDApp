@@ -39,7 +39,7 @@ const whoGroups = (page) => Object.fromEntries(page.$$('#map-dialog .who-group')
 
 /** Drag with the mouse: down on `from`, through `points`, up at the last one (screen = map pixels after Fit). */
 /** The fog shapes the page drew last (on the fog's canvas). */
-const fogShapes = async (page) => (await page.module('map-state.js')).state.fogShapes ?? [];
+const fogShapes = async (page) => (await page.module('map/state.js')).state.fogShapes ?? [];
 
 function drag(page, from, points) {
   const [x0, y0] = points[0];
@@ -402,7 +402,7 @@ test("maps: a player's page goes where the DM brings everyone and opens there; t
     page.type('#map-pick', road.id);
     await page.settle();
     await t.request('POST', `${base}/${cellar.id}/tokens`, { body: { kind: 'npc', name: 'Rat', x: 10, y: 10 } });
-    const { state } = await page.module('map-state.js');
+    const { state } = await page.module('map/state.js');
     await page.waitFor(() => state.maps.find((m) => m.id === cellar.id).tokens.some((tk) => tk.name === 'Rat'), { what: 'the change on the cellar' });
     await page.settle();
     assert.equal(page.$('#map-pick').value, road.id);
@@ -768,7 +768,7 @@ test('regression: AI walls asks how hard the AI should think every time, sends i
 
 // The owner (2026-10-20): the picked token's bar "is in the way of seeing the whole map".
 test('regression: what is picked on the map shows below the map, not over it (except full screen and phones)', async () => {
-  const css = fs.readFileSync(new URL('../public/style.css', import.meta.url), 'utf8');
+  const css = fs.readFileSync(new URL('../public/styles/style.css', import.meta.url), 'utf8');
   const rule = css.match(/\n\.map-selection \{([^}]*)\}/)[1];
   assert.doesNotMatch(rule, /position:\s*absolute/, 'in the page');
   assert.match(css, /:root:is\(\[data-map-full\], \[data-phone\]\) \.map-selection \{[^}]*position: absolute/);
@@ -1064,7 +1064,7 @@ test('maps: twisting two fingers turns the map (past a small twist), pins land u
     page: (t) => ({ as: t.sam }),
   }, async (page, t, { map }) => {
     await openMapTab(page);
-    const { state } = await page.module('map-state.js');
+    const { state } = await page.module('map/state.js');
     const transform = () => page.$('#map-stage').style.transform;
     const finger = (type, id, x, y) => page.pointer('#map-view', type, { pointerId: id, clientX: x, clientY: y, isPrimary: id === 1 });
     const at = (deg, r = 100) => [300 + r * Math.cos((deg * Math.PI) / 180), 200 + r * Math.sin((deg * Math.PI) / 180)];

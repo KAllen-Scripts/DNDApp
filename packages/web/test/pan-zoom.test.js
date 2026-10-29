@@ -1,11 +1,11 @@
 /**
- * pan-zoom.js (moving round the wiki's big views) and mini-views.js (the small
+ * page/pan-zoom.js (moving round the wiki's big views) and page/mini-views.js (the small
  * drawings on a page's compass, the Home and the rail).
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { zoomAt, fitBox, centreOn, toContent, panZoom } from '../public/pan-zoom.js';
+import { zoomAt, fitBox, centreOn, toContent, panZoom } from '../public/page/pan-zoom.js';
 
 const close = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-9, `${msg}: ${a} vs ${b}`);
 

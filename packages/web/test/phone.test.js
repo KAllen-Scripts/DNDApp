@@ -1,5 +1,5 @@
 /**
- * The phone layout (look-boot.js, phone.js, mobile.css): on a phone the top
+ * The phone layout (page/look-boot.js, page/phone.js, mobile.css): on a phone the top
  * bar hides behind a ☰ button and opens as a menu; toolbars fold into ⋯ menus.
  */
 import { test } from 'node:test';
@@ -207,7 +207,7 @@ test('a phone has no room for a panel beside the map', async () => {
 });
 
 test('the phone styles only apply in the phone layout', () => {
-  const css = fs.readFileSync(new URL('../public/mobile.css', import.meta.url), 'utf8');
+  const css = fs.readFileSync(new URL('../public/styles/mobile.css', import.meta.url), 'utf8');
   const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
   assert.ok(html.indexOf('mobile.css') > html.indexOf('themes.css'), 'loaded after the themes, so it wins over the layouts');
   // Every rule is for the phone layout, apart from hiding its buttons elsewhere and the Look dialog's pictures.
@@ -222,7 +222,7 @@ test('the phone styles only apply in the phone layout', () => {
 test('regression: an open ⋯ menu in a bar that stays at the top sits above the scrim, so its buttons can be tapped', () => {
   // The Sheet's, Inventory's, the DM's lists' and the admin's bars are sticky with a z-index, which puts their
   // menu in the bar's own layer, under the page-wide scrim: the menu looked dimmed and a tap hit the scrim.
-  const css = fs.readFileSync(new URL('../public/mobile.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = fs.readFileSync(new URL('../public/styles/mobile.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const z = (selector) => {
     const rule = css.split('}').find((r) => r.split('{')[0].split(/,(?![^(]*\))/).some((s) => s.trim() === selector));
     return Number(rule?.match(/z-index:\s*(\d+)/)?.[1] ?? NaN);
@@ -236,7 +236,7 @@ test('regression: an open ⋯ menu in a bar that stays at the top sits above the
 test("regression: on a phone the wiki's Atlas fills the screen and the rail's last button isn't under ☰", () => {
   // The wiki's grid kept its row at the top (align-content: start), so the Atlas's map was a short strip; and the
   // rail's room for ☰ was padding at the end of its scroll, so ☰ covered the last button showing until you scrolled.
-  const css = fs.readFileSync(new URL('../public/mobile.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = fs.readFileSync(new URL('../public/styles/mobile.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const rule = (selector) => css.split('}').find((r) => r.split('{')[0].split(/,(?![^(]*\))/).some((s) => s.trim() === selector)) ?? '';
   assert.match(rule(':root[data-phone] #wiki-view.wiki-atlas-on'), /align-content:\s*stretch/);
   assert.match(rule(':root[data-phone] .wiki-rail'), /margin-right:\s*2\.8rem/);

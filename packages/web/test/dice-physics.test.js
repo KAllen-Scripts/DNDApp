@@ -1,13 +1,13 @@
 /**
- * The Deluxe dice's throw (dice-physics.js, real cannon-es physics): dice stay
+ * The Deluxe dice's throw (dice/physics.js, real cannon-es physics): dice stay
  * on the table, come to rest in time, and with their numbers turned they show
  * exactly the server's numbers.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import './page.js'; // the module hooks: "/vendor/cannon-es.js" is the package the server serves
-const { simulate, STEP } = await import('../public/dice-physics.js');
-const { readDie, quat } = await import('../public/dice-shapes.js');
+const { simulate, STEP } = await import('../public/dice/physics.js');
+const { readDie, quat } = await import('../public/dice/shapes.js');
 
 test('dice-physics: thrown dice land on the asked-for numbers, on the table, within a few seconds', () => {
   const dice = [

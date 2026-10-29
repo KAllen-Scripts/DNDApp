@@ -1,5 +1,5 @@
 /**
- * Recording from Discord on the DM's Sessions tab (sessions.js): link the
+ * Recording from Discord on the DM's Sessions tab (campaign/sessions.js): link the
  * campaign's Discord server and voice channel, start and stop, and put a
  * finished recording's transcript into the upload form. The bot is the real
  * one with a fake Discord (server test/fake-discord.js); speech-to-text is the fake engine.

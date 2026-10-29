@@ -1,5 +1,5 @@
 /**
- * The player's characters on the Sheet tab (sheet-characters.js): who they
+ * The player's characters on the Sheet tab (sheet/characters.js): who they
  * play now, New character, Make active, Rename, Delete (asked first).
  */
 import { test } from 'node:test';

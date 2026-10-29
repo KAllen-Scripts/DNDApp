@@ -1,5 +1,5 @@
 /**
- * Layout options and personal touches (look-boot.js, look.js, sheet-place.js):
+ * Layout options and personal touches (page/look-boot.js, page/look.js, page/side-panel.js):
  * any panel beside the map and on either side, the map toolbar's place,
  * token names, hidden map tools, the tabs' order and start tab, and an
  * accent colour. All kept in this browser.
@@ -121,7 +121,7 @@ test('beside the map under Look: pick what goes there; its side is greyed out un
 });
 
 test('regression: the bar along the top stays put: every tab has room for its bold name, and its width never depends on the tab', async () => {
-  const css = fs.readFileSync(new URL('../public/style.css', import.meta.url), 'utf8') + fs.readFileSync(new URL('../public/themes.css', import.meta.url), 'utf8');
+  const css = fs.readFileSync(new URL('../public/styles/style.css', import.meta.url), 'utf8') + fs.readFileSync(new URL('../public/styles/themes.css', import.meta.url), 'utf8');
   // Only the panels change width with the tab; the page itself doesn't.
   const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].map(([, sel, body]) => [sel.trim(), body]);
   for (const [sel, body] of rules) {
@@ -274,7 +274,7 @@ test('accent colour: your own over any theme, with readable text on it; back to 
 
 test("regression: a long campaign name in the DM's bar is cut short with its tooltip, not spilled under the tabs", async () => {
   // "The Lanterns of Saltreach" wrapped a word a line in a 25 px column and ran under the DM's ten tabs.
-  const css = fs.readFileSync(new URL('../public/style.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = fs.readFileSync(new URL('../public/styles/style.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const rule = css.split('}').find((r) => r.split('{')[0].trim() === '#campaign-name') ?? '';
   assert.match(rule, /white-space:\s*nowrap/);
   assert.match(rule, /text-overflow:\s*ellipsis/);
@@ -287,7 +287,7 @@ test("regression: a long campaign name in the DM's bar is cut short with its too
 test("regression: the Sessions tab's table scrolls in its own box on a phone instead of pushing the page past the screen's edge", () => {
   // .sessions was a grid with an automatic column, which grew to the table's width, so the table's own scroll box
   // never scrolled and the campaign picker, the table and the upload box ran off the right of a phone.
-  const css = fs.readFileSync(new URL('../public/style.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = fs.readFileSync(new URL('../public/styles/style.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const rule = css.split('}').find((r) => r.split('{')[0].trim() === '.sessions') ?? '';
   assert.match(rule, /grid-template-columns:\s*minmax\(0,\s*1fr\)/);
 });
@@ -297,7 +297,7 @@ test('regression: in themes with wide capital tabs the top bar keeps to one row,
   // or three rows (the account button under the campaign's name) at widths where the plain themes fit; the sidebar
   // layout's narrower bar did it in every theme. The bar's steps were picked by the window's width, not by the bar.
   const { JSDOM } = await import('jsdom');
-  const { fitBar, FIT_STEPS } = await import('../public/topbar-fit.js');
+  const { fitBar, FIT_STEPS } = await import('../public/page/topbar-fit.js');
   const { document } = new JSDOM('<header class="topbar fit-wrap"><div class="who"></div><nav class="tabs"></nav></header>').window;
   const bar = document.querySelector('.topbar');
   // It wraps until the tabs are allowed onto two lines in their own box.
@@ -308,11 +308,11 @@ test('regression: in themes with wide capital tabs the top bar keeps to one row,
   assert.deepEqual(fitBar(bar, () => false), []);
   assert.deepEqual([...bar.classList], ['topbar']);
 
-  const css = fs.readFileSync(new URL('../public/style.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = fs.readFileSync(new URL('../public/styles/style.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   for (const step of FIT_STEPS) assert.ok(css.includes(`#app-view > .topbar.${step}`), `style.css has the ${step} step`);
   assert.match(css, /\.topbar\.fit-wrap \.tabs \{[^}]*flex-wrap:\s*wrap/, 'the last step puts the tabs on two lines, it never hides them');
   // The campaign's name has room of its own before the bar has to step down, so it isn't squeezed to nothing.
   assert.match(css, /#app-view > \.topbar \.who \{ flex: 1 1 8rem; \}/);
-  const app = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  const app = fs.readFileSync(new URL('../public/page/app.js', import.meta.url), 'utf8');
   assert.match(app, /initBarFit\(\$\('#app-view > \.topbar'\)\)/, 'the page fits its bar');
 });

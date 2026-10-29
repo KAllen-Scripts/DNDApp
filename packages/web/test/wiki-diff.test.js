@@ -1,7 +1,7 @@
-/** wiki-diff.js: what changed between two versions of a page, for History. */
+/** wiki/diff.js: what changed between two versions of a page, for History. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { wordDiff, pageDiff } from '../public/wiki-diff.js';
+import { wordDiff, pageDiff } from '../public/wiki/diff.js';
 
 const show = (runs) => runs.map((r) => (r.op === 'same' ? r.text : r.op === 'add' ? `[+${r.text}]` : `[-${r.text}]`)).join('');
 

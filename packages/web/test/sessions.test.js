@@ -1,5 +1,5 @@
 /**
- * The DM's Sessions tab (sessions.js): for the campaign they're in, check
+ * The DM's Sessions tab (campaign/sessions.js): for the campaign they're in, check
  * who's who in a transcript, upload it, and watch it get processed.
  */
 import { test } from 'node:test';

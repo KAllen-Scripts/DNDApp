@@ -1,5 +1,5 @@
 /**
- * The wiki's space (wiki-space.js): the Wiki button leaves the table for a
+ * The wiki's space (wiki/space.js): the Wiki button leaves the table for a
  * space of its own on the same page, whose address follows the page shown, so
  * Back, Forward and reload land in the right place. A player gets their own version.
  */
@@ -143,7 +143,7 @@ test("wiki space: a page's compass shows where it sits; History shows what chang
   }, async (page, t, { mill, lady }) => {
     page.click('[data-tab=wiki]');
     await page.waitFor('.wiki-card');
-    await (await page.module('wiki-space.js')).go(`#/page/${lady.id}`);
+    await (await page.module('wiki/space.js')).go(`#/page/${lady.id}`);
     await page.waitFor('.wiki-compass .wiki-compass-chip');
     const group = (label) => page.$$('.wiki-compass-group').find((g) => g.querySelector('.wiki-compass-label').textContent === label);
     const chips = (label) => [...group(label).querySelectorAll('.wiki-compass-title')].map((e) => e.textContent);
@@ -157,7 +157,7 @@ test("wiki space: a page's compass shows where it sits; History shows what chang
     assert.deepEqual(chips('Linked from'), ['The Grey Lady']);
 
     // History: version 2 of the Lady shows the sentence added to version 1.
-    await (await page.module('wiki-space.js')).go(`#/page/${lady.id}/history`);
+    await (await page.module('wiki/space.js')).go(`#/page/${lady.id}/history`);
     await page.waitFor(() => page.$$('.wiki-history button').length === 2);
     page.click(page.$$('.wiki-history button').find((b) => b.textContent === 'Version 2'));
     await page.waitFor('.wiki-diff');
@@ -178,7 +178,7 @@ test('wiki space: names in an answer open the drawer; Ctrl K finds a page by wha
     },
     page: (t, { dana }) => ({ as: dana }),
   }, async (page, t, { mill, lady }) => {
-    const { markNames } = await page.module('wiki-names.js');
+    const { markNames } = await page.module('wiki/names.js');
     const answer = page.document.createElement('div');
     answer.innerHTML = '<p>You met <strong>the grey lady</strong> near Millbrook. <code>Millbrook</code></p>';
     page.$('#thread').append(answer);
@@ -211,7 +211,7 @@ test('wiki space: names in an answer open the drawer; Ctrl K finds a page by wha
     assert.equal(page.errors.length, 0, page.errors.join('\n'));
   });
   await withPage({ page: (t) => ({ as: t.sam }) }, async (page) => {
-    const { markNames } = await page.module('wiki-names.js');
+    const { markNames } = await page.module('wiki/names.js');
     const answer = page.document.createElement('div');
     answer.textContent = 'You met the Grey Lady near Millbrook.';
     markNames(answer);

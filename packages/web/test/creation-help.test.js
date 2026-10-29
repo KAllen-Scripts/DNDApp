@@ -1,5 +1,5 @@
 /**
- * Help making a character (sheet-help.js): a panel above the sheet saying
+ * Help making a character (sheet/creation-help.js): a panel above the sheet saying
  * what the class, race and background give and what to choose. Nothing is
  * forced: clicking ticks a skill or fills something in.
  */
