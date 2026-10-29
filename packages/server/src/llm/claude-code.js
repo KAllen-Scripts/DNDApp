@@ -58,8 +58,8 @@ export function createClaudeCodeProvider({ config, usage, queryFn = query }) {
   const { tasks } = config.llm;
 
   /** Run one query to completion. Returns the result message. */
-  async function run({ task, purpose, system, prompt, campaignId, userId, options = {}, onMessage, effort: chosen }) {
-    const { model } = tasks[task];
+  async function run({ task, purpose, system, prompt, campaignId, userId, options = {}, onMessage, effort: chosen, model: chosenModel }) {
+    const model = chosenModel || tasks[task].model;
     const effort = chosen || tasks[task].effort;
     let result;
     const startedAt = Date.now();
@@ -136,7 +136,7 @@ export function createClaudeCodeProvider({ config, usage, queryFn = query }) {
       return result.result.trim();
     },
 
-    async agent({ task, purpose, system, prompt, tools, limits, campaignId, userId, onText, onTool, onTurn, effort }) {
+    async agent({ task, purpose, system, prompt, tools, limits, campaignId, userId, onText, onTool, onTurn, effort, model }) {
       const state = { toolCalls: 0 };
       let turn = 0;
       const server = createSdkMcpServer({
@@ -148,6 +148,7 @@ export function createClaudeCodeProvider({ config, usage, queryFn = query }) {
       const result = await run({
         task,
         effort,
+        model,
         purpose,
         system,
         prompt,

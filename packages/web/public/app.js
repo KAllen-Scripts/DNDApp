@@ -665,11 +665,13 @@ $('#ask-form textarea').addEventListener('keydown', (e) => {
 
 /**
  * Under a quick answer (a general D&D lookup, answered fast from what the AI
- * knows): a button to ask again the thorough way, with the books and records.
+ * knows) or one the faster model wrote from the records it was given: a
+ * button to ask again the thorough way, with the books, the records and the
+ * main model.
  */
-function quickNote(question) {
+function quickNote(question, path) {
   const button = h('button', { type: 'button', class: 'link small' }, 'Look it up properly');
-  const note = h('p', { class: 'muted small answer-quick' }, 'Quick answer. ', button);
+  const note = h('p', { class: 'muted small answer-quick' }, path === 'quick' ? 'Quick answer. ' : 'Quick answer from the records. ', button);
   button.addEventListener('click', () => {
     if (state.asking) return;
     note.remove();
@@ -715,7 +717,7 @@ async function ask(question, mode = 'auto') {
           markNames(body);
           const ev = renderEvidence(data.evidence);
           if (ev) a.append(ev);
-          if (data.path === 'quick') a.append(quickNote(question));
+          if (data.path === 'quick' || data.fast) a.append(quickNote(question, data.path));
         } else if (event === 'error') {
           throw new Error(data.error);
         }
