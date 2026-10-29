@@ -156,12 +156,15 @@ export function mapSpellsFor(list, { dm, visible, own, templates }) {
   for (const sp of list ?? []) {
     const mine = own.has(sp.caster);
     const seesCaster = mine || visible.has(sp.caster);
+    // The DM's own effect from no token (a trap): its name is all there is to see.
+    const free = sp.caster == null && sp.action === 'custom';
     const affected = (sp.affected ?? []).filter((a) => visible.has(a.id) || own.has(a.id));
     if (!seesCaster && !affected.length && !areas.has(sp.template)) continue;
+    const { custom, ...rest } = sp;
     out.push({
-      ...sp,
+      ...rest,
       caster: seesCaster ? sp.caster : null,
-      caster_name: seesCaster ? sp.caster_name : 'Someone you can’t see',
+      caster_name: seesCaster || free ? sp.caster_name : 'Someone you can’t see',
       dc: mine ? sp.dc : null,
       affected,
       template: areas.has(sp.template) ? sp.template : null,

@@ -6,7 +6,7 @@
  * rolled and a card per attack, to everyone who can see it (the map's `attacks`, filtered by the server).
  */
 import { api, h } from './api.js';
-import { ownToken } from './shared/map.js';
+import { CONDITIONS, ownToken } from './shared/map.js';
 import { campaignSettings } from './campaign-settings.js';
 import { base, report, state, status } from './map-state.js';
 import { onMap, renderMeasureTools, renderPinTool, renderRuler, renderTokens, setTool } from './map.js';
@@ -103,7 +103,8 @@ export async function pickAction({ attacker = null, target = null }) {
     });
     const twoHands = x.damage2 ? h('input', { type: 'checkbox' }) : null;
     const slotPick = x.level >= 1 && x.upcast ? h('select', { 'aria-label': `${x.name}: slot level` }, Array.from({ length: 10 - x.level }, (_, k) => new Option(`${ORD[x.level + k]} level${slots ? ` (${slots[x.level + k] ?? 0}${slots.pact?.level === x.level + k ? ` + ${slots.pact.left} pact` : ''} left)` : ''}`, x.level + k))) : null;
-    const useSlot = x.level >= 1 ? h('input', { type: 'checkbox', checked: true }) : null;
+    // A creature's spells use no slots the app keeps (the DM keeps count; its uses a day are shown).
+    const useSlot = x.level >= 1 && slots ? h('input', { type: 'checkbox', checked: true }) : null;
     const left = x.level >= 1 && slots && !slotPick ? h('span', { class: 'muted small' }, ` ${(slots[x.level] ?? 0) + (slots.pact?.level === x.level ? slots.pact.left : 0)} ${ORD[x.level]}-level slots left`) : null;
     const go = () => {
       const opts = {
@@ -128,7 +129,7 @@ export async function pickAction({ attacker = null, target = null }) {
     return h('div', { class: 'attack-row', 'data-action': x.id },
       h('button', { type: 'button', class: 'attack-go', onclick: go },
         h('strong', {}, x.name),
-        h('span', { class: 'muted small' }, actionText(x)),
+        h('span', { class: 'muted small' }, [actionText(x), x.uses].filter(Boolean).join(' · ')),
       ),
       sit,
       ...(riders.length || twoHands || slotPick || useSlot ? [h('div', { class: 'attack-opts' },
@@ -156,12 +157,112 @@ export async function pickAction({ attacker = null, target = null }) {
       ...attacks,
       spells.length ? h('h3', {}, 'Spells') : null,
       ...spells,
-      !rows.length ? h('p', { class: 'muted' }, attacker.kind === 'pc' ? 'Nothing on the character sheet to use yet: equip a weapon in the Inventory, or add attacks and spells.' : 'Its stat block has no attacks the app can read. Fill it in (Stat block) and try again.') : null,
-      h('div', { class: 'map-dialog-actions' }, h('span', { class: 'spacer' }), h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel')),
+      !rows.length ? h('p', { class: 'muted' }, attacker.kind === 'pc' ? 'Nothing on the character sheet to use yet: equip a weapon in the Inventory, or add attacks and spells.' : `Its stat block has no attacks the app can read. Fill it in (Stat block) and try again${state.canEdit ? ', or make your own with Something else' : ''}.`) : null,
+      h('div', { class: 'map-dialog-actions' },
+        // The DM: anything else, made up on the spot (a bugged spell, a lair action, a custom ability).
+        state.canEdit ? h('button', { type: 'button', class: 'ghost', 'data-custom': '', title: 'Make up an attack, spell or effect: to hit or a save, damage, conditions, an area', onclick: () => customForm({ attacker, target }) }, 'Something else…') : null,
+        h('span', { class: 'spacer' }), h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel')),
     ),
   );
   dialog.onclose = null;
   dialog.showModal();
+}
+
+// ---------- the DM's own: anything, from anyone or nobody ----------
+
+const KINDS = { attack: 'An attack roll', save: 'A saving throw', auto: 'Damage, no roll', heal: 'Healing', effect: 'Just an effect (conditions)' };
+const SHAPES = { '': 'No area: tap who', circle: 'Sphere (radius)', cone: 'Cone', line: 'Line', cube: 'Cube' };
+const GIVEABLE = CONDITIONS.filter((c) => c !== 'exhaustion' && c !== 'concentrating');
+
+/**
+ * The DM makes up an attack, spell or effect (owner, 2026-10-29: "place attacks, spells, and whatever else on
+ * the map. In case something bugs out or something custom needs doing"): who does it (any token, or nobody: a
+ * trap, the room), to hit or a save, damage, conditions, an area and how long it lasts. Then it goes like any
+ * other: tap who, or place its area; the server rolls (routes/attacks.js `custom`).
+ */
+export function customForm({ attacker = null, target = null } = {}) {
+  const map = state.current;
+  if (!map || !state.canEdit) return;
+  const dialog = $('#map-dialog');
+  const last = state.lastCustom ?? {};
+  const field = (label, input, attrs = {}) => h('label', { class: 'custom-field', ...attrs }, h('span', { class: 'small' }, label), input);
+  const doer = h('select', { name: 'by', 'aria-label': 'Who does it' },
+    new Option('Nobody (a trap, the room, the DM)', ''),
+    ...map.tokens.filter((t) => t.id !== target?.id).map((t) => new Option(t.name, t.id, false, t.id === attacker?.id)));
+  const from = h('input', { name: 'from', maxlength: 60, placeholder: 'The DM', value: last.from ?? '' });
+  const name = h('input', { name: 'name', required: true, maxlength: 80, placeholder: 'Lightning trap, Lair action, Bugged spell…', value: last.name ?? '' });
+  const kind = h('select', { name: 'kind' }, Object.entries(KINDS).map(([k, n]) => new Option(n, k, false, k === (last.kind ?? 'save'))));
+  const bonus = h('input', { name: 'bonus', type: 'number', min: -10, max: 30, value: last.bonus ?? 5 });
+  const ranged = h('input', { name: 'ranged', type: 'checkbox', checked: !!last.ranged });
+  const dc = h('input', { name: 'dc', type: 'number', min: 1, max: 40, value: last.dc ?? 13 });
+  const save = h('select', { name: 'save' }, Object.entries(ABBR).map(([k, n]) => new Option(n, k, false, k === (last.save ?? 'dex'))));
+  const half = h('input', { name: 'half', type: 'checkbox', checked: last.half ?? true });
+  const damage = h('input', { name: 'damage', maxlength: 100, placeholder: '2d6 fire + 1d4 cold', value: last.damage ?? '' });
+  const conds = GIVEABLE.map((c) => h('label', { class: 'map-check small' }, h('input', { type: 'checkbox', 'data-condition': c, checked: (last.conditions ?? []).includes(c) }), ` ${c}`));
+  const shape = h('select', { name: 'shape' }, Object.entries(SHAPES).map(([k, n]) => new Option(n, k, false, k === (last.area?.shape ?? ''))));
+  const size = h('input', { name: 'size', type: 'number', min: 1, max: 1000, value: last.area?.size ?? 20 });
+  const lasts = h('input', { name: 'lasts', type: 'checkbox', checked: !!last.lasts });
+  const rounds = h('input', { name: 'rounds', type: 'number', min: 0, max: 14400, value: last.rounds ?? 10, title: '0: until you end it' });
+  const conc = h('input', { name: 'concentration', type: 'checkbox', checked: !!last.concentration });
+  const difficult = h('input', { name: 'difficult', type: 'checkbox', checked: !!last.difficult });
+  const parts = {
+    from: field('Named', from), bonus: field('To hit', bonus), ranged: h('label', { class: 'map-check small' }, ranged, ' Ranged'),
+    dc: field('DC', dc), save: field('Save', save), half: h('label', { class: 'map-check small' }, half, ' Half damage on a save'),
+    damage: field('Damage or healing', damage), conditions: h('fieldset', { class: 'custom-conditions' }, h('legend', { class: 'small' }, 'Gives (on a hit, a failed save, or straight away)'), ...conds),
+    size: field('Size (ft)', size), difficult: h('label', { class: 'map-check small' }, difficult, ' Difficult terrain'),
+    rounds: field('Rounds (0: until ended)', rounds), conc: h('label', { class: 'map-check small' }, conc, ' Concentration'),
+  };
+  const show = () => {
+    const k = kind.value;
+    parts.from.hidden = !!doer.value;
+    parts.bonus.hidden = parts.ranged.hidden = k !== 'attack';
+    parts.dc.hidden = parts.save.hidden = parts.half.hidden = k !== 'save';
+    parts.damage.hidden = k === 'effect';
+    parts.conditions.hidden = k === 'heal';
+    parts.size.hidden = parts.difficult.hidden = !shape.value;
+    parts.rounds.hidden = !lasts.checked;
+    parts.conc.hidden = !lasts.checked || !doer.value;
+    go.textContent = shape.value ? 'Place its area' : target ? `Do it to ${target.name}` : 'Pick who';
+  };
+  const go = h('button', { type: 'submit', class: 'primary', 'data-custom-go': '' }, 'Pick who');
+  for (const el of [doer, kind, shape, lasts]) el.addEventListener('change', show);
+  const submit = (e) => {
+    e.preventDefault();
+    if (!name.value.trim()) return name.focus();
+    const custom = {
+      name: name.value.trim(), kind: kind.value,
+      ...(!doer.value && from.value.trim() && { from: from.value.trim() }),
+      ...(kind.value === 'attack' && { bonus: Number(bonus.value) || 0, ranged: ranged.checked }),
+      ...(kind.value === 'save' && { dc: Number(dc.value) || 10, save: save.value, half: half.checked }),
+      ...(kind.value !== 'effect' && { damage: damage.value.trim() }),
+      conditions: kind.value === 'heal' ? [] : conds.map((l) => l.querySelector('input')).filter((b) => b.checked).map((b) => b.dataset.condition),
+      ...(lasts.checked && { lasts: true, rounds: Number(rounds.value) || 0, concentration: !!doer.value && conc.checked }),
+      ...(shape.value && { difficult: difficult.checked }),
+    };
+    const area = shape.value ? { shape: shape.value, size: Number(size.value) || 5, ...(shape.value === 'line' && { width: 5 }) } : null;
+    state.lastCustom = { ...custom, from: from.value.trim(), area };
+    dialog.close();
+    const by = map.tokens.find((t) => t.id === doer.value) ?? null;
+    const action = { id: 'custom', name: custom.name, source: 'custom', kind: custom.kind, area, targets_max: custom.kind === 'attack' && target ? 1 : 12 };
+    const opts = { custom, mode: 'normal' };
+    if (area) return placeArea(by, action, opts);
+    if (target) return send({ attacker: by?.id, target: target.id, ...opts });
+    startTargeting(by ?? { id: null }, action, opts, []);
+  };
+  dialog.replaceChildren(
+    h('form', { method: 'dialog', class: 'map-dialog-inner custom-action', onsubmit: submit },
+      h('h2', {}, target ? `Something else at ${target.name}` : 'Something else'),
+      h('p', { class: 'muted small' }, 'Make up an attack, spell or effect: a trap, a lair action, a spell the app gets wrong. The server rolls it like any other, and Undo works.'),
+      h('div', { class: 'custom-grid' }, field('Name', name), field('Done by', doer), parts.from, field('It is', kind), parts.bonus, parts.ranged, parts.dc, parts.save, parts.half, parts.damage),
+      parts.conditions,
+      h('div', { class: 'custom-grid' }, field('Area', shape), parts.size, parts.difficult, h('label', { class: 'map-check small' }, lasts, ' Stays in play'), parts.rounds, parts.conc),
+      h('div', { class: 'map-dialog-actions' }, h('span', { class: 'spacer' }), h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel'), go),
+    ),
+  );
+  show();
+  dialog.onclose = null;
+  dialog.showModal();
+  name.focus();
 }
 
 // ---------- picking who, or where ----------
@@ -173,7 +274,7 @@ export async function pickAction({ attacker = null, target = null }) {
  */
 function startTargeting(attacker, action, opts, picked = null) {
   setTool({});
-  state.targeting = { attacker: attacker.id, action, opts, ...(picked && { picked: [...picked] }) };
+  state.targeting = { attacker: attacker?.id ?? null, action, opts, ...(picked && { picked: [...picked] }) };
   drawTargeting();
   renderTokens();
 }
@@ -197,9 +298,9 @@ function drawTargeting() {
       send({ attacker: t.attacker, action: action.id, ...(picked.length && { targets: picked }), ...opts });
     };
     bar.replaceChildren(...[
-      h('span', {}, names.length ? `${t.action.name} on ${names.join(', ')}${max > 1 ? ` (${names.length} of ${max})` : ''}` : `Tap who ${name} casts ${t.action.name} on${max > 1 ? ` (up to ${max})` : ''}`),
-      !t.picked.includes(t.attacker) && t.picked.length < max ? h('button', { type: 'button', class: 'ghost', onclick: () => { t.picked.push(t.attacker); drawTargeting(); renderTokens(); } }, 'On yourself') : null,
-      h('button', { type: 'button', class: 'primary', 'data-cast': '', disabled: !t.picked.length && t.action.kind !== 'effect', onclick: cast }, t.picked.length ? 'Cast' : 'Cast on nobody'),
+      h('span', {}, names.length ? `${t.action.name} on ${names.join(', ')}${max > 1 && max < 12 ? ` (${names.length} of ${max})` : ''}` : `Tap who ${t.attacker ? `${name} casts ` : 'gets '}${t.action.name}${t.attacker ? ' on' : ''}${max > 1 ? (max < 12 ? ` (up to ${max})` : ' (as many as you like)') : ''}`),
+      t.attacker && !t.picked.includes(t.attacker) && t.picked.length < max ? h('button', { type: 'button', class: 'ghost', onclick: () => { t.picked.push(t.attacker); drawTargeting(); renderTokens(); } }, 'On yourself') : null,
+      h('button', { type: 'button', class: 'primary', 'data-cast': '', disabled: !t.picked.length && t.action.kind !== 'effect', onclick: cast }, t.picked.length ? (t.action.source === 'custom' ? 'Do it' : 'Cast') : 'Cast on nobody'),
       h('button', { type: 'button', class: 'ghost', onclick: stopTargeting }, 'Cancel'),
     ].filter(Boolean));
   }
@@ -241,7 +342,7 @@ function placeArea(attacker, action, opts) {
     width: action.area.shape === 'line' ? Math.round((action.area.width ?? 5) * k * 100) / 100 : null,
     label: action.name.slice(0, 80),
     color: '#e8743b',
-    attack: { attacker: attacker.id, action: action.id, ...opts },
+    attack: { attacker: attacker?.id, action: action.id, ...opts },
   };
   renderPinTool();
   renderMeasureTools();
@@ -256,6 +357,8 @@ export const castAt = (attack, templateId) => send({ ...attack, template: templa
 
 async function send(body, path = 'attack') {
   const map = state.current;
+  // The DM's own effect from no token (a trap): no attacker at all.
+  if (body.attacker == null) delete body.attacker;
   let res;
   try {
     res = await state.guarded(() => api('POST', `${base()}/${map.id}/${path}`, body));
@@ -289,6 +392,8 @@ export function seeAttacks(map) {
   if (state.current?.id === map.id) {
     const btn = $('#map-attacks-log');
     if (btn) btn.hidden = !attacksOn() && !log.length && !(map.spells ?? []).length;
+    const effect = $('#map-dm-effect');
+    if (effect) effect.hidden = !attacksOn() || !state.canEdit;
   }
   for (const e of log) {
     if (ids.has(e.id)) {

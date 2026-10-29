@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  afterDefenses, attackLogFor, attackSituation, concentrationDc, creatureActions, creatureDefenses, critNotation, halvesOnSave,
+  afterDefenses, attackLogFor, attackSituation, concentrationDc, creatureActions, creatureDefenses, creatureSpellList, critNotation, customAction, customDamage, halvesOnSave,
   refundSlot, resolveAttack, saveSituation, sheetActions, sheetDefenses, slotsLeft, spendSlot, tokenGap,
 } from '../src/attacks.js';
 import { castLevels, castWithSlot } from '../src/spell-slots.js';
@@ -355,4 +355,35 @@ test('regression: castLevels lists the slot levels a spell can use with what is 
   assert.throws(() => castWithSlot(sheet, calc, { name: 'Misty Step', level: 2 }, 1), /2nd-level spell/);
   assert.throws(() => castWithSlot(sheet, calc, { name: 'Fire Bolt', level: 0 }), /cantrip/);
   assert.equal(sheet.spellcasting.slots_used[1], 4, 'the sheet passed in is left alone');
+});
+
+test('creatureSpellList reads a stat block\'s spellcasting: 2014 slots, 2024 uses a day with a higher-level version, innate spells in one paragraph', () => {
+  const old = creatureSpellList(`***Spellcasting.*** The priest is a 5th-level spellcaster. Its spellcasting ability is Wisdom (spell save DC 13, +5 to hit with spell attacks). The priest has the following cleric spells prepared:
+Cantrips (at will): *light, sacred flame, thaumaturgy*
+1st level (4 slots): *cure wounds, guiding bolt, sanctuary*
+3rd level (2 slots): *dispel magic, spirit guardians*`);
+  assert.deepEqual([old.dc, old.bonus, old.level], [13, 5, 5]);
+  assert.deepEqual(old.spells.map((x) => x.name), ['light', 'sacred flame', 'thaumaturgy', 'cure wounds', 'guiding bolt', 'sanctuary', 'dispel magic', 'spirit guardians']);
+  assert.equal(old.spells[7].uses, '3rd level (2 slots)');
+
+  const now = creatureSpellList(`Spellcasting. The mage casts one of the following spells, using Intelligence as the spellcasting ability (spell save DC 14, +6 to hit with spell attacks):
+At Will: Detect Magic, Light, Mage Hand, Prestidigitation
+2/Day Each: Fireball (level 4 version), Invisibility
+1/Day: Cone of Cold`);
+  assert.deepEqual(now.spells.find((x) => x.name === 'Fireball'), { name: 'Fireball', slot: 4, uses: '2/day each' });
+  assert.equal(now.spells.at(-1).name, 'Cone of Cold');
+
+  const innate = creatureSpellList('Innate Spellcasting. The drow\'s spellcasting ability is Charisma (spell save DC 11). It can innately cast the following spells, requiring no material components: At will: dancing lights 1/day each: darkness, faerie fire');
+  assert.deepEqual([innate.dc, innate.bonus], [11, 3]);
+  assert.deepEqual(innate.spells.map((x) => [x.name, x.uses]), [['dancing lights', 'at will'], ['darkness', '1/day each'], ['faerie fire', '1/day each']]);
+  assert.equal(creatureSpellList('Bite. Melee Weapon Attack: +4 to hit'), null);
+});
+
+test('customAction: the DM\'s own attack, save or effect, with damage typed in a few parts', () => {
+  assert.deepEqual(customDamage('2d6+3 fire + 1d6 cold'), [{ dice: '2d6+3', type: 'fire' }, { dice: '1d6', type: 'cold' }]);
+  assert.deepEqual(customDamage('1d8+2', { heal: true }), [{ dice: '1d8+2', type: 'healing' }]);
+  const a = customAction({ name: 'Collapsing roof', kind: 'save', dc: 15, save: 'dex', damage: '4d10 bludgeoning', half: true, conditions: ['prone'], area: { shape: 'cube', size: 20 } });
+  assert.deepEqual([a.kind, a.dc, a.save, a.half, a.area, a.conditions, a.lasting], ['save', 15, 'dex', true, { shape: 'cube', size: 20 }, ['prone'], null]);
+  const e = customAction({ name: 'Darkness', kind: 'effect', damage: '9d9 fire', lasts: true, rounds: 100, concentration: true });
+  assert.deepEqual([e.damage, e.lasting], [[], { concentration: true, rounds: 100 }]);
 });

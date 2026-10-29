@@ -2490,6 +2490,11 @@ button.busy:disabled { opacity: 1; }
 .attack-sit.advantage { color: var(--ok, #2e7d32); }
 .attack-sit.disadvantage { color: var(--error); }
 .attack-log-list { display: grid; gap: 0.4rem; max-height: 60vh; overflow-y: auto; }
+/* The DM's own attack, spell or effect (customForm). */
+.custom-action .custom-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(9.5rem, 100%), 1fr)); gap: 0.4rem 0.6rem; align-items: end; margin: 0.4rem 0; }
+.custom-action .custom-field { display: grid; gap: 0.15rem; }
+.custom-action .custom-field input, .custom-action .custom-field select { width: 100%; min-width: 0; }
+.custom-action .custom-conditions { display: flex; flex-wrap: wrap; gap: 0.2rem 0.7rem; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.3rem 0.6rem; margin: 0.4rem 0; }
 @media (max-width: 640px) {
   /* On a phone the picked token's bar floats at the bottom: the cards go to the top. */
   .map-attack-cards { left: 0.25rem; right: 3rem; width: auto; top: 0.25rem; bottom: auto; flex-direction: column; }

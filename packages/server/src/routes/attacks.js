@@ -13,11 +13,11 @@ import { computeSheet } from '@dndapp/shared/sheet.js';
 import { spendForAttack } from '@dndapp/shared/attack-extras.js';
 import { activeForm, formHasHp, setFormHp } from '@dndapp/shared/wild-shape.js';
 import {
-  attackRiders, attackSituation, castLevels, concentrationDc, creatureActions, creatureDefenses, refundSlot, resolveAttack,
-  rollToEnd, sheetActions, sheetDefenses, slotsLeft, spendSlot, tokenGap,
+  AREA_SHAPES, CUSTOM_KINDS, attackRiders, attackSituation, castLevels, concentrationDc, creatureActions, creatureDefenses, creatureSpellList,
+  creatureSpells, customAction, refundSlot, resolveAttack, rollToEnd, sheetActions, sheetDefenses, slotsLeft, spendSlot, tokenGap,
 } from '@dndapp/shared/attacks.js';
 import { ABILITY_NAMES } from '@dndapp/shared/sheet.js';
-import { endConcentration, endMapSpell } from '@dndapp/shared/spell-effects.js';
+import { SPELL_CONDITIONS, endConcentration, endMapSpell } from '@dndapp/shared/spell-effects.js';
 import { AuthError } from '../auth.js';
 import { BadRequestError, NotFoundError } from '../store.js';
 import { newTokenId } from '../maps/store.js';
@@ -34,10 +34,35 @@ const actionView = (x) => ({
   area: x.area, half: x.half, ranged: !!x.ranged, level: x.level, slot: x.slot ?? null, upcast: !!x.upcast, prepared: !!x.prepared,
   // What a spell does besides damage: the conditions it gives, how long it lasts, difficult terrain, how many it targets.
   conditions: x.conditions ?? [], lasting: x.lasting ?? null, difficult: !!x.difficult, targets_max: x.targets_max ?? null, self: !!x.self, duration: x.duration ?? '',
+  // A stat block's spell: how often it can cast it ("1/day each", "3rd level (3 slots)").
+  ...(x.uses && { uses: x.uses }),
+});
+
+/**
+ * The DM's own attack, spell or effect (customAction in shared/attacks.js): what the custom form sends. `from`
+ * names where it comes from when no token does it ("Pit trap"; default "The DM").
+ */
+const CUSTOM = z.object({
+  name: z.string().trim().min(1).max(80),
+  from: z.string().trim().max(60).default(''),
+  kind: z.enum(CUSTOM_KINDS),
+  bonus: z.number().int().min(-10).max(30).default(0),
+  dc: z.number().int().min(1).max(40).default(10),
+  save: z.enum(['str', 'dex', 'con', 'int', 'wis', 'cha']).default('dex'),
+  damage: z.string().max(100).default(''),
+  half: z.boolean().default(false),
+  conditions: z.array(z.enum(SPELL_CONDITIONS)).max(6).default([]),
+  magical: z.boolean().default(true),
+  ranged: z.boolean().default(false),
+  area: z.object({ shape: z.enum(AREA_SHAPES), size: z.number().min(1).max(1000), width: z.number().min(1).max(100).optional() }).nullable().default(null),
+  lasts: z.boolean().default(false),
+  rounds: z.number().int().min(0).max(14400).default(0),
+  concentration: z.boolean().default(false),
+  difficult: z.boolean().default(false),
 });
 
 export function registerAttacks(app, r) {
-  const { access, editions, maps, sheets, store, viewableMap } = r;
+  const { access, editions, maps, sheets, spells, store, viewableMap } = r;
   const random = r.random;
 
   const attackSettings = (cid) => store.getSettings(cid).attacks;
@@ -53,14 +78,31 @@ export function registerAttacks(app, r) {
     return version ? { sheet, calc: computeSheet(sheet, { ...settings, edition: edition ?? settings.edition }), version } : null;
   };
 
-  /** The token's actions: a character's from their sheet, anyone else's from its stat block. */
-  const actionsOf = (cid, token, slots = {}, edition = '2014') => {
+  /**
+   * A stat block's spells, looked up by name like the sheet's (the SRD, then the group's books, then the AI's
+   * memory; each found one is remembered by the lookup, a name not found here until the server restarts).
+   */
+  const missing = new Set();
+  const knownSpells = async (cid, list) => {
+    const known = new Map();
+    for (const name of new Set((list?.spells ?? []).map((x) => x.name.toLowerCase()))) {
+      if (missing.has(name) || !spells) continue;
+      const sp = await spells.lookup(name, { campaignId: cid }).catch(() => null);
+      if (sp) known.set(name, sp);
+      else missing.add(name);
+    }
+    return known;
+  };
+
+  /** The token's actions: a character's from their sheet, anyone else's from its stat block (its attacks, then its spells). */
+  const actionsOf = async (cid, token, slots = {}, edition = '2014') => {
     if (token.kind === 'pc') {
       const s = sheetOf(cid, token, edition);
       if (!s) throw new BadRequestError(`${token.name} has no saved character sheet to attack from.`);
       return { list: sheetActions(s.sheet, s.calc, { slots, edition }), sheet: s };
     }
-    return { list: creatureActions(token.stats?.text), sheet: null };
+    const list = creatureSpellList(token.stats?.text);
+    return { list: [...creatureActions(token.stats?.text), ...creatureSpells(list, await knownSpells(cid, list), { slots })], sheet: null };
   };
 
   /** The token picked to act with: one this viewer controls (the DM: any). */
@@ -99,7 +141,7 @@ export function registerAttacks(app, r) {
     const { map, view } = viewableMap(request);
     const token = actorOf(request, a, map, view, request.params.tid);
     const edition = await editions.of(a.cid);
-    const { list, sheet } = actionsOf(a.cid, token, {}, edition);
+    const { list, sheet } = await actionsOf(a.cid, token, {}, edition);
     const tid = typeof request.query?.target === 'string' ? request.query.target : '';
     const seen = tid ? (a.role === 'dm' ? map.tokens : view.tokens).find((t) => t.id === tid) : null;
     const target = seen ? map.tokens.find((t) => t.id === seen.id) : null;
@@ -213,8 +255,10 @@ export function registerAttacks(app, r) {
   };
 
   const ATTACK = z.object({
-    attacker: z.string().max(20),
-    action: z.string().max(80),
+    // The DM's own (custom) may have no attacker: a trap, the room, the DM.
+    attacker: z.string().max(20).optional(),
+    action: z.string().max(80).default(''),
+    custom: CUSTOM.optional(),
     target: z.string().max(20).optional(),
     targets: z.array(z.string().max(20)).min(1).max(12).optional(),
     template: z.string().max(20).optional(),
@@ -234,6 +278,9 @@ export function registerAttacks(app, r) {
    * is in its area now (no slot; new ones join it). Returns { map, attack, rolls }.
    */
   const perform = ({ a, map, dm, body, attacker, pre, action, targets, template, edition, again = null }) => {
+    // The DM's own effect may come from no token at all (a trap, the room): it's named, and has no conditions or place.
+    const from = attacker ?? { id: null, name: body.custom?.from || again?.caster_name || 'The DM', kind: 'dm', conditions: [] };
+    const gapTo = (t) => (attacker ? tokenGap(map, attacker, t) : action.ranged ? 30 : 5);
     // A spell of 1st level or higher uses a slot (unless the player says not: a scroll, an item, a free cast).
     let sheetAfterSlot = null;
     let used = null;
@@ -261,7 +308,7 @@ export function registerAttacks(app, r) {
     const result = resolveAttack({
       action,
       attacker,
-      targets: targets.map((t) => ({ id: t.id, name: t.name, conditions: t.conditions, gap: tokenGap(map, attacker, t), ...defenses.get(t.id) })),
+      targets: targets.map((t) => ({ id: t.id, name: t.name, conditions: t.conditions, gap: gapTo(t), ...defenses.get(t.id) })),
       mode: body.mode,
       riders,
       twoHands: body.two_hands,
@@ -273,7 +320,7 @@ export function registerAttacks(app, r) {
     if (sheetAfterSlot) later.push({ user_id: attacker.user_id, sheet: sheetAfterSlot, reason: `cast ${action.name} on the map (${ordinal(slotLevel)}-level ${used === 'pact' ? 'Pact Magic ' : ''}slot)`, by: a.userId });
     if (sheetAfterSpends && result.targets.some((t) => t.hit === true)) later.push({ user_id: attacker.user_id, sheet: sheetAfterSpends, reason: `${spends.map((x) => x.name).join(' and ')} with ${action.name} on the map`, by: a.userId });
     // A spell that lasts (not instantaneous) stays in play: its area, who's under it, the caster's concentration.
-    const lasting = action.source === 'spell' && action.lasting && action.lasting.rounds !== 0 ? action.lasting : null;
+    const lasting = (action.source === 'spell' || action.source === 'custom') && action.lasting && action.lasting.rounds !== 0 ? action.lasting : null;
     const id = newTokenId();
     const saved = maps.change(a.cid, map.id, (m) => {
       const entry = {
@@ -281,8 +328,9 @@ export function registerAttacks(app, r) {
         at: new Date().toISOString(),
         by: a.userId,
         status: 'done',
-        attacker: { id: attacker.id, name: attacker.name, kind: attacker.kind },
+        attacker: { id: from.id, name: from.name, kind: from.kind },
         action: {
+          ...(action.source === 'custom' && { custom: true }),
           name: action.name, kind: action.kind, dc: action.dc, save: action.save, half: action.half, slot: slotLevel, used,
           dice: action.damage.map((p) => p.dice).join(' + '), riders: riders.map((rd) => rd.name), two_hands: body.two_hands && !!action.damage2,
           ...(lasting && { lasting: { concentration: lasting.concentration, rounds: lasting.rounds, duration: action.duration ?? '' } }),
@@ -300,7 +348,7 @@ export function registerAttacks(app, r) {
             t.status = 'pending';
             entry.status = 'pending';
           } else {
-            const reason = res.heal ? `healed ${res.amount} by ${attacker.name}'s ${action.name} on the map` : `took ${res.amount} damage from ${attacker.name}'s ${action.name} on the map`;
+            const reason = res.heal ? `healed ${res.amount} by ${from.name}'s ${action.name} on the map` : `took ${res.amount} damage from ${from.name}'s ${action.name} on the map`;
             Object.assign(t, applyHp(a.cid, m, token, res.amount, { heal: !!res.heal, later, reason, by: a.userId }), { status: 'applied' });
             if (!res.heal) t.concentration = concentration(m, token, defenses.get(token.id), res.amount, !!sheetOf(a.cid, token));
           }
@@ -329,7 +377,7 @@ export function registerAttacks(app, r) {
         entry.spell = again.id;
       } else if (lasting && (template || under.length)) {
         // Concentrating on a new spell ends the one before.
-        if (lasting.concentration) {
+        if (lasting.concentration && attacker) {
           const ended = endConcentration(m, attacker.id);
           if (ended.length) entry.ended = ended.map((x) => x.name);
           const caster = m.tokens.find((t) => t.id === attacker.id);
@@ -338,9 +386,10 @@ export function registerAttacks(app, r) {
         const spellId = newTokenId();
         const fight = m.combat && lasting.rounds ? m.combat : null;
         m.spells.push({
-          id: spellId, name: action.name, caster: attacker.id, caster_name: attacker.name, user_id: a.userId, action: action.id, slot: slotLevel,
-          concentration: lasting.concentration, rounds: lasting.rounds,
-          ends: fight ? { round: fight.round + lasting.rounds, turn: fight.entries.some((e) => e.id === attacker.id) ? attacker.id : fight.turn } : null,
+          id: spellId, name: action.name, caster: from.id, caster_name: from.name, user_id: a.userId, action: action.id, slot: slotLevel,
+          concentration: lasting.concentration && !!attacker, rounds: lasting.rounds,
+          ends: fight ? { round: fight.round + lasting.rounds, turn: attacker && fight.entries.some((e) => e.id === attacker.id) ? attacker.id : fight.turn } : null,
+          ...(action.source === 'custom' && { custom: body.custom }),
           template: template?.id ?? null, save: action.save || '', dc: action.dc ?? null, check: action.check ?? '',
           affected: under, attack: id, at: entry.at,
         });
@@ -349,7 +398,7 @@ export function registerAttacks(app, r) {
         entry.spell = spellId;
       }
       m.attacks = [...(m.attacks ?? []), entry];
-    }, { by: a.userId, reason: `${action.source === 'spell' ? 'spell' : 'attack'}: ${attacker.name}, ${action.name}${again ? ' (again)' : ''}` });
+    }, { by: a.userId, reason: `${action.source === 'spell' ? 'spell' : action.source === 'custom' ? 'the DM\'s own' : 'attack'}: ${from.name}, ${action.name}${again ? ' (again)' : ''}` });
     saveSheets(a.cid, later);
     const fresh = later.length ? maps.get(a.cid, map.id) : saved;
     const out = maps.view(fresh, a);
@@ -370,13 +419,24 @@ export function registerAttacks(app, r) {
     const { map, view } = viewableMap(request);
     const dm = a.role === 'dm';
     const body = ATTACK.parse(request.body ?? {});
-    const attacker = actorOf(request, a, map, view, body.attacker);
+    if (body.custom && !dm) throw new AuthError('Only the DM can make up their own attacks and effects.', 403);
+    if (!body.custom && !body.attacker) throw new BadRequestError('Pick who attacks.');
+    const attacker = body.attacker ? actorOf(request, a, map, view, body.attacker) : null;
     const edition = await editions.of(a.cid);
-    const pre = actionsOf(a.cid, attacker, {}, edition);
-    const picked = pre.list.find((x) => x.id === body.action);
-    if (!picked) throw new NotFoundError(`${attacker.name} has no such attack.`);
-    // A spell cast higher: its damage (and how many it can target) at that slot.
-    const action = body.slot && picked.source === 'spell' ? actionsOf(a.cid, attacker, { [picked.id.slice(6)]: body.slot }, edition).list.find((x) => x.id === body.action) : picked;
+    let pre;
+    let action;
+    if (body.custom) {
+      // The DM's own: anything, from any token or none; nothing spent, no riders.
+      pre = { list: [], sheet: null };
+      action = customAction(body.custom);
+      Object.assign(body, { riders: [], use_slot: false, two_hands: false });
+    } else {
+      pre = await actionsOf(a.cid, attacker, {}, edition);
+      const picked = pre.list.find((x) => x.id === body.action);
+      if (!picked) throw new NotFoundError(`${attacker.name} has no such attack.`);
+      // A spell cast higher: its damage (and how many it can target) at that slot.
+      action = body.slot && picked.source === 'spell' ? (await actionsOf(a.cid, attacker, { [picked.id.slice(6)]: body.slot }, edition)).list.find((x) => x.id === body.action) : picked;
+    }
 
     let targets;
     let template = null;
@@ -384,9 +444,9 @@ export function registerAttacks(app, r) {
     if (body.template) {
       template = map.templates.find((t) => t.id === body.template);
       if (!template || (!dm && template.user_id !== a.userId)) throw new NotFoundError('No such template');
-      targets = tokensInTemplate(map, template, map.tokens).filter((t) => !(t.id === attacker.id && ['cone', 'line'].includes(template.shape)));
+      targets = tokensInTemplate(map, template, map.tokens).filter((t) => !(t.id === attacker?.id && ['cone', 'line'].includes(template.shape)));
     } else if (ids.length) {
-      if (ids.length > 1 && action.kind === 'attack') throw new BadRequestError(`${action.name} attacks one target at a time.`);
+      if (ids.length > 1 && action.kind === 'attack' && action.source !== 'custom') throw new BadRequestError(`${action.name} attacks one target at a time.`);
       if (!dm && action.targets_max && ids.length > action.targets_max) throw new BadRequestError(`${action.name} can target ${action.targets_max === 1 ? 'one creature' : `up to ${action.targets_max} creatures`}${body.slot ? ' with that slot' : ''}.`);
       targets = ids.map((tid) => {
         const seen = (dm ? map.tokens : view.tokens).find((t) => t.id === tid);
@@ -428,20 +488,23 @@ export function registerAttacks(app, r) {
     }
     if (body.do === 'again') {
       if (!runsCaster) throw new AuthError('Only whoever cast it (or the DM) can do that.', 403);
-      if (!caster) throw new BadRequestError(`Whoever cast ${sp.name} isn't on this map any more.`);
+      // The DM's own effect, kept with it: it needs no caster (a trap's).
+      const custom = sp.action === 'custom' ? CUSTOM.safeParse(sp.custom ?? {}) : null;
+      if (custom && !custom.success) throw new BadRequestError(`${sp.name} can't be rolled again: make it again instead.`);
+      if (!caster && !(custom && sp.caster == null)) throw new BadRequestError(`Whoever cast ${sp.name} isn't on this map any more.`);
       const template = map.templates.find((t) => t.id === sp.template);
       if (!template) throw new BadRequestError(`${sp.name} has no area on the map to roll for.`);
       const edition = await editions.of(a.cid);
-      const pre = actionsOf(a.cid, caster, sp.slot ? { [sp.action.slice(6)]: sp.slot } : {}, edition);
+      const pre = custom ? { list: [customAction(custom.data)], sheet: null } : await actionsOf(a.cid, caster, sp.slot ? { [sp.action.slice(6)]: sp.slot } : {}, edition);
       const action = pre.list.find((x) => x.id === sp.action);
       if (!action) throw new BadRequestError(`${sp.name} isn't on ${caster.name}'s sheet any more.`);
       // A spell that holds people (Entangle) isn't rolled again for whoever it already holds; one that hurts is.
       const holds = (action.conditions ?? []).length > 0 && !action.damage.length;
       const targets = tokensInTemplate(map, template, map.tokens)
-        .filter((t) => !(t.id === caster.id && ['cone', 'line'].includes(template.shape)))
+        .filter((t) => !(t.id === caster?.id && ['cone', 'line'].includes(template.shape)))
         .filter((t) => !holds || !sp.affected.some((x) => x.id === t.id));
-      const noRiders = { mode: 'normal', use_slot: false, riders: [], rider_options: {}, two_hands: false, slot: sp.slot ?? undefined };
-      return perform({ a, map, dm, body: noRiders, attacker: caster, pre, action, targets, template, edition, again: sp });
+      const noRiders = { mode: 'normal', use_slot: false, riders: [], rider_options: {}, two_hands: false, slot: sp.slot ?? undefined, ...(custom && { custom: custom.data }) };
+      return perform({ a, map, dm, body: noRiders, attacker: caster ?? null, pre, action, targets, template, edition, again: sp });
     }
     // break
     const under = sp.affected.find((x) => x.id === body.target);

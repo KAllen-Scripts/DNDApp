@@ -284,3 +284,129 @@ test('from the map: Divine Smite with the slot the player picks; Weapon Mastery 
     await t.cleanup();
   }
 });
+
+const MAGE = `**Mage**
+**Armor Class** 12 (15 with mage armor)
+| STR | DEX | CON | INT | WIS | CHA |
+|---|---|---|---|---|---|
+| 9 (-1) | 14 (+2) | 11 (+0) | 17 (+3) | 12 (+1) | 11 (+0) |
+***Spellcasting.*** The mage is a 9th-level spellcaster. Its spellcasting ability is Intelligence (spell save DC 14, +6 to hit with spell attacks). The mage has the following wizard spells prepared:
+- Cantrips (at will): *fire bolt, light, mage hand, prestidigitation*
+- 1st level (4 slots): *detect magic, mage armor, magic missile, shield*
+- 2nd level (3 slots): *misty step, hold person*
+- 3rd level (3 slots): *counterspell, fireball, fly*
+***Dagger.*** *Melee or Ranged Weapon Attack:* +5 to hit, reach 5 ft. or range 20/60 ft., one target. *Hit:* 4 (1d4 + 2) piercing damage.`;
+
+test('regression: an NPC casts the spells its stat block lists (they were left out of its attacks): Fireball at the party, Hold Person on a character', async () => {
+  const { t, dice, base, add, sheet, sheetOf, attack } = await table();
+  try {
+    await sheet(t.sam, { classes: [{ name: 'Fighter', subclass: '', level: 3 }], abilities: { str: 14, dex: 10, con: 14, int: 10, wis: 10, cha: 10 }, hp: { current: 28 } });
+    const thorin = await add({ kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 157.5, y: 157.5 });
+    const mage = await add({ kind: 'enemy', name: 'Mage', x: 437.5, y: 437.5, hp: { current: 40, max: 40 }, stats: { text: MAGE } });
+    const goblin = await add({ kind: 'enemy', name: 'Goblin', x: 192.5, y: 157.5, hp: { current: 20, max: 20 }, stats: { text: GOBLIN } });
+    const acts = (await t.request('GET', `${base}/tokens/${mage.id}/actions`)).json().actions;
+    const named = (n) => acts.find((x) => x.name === n);
+    assert.equal(named('Dagger').kind, 'attack', 'its own attacks are still there');
+    assert.deepEqual([named('Fireball').kind, named('Fireball').dc, named('Fireball').save, named('Fireball').area, named('Fireball').uses], ['save', 14, 'dex', { shape: 'circle', size: 20 }, '3rd level (3 slots)']);
+    assert.deepEqual([named('Fire Bolt').kind, named('Fire Bolt').bonus, named('Fire Bolt').damage], ['attack', 6, '2d10 fire'], 'a 9th-level caster\'s cantrip');
+    assert.equal(named('Hold Person').conditions.includes('paralyzed'), true);
+
+    // Fireball on Thorin and the goblin: 8d6 all 2s = 16; Thorin 10 + 0 fails, the goblin 15 + 4 saves.
+    const tpl = (await t.request('POST', `${base}/templates`, { body: { shape: 'circle', x: 175, y: 175, size: 20, label: 'Fireball' } })).json().template;
+    dice.next(2, 2, 2, 2, 2, 2, 2, 2, 10, 15);
+    const res = await attack({ attacker: mage.id, action: named('Fireball').id, template: tpl.id });
+    assert.equal(res.statusCode, 200, res.body);
+    assert.deepEqual(res.json().attack.targets.map((x) => [x.name, x.save.success, x.amount]), [['Thorin', false, 16], ['Goblin', true, 8]]);
+    assert.equal((await sheetOf(t.sam)).hp.current, 12);
+
+    // Hold Person on Thorin: Wis 3 + 0 fails DC 14, paralyzed; the mage concentrates.
+    dice.next(3);
+    const held = await attack({ attacker: mage.id, action: named('Hold Person').id, target: thorin.id });
+    assert.equal(held.statusCode, 200, held.body);
+    const map = t.maps.get(t.campaign.id, res.json().map.id);
+    assert.equal(map.tokens.find((x) => x.id === thorin.id).conditions.includes('paralyzed'), true);
+    assert.equal(map.tokens.find((x) => x.id === mage.id).conditions.includes('concentrating'), true);
+    assert.equal(map.spells.length, 1);
+    assert.equal(goblin.name, 'Goblin');
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('the DM places their own effect: a trap from no token catches who is in its area, restrains and lasts; players see its name, not its DC', async () => {
+  const { t, dice, base, add, sheet, sheetOf, attack } = await table();
+  try {
+    await sheet(t.sam, { classes: [{ name: 'Fighter', subclass: '', level: 3 }], abilities: { str: 14, dex: 10, con: 14, int: 10, wis: 10, cha: 10 }, hp: { current: 28 } });
+    const thorin = await add({ kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 157.5, y: 157.5 });
+    const goblin = await add({ kind: 'enemy', name: 'Goblin', x: 192.5, y: 157.5, hp: { current: 20, max: 20 }, stats: { text: GOBLIN } });
+    const tpl = (await t.request('POST', `${base}/templates`, { body: { shape: 'circle', x: 175, y: 157.5, size: 10, label: 'Net trap' } })).json().template;
+    const custom = { name: 'Net trap', from: 'A hidden trap', kind: 'save', dc: 13, save: 'dex', damage: '2d6 bludgeoning', half: true, conditions: ['restrained'], lasts: true, rounds: 10, difficult: true };
+    // Players can't make up their own.
+    assert.equal((await attack({ custom, template: tpl.id }, t.sam.token)).statusCode, 403);
+
+    // 2d6 = 4 + 4; Thorin 5 fails (8, restrained), the goblin 9 + 4 = 13 saves (4).
+    dice.next(4, 4, 5, 9);
+    const res = await attack({ custom, template: tpl.id });
+    assert.equal(res.statusCode, 200, res.body);
+    const card = res.json().attack;
+    assert.deepEqual(card.attacker, { id: null, name: 'A hidden trap', kind: 'dm' });
+    assert.deepEqual(card.targets.map((x) => [x.name, x.save.success, x.amount, x.conditions ?? []]), [['Thorin', false, 8, ['restrained']], ['Goblin', true, 4, []]]);
+    assert.equal((await sheetOf(t.sam)).hp.current, 20);
+    const map = t.maps.get(t.campaign.id, res.json().map.id);
+    assert.deepEqual(map.tokens.find((x) => x.id === thorin.id).conditions, ['restrained']);
+    assert.equal(map.spells.length, 1);
+    assert.equal(map.spells[0].caster, null);
+    assert.equal(map.templates.find((x) => x.id === tpl.id).difficult, true);
+
+    // Sam sees the trap's name, Thorin's line, but not its DC or what the DM filled in.
+    const seen = (await t.request('GET', base, { as: t.sam.token })).json();
+    assert.equal(seen.attacks.at(-1).attacker.name, 'A hidden trap');
+    assert.equal(seen.spells[0].caster_name, 'A hidden trap');
+    assert.equal(seen.spells[0].dc, null);
+    assert.equal(seen.spells[0].custom, undefined);
+
+    // Rolled again for whoever is in it now (it hurts, so everyone in it): 3 + 3; Thorin 2 fails, the goblin 10 + 4 saves.
+    dice.next(3, 3, 2, 10);
+    const again = await t.request('POST', `${base}/spells/${map.spells[0].id}`, { body: { do: 'again' } });
+    assert.equal(again.statusCode, 200, again.body);
+    assert.deepEqual(again.json().attack.targets.map((x) => [x.name, x.amount]), [['Thorin', 6], ['Goblin', 3]]);
+
+    // Undo the first card: its 8 come back to Thorin and the trap ends, so he's free.
+    assert.equal((await t.request('POST', `${base}/attacks/${card.id}`, { body: { do: 'undo' } })).statusCode, 200);
+    assert.equal((await sheetOf(t.sam)).hp.current, 22);
+    const after = t.maps.get(t.campaign.id, res.json().map.id);
+    assert.deepEqual(after.tokens.find((x) => x.id === thorin.id).conditions, []);
+    assert.equal(goblin.kind, 'enemy');
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('the DM\'s own attack from an NPC: rolled against AC on several targets, its condition on a hit; a heal from nobody', async () => {
+  const { t, dice, base, add, attack } = await table();
+  try {
+    const goblin = await add({ kind: 'enemy', name: 'Goblin', x: 87.5, y: 52.5, hp: { current: 12, max: 12 }, stats: { text: GOBLIN } });
+    const boss = await add({ kind: 'enemy', name: 'Boss', x: 52.5, y: 52.5, hp: { current: 30, max: 30 } });
+    const wolf = await add({ kind: 'npc', name: 'Wolf', x: 52.5, y: 87.5, hp: { current: 11, max: 11 } });
+    // Hits the goblin (16 + 2 = 18 vs 15: 1d8 = 5, knocked prone); against the wolf (no AC) the DM decides, damage rolled (3).
+    dice.next(16, 5, 12, 3);
+    const res = await attack({ attacker: boss.id, targets: [goblin.id, wolf.id], custom: { name: 'Tail sweep', kind: 'attack', bonus: 2, damage: '1d8 bludgeoning', conditions: ['prone'] } });
+    assert.equal(res.statusCode, 200, res.body);
+    const card = res.json().attack;
+    assert.equal(card.attacker.name, 'Boss');
+    assert.deepEqual(card.targets.map((x) => [x.name, x.hit, x.amount, x.conditions ?? []]), [['Goblin', true, 5, ['prone']], ['Wolf', null, 3, []]]);
+    const map = t.maps.get(t.campaign.id, res.json().map.id);
+    assert.equal(map.tokens.find((x) => x.id === goblin.id).hp.current, 7);
+    assert.deepEqual(map.tokens.find((x) => x.id === goblin.id).conditions, ['prone']);
+
+    dice.next(4);
+    const heal = await attack({ targets: [goblin.id], custom: { name: 'Healing fountain', kind: 'heal', damage: '1d6+1' } });
+    assert.equal(heal.statusCode, 200, heal.body);
+    assert.deepEqual([heal.json().attack.attacker.name, heal.json().attack.targets[0].amount], ['The DM', 5]);
+    assert.equal(t.maps.get(t.campaign.id, res.json().map.id).tokens.find((x) => x.id === goblin.id).hp.current, 12);
+    // Nothing to do it to.
+    assert.equal((await attack({ custom: { name: 'Boom', kind: 'save', damage: '1d6 fire' } })).statusCode, 400);
+  } finally {
+    await t.cleanup();
+  }
+});

@@ -132,23 +132,31 @@ export function sheetActions(sheet, calc, { slots = {}, edition = '2014' } = {})
   for (const sp of sheet.spells ?? []) {
     if (!sp.name.trim()) continue;
     const level = sp.level >= 1 ? Math.max(sp.level, Math.min(9, Number(slots[sp.id]) || sp.level)) : sp.level;
-    const r = spellRolls(sp, calc, level);
-    const heal = /heal/i.test(sp.damage);
-    const kind = sp.attack === 'attack' ? 'attack' : sp.attack === 'save' ? 'save' : sp.damage.trim() ? (heal ? 'heal' : 'auto') : 'effect';
-    const area = spellArea(sp);
-    const fx = spellEffects(sp, level);
-    out.push({
-      id: `spell:${sp.id}`, name: sp.name, source: 'spell', kind, bonus: r.kind === 'attack' ? r.bonus : null, dc: r.kind === 'save' ? r.dc : null, save: r.save || '',
-      damage: r.damage ? [{ dice: r.damage, type: heal ? 'healing' : damageType(r.type) }] : [], damage2: null,
-      ranged: /ranged spell attack/i.test(sp.description), finesse: false, magical: true, area,
-      conditions: fx.conditions, lasting: fx.lasting, difficult: !!area && fx.difficult, targets_max: area ? null : fx.targets.max, self: !area && fx.targets.self,
-      check: breakFree(sp.description), duration: sp.duration,
-      half: kind === 'save' ? halvesOnSave(sp.description, { cantrip: sp.level === 0 }) : false,
-      level: sp.level, slot: level, upcast: sp.level >= 1 && !!sp.higher_damage.trim(), prepared: sp.prepared, ability: calc.values.spell_ability ?? '', text: '',
-      d20: kind === 'attack' ? /^1d20([a-z0-9]*)/i.exec(planSpell(sheet, calc, sp, { edition, slot: level }).hit ?? '')?.[1] ?? '' : '',
-    });
+    out.push(spellAction(sp, calc, { id: `spell:${sp.id}`, slot: level, d20: (kind) => (kind === 'attack' ? /^1d20([a-z0-9]*)/i.exec(planSpell(sheet, calc, sp, { edition, slot: level }).hit ?? '')?.[1] ?? '' : '') }));
   }
   return out.slice(0, 120);
+}
+
+/**
+ * One spell as an action on the map (a sheet's, or one a stat block's Spellcasting lists), cast with a slot of
+ * `slot`. calc: computeSheet's result, or for a creature { values: { spell_attack, spell_dc }, level }.
+ */
+function spellAction(sp, calc, { id, slot, d20 = () => '' }) {
+  const r = spellRolls(sp, calc, slot);
+  const heal = /heal/i.test(sp.damage);
+  const kind = sp.attack === 'attack' ? 'attack' : sp.attack === 'save' ? 'save' : sp.damage.trim() ? (heal ? 'heal' : 'auto') : 'effect';
+  const area = spellArea(sp);
+  const fx = spellEffects(sp, slot);
+  return {
+    id, name: sp.name, source: 'spell', kind, bonus: r.kind === 'attack' ? r.bonus : null, dc: r.kind === 'save' ? r.dc : null, save: r.save || '',
+    damage: r.damage ? [{ dice: r.damage, type: heal ? 'healing' : damageType(r.type) }] : [], damage2: null,
+    ranged: /ranged spell attack/i.test(sp.description), finesse: false, magical: true, area,
+    conditions: fx.conditions, lasting: fx.lasting, difficult: !!area && fx.difficult, targets_max: area ? null : fx.targets.max, self: !area && fx.targets.self,
+    check: breakFree(sp.description), duration: sp.duration,
+    half: kind === 'save' ? halvesOnSave(sp.description, { cantrip: sp.level === 0 }) : false,
+    level: sp.level, slot, upcast: sp.level >= 1 && !!sp.higher_damage.trim(), prepared: sp.prepared, ability: calc.values.spell_ability ?? '', text: '',
+    d20: d20(kind),
+  };
 }
 
 // Spell slots (left, spend, give back, cast with): spell-slots.js, shared with the sheet page.
@@ -213,6 +221,98 @@ export function creatureActions(text) {
     if (out.length >= 16) break;
   }
   return out;
+}
+
+/** A line of a Spellcasting trait that lists spells: "3rd level (3 slots): fireball, fly", "At Will: Light", "1/day each: darkness". */
+const SPELL_LIST = /^[\s>|-]*((?:cantrips?|at will|(\d)(?:st|nd|rd|th)[- ]level|\d+\s*\/\s*day)[^:\n]{0,30}):\s*(.+)$/i;
+
+/**
+ * The spells a stat block can cast (owner, 2026-10-29: "the DM can cast spells and attacks and such from
+ * NPC's"), read from its Spellcasting or Innate Spellcasting trait, 2014 ("spell save DC 14, +6 to hit with
+ * spell attacks… 3rd level (3 slots): counterspell, fireball") and 2024 ("2/Day Each: Fireball (level 4
+ * version), Invisibility"). { dc, bonus, level (caster level, for cantrips), spells: [{ name, slot (a "level
+ * N version"), uses ("at will", "1/day each", "3rd level (3 slots)") }] }, or null with no spellcasting.
+ */
+export function creatureSpellList(text) {
+  const s = clean(text).replace(/[*_]/g, '');
+  const head = s.search(/spellcasting/i);
+  if (head < 0) return null;
+  // A trait written as one paragraph: each list on its own line.
+  const from = s.slice(head).replace(/[ \t]+(?=(?:cantrips?(?: \(at will\))?|at will|\d(?:st|nd|rd|th)[- ]level(?: \([^)]{0,20}\))?|\d+\s*\/\s*day(?: each)?)\s*:)/gi, '\n');
+  const dc = Number(from.match(/spell save DC\s*(\d{1,2})/i)?.[1]) || null;
+  const hit = from.match(/([+-]\s*\d{1,2})\s+to hit with spell attacks/i);
+  const bonus = hit ? Number(hit[1].replace(/\s+/g, '')) : dc ? dc - 8 : null;
+  if (dc == null && bonus == null) return null;
+  const level = Number(from.match(/(\d{1,2})(?:st|nd|rd|th)[- ]level spellcaster/i)?.[1]) || 1;
+  const spells = [];
+  for (const line of from.split('\n')) {
+    const m = SPELL_LIST.exec(line);
+    if (!m) continue;
+    for (const part of m[3].split(/,(?![^(]*\))/)) {
+      const name = part.replace(/\([^)]*\)/g, '').replace(/[^\p{L}\p{N}' /-]/gu, '').replace(/\s+/g, ' ').trim();
+      if (!name || name.length > 60) continue;
+      const version = Number(part.match(/level (\d) version/i)?.[1]) || null;
+      spells.push({ name, slot: version, uses: m[1].trim().toLowerCase() });
+      if (spells.length >= 30) break;
+    }
+  }
+  return { dc: dc ?? bonus + 8, bonus: bonus ?? dc - 8, level, spells };
+}
+
+/**
+ * A stat block's spells as actions (same shape as a sheet's, `spell:npc<n>`), from creatureSpellList and the
+ * spells looked up by name (known: Map of lower-case name → a normalised spell; ones not found are left out).
+ * slots: { npc<n>: level } to cast one higher.
+ */
+export function creatureSpells(list, known, { slots = {} } = {}) {
+  if (!list) return [];
+  const calc = { values: { spell_attack: list.bonus, spell_dc: list.dc, spell_ability: '' }, level: list.level };
+  const out = [];
+  for (const [i, x] of list.spells.entries()) {
+    const sp = known.get(x.name.toLowerCase());
+    if (!sp?.name) continue;
+    const slot = sp.level >= 1 ? Math.max(sp.level, Math.min(9, Number(slots[`npc${i}`]) || x.slot || sp.level)) : sp.level;
+    out.push({ ...spellAction({ ...sp, prepared: false }, calc, { id: `spell:npc${i}`, slot }), uses: x.uses });
+  }
+  return out;
+}
+
+// ---------- the DM's own: anything, from anyone or nobody ----------
+
+/** What a custom action does: an attack roll, a saving throw, damage that just lands, healing, or only an effect. */
+export const CUSTOM_KINDS = ['attack', 'save', 'auto', 'heal', 'effect'];
+export const AREA_SHAPES = ['circle', 'cone', 'line', 'cube'];
+
+/** Damage the DM typed: "2d6+3 fire + 1d6 cold" → [{ dice: "2d6+3", type: "fire" }, { dice: "1d6", type: "cold" }] (at most 4). */
+export function customDamage(text, { heal = false } = {}) {
+  const out = [];
+  const re = new RegExp(String.raw`(\d{1,3}d\d{1,3}(?:\s*[+-]\s*\d{1,3}(?!\s*d))?|\d{1,4})(?:\s+(${TYPE_RE}))?`, 'gi');
+  for (const m of clean(text).matchAll(re)) {
+    out.push({ dice: m[1].replace(/\s+/g, ''), type: heal ? 'healing' : (m[2] ?? '').toLowerCase() });
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+
+/**
+ * The DM's own attack, spell or effect (owner, 2026-10-29: "the DM to be able to place attacks, spells, and
+ * whatever else on the map. In case something bugs out or something custom needs doing"), from what they
+ * filled in (the server checks it): { name, kind, bonus, dc, save, damage ("2d6 fire"), half, conditions,
+ * magical, ranged, area: { shape, size, width } | null, lasts, rounds, concentration, difficult }. Same
+ * shape as the other actions (`custom`); its conditions go on a hit, a failed save, or straight away.
+ */
+export function customAction(c) {
+  const kind = CUSTOM_KINDS.includes(c.kind) ? c.kind : 'effect';
+  const area = c.area && AREA_SHAPES.includes(c.area.shape) ? { shape: c.area.shape, size: c.area.size, ...(c.area.shape === 'line' && { width: c.area.width ?? 5 }) } : null;
+  return {
+    id: 'custom', name: c.name, source: 'custom', kind,
+    bonus: kind === 'attack' ? c.bonus ?? 0 : null, dc: kind === 'save' ? c.dc ?? 10 : null, save: kind === 'save' ? c.save || 'dex' : '',
+    damage: kind === 'effect' ? [] : customDamage(c.damage, { heal: kind === 'heal' }), damage2: null,
+    ranged: !!c.ranged, finesse: false, magical: c.magical !== false, area,
+    conditions: kind === 'heal' ? [] : [...(c.conditions ?? [])], lasting: c.lasts ? { concentration: !!c.concentration, rounds: c.rounds || null } : null,
+    difficult: !!c.difficult, targets_max: null, self: false, check: '', duration: c.lasts && c.rounds ? `${c.rounds} round${c.rounds === 1 ? '' : 's'}` : '',
+    half: kind === 'save' && !!c.half, level: null, slot: null, upcast: false, ability: '', text: '',
+  };
 }
 
 // ---------- how a target defends ----------
@@ -450,6 +550,8 @@ export function resolveAttack({ action, attacker = null, targets, mode = 'normal
         Object.assign(entry, (({ amount, notes }) => ({ amount, notes: [...entry.notes, ...notes] }))(land(entry.rolled, t)));
       }
       if (hit === null) entry.notes.push('its AC is unknown: the DM decides');
+      // The DM's own attack can give conditions on a hit (a net restrains).
+      if (hit === true && action.source === 'custom' && action.conditions?.length) entry.conditions = [...action.conditions];
       if (action.mastery) masteryOnTarget(action, entry, t, { hit, ownType, land, rolls, random });
       out.targets.push(entry);
     }
@@ -470,6 +572,7 @@ export function resolveAttack({ action, attacker = null, targets, mode = 'normal
       entry.heal = true;
     } else if (action.kind === 'auto') {
       Object.assign(entry, land(rolled, t));
+      if (action.source === 'custom' && action.conditions?.length) Object.assign(entry, { conditions: [...action.conditions], effect: true });
     } else {
       const sit = saveSituation(t, action.save, { sheetWhy: t.sheetSave?.(action.save) ?? '' });
       const bonus = t.saves?.[action.save] ?? 0;
@@ -523,9 +626,11 @@ export function attackLogFor(log, { dm, visible, own, showAc }) {
   if (dm) return log;
   const out = [];
   for (const e of log ?? []) {
-    const seesAttacker = visible.has(e.attacker.id) || own.has(e.attacker.id);
+    // The DM's own effect from no token (a trap): players see its name, and only when it touched someone they see.
+    const free = e.attacker.id == null && e.attacker.kind === 'dm';
+    const seesAttacker = free || visible.has(e.attacker.id) || own.has(e.attacker.id);
     const targets = e.targets.filter((t) => visible.has(t.id) || own.has(t.id));
-    if (!seesAttacker && !targets.length) continue;
+    if (!targets.length && (free || !seesAttacker)) continue;
     const mine = own.has(e.attacker.id);
     out.push({
       ...e,
