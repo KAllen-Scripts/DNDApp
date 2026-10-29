@@ -464,16 +464,18 @@ function infoBox() {
   drawClasses();
   const level = h('output', { class: 'readout', title: 'Worked out from your class levels' });
   state.renders.push(() => (level.textContent = state.calc.level));
+  const bg = backgroundBox({ state, input: field('background', { label: 'Background', list: 'dl-backgrounds' }), changed, redraw: render });
   return h('section', { class: 'sh-box info-box' },
     classes,
     h('div', { class: 'info-grid' },
-      labelled('Background', backgroundBox({ state, input: field('background', { label: 'Background', list: 'dl-backgrounds' }), changed, redraw: render })),
+      labelled('Background', bg.box),
       labelled('Race', field('race', { label: 'Race', list: 'dl-races' })),
       labelled('Alignment', field('alignment', { label: 'Alignment', list: 'dl-alignments' })),
       labelled('Player name', field('player_name', { label: 'Player name' })),
       labelled('Experience points', field('xp', { label: 'Experience points' })),
       labelled('Character level', level),
     ),
+    bg.more,
   );
 }
 

@@ -74,4 +74,17 @@ How the start-up was timed: a script in the scratchpad called the Agent SDK's `q
 
 The quick way still runs the Q&A model (the large default model) for one turn. Most of what's left of a quick answer is that model's time to first words and to write the answer.
 
-**Suggestion for Kenny (needs his yes):** try a faster model for the quick way only, keeping the full way (campaign questions, rules looked up in the books) on today's model. This is the parked "faster model for Ask" experiment, narrowed to where it's safest: general lookups, where a smaller model's D&D knowledge is enough and "Look it up properly" is one press away. It would need a small code change: a `MODEL_QA_QUICK` setting, empty by default so nothing changes until he sets it. To decide, compare `total_ms` and `first_text_ms` in the log for ~10 quick questions on each. The full way's own experiment (`MODEL_QA=…` or `EFFORT_QA=low` in `.env`) is unchanged and still parked.
+**Suggestion for Kenny (needs his yes; done 2026-10-28, see below):** try a faster model for the quick way only, keeping the full way (campaign questions, rules looked up in the books) on today's model. This is the parked "faster model for Ask" experiment, narrowed to where it's safest: general lookups, where a smaller model's D&D knowledge is enough and "Look it up properly" is one press away. It would need a small code change: a `MODEL_QA_QUICK` setting, empty by default so nothing changes until he sets it. To decide, compare `total_ms` and `first_text_ms` in the log for ~10 quick questions on each. The full way's own experiment (`MODEL_QA=…` or `EFFORT_QA=low` in `.env`) is unchanged and still parked.
+
+## A faster model, picked per question (2026-10-28)
+
+Kenny: "Can we use a faster model for asking questions? Or more so, could we quickly decide if it's stored in the data we have, or needs looking up, then assign a fast model if we have it, or more intelligent model if we don't? Would this be faster and/or save tokens?"
+
+Built, as `pickModel` in `qa/route.js`, run after the automatic search (no AI: an AI deciding would be a model call of its own, a second or more and its tokens, which is about what it saves):
+
+- **Faster model** (`MODEL_QA_FAST`, default `claude-sonnet-5-5`): the quick way (general D&D lookups), and full-way questions that name a record or wiki page the automatic search put in front of the model ("What does Brother Hal want?" with Brother Hal's record found). The answer is already in the prompt, so the job is reading and writing it up.
+- **Main model** (`MODEL_QA`, Opus by default): everything else, where it has to dig (transcripts, several records, the books, nothing named), and every **Look it up properly**, which now also shows under a faster model's full-way answers ("Quick answer from the records").
+- The faster model keeps all the tools, so it can still look further.
+- `MODEL_QA_FAST=off` puts everything back on `MODEL_QA`.
+
+Faster and cheaper? Faster: a smaller model starts writing sooner and writes faster; not yet timed with the real AI. Tokens: about the same number per answer, but Sonnet's weigh less against the plan's limits than Opus's (on the API, half the price: $2/$10 against $4/$20 per million). The log line now has `model` and `model_why`; compare `total_ms` and `first_text_ms` before and after.

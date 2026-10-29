@@ -44,10 +44,13 @@ export function pickBackground({ state, changed, redraw }, b) {
 /**
  * The Background input with what goes with it. `input` is the sheet's own
  * text field (typing is saved as usual); `redraw` draws the sheet again
- * after the background changed it.
+ * after the background changed it. Gives `box` (the input, for its cell in
+ * the info grid) and `more` (what changed and what it gives, drawn full width
+ * under the grid: a narrow cell squeezed it to a letter a line).
  */
 export function backgroundBox({ state, input, changed, redraw }) {
-  const wrap = h('div', { class: 'bg-box' }, input);
+  const box = h('div', { class: 'bg-box' }, input);
+  const wrap = h('div', { class: 'bg-more' });
   const apply = (b) => pickBackground({ state, changed, redraw }, b);
   input.addEventListener('change', () => {
     const b = sheetBackground(state);
@@ -75,12 +78,14 @@ export function backgroundBox({ state, input, changed, redraw }) {
     ));
   }
   if (b) {
+    // Offered only while applying it would still change something.
+    const useful = applyBackground(state.sheet, b).changes.length > 0;
     wrap.append(h('details', { class: 'bg-gives' },
       h('summary', {}, `What ${b.name} gives${b.custom ? ' (your DM\'s)' : ''}`),
       h('dl', {}, backgroundSummary(b).flatMap((l) => [h('dt', {}, l.label), h('dd', {}, l.text)])),
       h('p', { class: 'muted small' }, b.book),
-      h('button', { type: 'button', class: 'ghost small', onclick: () => apply(b) }, `Apply ${b.name} to the sheet`),
+      useful ? h('button', { type: 'button', class: 'ghost small', onclick: () => apply(b) }, `Apply ${b.name} to the sheet`) : null,
     ));
   }
-  return wrap;
+  return { box, more: wrap.childNodes.length ? wrap : null };
 }
