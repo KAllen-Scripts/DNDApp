@@ -38,6 +38,7 @@ import { castLevels } from './shared/spell-slots.js';
 import { attackPlan, combatBar, extrasLine, inventoryMastery, rollAttackPlan, rollDamagePlan, spellPlan } from './sheet-attacks.js';
 import { backgroundBox, backgroundNames, forgetApplied } from './sheet-background.js';
 import { helpPanel } from './sheet-help.js';
+import { fold, isOpen, setOpen } from './sheet-fold.js';
 import { itemNames } from './shared/item-names.js';
 import { GEAR_KINDS, effectText, gearCard } from './gear-card.js';
 import { levelUpBanner } from './sheet-level-up.js';
@@ -1777,6 +1778,24 @@ function spells() {
   );
   state.renders.push(() => (pact.hidden = !state.calc.values.pact_slots && !('pact_slots' in state.sheet.overrides)));
 
+  // Levels with no slots are hidden until asked for (to type a number in one the rules don't give).
+  const slots = h('div', { class: 'slots' }, [1, 2, 3, 4, 5, 6, 7, 8, 9].map(slotTile), pact);
+  const slotHelp = h('span', {}, 'Slots per long rest are worked out for you (type a number to change one). Tick a circle when you use a slot. ');
+  const allLevels = h('button', { type: 'button', class: 'link slot-levels', onclick: () => {
+    setOpen('slot-levels', !isOpen('slot-levels'));
+    paintLevels();
+  } });
+  const paintLevels = () => {
+    const all = isOpen('slot-levels');
+    const none = [1, 2, 3, 4, 5, 6, 7, 8, 9].filter((n) => !state.calc.values[`slots.${n}`]).length;
+    slots.classList.toggle('only-used', !all);
+    allLevels.hidden = !none;
+    // A sheet with no slots at all (no spellcasting class yet) needs only the button.
+    slotHelp.hidden = none === 9 && slots.querySelector('.pact').hidden && !all;
+    allLevels.textContent = all ? 'Hide levels with no slots' : `Show all levels (${none} with no slots)`;
+  };
+  state.renders.push(paintLevels);
+
   const list = h('div', { class: 'spell-list' });
   const drawList = () => list.replaceChildren(...spellGroups(drawList));
   drawList();
@@ -1788,8 +1807,8 @@ function spells() {
       stat(auto('spell_dc', { label: 'Spell save DC' }), 'Spell save DC', 'big'),
       stat(auto('spell_attack', { kind: 'bonus', label: 'Spell attack bonus' }), 'Spell attack bonus', 'big', check('spell_attack', 'Spell attack')),
     ),
-    h('div', { class: 'slots' }, [1, 2, 3, 4, 5, 6, 7, 8, 9].map(slotTile), pact),
-    h('p', { class: 'muted small slot-help' }, 'Slots per long rest are worked out for you (type a number to change one). Tick a circle when you use a slot.'),
+    slots,
+    h('p', { class: 'muted small slot-help' }, slotHelp, allLevels),
     addSpell(drawList, list),
     list,
   );
@@ -1860,9 +1879,11 @@ function addSpell(drawList, list) {
   });
   const form = h('form', { class: 'add-spell', onsubmit: add }, suggestions, input,
     h('button', { type: 'submit', class: 'primary', title: 'Add it with its details from the SRD, your books or the AI' }, 'Add spell'),
-    h('button', { type: 'button', class: 'ghost', title: 'Your own spell (homebrew, or one nobody knows): typed in by you, never looked up', onclick: custom }, 'Make my own'),
-    fill, note);
-  return form;
+    h('button', { type: 'button', class: 'ghost', title: 'Your own spell (homebrew, or one nobody knows): typed in by you, never looked up', onclick: custom }, 'Make my own'));
+  // Adding a spell opens when asked (open to start with on a sheet with none); filling in and messages stay in view.
+  return h('div', { class: 'add-spell-wrap' },
+    fold('spell-add', '+ Add a spell', form, { open: !state.sheet.spells.length, cls: 'spell-fold' }),
+    h('div', { class: 'add-spell-foot' }, fill, note));
 }
 
 /**

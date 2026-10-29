@@ -18,6 +18,7 @@ import {
 } from './shared/class-features.js';
 import { subclassOf } from './shared/subclass-features.js';
 import { knownRace } from './shared/race-features.js';
+import { isOpen, setOpen } from './sheet-fold.js';
 
 const RECHARGE_SHORT = { short: 'Short rest', long: 'Long rest', short_one: 'Short rest: one', none: 'By hand' };
 const ordinal = (n) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
@@ -131,12 +132,31 @@ export function classFeaturesBox({ state, changed, render, heal, wildShape }) {
   }
 
   function rowView(r, multi) {
-    const title = h('span', { class: 'cf-name' }, h('strong', {}, r.name), multi && r.class ? h('span', { class: 'muted small' }, ` (${CLASSES[r.class].name})`) : null);
+    const text = [r.note, r.page && `(${r.page})`].filter(Boolean).join(' ');
+    // What a feature does shows as one line (its worked-out numbers come first) until you click its name or the line.
+    const key = `cf-note:${r.id}`;
+    const note = text ? h('p', { class: 'muted small cf-note', title: 'Click to show or hide the rest' }, text) : null;
+    const name = h('strong', {}, r.name);
+    const toggle = note ? h('button', { type: 'button', class: 'cf-name-toggle', title: 'What it does' }, name) : name;
+    if (note) {
+      const show = (open) => {
+        note.classList.toggle('folded', !open);
+        toggle.setAttribute('aria-expanded', String(open));
+      };
+      const flip = () => {
+        const open = note.classList.contains('folded');
+        setOpen(key, open);
+        show(open);
+      };
+      show(isOpen(key));
+      toggle.addEventListener('click', flip);
+      note.addEventListener('click', flip);
+    }
+    const title = h('span', { class: 'cf-name' }, toggle, multi && r.class ? h('span', { class: 'muted small' }, ` (${CLASSES[r.class].name})`) : null);
     const head = h('div', { class: 'cf-head' }, title, h('span', { class: 'spacer' }), r.kind === 'info' ? null : counter(r), r.custom ? removeButton(r) : null);
-    const note = [r.note, r.page && `(${r.page})`].filter(Boolean).join(' ');
     return h('div', { class: `cf-row cf-${r.kind}${r.left === 0 ? ' cf-empty' : ''}`, 'data-feature': r.id },
       head,
-      note ? h('p', { class: 'muted small cf-note' }, note) : null,
+      note,
       actions(r),
       r.id === 'wild_shape' ? forms : null,
     );
