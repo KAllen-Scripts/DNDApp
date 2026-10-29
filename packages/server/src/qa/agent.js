@@ -14,13 +14,14 @@
 import { json } from '../db/index.js';
 import { renderRecord } from '../kb/store.js';
 import { createTools } from './tools.js';
+import { creatureLabel } from '../creatures.js';
 import { handbookEditions } from '../sheets/books.js';
 import { routeQuestion } from './route.js';
 
 export class RateLimitError extends Error {}
 
 /** For the DM only, after the list of their creatures (owner's request, 2026-10-09). */
-const DM_CREATURES = `How to use the DM's creatures: when the DM asks about a creature or NPC (its stats, attacks, AC, hit points, tactics), check their creatures first. A saved one with that name ("Goblin 3" or "the goblins" mean "Goblin") is the DM's own version: its stat block and notes take priority over the books, the campaign records and your own knowledge, even where they differ from the official creature. Get it with get_my_creatures (creatures named in the question are already included below), answer from it, and say it's from their Creatures tab. Use the books or your knowledge only when none matches or it has no stat block, and then say so.`;
+const DM_CREATURES = `How to use the DM's creatures: when the DM asks about a creature or NPC (its stats, attacks, AC, hit points, tactics), check their creatures first. A saved one with that name ("Goblin 3" or "the goblins" mean "Goblin") is the DM's own version: its stat block and notes take priority over the books, the campaign records and your own knowledge, even where they differ from the official creature. Get it with get_my_creatures (creatures named in the question are already included below), answer from it, and say it's from their Bestiary tab. Use the books or your knowledge only when none matches or it has no stat block, and then say so.`;
 
 /** The DM's wiki, for the DM (owner, 2026-10-20: "When the DM asks questions this should draw from the archivist AND the wiki"). */
 const WIKI_DM = `How to use the DM's wiki: the DM keeps a wiki of their own pages about the world (people, places, factions, secrets, plans), separate from the archivist's records. For questions about the campaign, use both: search_wiki and read_wiki_page for the wiki, the knowledge-base tools for the records. The wiki is the DM's own word on what is true in the world, including what the players haven't found out; the records are what happened in play. When they disagree, say so and give both. Each wiki section says who the DM has made it available to; when the DM asks what the players know, use that and the records' known_by. Parts can be marked: [rumour] (heard, not confirmed), [Name's account] (a player's telling, not yet confirmed), [false: … Truth: …] (what the players believe and what is really so: tell the DM the truth, and say what the players believe) and [planned: …] (the DM's prep, not yet in play). Cite wiki pages like this: (wiki: Page title).`;
@@ -238,8 +239,8 @@ export function createQA({ db, store, kb, search, books, creatures = null, editi
         : '',
       groupEdition(shelf, chosenEdition, fallbackEdition),
       dmCreatures.length
-        ? `<dm_creatures note="The DM's own enemies and NPCs, saved on their Creatures tab. Only the DM sees them; you're answering the DM.">\n${dmCreatures
-            .map((c) => `- ${c.name} (${c.kind === 'npc' ? 'NPC' : 'enemy'}${c.stats ? '' : ', no stat block'})`)
+        ? `<dm_creatures note="The DM's own creatures (their bestiary) and people (NPCs), saved on their Bestiary tab. Only the DM sees them; you're answering the DM.">\n${dmCreatures
+            .map((c) => `- ${c.name} (${creatureLabel(c)}${c.stats ? '' : ', no stat block'})`)
             .join('\n')}\n</dm_creatures>\n${DM_CREATURES}`
         : '',
       tools.hasWiki ? (viewer.seesAll ? WIKI_DM : WIKI_PLAYER) : '',
