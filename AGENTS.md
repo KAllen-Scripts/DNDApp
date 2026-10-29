@@ -4,7 +4,7 @@ Before doing anything, read:
 
 1. [HANDOFF.md](HANDOFF.md): current state, change log, decisions, what's verified, next steps.
 2. [SPEC.md](SPEC.md): the design. It is the source of truth; update it when a decision changes.
-3. [README.md](README.md): setup, commands, API.
+3. [README.md](README.md): what the app is and how to run it; [docs/hosting.md](docs/hosting.md) (setup, hosting, data), [docs/api.md](docs/api.md) (the API), [docs/testing.md](docs/testing.md) (tests) and [docs/features.md](docs/features.md) (how each feature works for its users) have the detail.
 4. [docs/notes/](docs/notes/README.md) when you need the background: design notes, research and checklists for features not built yet.
 
 Rules for this project:

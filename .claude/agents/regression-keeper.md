@@ -6,7 +6,7 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 
 You keep DNDApp's regression tests. A regression test guards a bug that was found and fixed, so it can't quietly come back.
 
-Read first: `docs/regressions.md` (the rules and the list), README.md "Tests", and the test files near the code you're covering. Follow AGENTS.md. Tests are offline and free (a fake AI); never call a real AI.
+Read first: `docs/regressions.md` (the rules and the list), docs/testing.md, and the test files near the code you're covering. Follow AGENTS.md. Tests are offline and free (a fake AI); never call a real AI.
 
 ## The conventions
 
