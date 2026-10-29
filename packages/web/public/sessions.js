@@ -1,6 +1,6 @@
 /**
- * The DM's Sessions tab: which campaign the transcript is for (any campaign
- * this account is the DM of), past uploads with their processing state,
+ * The DM's Sessions tab, for the campaign they're in (chosen at login, changed
+ * with Switch campaign): past uploads with their processing state,
  * player notes waiting for a transcript, and the upload form (session number,
  * date played, title, transcript, and who's who in the transcript).
  *
@@ -18,17 +18,17 @@ const longDate = (d) =>
   new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 const notesText = (notes, authors) => (notes ? `${plural(notes, 'note')} from ${plural(authors, 'player')}` : null);
 
-// campaigns: the ones this account is the DM of. campaignId: the one the tab shows. view: its GET .../sessions/overview.
-const state = { campaigns: [], campaignId: null, view: null, guarded: (fn) => fn() };
+// campaign: the one the DM is in ({ id, name }). view: its GET .../sessions/overview.
+const state = { campaign: null, view: null, guarded: (fn) => fn() };
 let timer = null;
 let list = null; // the element holding the sessions list
 
-const base = () => `/campaigns/${state.campaignId}`;
+const base = () => `/campaigns/${state.campaign.id}`;
 const busy = (v) => v.sessions.some((s) => ['queued', 'processing'].includes(s.status) || ['queued', 'running'].includes(s.job?.status));
 
-/** Enter a campaign as its DM: the tab starts on that campaign. Players never call this. */
-export async function loadSessions({ campaigns, campaignId, guarded }) {
-  Object.assign(state, { campaigns, campaignId, guarded });
+/** Enter a campaign as its DM. Players never call this. */
+export async function loadSessions({ campaign, guarded }) {
+  Object.assign(state, { campaign, guarded });
   await refresh();
 }
 
@@ -60,9 +60,9 @@ async function run(fn, done) {
 
 /** Refresh just the sessions list, leaving a half-filled upload form alone. */
 async function refreshList() {
-  const cid = state.campaignId;
+  const cid = state.campaign.id;
   const v = await api('GET', `${base()}/sessions/overview`);
-  if (cid !== state.campaignId) return; // the DM picked another campaign meanwhile
+  if (cid !== state.campaign.id) return; // the DM switched campaign meanwhile
   state.view = v;
   if (list?.isConnected) list.replaceChildren(...renderList());
 }
@@ -80,18 +80,6 @@ function poll() {
     }
     poll();
   }, 4000);
-}
-
-// ---------- which campaign ----------
-
-function campaignPicker() {
-  const select = h('select', { 'aria-label': 'Campaign' }, state.campaigns.map((c) => h('option', { value: c.id, selected: c.id === state.campaignId }, c.name)));
-  select.addEventListener('change', () => {
-    state.campaignId = Number(select.value);
-    say('');
-    state.guarded(refresh).catch((err) => say(err.message, true));
-  });
-  return h('label', { class: 'sessions-campaign' }, 'Campaign', select);
 }
 
 // ---------- past uploads ----------
@@ -142,7 +130,7 @@ function renderList() {
 
 function uploadForm() {
   const v = state.view;
-  const campaign = state.campaigns.find((c) => c.id === state.campaignId);
+  const { campaign } = state;
   const number = h('input', { type: 'number', min: 1, step: 1, value: v.next_number, required: true, 'aria-label': 'Session number' });
   const date = h('input', { type: 'date', value: v.notes_waiting[0]?.date ?? v.today, required: true, 'aria-label': 'Date played' });
   const title = h('input', { placeholder: 'Title (optional)', maxLength: 200, 'aria-label': 'Session title' });
@@ -277,9 +265,10 @@ const HUES = [8, 212, 145, 275, 32, 182, 330, 95];
 function draw() {
   list = h('div', { class: 'sessions-list' }, renderList());
   const box = $('#sessions');
-  box.style.setProperty('--hue', HUES[(state.campaignId - 1) % HUES.length]);
+  box.style.setProperty('--hue', HUES[(state.campaign.id - 1) % HUES.length]);
   box.replaceChildren(
-    campaignPicker(),
+    // Which campaign this is: the one in the top bar. Another one is a Switch campaign away.
+    h('p', { class: 'sessions-campaign' }, 'For ', h('strong', {}, state.campaign.name)),
     list,
     h('details', { class: 'upload', open: !state.view.sessions.length },
       h('summary', {}, 'Upload a session transcript'),
@@ -289,5 +278,5 @@ function draw() {
 
 export function initSessionActions() {
   // Opening the tab picks up what changed (and restarts the refresh while something is processing).
-  $('[data-tab=sessions]').addEventListener('click', () => state.campaignId && state.guarded(refreshList).then(poll, () => {}));
+  $('[data-tab=sessions]').addEventListener('click', () => state.campaign && state.guarded(refreshList).then(poll, () => {}));
 }
