@@ -4,6 +4,7 @@ import {
   afterDefenses, attackLogFor, attackSituation, concentrationDc, creatureActions, creatureDefenses, critNotation, halvesOnSave,
   refundSlot, resolveAttack, saveSituation, sheetActions, sheetDefenses, slotsLeft, spendSlot, tokenGap,
 } from '../src/attacks.js';
+import { castLevels, castWithSlot } from '../src/spell-slots.js';
 import { attackRiders } from '../src/attack-riders.js';
 import { computeSheet, emptySheet, normalizeSheet } from '../src/sheet.js';
 import { normalizeGear } from '../src/gear.js';
@@ -340,4 +341,18 @@ test('map riders: Great Weapon Master\'s −5/+10 changes the roll to hit; Divin
   const ls = sheetActions(pal.sheet, pal.calc).find((x) => x.name === 'Longsword');
   const [smite] = attackRiders(pal.sheet, pal.calc.values, ls, { picks: { divine_smite: 2 } });
   assert.deepEqual([smite.dice, smite.spend, smite.options.map((o) => o.value)], ['3d8', { slot: 2 }, [1, 2]]);
+});
+
+test('regression: castLevels lists the slot levels a spell can use with what is left (pact included), and castWithSlot spends one or says why not', () => {
+  const sheet = normalizeSheet({ classes: [{ name: 'Wizard', subclass: '', level: 3 }, { name: 'Warlock', subclass: '', level: 1 }], spellcasting: { class: 'Wizard', slots_used: { 1: 4 }, pact_used: 0 } });
+  const calc = computeSheet(sheet);
+  const { levels, first } = castLevels(sheet, calc, 1);
+  assert.deepEqual(levels.slice(0, 2), [{ level: 1, left: 1, pact: 1 }, { level: 2, left: 2, pact: 0 }]);
+  assert.equal(first, 1);
+  const cast = castWithSlot(sheet, calc, { name: 'Hex', level: 1 });
+  assert.equal(cast.used, 'pact');
+  assert.throws(() => castWithSlot(cast.sheet, calc, { name: 'Hex', level: 1 }), /No 1st-level spell slots left/);
+  assert.throws(() => castWithSlot(sheet, calc, { name: 'Misty Step', level: 2 }, 1), /2nd-level spell/);
+  assert.throws(() => castWithSlot(sheet, calc, { name: 'Fire Bolt', level: 0 }), /cantrip/);
+  assert.equal(sheet.spellcasting.slots_used[1], 4, 'the sheet passed in is left alone');
 });

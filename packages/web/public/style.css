@@ -921,8 +921,8 @@ label.check input { width: auto; flex: none; margin: 0; }
 .sessions-panel .sessions { margin-top: 0.4rem; }
 #sessions-status:empty { display: none; }
 #sessions-status { margin: 0.4rem 0 0; }
-.sessions-campaign { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
-.sessions-campaign select { padding: 0.3rem 0.45rem; max-width: 100%; }
+.sessions-campaign { margin: 0; font-size: 0.85rem; color: var(--muted); }
+.sessions-campaign strong { color: var(--text); }
 .sessions-table td { vertical-align: top; }
 .sessions-table .status-cell button { margin-top: 0.3rem; padding: 0.25rem 0.6rem; font-size: 0.85rem; }
 .notice { padding: 0.6rem 0.8rem; border-radius: 8px; background: var(--camp-soft); border: 1px solid var(--camp-line); font-size: 0.9rem; }
@@ -1143,6 +1143,7 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 @media print { .sh-help { display: none !important; } }
 /* The Background box (sheet-background.js) and the DM's own backgrounds (campaign-backgrounds.js). */
 .bg-box { display: grid; gap: 0.3rem; min-width: 0; }
+.bg-more { display: grid; gap: 0.3rem; margin-top: 0.5rem; }
 .bg-applied { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.5rem; overflow-wrap: anywhere; }
 .bg-gives summary { cursor: pointer; font-size: 0.85rem; color: var(--muted); }
 .bg-gives dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.6rem; margin: 0.3rem 0; font-size: 0.85rem; }
@@ -1218,7 +1219,7 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 }
 /* A popped-out window: just the one page. */
 .popped-window #app-view { --page-width: none; --bar-width: 100%; }
-.popped-window :is(.tabs, #switch-campaign, .change-password, #tab-popout, #map-beside) { display: none !important; }
+.popped-window :is(.tabs, .switch-campaign, .change-password, #tab-popout, #map-beside) { display: none !important; }
 
 /*
  * One set of measurements for the whole sheet, so boxes line up in every
@@ -1637,6 +1638,20 @@ input.num, .sheet .num { text-align: center; }
 .ws-text { margin: 0.1rem 0; }
 .ws-banner { margin: 0.2rem 0 0; color: var(--accent); font-weight: 600; }
 .ws-banner[hidden] { display: none; }
+/* Level up (sheet-level-up.js): under the name; the DM's levels given stand out. */
+.level-up-banner { margin: 0.2rem 0 0; display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.level-up-banner[hidden] { display: none; }
+.level-up-banner.granted span { color: var(--accent); font-weight: 600; }
+.level-up-banner:not(.granted) span:empty { display: none; }
+@media print { .level-up-banner { display: none; } }
+.level-up-dialog fieldset { border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 0.6rem; margin: 0.5rem 0; display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem; }
+.level-up-dialog fieldset [hidden], .level-up-dialog [hidden] { display: none; }
+.level-up-warning { color: var(--warn, #b45309); }
+.level-up-changes { margin: 0.2rem 0 0.5rem; padding-left: 1.2rem; max-height: 14rem; overflow: auto; }
+.level-levels { list-style: none; padding: 0; margin: 0.3rem 0; }
+.level-levels li { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; padding: 0.2rem 0; }
+.level-levels li .spacer { flex: 1; }
+.level-given { color: var(--accent); }
 .ws-add { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .ws-add input { flex: 1 1 12rem; width: auto; }
 .ws-add button { height: var(--ctl); padding: 0 1rem; }

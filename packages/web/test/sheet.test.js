@@ -317,9 +317,60 @@ test('sheet: spells roll to hit with the spell attack bonus, or show their DC, a
     await page.settle();
     assert.equal(last().notation, '1d8');
 
-    // Shield has nothing to roll.
+    // Shield has nothing to roll: its row has the slot list and Cast.
     card = await add('Shield');
-    assert.equal(card.querySelector('.spell-rolls').childElementCount, 0);
+    assert.ok(card.querySelector('[aria-label="Cast Shield"]'));
+    assert.equal(card.querySelector('[aria-label="Roll Shield damage"]'), null);
+  });
+});
+
+test('regression: casting a spell from the sheet spends a spell slot (Cast, the to-hit roll or the damage roll), and with none left it asks before rolling', async () => {
+  await withPage(sheetPage(), async (page, t) => {
+    page.click('[data-tab=sheet]');
+    page.type(byLabel(page, 'Intelligence score'), '18');
+    page.type(byLabel(page, 'Class'), 'Wizard');
+    page.type(byLabel(page, 'Level'), '3');
+    const add = async (name) => {
+      page.type('#sheet .add-spell input', name);
+      page.submit('#sheet .add-spell');
+      return page.waitFor(() => page.$$('#sheet .spell').find((c) => c.querySelector('strong').textContent === name && c.querySelector('.source-srd')), { what: name });
+    };
+    const card = (name) => page.$$('#sheet .spell').find((c) => c.querySelector('strong').textContent === name);
+    const used = () => page.$$('#sheet .slot .pips').map((p) => [...p.querySelectorAll('input')].filter((b) => b.checked).length);
+    const saved = async () => (await t.request('GET', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token })).json().sheet.spellcasting.slots_used;
+    const rolls = () => page.requests.filter((r) => r.path.endsWith('/roll'));
+
+    // Wizard 3: four 1st-level slots, two 2nd. Shield (nothing to roll) has Cast.
+    await add('Shield');
+    assert.equal(page.text(card('Shield').querySelector('[aria-label="Shield slot level"] option')), '1st (4 left)');
+    page.click(card('Shield').querySelector('[aria-label="Cast Shield"]'));
+    await page.settle();
+    assert.deepEqual(used().slice(0, 2), [1, 0]);
+    assert.equal((await saved())[1], 1);
+
+    // Magic Missile (no attack roll: damage) spends one when its damage is rolled, here a 2nd-level slot.
+    await add('Magic Missile');
+    page.type(card('Magic Missile').querySelector('[aria-label="Magic Missile slot level"]'), '2');
+    page.click(card('Magic Missile').querySelector('[aria-label="Roll Magic Missile damage"]'));
+    await page.settle();
+    assert.deepEqual(used().slice(0, 2), [1, 1]);
+    assert.equal((await saved())[2], 1);
+    assert.match(card('Magic Missile').querySelector('[aria-label="Magic Missile slot level"]').selectedOptions[0].textContent, /2nd \(1 left\)/);
+
+    // A cantrip spends nothing.
+    await add('Fire Bolt');
+    page.click(card('Fire Bolt').querySelector('[aria-label="Roll Fire Bolt to hit"]'));
+    await page.settle();
+    assert.deepEqual(used().slice(0, 2), [1, 1]);
+
+    // None left at the level picked: the player is asked (the list stays on 1st); saying no rolls nothing.
+    page.type(byLabel(page, '1st level slot used 4'), true);
+    page.answers.confirm = false;
+    const before = rolls().length;
+    page.click(card('Shield').querySelector('[aria-label="Cast Shield"]'));
+    await page.settle();
+    assert.match(page.dialogs.at(-1).message, /No 1st-level spell slots left/);
+    assert.equal(rolls().length, before);
   });
 });
 
@@ -982,7 +1033,7 @@ test('campaign settings: the DM ignores weight limits from Settings', async () =
     assert.equal(page.el('#setting-weight').value, 'capacity');
     page.type('#setting-weight', 'ignore');
     await page.waitFor(() => /Saved/.test(page.text('#settings-dialog')), { what: 'the setting to save' });
-    assert.deepEqual(t.store.getSettings(t.campaign.id), { weight: 'ignore', edition: null, clock: 480, travel: { time: 'clock', roads: true, terrain: true, vehicles: true, marches: true, encounters: true }, attacks: { on: true, damage: 'auto', show_ac: false }, backgrounds: [], calendar: null, wiki: { lanes: [] } });
+    assert.deepEqual(t.store.getSettings(t.campaign.id), { weight: 'ignore', edition: null, level_up: 'player', clock: 480, travel: { time: 'clock', roads: true, terrain: true, vehicles: true, marches: true, encounters: true }, attacks: { on: true, damage: 'auto', show_ac: false }, backgrounds: [], calendar: null, wiki: { lanes: [] } });
   });
 });
 

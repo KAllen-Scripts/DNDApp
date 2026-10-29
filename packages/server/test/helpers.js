@@ -122,9 +122,9 @@ export function createFakeLLM({ qaScript = [], archivist = defaultArchivist, str
       if (!research) throw new Error(`fake llm: no research() handler for ${opts.purpose}`);
       return research(opts);
     },
-    async agent({ purpose, system, prompt, tools, onText, onTool, onTurn, effort, limits }) {
+    async agent({ purpose, system, prompt, tools, onText, onTool, onTurn, effort, model, limits }) {
       const toolResults = [];
-      calls.push({ purpose, system, prompt, toolResults, tools: tools.map((t) => t.name), ...(effort && { effort }), ...(limits && { limits }) });
+      calls.push({ purpose, system, prompt, toolResults, tools: tools.map((t) => t.name), ...(effort && { effort }), ...(model && { model }), ...(limits && { limits }) });
       const tracked = tools.map((t) => ({
         ...t,
         run: async (input) => {

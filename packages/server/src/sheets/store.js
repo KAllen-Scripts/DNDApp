@@ -160,15 +160,19 @@ export function createSheets({ db, archive, store, onSave = () => {}, onSwitch =
      * Save the whole sheet of the active character (or, with `number`, that
      * character). `baseVersion` is the version the page loaded; if the sheet
      * has been saved since, nothing is saved (SheetConflictError), so one
-     * device can't silently overwrite another's changes.
+     * device can't silently overwrite another's changes. `levels`: the sheet's
+     * levels_granted is taken from `input` (the level up routes); otherwise it's kept.
      * @returns {{ sheet, version, updated_at, number }}
      */
-    save(campaignId, userId, input, { baseVersion, by, reason, number = null } = {}) {
+    save(campaignId, userId, input, { baseVersion, by, reason, number = null, levels = false } = {}) {
       const c = store.getCampaign(campaignId);
       const current = number == null ? sheets.get(campaignId, userId) : sheets.get(campaignId, userId, number);
       if (!current) throw new CharacterError('There is no such character.', 404);
       if (baseVersion != null && baseVersion !== current.version) throw new SheetConflictError(current);
       const sheet = normalizeSheet(input);
+      // Levels the DM has given (level-up.js) change only through the level up routes (levels: true), never from
+      // a sheet the page or an upload sends.
+      if (!levels) sheet.levels_granted = current.sheet.levels_granted ?? 0;
       const changes = current.version ? diffJson(current.sheet, sheet) : [{ p: [], v: sheet }];
       if (!changes.length) return current;
       const version = current.version + 1;
