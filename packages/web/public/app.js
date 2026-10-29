@@ -196,11 +196,14 @@ $('#campaign-form').addEventListener('submit', (e) => {
   if (campaign) guarded(() => enterCampaign(campaign));
 });
 
-$('#switch-campaign').addEventListener('click', async () => {
-  await flushSheet();
-  stopMaps();
-  showCampaignPicker();
-});
+// Beside the campaign's name, and in the account menu (on a phone, the ☰ sheet).
+for (const button of document.querySelectorAll('.switch-campaign')) {
+  button.addEventListener('click', async () => {
+    await flushSheet();
+    stopMaps();
+    showCampaignPicker();
+  });
+}
 
 /** Everything on the Ask and Notes tabs belongs to this campaign. */
 async function enterCampaign(campaign) {
@@ -212,14 +215,14 @@ async function enterCampaign(campaign) {
   $('#campaign-name').textContent = campaign.name;
   $('#campaign-name').title = campaign.name;
   $('#character').textContent = describe(campaign);
-  $('#switch-campaign').hidden = state.me.campaigns.length < 2;
+  for (const button of document.querySelectorAll('.switch-campaign')) button.hidden = state.me.campaigns.length < 2;
   $('#account-name').textContent = state.me.user.name;
   if (!WINDOW_TAB) document.title = `${campaign.name} · ${APP_NAME}`;
   newConversation();
   const isDm = campaign.role === 'dm';
   // The Archivist tab is the DM's; a player who was on it goes back to the first tab.
   $('[data-tab=archivist]').hidden = !isDm;
-  // ...and Sessions, to upload transcripts to any campaign they run.
+  // ...and Sessions, to upload this campaign's transcripts.
   $('[data-tab=sessions]').hidden = !isDm;
   // Everyone gets the Wiki: a player reads their own version of it, filtered on the server.
   $('[data-tab=wiki]').hidden = false;
@@ -277,7 +280,7 @@ async function enterCampaign(campaign) {
     loadMaps({ campaignId: campaign.id, userId: state.me.user.id, guarded }),
     loadTable({ campaignId: campaign.id, guarded }),
     isDm ? loadArchivist({ campaignId: campaign.id, guarded }) : null,
-    isDm ? loadSessions({ campaigns: state.me.campaigns.filter((c) => c.role === 'dm'), campaignId: campaign.id, guarded }) : null,
+    isDm ? loadSessions({ campaign, guarded }) : null,
     loadWiki({ campaignId: campaign.id, guarded, isDm, userId: state.me.user.id }),
     isDm ? loadCreatures({ campaignId: campaign.id, guarded }) : null,
     isDm ? loadItems({ campaignId: campaign.id, guarded }) : null,
@@ -665,11 +668,13 @@ $('#ask-form textarea').addEventListener('keydown', (e) => {
 
 /**
  * Under a quick answer (a general D&D lookup, answered fast from what the AI
- * knows): a button to ask again the thorough way, with the books and records.
+ * knows) or one the faster model wrote from the records it was given: a
+ * button to ask again the thorough way, with the books, the records and the
+ * main model.
  */
-function quickNote(question) {
+function quickNote(question, path) {
   const button = h('button', { type: 'button', class: 'link small' }, 'Look it up properly');
-  const note = h('p', { class: 'muted small answer-quick' }, 'Quick answer. ', button);
+  const note = h('p', { class: 'muted small answer-quick' }, path === 'quick' ? 'Quick answer. ' : 'Quick answer from the records. ', button);
   button.addEventListener('click', () => {
     if (state.asking) return;
     note.remove();
@@ -715,7 +720,7 @@ async function ask(question, mode = 'auto') {
           markNames(body);
           const ev = renderEvidence(data.evidence);
           if (ev) a.append(ev);
-          if (data.path === 'quick') a.append(quickNote(question));
+          if (data.path === 'quick' || data.fast) a.append(quickNote(question, data.path));
         } else if (event === 'error') {
           throw new Error(data.error);
         }

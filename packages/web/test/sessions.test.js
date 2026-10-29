@@ -1,6 +1,6 @@
 /**
- * The DM's Sessions tab (sessions.js): pick which of their campaigns a
- * transcript is for, check who's who, upload it, and watch it get processed.
+ * The DM's Sessions tab (sessions.js): for the campaign they're in, check
+ * who's who in a transcript, upload it, and watch it get processed.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -75,8 +75,8 @@ test('sessions: paste a transcript, check who\'s who, upload; it gets processed'
   });
 });
 
-test('sessions: the DM picks which of their campaigns the transcript is for', async () => {
-  // Dana runs a second campaign, and plays in a third (which isn't offered).
+test('sessions: the tab is for the campaign the DM is in; Switch campaign moves it to another', async () => {
+  // Dana runs a second campaign, and plays in a third.
   await withPage({
     before: async (t) => {
       const dana = await addDm(t);
@@ -91,12 +91,23 @@ test('sessions: the DM picks which of their campaigns the transcript is for', as
   }, async (page, t, { other }) => {
     page.click('[data-tab=sessions]');
     await page.settle();
-    const pick = box(page).querySelector('[aria-label="Campaign"]');
-    assert.deepEqual([...pick.options].map((o) => o.textContent), ['Second Campaign', 'Test Campaign'], 'by name');
-    assert.equal(pick.selectedOptions[0].textContent, 'Test Campaign', 'starts on the campaign the DM is in');
+    // No campaign picker of its own: the DM chose the campaign at login.
+    assert.equal(box(page).querySelector('select[aria-label="Campaign"]'), null);
+    assert.equal(page.text(box(page).querySelector('.sessions-campaign')), 'For Test Campaign');
 
-    page.type(pick, String(other.id));
+    // Switch campaign is in the account menu as well as beside the name.
+    const menuSwitch = page.$('#account-menu .switch-campaign');
+    assert.ok(page.visible(menuSwitch));
+    page.click(menuSwitch);
     await page.settle();
+    assert.ok(page.visible('#campaign-view'));
+    page.type('#campaign-pick', String(other.id));
+    page.submit('#campaign-form');
+    await page.settle();
+    page.click('[data-tab=sessions]');
+    await page.settle();
+    assert.equal(page.text(box(page).querySelector('.sessions-campaign')), 'For Second Campaign');
+
     // The form is now the other campaign's: its members are the choices.
     const f = form(page);
     page.type(f.querySelector('[aria-label="Transcript text"]'), SAMPLE);
@@ -109,7 +120,13 @@ test('sessions: the DM picks which of their campaigns the transcript is for', as
     assert.match(message(page), /Uploaded session #1 .* to Second Campaign/);
     await t.jobs.idle();
     assert.equal(t.store.getSession(other.id, 1).number, 1);
-    assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/sessions`)).json().length, 0, 'nothing went to the campaign the DM is in');
+    assert.equal((await t.request('GET', `/campaigns/${t.campaign.id}/sessions`)).json().length, 0, 'nothing went to the campaign the DM was in first');
+  });
+});
+
+test('sessions: someone in only one campaign has no Switch campaign anywhere', async () => {
+  await withPage(asDana(), async (page) => {
+    for (const b of page.$$('.switch-campaign')) assert.ok(!page.visible(b));
   });
 });
 

@@ -15,7 +15,7 @@ import { json } from '../db/index.js';
 import { renderRecord } from '../kb/store.js';
 import { createTools } from './tools.js';
 import { handbookEditions } from '../sheets/books.js';
-import { routeQuestion } from './route.js';
+import { routeQuestion, pickModel } from './route.js';
 
 export class RateLimitError extends Error {}
 
@@ -249,7 +249,10 @@ export function createQA({ db, store, kb, search, books, creatures = null, editi
       .join('\n\n');
 
     // Quick: only the records (house rules, homebrew), in a smaller budget; no transcripts or notes.
-    const found = await tools.preSearch(question, quick ? { tokens: Q.quickPreSearchTokens, only: ['kb', 'wiki'] } : {});
+    const { text: found, found: foundTitles } = await tools.preSearch(question, quick ? { tokens: Q.quickPreSearchTokens, only: ['kb', 'wiki'] } : {});
+    // A faster model when it's a general lookup or the records found already have it (owner, 2026-10-28).
+    const picked = pickModel(question, route, { mode, found: foundTitles, fast: Q.fastModel });
+    const fast = picked.model === 'fast';
     const mine = tools.myCreaturesIn(question);
     const prompt =
       `${historyBlock(conversationId)}Question: ${question}` +
@@ -264,6 +267,8 @@ export function createQA({ db, store, kb, search, books, creatures = null, editi
       path: route.path,
       why: route.reason,
       effort: quick ? Q.quickEffort : null,
+      model: fast ? Q.fastModel : (config.llm?.tasks?.qa?.model ?? null),
+      model_why: picked.reason,
       system_chars: system.length,
       prompt_chars: prompt.length,
       prep_ms: prepMs,
@@ -301,6 +306,7 @@ export function createQA({ db, store, kb, search, books, creatures = null, editi
         prompt,
         tools: timed,
         ...(quick && { effort: Q.quickEffort }),
+        ...(fast && { model: Q.fastModel }),
         limits: { maxToolCalls: quick ? Q.quickMaxToolCalls : Q.maxToolCalls, maxCostUsd: Q.maxCostUsd },
         campaignId,
         userId,
@@ -330,7 +336,7 @@ export function createQA({ db, store, kb, search, books, creatures = null, editi
     const durationMs = since();
     timing.total_ms = durationMs;
     const id = log({ ...row, answer, evidence: json.str(evidence), toolCalls: json.str(toolLog), cost, durationMs, firstTextMs: timing.first_text_ms, status: 'ok' });
-    const result = { id, conversationId, answer, evidence, toolCalls: toolLog.length, costUsd: cost, durationMs, path: route.path };
+    const result = { id, conversationId, answer, evidence, toolCalls: toolLog.length, costUsd: cost, durationMs, path: route.path, fast };
     emit({ type: 'done', ...result });
     return { ...result, timing };
   }
