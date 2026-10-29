@@ -34,6 +34,7 @@ import { loadCharacters, refreshCharacters, nameTyped } from './sheet-characters
 import { traitsList } from './sheet-traits.js';
 import { offhandWeapon } from './shared/attack-extras.js';
 import { withD20Rule } from './shared/feats.js';
+import { castLevels } from './shared/spell-slots.js';
 import { attackPlan, combatBar, extrasLine, inventoryMastery, rollAttackPlan, rollDamagePlan, spellPlan } from './sheet-attacks.js';
 import { backgroundBox, backgroundNames, forgetApplied } from './sheet-background.js';
 import { helpPanel } from './sheet-help.js';
@@ -1961,28 +1962,48 @@ function spellCard(spell, drawList) {
 }
 
 /**
- * A spell's roll buttons in its row: to hit (a spell attack, then its damage
- * offered) and damage (or healing), with the slot it's cast with for spells
- * that do more when cast higher.
+ * A spell's buttons in its row: to hit (a spell attack, then its damage
+ * offered), damage (or healing), and Cast for a spell with nothing to roll
+ * (Entangle). A spell of 1st level or higher has a slot list (with how many
+ * are left) and casting it spends that slot through the server: the to-hit
+ * roll for an attack, the damage roll for anything else, or Cast. With no
+ * slot left the player can still roll (a scroll, an item, a free casting).
  */
 function spellRollButtons(spell) {
   const wrap = h('span', { class: 'spell-rolls' });
   const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+  let slot = null;
+  const paintSlots = () => {
+    if (!slot) return;
+    const { levels, first } = castLevels(state.sheet, state.calc, spell.level);
+    const keep = slot.value ? Number(slot.value) : null;
+    slot.replaceChildren(...levels.map((l) => new Option(`${ORDINALS[l.level]} (${l.left} left${l.pact ? ', pact' : ''})`, l.level)));
+    // The level the player picked stays picked (with none left, casting asks); at first, the lowest with one left.
+    slot.value = String(keep && levels.some((l) => l.level === keep) ? keep : first);
+  };
+  state.renders.push(paintSlots);
   const draw = () => {
     wrap.replaceChildren();
-    if (!spell.attack && !spell.damage.trim()) return;
-    const upcast = spell.level >= 1 && spell.higher_damage.trim();
-    const slot = upcast ? h('select', { 'aria-label': `${spell.name} slot level`, title: 'Cast with a slot of this level', onclick: (e) => e.stopPropagation() }, Array.from({ length: 10 - spell.level }, (_, k) => new Option(ORDINALS[spell.level + k], spell.level + k))) : null;
+    const leveled = spell.level >= 1;
+    if (!spell.attack && !spell.damage.trim() && !leveled) return;
+    slot = leveled ? h('select', { 'aria-label': `${spell.name} slot level`, title: 'Cast with a slot of this level', onclick: (e) => e.stopPropagation() }) : null;
     const rolls = () => spellPlan(state, spell, slot ? Number(slot.value) : spell.level, `spell:${spell.id}`);
     const at = () => (slot && Number(slot.value) > spell.level ? ` at ${ORDINALS[slot.value]} level` : '');
+    const cast = () => castSpell(spell, slot ? Number(slot.value) : null);
     const heal = /heal/i.test(spell.damage);
+    if (slot) {
+      wrap.append(slot);
+      paintSlots();
+    }
     if (spell.attack === 'attack') {
-      const hit = h('button', { type: 'button', class: 'icon-roll', title: 'Spell attack (Shift: advantage, Alt: disadvantage)', 'aria-label': `Roll ${spell.name} to hit` });
+      const hit = h('button', { type: 'button', class: 'icon-roll', title: `Spell attack${leveled ? ': spends the slot' : ''} (Shift: advantage, Alt: disadvantage)`, 'aria-label': `Roll ${spell.name} to hit` });
       hit.innerHTML = D20_ICON;
-      hit.addEventListener('click', (e) => {
+      hit.addEventListener('click', async (e) => {
         stop(e);
+        const mode = rollModeFromEvent(e);
         const r = rolls();
-        roll(r.hit, { label: `${spell.name}: to hit`, mode: rollModeFromEvent(e), then: r.damage && { label: `${spell.name}: damage${at()}${withExtras(r)}`, notation: r.damage, crit: r.crit, notes: r.notes } });
+        if (!(await cast())) return;
+        roll(r.hit, { label: `${spell.name}: to hit${at()}`, mode, then: r.damage && { label: `${spell.name}: damage${at()}${withExtras(r)}`, notation: r.damage, crit: r.crit, notes: r.notes } });
       });
       wrap.append(hit);
     } else if (spell.attack === 'save') {
@@ -1990,19 +2011,54 @@ function spellRollButtons(spell) {
       wrap.append(h('span', { class: 'muted small spell-dc', title: 'Targets make this saving throw' }, `DC ${r.dc ?? '?'}${r.save ? ` ${cap(r.save)}` : ''}`));
     }
     if (spell.damage.trim()) {
-      if (slot) wrap.append(slot);
-      wrap.append(h('button', { type: 'button', class: 'icon-roll dmg-roll', title: heal ? 'Roll healing' : 'Roll damage', 'aria-label': `Roll ${spell.name} ${heal ? 'healing' : 'damage'}`, onclick: (e) => {
+      // An attack's damage follows its to-hit roll, which already spent the slot.
+      const casts = spell.attack !== 'attack';
+      wrap.append(h('button', { type: 'button', class: 'icon-roll dmg-roll', title: `${heal ? 'Roll healing' : 'Roll damage'}${casts && leveled ? ': spends the slot' : ''}`, 'aria-label': `Roll ${spell.name} ${heal ? 'healing' : 'damage'}`, onclick: async (e) => {
         stop(e);
         const r = rolls();
         if (!r.damage) return alert(`Type the dice for ${spell.name} first, like 8d6 fire.`);
+        if (casts && !(await cast())) return;
         const dc = r.kind === 'save' ? ` (DC ${r.dc}${r.save ? ` ${cap(r.save)}` : ''} save)` : '';
         roll(r.damage, { label: `${spell.name}: ${heal ? 'healing' : 'damage'}${at()}${dc}${withExtras(r)}` });
       } }, heal ? 'Heal' : 'Dmg'));
+    } else if (leveled && spell.attack !== 'attack') {
+      wrap.append(h('button', { type: 'button', class: 'small cast-spell', title: 'Cast it: spends the slot', 'aria-label': `Cast ${spell.name}`, onclick: async (e) => {
+        stop(e);
+        if (await cast()) status(`Cast ${spell.name}${at()}.`);
+      } }, 'Cast'));
     }
   };
   draw();
   wrap.redraw = draw;
   return wrap;
+}
+
+/**
+ * Cast a spell of 1st level or higher: the server spends a slot of `slot`
+ * (shared/attacks.js castWithSlot) and the slot boxes follow. With none left
+ * the player can go on without one (a scroll, an item, a free casting).
+ * Cantrips need nothing. Returns false when the player stops.
+ */
+async function castSpell(spell, slot) {
+  if (!(spell.level >= 1)) return true;
+  await flush();
+  try {
+    const res = await state.guarded(() => api('POST', `${base()}/sheet/spells/cast`, { id: spell.id, ...(slot && { slot }) }));
+    if (!res) return false;
+    // Only the slots changed on the server: take them, and leave anything typed since alone.
+    const sc = normalizeSheet(res.sheet).spellcasting;
+    for (const s of [state.sheet, state.savedSheet]) {
+      if (!s) continue;
+      s.spellcasting.slots_used = structuredClone(sc.slots_used);
+      s.spellcasting.pact_used = sc.pact_used;
+    }
+    state.version = res.version;
+    refresh();
+    announce();
+    return true;
+  } catch (err) {
+    return confirm(`${err.message}\n\nRoll anyway without spending a slot (a scroll, an item, a free casting)?`);
+  }
 }
 
 /** " (with Agonizing Blast +3)": a spell's class feature extras, for its roll's label. */

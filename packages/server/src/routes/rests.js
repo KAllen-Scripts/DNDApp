@@ -47,6 +47,18 @@ export function registerRests(app, r) {
   });
 
   /**
+   * Cast a spell from your sheet: { id (the spell on the sheet), slot? (the
+   * slot level; the spell's own if not given) }. Spends the slot (Pact Magic
+   * if no ordinary one of that level is left); refused when none is. The page
+   * rolls the spell's dice itself. Returns { level, used, sheet, version, updated_at }.
+   */
+  app.post('/campaigns/:cid/sheet/spells/cast', async (request) => {
+    const { cid } = player(request);
+    const { id, slot } = z.object({ id: z.string().min(1).max(64), slot: z.number().int().min(1).max(9).optional() }).parse(request.body);
+    return rests.castSpell(cid, request.user.id, id, { slot });
+  });
+
+  /**
    * Drink a potion that heals from your inventory: { id (the inventory line),
    * visibility? }. The server rolls what it heals (shared like any roll), adds
    * the hit points and takes one away. Returns what the hit dice route returns.
