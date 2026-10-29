@@ -149,6 +149,17 @@ button.link { border: none; background: none; padding: 0; color: var(--accent); 
   :root:not([data-phone]) #app-view > .topbar:has([data-tab="sessions"]:not([hidden])) .bar-tool:not(#account-menu-open) .bar-label,
   :root:not([data-phone]) #app-view > .topbar:has([data-tab="sessions"]:not([hidden])) .dice-open span { display: none; }
 }
+/* Whatever the theme or window, the bar keeps to one row (topbar-fit.js): when it would run onto another, the
+   tools drop their names, then the tabs close up, then the tabs go onto two lines in their own box. The campaign's
+   name keeps 8rem before that happens, so it's never squeezed to nothing. */
+:root:not([data-phone]) #app-view > .topbar .who { flex: 1 1 8rem; }
+:root:not([data-phone]) #app-view > .topbar.fit-icons .bar-tool:not(#account-menu-open) .bar-label,
+:root:not([data-phone]) #app-view > .topbar.fit-icons .dice-open span { display: none; }
+:root:not([data-phone]) #app-view > .topbar.fit-tight .tabs button { padding-inline: 0.45rem; letter-spacing: 0.02em; }
+:root:not([data-phone]) #app-view > .topbar.fit-wrap { flex-wrap: nowrap; }
+:root:not([data-phone]) #app-view > .topbar.fit-wrap .who { flex: 0 1 auto; min-width: 6rem; max-width: 10rem; }
+:root:not([data-phone]) #app-view > .topbar.fit-wrap .tabs { flex: 1 1 0; min-width: 0; flex-wrap: wrap; }
+:root:not([data-phone]) #app-view > .topbar.fit-wrap > :not(.who, .tabs) { flex: none; }
 
 .panel { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0.75rem 16px 16px; gap: 0.75rem; }
 .panel-head { display: flex; gap: 0.5rem; align-items: center; }
