@@ -37,6 +37,31 @@ test('login: no saved login shows the login form; a wrong password says so; the 
   });
 });
 
+test('login: on the example data, pick who to log in as from a list, with no password', async () => {
+  await withPage({ setup: { config: { dataSet: 'example' } } }, async (page) => {
+    assert.ok(page.visible('#login-form [name=pick]'));
+    assert.ok(!page.visible('#login-form [name=name]'));
+    assert.ok(!page.visible('#login-form [name=password]'));
+    const options = [...page.$('#login-form [name=pick]').options].map((o) => o.textContent);
+    assert.deepEqual(options, ['Alex (Lyra)', 'Sam (Thorin)', 'Kenny (server admin)']);
+
+    page.type('#login-form [name=pick]', 'Sam');
+    page.submit('#login-form');
+    await page.settle();
+    assert.ok(page.visible('#app-view'));
+    assert.equal(page.text('#character'), 'playing Thorin');
+  });
+});
+
+test('regression: on the real data, the login page shows the name and password form and no account list', async () => {
+  await withPage({}, async (page) => {
+    assert.ok(page.visible('#login-form [name=name]'));
+    assert.ok(page.visible('#login-form [name=password]'));
+    assert.ok(!page.visible('#login-form [name=pick]'));
+    assert.equal(page.$('#login-form [name=pick]').options.length, 0);
+  });
+});
+
 test('login: a saved login that has expired goes back to the login form with a message', async () => {
   await withPage({ page: { as: { token: 'not-a-real-token' } } }, async (page) => {
     assert.ok(page.visible('#login-view'));
