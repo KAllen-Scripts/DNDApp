@@ -81,6 +81,12 @@ export function createAuth({ db, archive, loginDays = 30, maxFailedLogins = 10, 
   };
   let dummyHash = null;
 
+  const startLogin = (userId) => {
+    const token = newToken();
+    db.prepare('INSERT INTO logins (token_hash, user_id) VALUES (?, ?)').run(sha256(token), userId);
+    return { token, user: publicUser(userId) };
+  };
+
   /** The account and login behind an Authorization header, or null. Read-only. */
   const lookup = (header) => {
     const m = /^Bearer\s+(\S+)$/i.exec(header ?? '');
@@ -150,9 +156,25 @@ export function createAuth({ db, archive, loginDays = 30, maxFailedLogins = 10, 
         throw new AuthError('Wrong name or password');
       }
       failures.delete(nameKey);
-      const token = newToken();
-      db.prepare('INSERT INTO logins (token_hash, user_id) VALUES (?, ?)').run(sha256(token), row.id);
-      return { token, user: publicUser(row.id) };
+      return startLogin(row.id);
+    },
+
+    /**
+     * The accounts anyone may log in as without a password, with what they play.
+     * Only the example data offers this (routes/accounts.js checks); never the real data.
+     * @returns {{ name: string, is_admin: boolean, plays: string[] }[]}
+     */
+    pickableAccounts() {
+      const users = db.prepare('SELECT id, name, is_admin FROM users WHERE revoked_at IS NULL ORDER BY is_admin, name COLLATE NOCASE').all();
+      const plays = db.prepare("SELECT CASE WHEN role = 'dm' THEN 'DM' ELSE COALESCE(character_name, 'player') END AS play FROM memberships WHERE user_id = ? ORDER BY campaign_id");
+      return users.map((u) => ({ name: u.name, is_admin: !!u.is_admin, plays: plays.all(u.id).map((m) => m.play) }));
+    },
+
+    /** Log in as an account by name alone (the example data's login picker). */
+    loginWithoutPassword(name) {
+      const row = db.prepare('SELECT id FROM users WHERE name = ? COLLATE NOCASE AND revoked_at IS NULL').get(cleanName(name));
+      if (!row) throw new AuthError('No such account', 404);
+      return startLogin(row.id);
     },
 
     logout(header) {

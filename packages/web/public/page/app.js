@@ -32,6 +32,7 @@ import { initPhone, phoneMenu, phoneSheet } from './phone.js';
 import { initBarFit } from './topbar-fit.js';
 import { WINDOW_TAB, SHEET_WINDOW, windowCampaign, besidePanel, placeBeside, setSheetCampaign, initSheetPlace } from './side-panel.js';
 import { $, h } from './dom.js';
+import { offerPickLogin, picking } from './pick-login.js';
 
 const APP_NAME = 'The Party Ledger'; // the site's name (the domain is thepartyledger.fyi)
 const CAMPAIGN_KEY = 'dndapp.campaign'; // last campaign chosen in this browser (pre-selected next time)
@@ -75,6 +76,7 @@ function showLogin(message) {
   err.hidden = !message;
   $('#login-form [name=password]').value = '';
   $('#login-form [name=name]').focus();
+  offerPickLogin($('#login-form'));
 }
 
 /** Run an action; if the login has expired, go back to the login screen. */
@@ -303,7 +305,9 @@ $('#login-form').addEventListener('submit', async (e) => {
   const button = form.querySelector('button');
   button.disabled = true;
   try {
-    const { token } = await api('POST', '/login', { name: form.name.value, password: form.password.value });
+    const { token } = picking(form)
+      ? await api('POST', '/login/pick', { name: form.pick.value })
+      : await api('POST', '/login', { name: form.name.value, password: form.password.value });
     setToken(token);
     form.password.value = '';
     $('#login-error').hidden = true;

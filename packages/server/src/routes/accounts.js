@@ -20,6 +20,20 @@ export function registerAccounts(app, r) {
     return auth.login(name, password, request.ip);
   });
 
+  // The example data only (DATA_SET=example): pick who to log in as from a list, no password, for testing.
+  // On the real data the list is empty and logging in this way is refused.
+  const examplePick = () => config.dataSet === 'example';
+
+  /** The accounts to pick from: { accounts: [{ name, is_admin, plays }] }. Empty on the real data. */
+  app.get('/login/pick', { config: { public: true } }, async () => ({ accounts: examplePick() ? auth.pickableAccounts() : [] }));
+
+  /** Log in as { name } with no password. Returns a token like /login. */
+  app.post('/login/pick', { config: { public: true }, bodyLimit: 16 * 1024 }, async (request) => {
+    if (!examplePick()) throw new NotFoundError('Not found');
+    const { name } = z.object({ name: z.string().min(1).max(100) }).parse(request.body);
+    return auth.loginWithoutPassword(name);
+  });
+
   app.post('/logout', { config: { public: true }, bodyLimit: 16 * 1024 }, async (request) => {
     auth.logout(request.headers.authorization);
     return { ok: true };

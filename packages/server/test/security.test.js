@@ -153,6 +153,42 @@ test('logins: guesses from one address are limited across names; the per-name lo
   }
 });
 
+test('regression: the real data offers no passwordless login: nobody is listed and picking an account is refused', async () => {
+  const t = await setup();
+  try {
+    const list = await t.app.inject({ method: 'GET', url: '/login/pick' });
+    assert.equal(list.statusCode, 200);
+    assert.deepEqual(list.json().accounts, []);
+    const pick = await t.app.inject({ method: 'POST', url: '/login/pick', payload: { name: 'Sam' } });
+    assert.equal(pick.statusCode, 404);
+    assert.ok(!pick.json().token);
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test('the example data: anyone may list the accounts and log in as one without a password', async () => {
+  const t = await setup({ config: { dataSet: 'example' } });
+  try {
+    const { accounts } = (await t.app.inject({ method: 'GET', url: '/login/pick' })).json();
+    assert.deepEqual(accounts, [
+      { name: 'Alex', is_admin: false, plays: ['Lyra'] },
+      { name: 'Sam', is_admin: false, plays: ['Thorin'] },
+      { name: 'Kenny', is_admin: true, plays: ['DM'] },
+    ]);
+    const pick = await t.app.inject({ method: 'POST', url: '/login/pick', payload: { name: 'sam' } });
+    assert.equal(pick.statusCode, 200);
+    const me = await t.request('GET', '/me', { as: pick.json().token });
+    assert.equal(me.json().user.name, 'Sam');
+    // Blocked accounts are neither listed nor usable.
+    t.auth.revoke(t.sam.id);
+    assert.ok(!(await t.app.inject({ method: 'GET', url: '/login/pick' })).json().accounts.some((a) => a.name === 'Sam'));
+    assert.equal((await t.app.inject({ method: 'POST', url: '/login/pick', payload: { name: 'Sam' } })).statusCode, 404);
+  } finally {
+    await t.cleanup();
+  }
+});
+
 test('regression: live map updates stop when a player is blocked or removed, and follow role changes', async () => {
   const t = await setup({ llm: mapLLM() });
   try {

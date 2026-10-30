@@ -175,6 +175,8 @@ When you change the web page, add or update a test in `packages/web/test/` (docs
 
 ## Checks to run in VS Code
 
+- 2026-10-30: run `npm test` (the example-data login picker tests in `server/test/security.test.js` and `web/test/app.test.js` were never run).
+
 - **Discord recording (2026-10-29):** with `DISCORD_BOT_TOKEN` in `.env`, restart; the log should say `Discord bot: logged in as …`. Invite the bot from the Sessions tab's link to a test Discord server, link the server and voice channel, Start recording, have two people talk for ten minutes (one leaving and rejoining halfway), Stop. Check: the transcript has both names and no long gaps around the rejoin; how long transcribing took with `TRANSCRIBE_ENGINE=local` (and `TRANSCRIBE_LOCAL_DEVICE=dml`), and with `whisper-cpp` if set up; `/record`, `/stop`, `/norecord` in Discord; the 🔴 nickname. Note the graphics card in HANDOFF.
 - **The DM's own effects and NPC spells (2026-10-29):** after pulling and restarting, as the DM: give an enemy the SRD Mage's stat block and open its Attack picker: Fire Bolt, Fireball, Hold Person and the rest should be there with "3rd level (3 slots)" and such. Then press **Effect**, make a "Pit trap" (nobody does it, Dex save DC 13, 2d6 bludgeoning, prone, a 10 ft cube) and place it over two tokens: does the form fit on the PC and a phone, and do the card and the players' view say "Pit trap"?
 - **Items and Merchants in the wiki (2026-10-28):** as the DM, open the Wiki and click Items, then Merchants on the rail: do they fill the space well on the PC and a phone, do New item, Look up and Put on the map work, and does going back to the table leave the map as it was?
@@ -390,6 +392,10 @@ Ideas the owner looked at and set aside, and why, so nobody re-proposes them col
 Not about the app, from the first project's chat (2026-10-08): the owner's $100 usage credit wasn't being drawn. The likely cause is the normal order (the plan's 5-hour allowance is used first; usage credits only start at the limit, and only if switched on in claude.ai Settings > Usage). If credits are on and he's still blocked at the limit, contact Anthropic support.
 
 ## Change log
+
+### 2026-10-30: Pick who to log in as on the example data
+
+The owner: on the example data, pick who to log in as from a dropdown, no password. With `DATA_SET=example` the login page shows a "Log in as" list of every unblocked account (with what they play: "test-mags (Wren)", "test-rowan (DM)") in place of the name and password (`page/pick-login.js`; server `GET/POST /login/pick` in `routes/accounts.js`, `auth.pickableAccounts` / `auth.loginWithoutPassword`). On the real data the list is empty and `POST /login/pick` is a 404, so the normal login is unchanged. Tests written (server `security.test.js`, web `app.test.js`) but **not run**: the owner said to skip them (low on credits). Run them next VS Code session.
 
 ### 2026-10-29: The code tidied into feature folders
 
