@@ -42,7 +42,7 @@ import { fold, isOpen, setOpen } from './fold.js';
 import { itemNames } from '/shared/item-names.js';
 import { GEAR_KINDS, effectText, gearCard } from '../items/item-card.js';
 import { levelUpBanner } from './level-up.js';
-import { $, cap, h, note, setChildren } from '../page/dom.js';
+import { $, cap, h, note, readBase64, setChildren } from '../page/dom.js';
 
 const LEVEL_NAMES = ['Cantrips', '1st level', '2nd level', '3rd level', '4th level', '5th level', '6th level', '7th level', '8th level', '9th level'];
 const SPELL_DETAILS = ['name', 'level', 'school', 'casting_time', 'range', 'components', 'material', 'duration', 'concentration', 'ritual', 'description', 'higher_levels', 'attack', 'save', 'damage', 'damage_mod', 'higher_damage', 'source', 'source_note'];
@@ -1422,14 +1422,6 @@ function details() {
 // Pictures of the character: the token that stands for them on maps (everyone
 // in the campaign sees it there), and a full picture (only theirs) that the
 // AI describes into the Appearance box.
-
-const readBase64 = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
 
 /** Show a picture once it's fetched (it needs the login, so an <img> can't fetch it itself). */
 function pictureImg(kind, cls) {
