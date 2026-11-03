@@ -22,12 +22,7 @@ export async function importMap(file) {
   const page = isPdf ? await askPage(file.name) : null;
   if (isPdf && !page) return;
   status(isPdf ? `Uploading page ${page}…` : 'Uploading…');
-  const data = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(',')[1]);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
+  const data = await readBase64(file);
   const map = await api('POST', base(), { filename: file.name, data, ...(page && { page }) });
   onMap(map);
   await show(map);
