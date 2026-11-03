@@ -29,7 +29,7 @@ export function opusPackets(count, hz = 300) {
 const ChannelType = { GuildText: 0, GuildVoice: 2, GuildStageVoice: 13 };
 
 export function fakeDiscord({ guilds = [] } = {}) {
-  const state = { clients: [], connections: [], nicknames: [], commands: new Map(), joinFails: false };
+  const state = { clients: [], connections: [], nicknames: [], commands: new Map(), joinFails: false, badTokens: [] };
 
   const member = (m) => ({ id: m.id, displayName: m.name, user: { id: m.id, username: m.username ?? m.name.toLowerCase(), bot: !!m.bot }, voice: { channelId: m.channel ?? null } });
 
@@ -71,7 +71,9 @@ export function fakeDiscord({ guilds = [] } = {}) {
       this.application = { id: '123456789012' };
       state.clients.push(this);
     }
-    async login() {
+    async login(token) {
+      this.token = token;
+      if (state.badTokens?.includes(token)) throw new Error('An invalid token was provided.');
       setImmediate(() => this.emit('ready'));
       return 'token';
     }
@@ -148,8 +150,8 @@ export function fakeDiscord({ guilds = [] } = {}) {
   }
 
   /** A slash command, as the member typed it. Returns what the bot replied. */
-  async function command(name, { guildId, userId, manager = false }) {
-    const client = state.clients.at(-1);
+  async function command(name, { guildId, userId, manager = false, token = null }) {
+    const client = token ? state.clients.find((c) => c.token === token && !c.destroyed) : state.clients.at(-1);
     const guild = client.guilds.cache.get(guildId);
     const m = guild.members.cache.get(userId);
     const replies = [];

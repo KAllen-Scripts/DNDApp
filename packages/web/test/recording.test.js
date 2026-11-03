@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withPage, addDm } from './helpers.js';
 import { fakeDiscord, opusPackets } from '../../server/test/fake-discord.js';
-import { startDiscordBot } from '../../server/src/recording/discord-bot.js';
+import { startDiscordBots } from '../../server/src/recording/discord-bot.js';
 
 const GUILD = {
   id: '500000000000000001',
@@ -26,13 +26,29 @@ const button = (root, text) => {
   return b;
 };
 
-test('recording: without a bot token the Sessions tab says how to set it up, and uploads still work', async () => {
-  await withPage({ before: async (t) => ({ dana: await addDm(t) }), page: (t, { dana }) => ({ as: dana, campaign: t.campaign }) }, async (page) => {
+test('recording: the DM sets the campaign’s own bot key on the Sessions tab; it’s never shown again', async () => {
+  const fake = fakeDiscord({ guilds: [GUILD] });
+  const setup = { config: { discord: { token: '', silenceMs: 1000 } }, bot: (ctx) => startDiscordBots(ctx, { discord: fake.discord, voice: fake.voice, log: { info() {}, warn() {}, error() {} } }) };
+  await withPage({ setup, before: async (t) => ({ dana: await addDm(t) }), page: (t, { dana }) => ({ as: dana, campaign: t.campaign }) }, async (page, t) => {
     page.click('[data-tab=sessions]');
     await page.settle();
-    const rec = page.$('#sessions .recorder');
-    assert.match(page.text(rec), /Record from Discord.*isn’t set up.*DISCORD_BOT_TOKEN/);
-    assert.ok(page.$('#sessions form.upload-form'));
+    const rec = () => page.$('#sessions .recorder');
+    assert.match(page.text(rec()), /Record from Discord.*No bot yet.*discord\.com\/developers.*uploaded below/);
+    assert.ok(page.$('#sessions form.upload-form'), 'uploads still work');
+    const key = 'K'.repeat(30) + '.dana-key.' + 'z'.repeat(20);
+    page.type(rec().querySelector('[aria-label="Discord bot key"]'), key);
+    page.submit(rec().querySelector('.recorder-key-form'));
+    await page.settle();
+    assert.equal(t.recordings.keys.get(t.campaign.id), key);
+    await page.waitFor(() => /This campaign’s own bot: Party Ledger#0001/.test(page.text(rec())), { timeout: 8000, what: 'the bot logged in' });
+    assert.equal(rec().querySelector('[aria-label="Discord bot key"]').value, '', 'the key isn’t put back on the page');
+    assert.ok(!page.document.body.innerHTML.includes(key));
+    assert.ok(rec().querySelector('[aria-label="Discord server"]'), 'its servers to pick from');
+    page.answers.confirm = [true];
+    page.click(button(rec(), 'Remove key'));
+    await page.settle();
+    assert.equal(t.recordings.keys.get(t.campaign.id), null);
+    assert.match(page.text(rec()), /No bot yet/);
   });
 });
 
@@ -40,12 +56,18 @@ test('recording: link the Discord channel, record, stop, then use the transcript
   const fake = fakeDiscord({ guilds: [GUILD] });
   const setup = {
     config: { discord: { token: 'test-token', silenceMs: 1000 } },
-    bot: (ctx) => startDiscordBot(ctx, { discord: fake.discord, voice: fake.voice, log: { info() {}, warn() {}, error() {} } }),
+    bot: (ctx) => startDiscordBots(ctx, { discord: fake.discord, voice: fake.voice, log: { info() {}, warn() {}, error() {} } }),
   };
-  await withPage({ setup, before: async (t) => ({ dana: await addDm(t) }), page: (t, { dana }) => ({ as: dana, campaign: t.campaign }) }, async (page, t) => {
+  // The server's key (.env): the campaign's bot is started before the page opens.
+  const before = async (t) => {
+    await t.discordBots.forCampaign(t.campaign.id);
+    return { dana: await addDm(t) };
+  };
+  await withPage({ setup, before, page: (t, { dana }) => ({ as: dana, campaign: t.campaign }) }, async (page, t) => {
     page.click('[data-tab=sessions]');
     await page.settle();
     const rec = () => page.$('#sessions .recorder');
+    assert.match(page.text(rec()), /The server’s bot \(Party Ledger#0001\)/);
     assert.ok(button(rec(), 'Start recording').disabled, 'nothing linked yet');
 
     page.type(rec().querySelector('[aria-label="Discord server"]'), GUILD.id);

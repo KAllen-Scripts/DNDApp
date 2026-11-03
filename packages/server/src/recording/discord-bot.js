@@ -1,6 +1,9 @@
 /**
- * The Discord bot that records sessions. It runs inside the server when
- * DISCORD_BOT_TOKEN is set, joins a voice channel when the DM asks (the
+ * The Discord bots that record sessions. Each campaign's DM gives their own
+ * bot's key on the Sessions tab (owner, 2026-11-02: "a DM may be in multiple
+ * servers. This should be set at the campaign level"); DISCORD_BOT_TOKEN in
+ * .env is the key for campaigns that haven't set one. One bot runs per key, inside
+ * the server. A bot joins a voice channel when the DM asks (the
  * Sessions tab's Start, or /record in Discord) and saves each person's
  * speech separately (Discord sends each voice on its own), so every line of
  * the transcript knows who said it. /stop (or Stop) ends it and the speech is
@@ -23,22 +26,25 @@ export function inviteUrl(applicationId, permissions) {
   return `https://discord.com/oauth2/authorize?client_id=${applicationId}&scope=bot%20applications.commands&permissions=${permissions}`;
 }
 
-/** Turned off: no token in .env. Everything says so instead of failing oddly. */
-function offBot() {
+const NOT_SET_UP = 'This campaign has no Discord bot key yet (the DM adds it on the Sessions tab).';
+
+/** No key for the campaign. Everything says so instead of failing oddly. */
+export function offBot() {
   const off = () => {
-    throw Object.assign(new Error('The Discord bot isn’t set up (DISCORD_BOT_TOKEN in .env).'), { statusCode: 400 });
+    throw Object.assign(new Error(NOT_SET_UP), { statusCode: 400 });
   };
-  return { configured: false, status: () => ({ configured: false, ready: false, error: null, invite_url: null, guilds: [] }), start: off, stop: off, recordingFor: () => null, close: async () => {} };
+  return { configured: false, status: () => ({ configured: false, ready: false, error: null, name: null, invite_url: null, guilds: [] }), start: off, stop: off, recordingFor: () => null, close: async () => {} };
 }
 
 /**
- * campaignsFor(guildId) -> [{ id, name, settings }]: campaigns linked to that Discord server.
+ * token: the bot's key.
+ * campaignsFor(guildId) -> [{ id, name, settings }]: campaigns using this bot that are linked to that Discord server.
  * isDm(campaignId, discordUsername): their speaker-map link is to one of the campaign's DMs.
  * discord / voice: the discord.js and @discordjs/voice modules (tests pass fakes).
  */
-export async function createDiscordBot({ config, recordings, campaignsFor, isDm, log = console, discord, voice }) {
+export async function createDiscordBot({ token, config, recordings, campaignsFor, isDm, log = console, discord, voice }) {
   const { excluded } = recordings;
-  if (!config.discord.token) return offBot();
+  if (!token) return offBot();
   discord ??= await import('discord.js');
   voice ??= await import('@discordjs/voice');
   const { Client, Events, GatewayIntentBits, PermissionsBitField, ChannelType } = discord;
@@ -80,7 +86,7 @@ export async function createDiscordBot({ config, recordings, campaignsFor, isDm,
       if (l) checkEmpty(l);
     }
   });
-  client.login(config.discord.token).catch((err) => {
+  client.login(token).catch((err) => {
     error = `Couldn't log in to Discord: ${err.message}`;
     log.error?.(error);
   });
@@ -96,6 +102,7 @@ export async function createDiscordBot({ config, recordings, campaignsFor, isDm,
       configured: true,
       ready,
       error,
+      name: ready ? client.user?.tag ?? null : null,
       invite_url: client.application?.id ? inviteUrl(client.application.id, permissions) : null,
       guilds: ready ? [...client.guilds.cache.values()].map((g) => ({ id: g.id, name: g.name, voice_channels: voiceChannels(g) })) : [],
     };
@@ -269,18 +276,71 @@ export async function createDiscordBot({ config, recordings, campaignsFor, isDm,
   };
 }
 
-/** The bot for a running server (index.js): campaigns are linked to a Discord server in their settings. */
-export function startDiscordBot(ctx, { log, discord, voice } = {}) {
+/**
+ * The bots for a running server (index.js): one per key in use, made when a
+ * campaign first needs it and logged out when no campaign uses its key any more.
+ *
+ *   forCampaign(cid)  the campaign's bot (its own key, else the .env one), or one that says it isn't set up
+ *   setKey(cid, key)  the DM's key for the campaign (null: back to the .env one)
+ *   keyOf(cid)        'own' | 'default' | null, never the key itself
+ */
+export async function startDiscordBots(ctx, { log, discord, voice } = {}) {
   const { db, store, config, recordings } = ctx;
-  const campaignsFor = (guildId) =>
-    db
-      .prepare('SELECT id, name FROM campaigns ORDER BY id')
-      .all()
-      .map((c) => ({ ...c, settings: store.getSettings(c.id) }))
-      .filter((c) => c.settings.discord?.guild_id === guildId);
+  const keys = recordings.keys;
+  const bots = new Map(); // key -> bot
+  const off = offBot();
+  const keyFor = (cid) => keys.get(cid) ?? config.discord?.token ?? null;
   const isDm = (cid, username) => {
     const link = store.getSpeakers(cid).find((s) => s.speaker === username && s.user_id != null);
     return !!link && store.roster(cid).some((m) => m.user_id === link.user_id && m.role === 'dm');
   };
-  return createDiscordBot({ config, recordings, campaignsFor, isDm, log, discord, voice });
+  const campaignIds = () => db.prepare('SELECT id FROM campaigns ORDER BY id').all().map((c) => c.id);
+
+  async function botFor(key) {
+    if (!bots.has(key)) {
+      const campaignsFor = (guildId) =>
+        db
+          .prepare('SELECT id, name FROM campaigns ORDER BY id')
+          .all()
+          .filter((c) => keyFor(c.id) === key)
+          .map((c) => ({ ...c, settings: store.getSettings(c.id) }))
+          .filter((c) => c.settings.discord?.guild_id === guildId);
+      bots.set(key, createDiscordBot({ token: key, config, recordings, campaignsFor, isDm, log, discord, voice }));
+    }
+    return bots.get(key);
+  }
+
+  /** Logs out bots no campaign uses (unless they're recording). */
+  async function tidy() {
+    const used = new Set(campaignIds().map(keyFor).filter(Boolean));
+    for (const [key, made] of bots) {
+      if (used.has(key)) continue;
+      const bot = await made;
+      if (campaignIds().some((cid) => bot.recordingFor(cid))) continue;
+      bots.delete(key);
+      await bot.close();
+    }
+  }
+
+  // Every key in use starts now, so /record works in Discord without anyone opening the Sessions tab.
+  for (const key of new Set(campaignIds().map(keyFor).filter(Boolean))) await botFor(key);
+
+  return {
+    async forCampaign(cid) {
+      const key = keyFor(cid);
+      return key ? botFor(key) : off;
+    },
+    keyOf: (cid) => (keys.get(cid) ? 'own' : config.discord?.token ? 'default' : null),
+    async setKey(cid, key) {
+      const bot = await this.forCampaign(cid);
+      if (bot.recordingFor(cid)) throw Object.assign(new Error('Stop the recording before changing the bot.'), { statusCode: 409 });
+      keys.set(cid, key);
+      await tidy();
+      return this.forCampaign(cid);
+    },
+    async close() {
+      for (const made of bots.values()) await (await made).close();
+      bots.clear();
+    },
+  };
 }

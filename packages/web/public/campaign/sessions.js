@@ -291,9 +291,9 @@ const lengthText = (ms) => {
 /** Link the campaign to a Discord server and voice channel; Start and Stop; recordings waiting to be uploaded. */
 function renderRecorder() {
   const { bot, link, live, recordings } = state.rec;
-  const out = [h('h3', {}, 'Record from Discord')];
+  const out = [h('h3', {}, 'Record from Discord'), keyBox()];
   if (!bot.configured) {
-    out.push(h('p', { class: 'small muted' }, 'The Discord bot isn’t set up on this server. Whoever hosts the server adds the bot’s token (DISCORD_BOT_TOKEN) to its .env file; docs/hosting.md in the app’s folder says how. Transcripts from anything else can still be uploaded below.'));
+    out.push(h('p', { class: 'small muted' }, 'Transcripts from anything else can still be uploaded below.'));
     return out;
   }
   if (bot.error) out.push(h('p', { class: 'small error' }, bot.error));
@@ -333,6 +333,34 @@ function renderRecorder() {
   if (done.length) out.push(h('ul', { class: 'recordings' }, done.map(recordingRow)));
   out.push(h('p', { class: 'small muted' }, 'Recordings are transcribed on the server’s own computer; the audio never leaves it.'));
   return out;
+}
+
+/**
+ * The campaign's bot (owner, 2026-11-02: set per campaign, since a DM may play in several Discord servers):
+ * its key, from the Discord developer portal, kept on the server and never shown again.
+ */
+function keyBox() {
+  const { bot, key, live } = state.rec;
+  const input = h('input', { type: 'password', autocomplete: 'off', placeholder: 'Paste the bot’s key (token)', 'aria-label': 'Discord bot key' });
+  const save = (value, done) => run(() => api('PUT', `${base()}/recordings/key`, { key: value }), done);
+  const whose =
+    key === 'own' ? `This campaign’s own bot${bot.name ? `: ${bot.name}` : ''}.`
+    : key === 'default' ? `The server’s bot${bot.name ? ` (${bot.name})` : ''}, set up by whoever hosts it. Add your own key to use your own bot instead.`
+    : 'No bot yet. To make one: at discord.com/developers/applications choose New Application, then Bot → Reset Token, copy the key and paste it here.';
+  return h('details', { class: 'recorder-key', open: !key },
+    h('summary', { class: 'small' }, key === 'own' ? 'This campaign’s Discord bot' : key === 'default' ? 'The server’s Discord bot' : 'Set up the Discord bot'),
+    h('p', { class: 'small muted' }, whose),
+    h('form', {
+      class: 'recorder-key-form',
+      onsubmit: (e) => {
+        e.preventDefault();
+        if (!input.value.trim()) return say('Paste the bot’s key first.', true);
+        save(input.value.trim(), 'Saved the bot’s key. It’s logging in to Discord.');
+      },
+    }, input, h('button', { type: 'submit', class: 'ghost', disabled: !!live }, key === 'own' ? 'Replace key' : 'Save key')),
+    key === 'own'
+      ? h('button', { class: 'ghost', disabled: !!live, onclick: () => confirm('Remove this campaign’s bot key? Recording then uses the server’s bot, if it has one.') && save(null, 'Removed the bot’s key.') }, 'Remove key')
+      : null);
 }
 
 function recordingRow(r) {

@@ -50,12 +50,14 @@ The first time a transcript is processed, the server downloads a small search mo
 
 If the group plays on Discord, the server's own bot can record the session and write the transcript; transcripts from anything else (a phone on the table, another program) are still uploaded the usual way. Discord sends each person's voice separately, so every line knows who said it, and people talking over each other doesn't garble it. **The audio never leaves this PC**: it's saved in `data/recordings/` and transcribed here (the owner, 2026-10-29).
 
-**Setting it up (once, the host):**
+**Setting it up (once per campaign, the DM):** each campaign has its own bot, since a DM may play in several Discord servers (the owner, 2026-11-02).
 
-1. At https://discord.com/developers/applications: **New Application** (e.g. "Party Ledger"), then **Bot** → **Reset Token**, and copy the token.
-2. Put it in `.env` as `DISCORD_BOT_TOKEN=...` and restart the server. The log says `Discord bot: logged in as …`.
-3. The DM's **Sessions** tab now has **Record from Discord** with an invite link. Whoever manages the group's Discord server opens it and adds the bot (it asks to see channels, join voice, send messages and change its own nickname).
+1. At https://discord.com/developers/applications: **New Application** (e.g. "Party Ledger"), then **Bot** → **Reset Token**, and copy the key (token).
+2. On the **Sessions** tab, under **Record from Discord**, paste it and **Save key**. It's kept only on the server (`data/recordings/keys.json`) and never shown again; **Replace key** or **Remove key** later.
+3. The tab then has an invite link. Whoever manages the group's Discord server opens it and adds the bot (it asks to see channels, join voice, send messages and change its own nickname).
 4. On the Sessions tab, the DM picks the Discord server and voice channel.
+
+Optionally the host can put a shared key in `.env` as `DISCORD_BOT_TOKEN=...` (restart the server): campaigns without their own key then use that bot.
 
 **Recording:** the DM presses **Start recording** on the Sessions tab, or types `/record` in Discord (the bot joins the voice channel they're in). It posts that the session is being recorded and its nickname shows 🔴 Recording. Anyone can type `/norecord` to leave their voice out (again to be recorded). **Stop** or `/stop` ends it; it also stops by itself 5 minutes after everyone leaves, after 8 hours, or if Discord disconnects it. `/record` and `/stop` work for whoever manages the Discord server and for the DM once their Discord name is linked to their account (after the first recording's upload).
 

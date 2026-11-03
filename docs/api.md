@@ -31,7 +31,8 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/sessions/overview` | The Sessions tab (DM): sessions with status, matched note counts and attendance; dates with notes but no transcript; next number; today's note date; the members names can be linked to |
 | GET | `/campaigns/:cid/sessions/:n` | Session and who attended |
 | GET | `/campaigns/:cid/sessions/:n/transcript?from=&to=` | Transcript lines (players: only sessions they attended) |
-| GET | `/campaigns/:cid/recordings` | Recording from Discord (DM): `{bot: {configured, ready, error, invite_url, guilds: [{id, name, voice_channels: [{id, name, people}]}]}, link: {guild_id, channel_id}, live, engine, recordings}` |
+| GET | `/campaigns/:cid/recordings` | Recording from Discord (DM): `{bot: {configured, ready, error, name, invite_url, guilds: [{id, name, voice_channels: [{id, name, people}]}]}, key: own \| default \| null, link: {guild_id, channel_id}, live, engine, recordings}` (never the key itself) |
+| PUT | `/campaigns/:cid/recordings/key` | The campaign's own Discord bot key (DM) `{key}` (null: the server's `DISCORD_BOT_TOKEN`, if any) → `{key: own \| default \| null, bot}` |
 | PUT | `/campaigns/:cid/recordings/link` | Which Discord server and voice channel the campaign records in (DM) `{guild_id, channel_id}` (nulls to unlink) |
 | POST | `/campaigns/:cid/recordings/start` / `stop` | The bot joins the linked channel and records / stops, and the recording is transcribed (DM) |
 | GET | `/campaigns/:cid/recordings/:id/transcript` | A finished recording's transcript, in the upload format (DM) `{recording, transcript}` |
