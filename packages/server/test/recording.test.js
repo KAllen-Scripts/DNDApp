@@ -16,7 +16,7 @@ import { createOggOpusWriter, readOggOpus, opusSamples } from '../src/recording/
 import { decodeOggOpus, wavBuffer, RATE } from '../src/recording/audio.js';
 import { buildTranscript, isHallucination, namesPrompt, speakerName, transcribeClips } from '../src/recording/transcribe.js';
 import { createEngine, fakeEngine } from '../src/recording/engines.js';
-import { startDiscordBot } from '../src/recording/discord-bot.js';
+import { startDiscordBots } from '../src/recording/discord-bot.js';
 
 const settle = async (n = 30) => {
   for (let i = 0; i < n; i++) await new Promise((r) => setImmediate(r));
@@ -212,8 +212,8 @@ test('recording: without a bot token the Sessions tab says so, and nothing can s
     const base = `/campaigns/${t.campaign.id}/recordings`;
     const res = await t.request('GET', base);
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(res.json(), { bot: { configured: false, ready: false, error: null, invite_url: null, guilds: [] }, link: { guild_id: null, channel_id: null }, live: null, engine: 'fake', recordings: [] });
-    assert.match((await t.request('POST', `${base}/start`)).json().error, /DISCORD_BOT_TOKEN/);
+    assert.deepEqual(res.json(), { bot: { configured: false, ready: false, error: null, name: null, invite_url: null, guilds: [] }, key: null, link: { guild_id: null, channel_id: null }, live: null, engine: 'fake', recordings: [] });
+    assert.match((await t.request('POST', `${base}/start`)).json().error, /no Discord bot key/);
     assert.equal((await t.request('PUT', `${base}/link`, { body: { guild_id: '111111', channel_id: null } })).statusCode, 400);
     // Players never see any of it.
     assert.equal((await t.request('GET', base, { as: t.sam.token })).statusCode, 403);
@@ -239,8 +239,10 @@ const GUILD = {
 
 async function withBot(fn) {
   const fake = fakeDiscord({ guilds: [GUILD] });
-  const t = await setup({ config: { discord: { token: 'test-token', silenceMs: 1000 } }, bot: (ctx) => startDiscordBot(ctx, { discord: fake.discord, voice: fake.voice, log: { info() {}, warn() {}, error() {} } }) });
+  const t = await setup({ config: { discord: { token: 'test-token', silenceMs: 1000 } }, bot: (ctx) => startDiscordBots(ctx, { discord: fake.discord, voice: fake.voice, log: { info() {}, warn() {}, error() {} } }) });
   try {
+    // The campaign is made after the server starts, so its bot starts when it's first asked for.
+    await t.discordBots.forCampaign(t.campaign.id);
     await settle();
     await fn(t, fake);
   } finally {
@@ -340,4 +342,62 @@ test('recording: if the bot can\'t join the channel, nothing is left behind', as
     fake.state.joinFails = false;
     assert.equal((await t.request('POST', `${base}/start`)).statusCode, 201);
   });
+});
+
+const KEY_A = 'A'.repeat(24) + '.campaign-one-key.' + 'x'.repeat(20);
+const KEY_B = 'B'.repeat(24) + '.campaign-two-key.' + 'y'.repeat(20);
+
+test('recording: each campaign can have its own bot key; it is never sent back, and its bot only answers for campaigns using it', async () => {
+  const fake = fakeDiscord({ guilds: [GUILD] });
+  // No key in .env: nothing runs until a DM gives one.
+  const t = await setup({ config: { discord: { token: '', silenceMs: 1000 } }, bot: (ctx) => startDiscordBots(ctx, { discord: fake.discord, voice: fake.voice, log: { info() {}, warn() {}, error() {} } }) });
+  try {
+    const cid = t.campaign.id;
+    const base = `/campaigns/${cid}/recordings`;
+    assert.equal(fake.state.clients.length, 0);
+    assert.equal((await t.request('GET', base)).json().key, null);
+
+    assert.equal((await t.request('PUT', `${base}/key`, { body: { key: 'nonsense' } })).statusCode, 400);
+    assert.equal((await t.request('PUT', `${base}/key`, { as: t.sam.token, body: { key: KEY_A } })).statusCode, 403, 'players can’t');
+    const set = await t.request('PUT', `${base}/key`, { body: { key: KEY_A } });
+    assert.equal(set.statusCode, 200);
+    assert.equal(set.json().key, 'own');
+    await settle();
+    const view = await t.request('GET', base);
+    assert.equal(view.json().key, 'own');
+    assert.equal(view.json().bot.ready, true);
+    assert.equal(view.json().bot.name, 'Party Ledger#0001');
+    // The key is never in a reply, nor in the settings everyone gets, nor in the archive.
+    for (const body of [set.body, view.body, (await t.request('GET', `/campaigns/${cid}`, { as: t.sam.token })).body]) assert.ok(!body.includes(KEY_A));
+    assert.ok(!JSON.stringify(t.store.getSettings(cid)).includes(KEY_A));
+    const archived = fs.readdirSync(t.archive.root, { recursive: true }).filter((f) => fs.statSync(path.join(t.archive.root, f)).isFile());
+    assert.ok(archived.every((f) => !fs.readFileSync(path.join(t.archive.root, f), 'utf8').includes(KEY_A)));
+
+    // A second campaign with another DM's bot, in the same Discord server.
+    const other = t.store.createCampaign('Other Campaign');
+    t.auth.addMember(other.id, t.dm.id, 'dm');
+    await t.request('PUT', `/campaigns/${other.id}/recordings/key`, { body: { key: KEY_B } });
+    await settle();
+    assert.deepEqual(fake.state.clients.map((c) => c.token), [KEY_A, KEY_B]);
+    await t.request('PUT', `/campaigns/${other.id}/recordings/link`, { body: { guild_id: GUILD.id, channel_id: '600000000000000002' } });
+    t.store.setSpeakers(other.id, [{ speaker: 'kennydm', display_name: 'DM', user_id: t.dm.id }]);
+    // Bot A knows no campaign in that server (the first isn't linked there); bot B records the second.
+    assert.match((await fake.command('record', { guildId: GUILD.id, userId: '700000000000000001', token: KEY_A }))[0].content, /isn’t linked to a campaign/);
+    assert.match((await fake.command('record', { guildId: GUILD.id, userId: '700000000000000001', token: KEY_B }))[0].content, /Recording this session of \*\*Other Campaign\*\*/);
+    // The key can't change mid-recording.
+    assert.equal((await t.request('PUT', `/campaigns/${other.id}/recordings/key`, { body: { key: null } })).statusCode, 409);
+    await fake.command('stop', { guildId: GUILD.id, userId: '700000000000000001', token: KEY_B });
+
+    // Removing a key logs its bot out; a key Discord refuses says so.
+    await t.request('PUT', `/campaigns/${other.id}/recordings/key`, { body: { key: null } });
+    assert.ok(fake.state.clients.find((c) => c.token === KEY_B).destroyed);
+    assert.equal((await t.request('GET', `/campaigns/${other.id}/recordings`)).json().key, null);
+    const bad = 'C'.repeat(60);
+    fake.state.badTokens.push(bad);
+    await t.request('PUT', `/campaigns/${other.id}/recordings/key`, { body: { key: bad } });
+    await settle();
+    assert.match((await t.request('GET', `/campaigns/${other.id}/recordings`)).json().bot.error, /Couldn't log in to Discord: An invalid token/);
+  } finally {
+    await t.cleanup();
+  }
 });

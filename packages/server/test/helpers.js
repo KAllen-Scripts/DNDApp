@@ -205,8 +205,8 @@ export async function setup({ llm = createFakeLLM(), config = {}, fetchImage, ra
     transcribe: { ...baseConfig.transcribe, engine: 'fake', ...config.transcribe },
   };
   const ctx = await createContext({ config: cfg, paths, llm, embedder: fakeEmbedder, log: { error() {} }, fetchImage });
-  // bot(ctx): a Discord bot for the recording tests (test/fake-discord.js), in place of none.
-  if (bot) ctx.discordBot = await bot(ctx);
+  // bot(ctx): the Discord bots for the recording tests (test/fake-discord.js), in place of none.
+  if (bot) ctx.discordBots = await bot(ctx);
   const app = buildApp({ ...ctx, ...(random && { random }), logger: false });
 
   // Accounts are created as the admin would, then logged in like the web page does.
@@ -244,7 +244,7 @@ export async function setup({ llm = createFakeLLM(), config = {}, fetchImage, ra
     cleanup: async () => {
       ctx.jobs.stop();
       await ctx.jobs.idle();
-      await ctx.discordBot?.close();
+      await ctx.discordBots?.close();
       await ctx.recordings.idle();
       await app.close();
       ctx.db.close();

@@ -141,5 +141,5 @@ export async function createContext({ config = defaultConfig, paths = defaultPat
   // Changes made while the server was off (or before its last run finished) still reach the archivist.
   for (const { id } of db.prepare('SELECT id FROM campaigns').all()) if (updates.pendingSince(id)) jobs.scheduleUpdates(id);
 
-  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, wiki, wikiAI, wikiPictures, wikiBoards, wikiAsOf, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, mapStamps, pipeline, jobs, qa, books, editions, spells, forms, sheets, sheetImport, sheetReview, maps, mapReader, designDrafter, statBlocks, creatureFinder, pictures, pictureDescriber, recordings, discordBot: null, restored };
+  return { config, paths, db, archive, store, auth, llm, embedder, search, kb, archivist, updates, handouts, wiki, wikiAI, wikiPictures, wikiBoards, wikiAsOf, creatures, rolls, rests, items, itemFinder, merchants, mapAssets, mapStamps, pipeline, jobs, qa, books, editions, spells, forms, sheets, sheetImport, sheetReview, maps, mapReader, designDrafter, statBlocks, creatureFinder, pictures, pictureDescriber, recordings, discordBots: null, restored };
 }

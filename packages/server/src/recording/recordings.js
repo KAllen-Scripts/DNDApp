@@ -7,6 +7,8 @@
  *     clips/<n>.ogg  that speech (Opus, plays in any audio player)
  *     transcript.txt once transcribed, in the upload format; the DM uploads it from the Sessions tab
  *   <data>/recordings/excluded.json  Discord users who asked (/norecord) not to be recorded
+ *   <data>/recordings/keys.json      each campaign's Discord bot key, by campaign id: a secret, so only
+ *                                    here (never archived, never sent to anyone)
  *
  * Not in the archive: a recording isn't part of the campaign until the DM
  * uploads its transcript (which is then archived like any other), and the DM
@@ -48,6 +50,25 @@ export function createRecordings({ root, store, config, engine: makeEngine, log 
       fs.mkdirSync(root, { recursive: true });
       fs.writeFileSync(excludedFile, JSON.stringify([...excludedIds]));
       return excludedIds.has(userId);
+    },
+  };
+
+  const keysFile = path.join(root, 'keys.json');
+  const keyList = (() => {
+    try {
+      return JSON.parse(fs.readFileSync(keysFile, 'utf8'));
+    } catch {
+      return {};
+    }
+  })();
+  const keys = {
+    get: (cid) => keyList[cid] ?? null,
+    /** The campaign's own bot key, or null to use the server's. */
+    set(cid, key) {
+      if (key) keyList[cid] = key;
+      else delete keyList[cid];
+      fs.mkdirSync(root, { recursive: true });
+      fs.writeFileSync(keysFile, JSON.stringify(keyList), { mode: 0o600 });
     },
   };
 
@@ -268,6 +289,8 @@ export function createRecordings({ root, store, config, engine: makeEngine, log 
 
     /** Discord users left out of recordings (/norecord), by Discord user id. */
     excluded,
+    /** Each campaign's own Discord bot key. */
+    keys,
 
     /** Deletes a recording and its audio (an uploaded transcript stays in the archive). */
     remove(cid, id) {

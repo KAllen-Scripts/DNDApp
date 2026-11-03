@@ -36,7 +36,7 @@ Where the project stands, what to do next, open questions, decisions and lessons
 
 ## Next steps
 
-1. **The owner tries what's built** ([docs/vscode-checks.md](docs/vscode-checks.md)), most urgently: Discord recording (make the bot, put `DISCORD_BOT_TOKEN` in `.env`, then pick the speech-to-text engine by speed on his card: `local` on CPU is likely hours for a 4-hour session, `whisper-cpp`'s NVIDIA build minutes; watch for gaps when someone joins or leaves, discord.js issue #11441); feeding the example transcripts in (`example/transcripts/README.md`, `example/ask-checks.md`); Ask's timings with the faster model (send the `Ask answered` log lines; tune `qa/route.js` from the log's `why`); the wiki's AI on his campaign (tune `src/wiki/ai.js`, bump `PIPELINE_VERSION`); thorough archiving with the real AI (raise `ARCHIVIST_MAX_TOOL_CALLS` if a run hits 500; a rebuild re-archives past sessions).
+1. **The owner tries what's built** ([docs/vscode-checks.md](docs/vscode-checks.md)), most urgently: Discord recording (make the bot, paste its key on the campaign's Sessions tab, then pick the speech-to-text engine by speed on his card: `local` on CPU is likely hours for a 4-hour session, `whisper-cpp`'s NVIDIA build minutes; watch for gaps when someone joins or leaves, discord.js issue #11441); feeding the example transcripts in (`example/transcripts/README.md`, `example/ask-checks.md`); Ask's timings with the faster model (send the `Ask answered` log lines; tune `qa/route.js` from the log's `why`); the wiki's AI on his campaign (tune `src/wiki/ai.js`, bump `PIPELINE_VERSION`); thorough archiving with the real AI (raise `ARCHIVIST_MAX_TOOL_CALLS` if a run hits 500; a rebuild re-archives past sessions).
 2. **Waiting on his calls** (defaults in place): map attacks on by default with damage applied straight away; item charges never recharging by themselves (a Recharge at dawn button could follow); should a summon's "until" also run out on the clock; Sonnet's answers good enough (`MODEL_QA_FAST=off` undoes it). Also "Open questions" below.
 3. **Not built yet, if wanted** (by feature; designs in docs/spec/):
    - *Recording:* transcribing during the session; playing a line's audio.
@@ -84,7 +84,7 @@ Every question still waiting on Kenny, in one place (SPEC §9 points here). When
    - Check: `npm test`, then `npm start`.
 3. **Data is not in git** (`data/` is ignored). To move a live setup, copy `data/archive/` (the source of truth): the server restores accounts (passwords keep working; everyone logs in again), campaigns, notes and the rest on start-up; then run a rebuild for the knowledge base. Copy `data/dndapp.sqlite` too to skip the rebuild.
 4. First-time setup: `npm run admin -- init "Admin" "password"`, then `npm start`, open `http://127.0.0.1:4400`, log in as admin, create the campaign and accounts, set who's the DM. Database upgrades are automatic (`db/index.js`); accounts from before logins need `npm run admin -- set-password "<name>" "<password>"` (also the way to recover the admin password).
-5. Optional `.env` (copy `.env.example`): provider, models and effort, limits, `DATA_SET`, `DISCORD_BOT_TOKEN`.
+5. Optional `.env` (copy `.env.example`): provider, models and effort, limits, `DATA_SET`, `DISCORD_BOT_TOKEN` (optional: each campaign's DM can give their own bot key on the Sessions tab).
 
 Dev environment: Windows 11, VS Code with the Claude Code extension, Git Bash and PowerShell. Git identity "Kenny Allen".
 
@@ -177,6 +177,11 @@ Don't pursue these unless the owner raises them again.
 ## Change log
 
 Newest first. Older entries: [docs/archive/changelog.md](docs/archive/changelog.md).
+
+### 2026-11-02: Discord bot key per campaign
+- The owner: "You've got the discord bot setup so we add the key in the server. But a DM may be in multiple servers. This should be set at the campaign level."
+- Each campaign's DM pastes their own bot's key on the Sessions tab (Record from Discord); one bot runs per key (`startDiscordBots`), and `DISCORD_BOT_TOKEN` is now only the default. Keys are in `data/recordings/keys.json`, never archived or sent back. `PUT /campaigns/:cid/recordings/key`. docs/spec/recording.md.
+- Tests: `server/test/recording.test.js` (a campaign's own key: never in a reply, the settings or the archive; two bots in one Discord server each answering for their own campaign; removing a key logs its bot out; a refused key says so), `web/test/recording.test.js` (setting and removing the key on the page).
 
 ### 2026-11-02: Docs compacted; agents read less
 - The owner: token use was getting high; compact HANDOFF and SPEC (they repeated each other), archive the originals so they aren't read every time, and look for repeated work and oversized files in the code, without losing anything.

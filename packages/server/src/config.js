@@ -184,7 +184,8 @@ export const config = {
     roller: env.DICE_ROLLER || 'deluxe',
   },
 
-  // The Discord bot that records sessions (src/recording/): off until DISCORD_BOT_TOKEN is set.
+  // The Discord bots that record sessions (src/recording/). Each campaign's DM can give their own bot key on the
+  // Sessions tab (owner, 2026-11-02); this one is for campaigns that haven't.
   discord: {
     token: env.DISCORD_BOT_TOKEN || '',
     // A pause this long ends someone's burst of speech (one clip, one or more transcript lines).
