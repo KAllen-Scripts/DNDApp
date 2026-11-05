@@ -144,6 +144,18 @@ test("regression: claude-code: the host's claude.ai connectors, synced skills an
   assert.deepEqual(options.skills, []);
 });
 
+test('claude-code: runs the program in CLAUDE_CODE_PATH when one is set, else the SDK picks its own', async () => {
+  const { usage } = usageFor();
+  const ask = async (claudeCodePath) => {
+    const queryFn = fakeQuery([result({ structured_output: { title: 'Hi' } })]);
+    const withPath = { ...config, llm: { ...config.llm, claudeCodePath } };
+    await createClaudeCodeProvider({ config: withPath, usage, queryFn }).structured({ task: 'archivist', purpose: 'archivist:test', system: 's', prompt: 'p', schema: Schema });
+    return queryFn.calls[0].options;
+  };
+  assert.equal((await ask('/phone/claude')).pathToClaudeCodeExecutable, '/phone/claude');
+  assert.equal('pathToClaudeCodeExecutable' in (await ask('')), false);
+});
+
 test('claude-code: agent exposes only the given tools and streams text', async () => {
   const { usage } = usageFor();
   const queryFn = fakeQuery([

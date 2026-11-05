@@ -80,6 +80,7 @@ export function createClaudeCodeProvider({ config, usage, queryFn = query }) {
         permissionMode: 'dontAsk',
         env: subscriptionEnv({ quiet: config.llm.quietStart !== false }),
         maxTurns: 3,
+        ...(config.llm.claudeCodePath && { pathToClaudeCodeExecutable: config.llm.claudeCodePath }),
         ...options,
       },
     })) {

@@ -67,6 +67,8 @@ export const config = {
     // (CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC). Measured 2026-10-21: ~2.9 s -> ~0.65 s to start
     // (docs/notes/ask-speed.md). CLAUDE_CODE_QUIET_START=off to turn it off.
     quietStart: env.CLAUDE_CODE_QUIET_START !== 'off',
+    // Claude Code only: the program to run, where the SDK has no build of its own (Android, docs/hosting.md).
+    claudeCodePath: env.CLAUDE_CODE_PATH || '',
     // Per-task model + effort. All tasks use the same model unless overridden.
     tasks: {
       archivist: { model: env.MODEL_ARCHIVIST || DEFAULT_MODEL, effort: env.EFFORT_ARCHIVIST || 'high' },
