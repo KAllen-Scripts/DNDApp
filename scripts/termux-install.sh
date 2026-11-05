@@ -21,18 +21,17 @@ echo "Compiling better-sqlite3 (a few minutes)..."
     node "$PREFIX/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js" rebuild --release
 )
 
-# npm leaves these out because of their "cpu" field, so unpack them by hand.
+# npm leaves these out on Android, so unpack them by hand. sharp's WebAssembly build shares its version.
 unpack() { # <package> <version>
   local dir="$ROOT/node_modules/$1" tmp
   tmp=$(mktemp -d)
-  (cd "$tmp" && npm pack "$1@$2" --silent >/dev/null)
+  (cd "$tmp" && npm pack "$1@$2" --loglevel=error >/dev/null)
   rm -rf "$dir"
   mkdir -p "$dir"
   tar xzf "$tmp"/*.tgz -C "$dir" --strip-components=1
   rm -rf "$tmp"
 }
-SHARP_WASM=$(node -p "require('./node_modules/sharp/package.json').optionalDependencies['@img/sharp-wasm32']")
-unpack @img/sharp-wasm32 "$SHARP_WASM"
+unpack @img/sharp-wasm32 "$(node -p "require('./node_modules/sharp/package.json').version")"
 unpack @emnapi/runtime "$(node -p "require('./node_modules/@img/sharp-wasm32/package.json').dependencies['@emnapi/runtime']")"
 
 cat > node_modules/onnxruntime-node/dist/index.js <<'JS'
