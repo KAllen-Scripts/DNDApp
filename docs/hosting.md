@@ -34,6 +34,16 @@ How the address reaches this PC (set up 2026-10-13):
 - **The server itself isn't a service.** The site only works while the server is running; when it isn't, players get Cloudflare's 502 page. `npm start` runs it in your terminal. `npm run restart` stops the running one (whichever way it was started) and starts it again in the background, so it keeps going after the terminal, the Claude Code session or the Claude app closes (on Windows it is created through WMI, so it isn't tied to whatever ran the command); its output goes to `data/server.log` (the run before is in `data/server-previous.log`). `npm run server:stop` stops it, and `npm run server:start` starts it only if it isn't running. Starting runs `npm install` first.
 - The Cloudflare API token used for the setup lives in `API_key` at the repo root, which git ignores. Nothing needs it while the site runs; the tunnel uses its own token, stored in the service.
 
+## Hosting on an Android phone (Termux)
+
+The server can run on a phone in Termux (done on a Galaxy A20e, Android 11). Install Termux from GitHub or F-Droid, not the Play Store.
+
+- **Packages:** `pkg install git nodejs-lts python clang make binutils cloudflared proot-distro`, clone the repo, then `bash scripts/termux-install.sh` instead of `npm install`. Run it again after each `git pull`. A plain `npm install` fails, and so do `npm run restart`, `server:start` and `server:stop`, which run or expect it. Use start and stop scripts on the phone instead.
+- **Claude Code** has no Android build, so it runs in Debian through proot: `proot-distro install debian`, unpack `@anthropic-ai/claude-agent-sdk-linux-arm64` (same version as the SDK), and point `CLAUDE_CODE_PATH` in `.env` at a small script that runs it with `proot-distro login debian`, passing the `CLAUDE*`, `ANTHROPIC*` and `MAX_MCP*` settings with `--env`. Log in once inside Debian; the login stays there.
+- **Search** runs on ONNX's WebAssembly build. It works and is compatible with the PC's search data, but takes about 670 MB of memory while loaded.
+- **Books:** set `BOOKS_DIR` to a folder on shared storage, such as `/sdcard/DND books`, so a file manager can reach it. Termux needs its storage permission.
+- **The tunnel:** a phone runs the same tunnel with `cloudflared tunnel run`. Only one machine should carry a tunnel: Cloudflare shares traffic between all its connectors, so stop the service on the other one first.
+
 ## Letting players in safely
 
 The server is meant to run on your own PC with players reaching it over the internet through **Cloudflare Tunnel** (SPEC §3.4). Keep it that way:
