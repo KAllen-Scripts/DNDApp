@@ -182,7 +182,8 @@ Newest first. Older entries: [docs/archive/changelog.md](docs/archive/changelog.
 
 - Galaxy A20e, Termux debug build, so `adb shell run-as com.termux` works. `CLAUDE_CODE_PATH` and `scripts/termux-install.sh` are new (PR #154); the setup is in docs/hosting.md.
 - Done and checked: a clean install; `data/` and `data-example/` copied from the PC (checksums match), with the real data active; the server starting on them; embeddings on the real model through ONNX's WebAssembly build (0.74 s for 3 sentences, about 670 MB); `claude --version` in Debian through proot; `/sdcard/DND books` as `BOOKS_DIR`.
-- Left, needing the owner: Claude login on the phone, then a real AI call (untested); the tunnel token and stopping the PC's `cloudflared` (needs admin); merging PR #154. Not done: `whisper.cpp` on the phone (download and build blocked pending his OK), so no local transcription; Discord voice untried; no start after a reboot.
+- Claude is logged in there: a real AI call with a tool through the server's provider worked (Haiku, 23.6 s, mostly slow start-up through proot). Remote Control is connected in tmux (`~/rc-start.sh`), not yet tried from a client.
+- Left, needing the owner: the tunnel token and stopping the PC's `cloudflared` (needs admin); merging PR #154. Not done: `whisper.cpp` on the phone (download and build blocked pending his OK), so no local transcription; Discord voice untried; no start after a reboot.
 - Tests that read `.env`: `app.test.js`'s real-data login test fails with `DATA_SET=example` in the host's `.env`.
 
 ### 2026-11-02: Discord bot key per campaign
