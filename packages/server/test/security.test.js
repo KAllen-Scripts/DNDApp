@@ -154,7 +154,7 @@ test('logins: guesses from one address are limited across names; the per-name lo
 });
 
 test('regression: the real data offers no passwordless login: nobody is listed and picking an account is refused', async () => {
-  const t = await setup();
+  const t = await setup({ config: { dataSet: 'real' } }); // whatever the host's .env says
   try {
     const list = await t.app.inject({ method: 'GET', url: '/login/pick' });
     assert.equal(list.statusCode, 200);

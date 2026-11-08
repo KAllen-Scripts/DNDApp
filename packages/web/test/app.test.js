@@ -54,7 +54,7 @@ test('login: on the example data, pick who to log in as from a list, with no pas
 });
 
 test('regression: on the real data, the login page shows the name and password form and no account list', async () => {
-  await withPage({}, async (page) => {
+  await withPage({ setup: { config: { dataSet: 'real' } } }, async (page) => { // whatever the host's .env says
     assert.ok(page.visible('#login-form [name=name]'));
     assert.ok(page.visible('#login-form [name=password]'));
     assert.ok(!page.visible('#login-form [name=pick]'));

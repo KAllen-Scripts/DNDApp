@@ -180,7 +180,7 @@ Newest first. Older entries: [docs/archive/changelog.md](docs/archive/changelog.
 
 ### 2026-11-05: Hosting on the owner's phone (Termux), in progress
 
-- Galaxy A20e, Termux debug build, so `adb shell run-as com.termux` works. `CLAUDE_CODE_PATH` and `scripts/termux-install.sh` are new (PR #154); the setup is in docs/hosting.md.
+- Galaxy A20e, Termux debug build, so `adb shell run-as com.termux` works. `CLAUDE_CODE_PATH` and `scripts/termux/install.sh` are new (PR #154); the setup is in docs/hosting.md.
 - Done and checked: a clean install; `data/` and `data-example/` copied from the PC (checksums match), with the real data active; the server starting on them; embeddings on the real model through ONNX's WebAssembly build (0.74 s for 3 sentences, about 670 MB); `claude --version` in Debian through proot; `/sdcard/DND books` as `BOOKS_DIR`.
 - Claude is logged in there: a real AI call with a tool through the server's provider worked (Haiku, 23.6 s, mostly slow start-up through proot). Remote Control is connected in tmux (`~/rc-start.sh`), not yet tried from a client.
 - 2026-11-08: **the phone is the host**, meant to run with the PC off. The tunnel runs there; the PC's `cloudflared` service is stopped and set to Manual (don't start it while the phone's runs). `~/dndapp-watchdog.sh` restarts the server, the tunnel and Remote Control within a minute if one stops; `~/.termux/boot/start-dndapp` starts it at boot once the Termux:Boot app is installed (not yet). The public site answered from the phone.

@@ -48,9 +48,21 @@ export function applyJson(doc, ops) {
       else if ('len' in op) doc.length = op.len;
       continue;
     }
-    const parent = op.p.slice(0, -1).reduce((o, k) => o[k], doc);
+    // Saves are diffed against the sheet as normalizeSheet left it, which can hold parts added since the archive's first
+    // line (point_buy, added later, was missing from older sheets). So a set makes any missing parents, and a delete or
+    // shortening under a missing parent has nothing to do.
+    const set = !('len' in op) && !op.d;
+    let parent = doc;
+    for (const [i, k] of op.p.slice(0, -1).entries()) {
+      if (parent[k] == null || typeof parent[k] !== 'object') {
+        if (!set) { parent = null; break; }
+        parent[k] = typeof op.p[i + 1] === 'number' ? [] : {};
+      }
+      parent = parent[k];
+    }
+    if (!parent) continue;
     const last = op.p.at(-1);
-    if ('len' in op) parent[last].length = op.len;
+    if ('len' in op) { if (Array.isArray(parent[last])) parent[last].length = op.len; }
     else if (op.d) delete parent[last];
     else parent[last] = structuredClone(op.v);
   }

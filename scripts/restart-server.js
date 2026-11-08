@@ -12,6 +12,10 @@
 // server is created by Windows itself (WMI's Win32_Process.Create), with no link to
 // whatever ran this script. Windows also can't ask another process to shut down cleanly,
 // so the old server is ended at once, as if its terminal window were closed.
+//
+// On Android (a phone in Termux, docs/hosting.md) `npm install` can't work, so starting
+// runs scripts/termux/install.sh instead (quick when nothing changed), and the server is
+// found by its command line: Android hides other processes' network ports.
 import { spawn, execFileSync, execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,8 +28,16 @@ const entry = path.join(repoRoot, 'packages/server/src/index.js');
 const logFile = path.join(config.dataDir, 'server.log');
 const url = `http://127.0.0.1:${config.port}/`;
 const isWindows = process.platform === 'win32';
+const isAndroid = process.platform === 'android';
 
 function listenerPid() {
+  if (isAndroid) {
+    try {
+      return Number(execFileSync('pgrep', ['-f', `node ${entry}`], { encoding: 'utf8' }).split('\n')[0]) || null;
+    } catch {
+      return null; // pgrep finds nothing
+    }
+  }
   if (isWindows) {
     const out = execFileSync('netstat', ['-ano', '-p', 'TCP'], { encoding: 'utf8' });
     for (const line of out.split(/\r?\n/)) {
@@ -66,6 +78,10 @@ async function stop() {
 }
 
 function install() {
+  if (isAndroid) {
+    execFileSync('bash', [path.join(repoRoot, 'scripts/termux/install.sh')], { cwd: repoRoot, stdio: 'inherit' });
+    return;
+  }
   console.log('Running npm install...');
   // npm is a .cmd on Windows, which only runs through a shell.
   execSync('npm install --no-audit --no-fund', { cwd: repoRoot, stdio: 'inherit' });

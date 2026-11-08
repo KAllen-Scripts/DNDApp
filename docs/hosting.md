@@ -36,14 +36,16 @@ How the address reaches this PC (set up 2026-10-13):
 
 ## Hosting on an Android phone (Termux)
 
-The server can run on a phone in Termux (done on a Galaxy A20e, Android 11). Install Termux from GitHub or F-Droid, not the Play Store.
+The server can also run on a phone in Termux (done on a Galaxy A20e, Android 11), with the PC off. The code works out which it's on (`process.platform` is `android` in Termux): the same commands work on both, and Windows works as before. Install Termux from GitHub or F-Droid, not the Play Store.
 
-- **Packages:** `pkg install git nodejs-lts python clang make binutils cloudflared proot-distro`, clone the repo, then `bash scripts/termux-install.sh` instead of `npm install`. Run it again after each `git pull`. A plain `npm install` fails, and so do `npm run restart`, `server:start` and `server:stop`, which run or expect it. Use start and stop scripts on the phone instead.
-- **Claude Code** has no Android build, so it runs in Debian through proot: `proot-distro install debian`, unpack `@anthropic-ai/claude-agent-sdk-linux-arm64` (same version as the SDK), and point `CLAUDE_CODE_PATH` in `.env` at a small script that runs it with `proot-distro login debian`, passing the `CLAUDE*`, `ANTHROPIC*` and `MAX_MCP*` settings with `--env`. Log in once inside Debian; the login stays there. Remote Control runs the same way (`remote-control`, in tmux so it outlives the Termux window). Each call starts slowly through proot, and each Remote Control session is another Claude process, so keep to one or two on a small phone.
-- **Search** runs on ONNX's WebAssembly build. It works and is compatible with the PC's search data, but takes about 670 MB of memory while loaded.
+- **Setting up:** `pkg install git`, clone the repo, then `bash scripts/termux/setup.sh` (packages, Debian for Claude Code, the start-at-boot file). Then log Claude Code in (`bash scripts/termux/claude.sh auth login`), put the tunnel token in `~/.cloudflared-token`, and build speech-to-text (`bash scripts/termux/whisper.sh`). Install the Termux:Boot app (the same build as Termux, as they share a signing key) and open it once.
+- **Running:** `bash scripts/termux/start.sh` starts a watchdog that, every minute, starts the server, the tunnel and Remote Control if one isn't running. `bash scripts/termux/stop.sh` stops everything. `npm run restart`, `server:start` and `server:stop` work as on the PC.
+- **Packages:** plain `npm install` fails on Android. `npm run restart` and `server:start` run `scripts/termux/install.sh` instead, which compiles `better-sqlite3`, uses `sharp`'s WebAssembly build, puts `onnxruntime-web` in place of `onnxruntime-node`, and unpacks the Claude Code that matches the Agent SDK. It does nothing when `package-lock.json` hasn't changed.
+- **Claude Code** has no Android build, so it runs in Debian through proot (`scripts/termux/claude.sh`, the default `CLAUDE_CODE_PATH` on Android). Each call starts a few seconds slower, and each Remote Control session is another Claude process, so keep to one or two on a small phone.
+- **Search** runs on ONNX's WebAssembly build, which can read the PC's search data, but takes about 670 MB of memory while loaded.
+- **Transcribing Discord recordings** uses whisper.cpp by default on Android (`~/whisper.cpp`, the `base.en` model), because `local` is too slow and too large for a phone. It's still slower than on a PC; see the timing in HANDOFF's change log.
 - **Books:** set `BOOKS_DIR` to a folder on shared storage, such as `/sdcard/DND books`, so a file manager can reach it. Termux needs its storage permission.
-- **Keeping it up:** a watchdog script on the phone restarts the server, the tunnel and Remote Control if one stops, and the Termux:Boot app starts it after a reboot (same signing key as Termux, so the GitHub build for a GitHub Termux).
-- **The tunnel:** a phone runs the same tunnel with `cloudflared tunnel run`. Only one machine should carry a tunnel: Cloudflare shares traffic between all its connectors, so stop the service on the other one first.
+- **The tunnel:** the phone runs the same tunnel. Only one machine should carry it, because Cloudflare shares traffic between all its connectors, so stop the PC's `cloudflared` service (and set it to Manual) while the phone hosts. Moving back: copy the phone's `data/` to the PC, stop the phone (`stop.sh`), then start the service and the server on the PC.
 
 ## Letting players in safely
 
