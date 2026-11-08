@@ -183,7 +183,9 @@ Newest first. Older entries: [docs/archive/changelog.md](docs/archive/changelog.
 - Galaxy A20e, Termux debug build, so `adb shell run-as com.termux` works. `CLAUDE_CODE_PATH` and `scripts/termux-install.sh` are new (PR #154); the setup is in docs/hosting.md.
 - Done and checked: a clean install; `data/` and `data-example/` copied from the PC (checksums match), with the real data active; the server starting on them; embeddings on the real model through ONNX's WebAssembly build (0.74 s for 3 sentences, about 670 MB); `claude --version` in Debian through proot; `/sdcard/DND books` as `BOOKS_DIR`.
 - Claude is logged in there: a real AI call with a tool through the server's provider worked (Haiku, 23.6 s, mostly slow start-up through proot). Remote Control is connected in tmux (`~/rc-start.sh`), not yet tried from a client.
-- Left, needing the owner: the tunnel token and stopping the PC's `cloudflared` (needs admin); merging PR #154. Not done: `whisper.cpp` on the phone (download and build blocked pending his OK), so no local transcription; Discord voice untried; no start after a reboot.
+- 2026-11-08: **the phone is the host**, meant to run with the PC off. The tunnel runs there; the PC's `cloudflared` service is stopped and set to Manual (don't start it while the phone's runs). `~/dndapp-watchdog.sh` restarts the server, the tunnel and Remote Control within a minute if one stops; `~/.termux/boot/start-dndapp` starts it at boot once the Termux:Boot app is installed (not yet). The public site answered from the phone.
+- Found on the phone's real data: a sheet-updates job fails in `applyJson` (`sheets/store.js`, "Cannot set properties of undefined (setting 'on')"), called from `kb/updates.js` `sheetChanges`. Not looked into; likely on the PC's copy too.
+- Left: merging PR #154; Termux:Boot. Not done: `whisper.cpp` on the phone (download and build blocked pending his OK), so no local transcription; Discord voice untried; no start after a reboot.
 - Tests that read `.env`: `app.test.js`'s real-data login test fails with `DATA_SET=example` in the host's `.env`.
 
 ### 2026-11-02: Discord bot key per campaign
