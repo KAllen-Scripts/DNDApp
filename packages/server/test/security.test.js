@@ -167,15 +167,18 @@ test('regression: the real data offers no passwordless login: nobody is listed a
   }
 });
 
-test('the example data: anyone may list the accounts and log in as one without a password', async () => {
+test('the example data: anyone may list the accounts and log in as one without a password, except an admin', async () => {
   const t = await setup({ config: { dataSet: 'example' } });
   try {
     const { accounts } = (await t.app.inject({ method: 'GET', url: '/login/pick' })).json();
     assert.deepEqual(accounts, [
       { name: 'Alex', is_admin: false, plays: ['Lyra'] },
       { name: 'Sam', is_admin: false, plays: ['Thorin'] },
-      { name: 'Kenny', is_admin: true, plays: ['DM'] },
     ]);
+    // An admin isn't listed and can't be picked by name: the admin screen needs the password.
+    const admin = await t.app.inject({ method: 'POST', url: '/login/pick', payload: { name: 'Kenny' } });
+    assert.equal(admin.statusCode, 403);
+    assert.ok(!admin.json().token);
     const pick = await t.app.inject({ method: 'POST', url: '/login/pick', payload: { name: 'sam' } });
     assert.equal(pick.statusCode, 200);
     const me = await t.request('GET', '/me', { as: pick.json().token });
