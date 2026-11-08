@@ -210,7 +210,9 @@ export const config = {
     localDevice: env.TRANSCRIBE_LOCAL_DEVICE || 'cpu',
     whisperCppBin: env.WHISPER_CPP_BIN || (isAndroid ? path.join(termuxHome, 'whisper.cpp/build/bin/whisper-cli') : ''),
     whisperCppModel: env.WHISPER_CPP_MODEL || (isAndroid ? path.join(termuxHome, 'whisper.cpp/models/ggml-base.en.bin') : ''),
-    threads: num(env.TRANSCRIBE_THREADS, 0),
+    // 0: whisper.cpp's own choice (4). On Android, 6 of the phone's 8 cores (measured on a Galaxy A20e: 1.38 s per
+    // second of speech, against 1.84 with 4 and 1.28 with 8), leaving some for the site.
+    threads: num(env.TRANSCRIBE_THREADS, isAndroid ? 6 : 0),
   },
 
   // Applies to the API provider only (Claude Code runs on the subscription).
