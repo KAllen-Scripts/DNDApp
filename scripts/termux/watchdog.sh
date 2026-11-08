@@ -17,7 +17,9 @@ while true; do
   fi
   if [ -x "$HOME/claude-bin/package/claude" ] && ! tmux has-session -t rc 2>/dev/null; then
     say "starting Remote Control"
-    tmux new-session -d -s rc -c "$ROOT" "bash $ROOT/scripts/termux/claude.sh remote-control --name Phone --spawn=same-dir"
+    # Sessions never ask before acting (owner, 2026-11-08: the phone is disposable). Claude Code sees itself as root
+    # inside proot and only skips permissions as root when told it is in a sandbox (IS_SANDBOX).
+    IS_SANDBOX=1 tmux new-session -d -s rc -c "$ROOT" "IS_SANDBOX=1 bash $ROOT/scripts/termux/claude.sh remote-control --name Phone --spawn=same-dir --permission-mode bypassPermissions"
   fi
   sleep 60
 done
