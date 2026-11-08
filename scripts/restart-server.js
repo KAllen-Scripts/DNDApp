@@ -107,7 +107,9 @@ function launchWindows() {
 
 function launchDetached() {
   const log = fs.openSync(logFile, 'a');
-  const child = spawn(process.execPath, [entry], { cwd: repoRoot, detached: true, stdio: ['ignore', log, log] });
+  // On Android, Termux may start programs through the system's loader, and then process.execPath is that loader.
+  const node = isAndroid ? 'node' : process.execPath;
+  const child = spawn(node, [entry], { cwd: repoRoot, detached: true, stdio: ['ignore', log, log] });
   fs.closeSync(log);
   let exitCode = null;
   child.on('exit', (code) => { exitCode = code ?? 'signal'; });
