@@ -37,7 +37,7 @@ import { withD20Rule } from '/shared/feats.js';
 import { castLevels } from '/shared/spell-slots.js';
 import { attackPlan, combatBar, extrasLine, inventoryMastery, rollAttackPlan, rollDamagePlan, spellPlan } from './attacks.js';
 import { backgroundBox, backgroundNames, forgetApplied } from './background.js';
-import { helpPanel } from './creation-help.js';
+import { forgetHelpTab, helpPanel } from './creation-help.js';
 import { fold, isOpen, setOpen } from './fold.js';
 import { itemNames } from '/shared/item-names.js';
 import { GEAR_KINDS, effectText, gearCard } from '../items/item-card.js';
@@ -91,6 +91,7 @@ export async function loadSheet({ campaignId, userId, guarded }) {
   state.itemPictures.clear();
   Object.assign(state, { campaignId, userId, guarded, dirty: false, unusedDescription: '', itemPicturesLoading: null });
   forgetApplied();
+  forgetHelpTab();
   const review = $('#sheet-review-result');
   if (review) review.hidden = true;
   const [{ sheet, version, edition, number }, pictures] = await Promise.all([api('GET', `${base()}/sheet`), api('GET', `${base()}/character/pictures`)]);
@@ -139,7 +140,7 @@ export function setSheetSettings(settings) {
 
 function useSheet(sheet, version, number = state.number) {
   // Another character (or campaign): the Background box's Undo was for the last one.
-  if ((number ?? 1) !== state.number || !state.sheet) forgetApplied();
+  if ((number ?? 1) !== state.number || !state.sheet) { forgetApplied(); forgetHelpTab(); }
   state.sheet = normalizeSheet(sheet);
   state.savedSheet = structuredClone(state.sheet);
   state.version = version;

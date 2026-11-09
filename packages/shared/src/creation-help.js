@@ -2,7 +2,7 @@
  * Help making a character (SPEC §6.4 "Help making a character"): what a
  * class, a race or species and a background give, and what the player
  * chooses, by the campaign's rules edition. The sheet's Help panel shows it
- * (web/public/sheet-help.js) and can tick the chosen skills and saves; it is
+ * (web/public/sheet/creation-help.js) and can tick the chosen skills and saves; it is
  * never forced and never changes anything by itself.
  *
  * Classes: the Player's Handbook 2014 and 2024 (the artificer from Tasha's,

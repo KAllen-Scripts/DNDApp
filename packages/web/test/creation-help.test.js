@@ -12,6 +12,7 @@ const NO_3D = { 'dndapp.dice': JSON.stringify({ threeD: false, sound: false }) }
 const byLabel = (page, label) => page.el(`#sheet [aria-label="${label}"]`);
 const chip = (page, sel, text) => [...page.document.querySelectorAll(`#sheet .sh-help ${sel} .help-chip`)].find((b) => b.textContent.replace('✓ ', '').trim() === text);
 const button = (el, text) => [...el.querySelectorAll('button')].find((b) => b.textContent.trim() === text);
+const step = (page, k) => page.el(`#sheet .sh-help [data-step="${k}"]`);
 const saved = (t) => t.sheets.get(t.campaign.id, t.sam.id).sheet;
 
 test('creation help: open on a new sheet; pick a class, tick its skills, put its equipment in, pick a race and a background', async () => {
@@ -37,9 +38,13 @@ test('creation help: open on a new sheet; pick a class, tick its skills, put its
     assert.match(page.text(rogue()), /1 of 4 ticked/);
     page.click(button(rogue(), 'Put in the Equipment box'));
     await page.settle();
+    assert.equal(step(page, 'class').getAttribute('aria-selected'), 'true', 'stays on the class just picked');
+    assert.match(page.text(step(page, 'class')), /Rogue 1/);
+    page.click(step(page, 'race'));
     page.click(chip(page, '.help-part', 'Hill Dwarf'));
     await page.settle();
     assert.match(page.text('#sheet .sh-help [data-race="Hill Dwarf"]'), /Darkvision/);
+    page.click(step(page, 'background'));
     page.click(chip(page, '.help-part', 'Acolyte'));
     await page.waitFor(() => page.text('#sheet-status') === 'Saved' && saved(t).background === 'Acolyte');
     const sheet = saved(t);
@@ -62,9 +67,12 @@ test('creation help: follows the campaign edition, and redraws as the class is t
   }, async (page) => {
     page.click('[data-tab=sheet]');
     assert.match(page.text('#sheet .sh-help summary'), /2024 rules/);
+    assert.match(page.text(step(page, 'race')), /Species/);
+    page.click(step(page, 'race'));
     assert.ok(chip(page, '.help-part', 'Goliath'), "2024's species");
     page.type(byLabel(page, 'Class'), 'Fighter');
     await page.settle();
+    page.click(step(page, 'class'));
     const fighter = page.el('#sheet .sh-help [data-class="fighter"]');
     assert.match(page.text(fighter), /Weapon Mastery/);
     assert.match(page.text(fighter), /Tactical Mind/);
@@ -72,5 +80,51 @@ test('creation help: follows the campaign edition, and redraws as the class is t
     page.el('#sheet .sh-help').open = false;
     page.el('#sheet .sh-help').dispatchEvent(new page.window.Event('toggle'));
     assert.equal(page.window.localStorage.getItem('dndapp.sheetHelp'), '0');
+  });
+});
+
+test('creation help: a pick can be changed, kept or cleared; another background takes the first one back off', async () => {
+  await withPage({
+    before: async (t) => { t.sheets.save(t.campaign.id, t.sam.id, emptySheet({ name: 'Thorin' })); },
+    page: (t) => ({ as: t.sam, storage: NO_3D }),
+  }, async (page, t) => {
+    page.click('[data-tab=sheet]');
+    page.click(step(page, 'race'));
+    page.click(chip(page, '.help-part', 'Tiefling'));
+    await page.settle();
+    const head = () => page.el('#sheet .sh-help .help-head');
+    // Change, then keep it: nothing changes.
+    page.click(button(head(), 'Change'));
+    assert.ok(chip(page, '.help-part', 'Tiefling').classList.contains('on'), 'the current one is marked');
+    page.click(button(page.el('#sheet .sh-help .help-part'), 'Keep Tiefling'));
+    assert.equal(byLabel(page, 'Race').value, 'Tiefling');
+    // Change to another.
+    page.click(button(head(), 'Change'));
+    page.click(chip(page, '.help-part', 'Hill Dwarf'));
+    await page.settle();
+    assert.equal(byLabel(page, 'Race').value, 'Hill Dwarf');
+    // Clear: back to the list.
+    page.click(button(head(), 'Clear'));
+    await page.settle();
+    assert.equal(byLabel(page, 'Race').value, '');
+    assert.ok(chip(page, '.help-part', 'Tiefling'), 'the list is back');
+
+    page.click(step(page, 'background'));
+    page.click(chip(page, '.help-part', 'Acolyte'));
+    await page.settle();
+    page.click(button(head(), 'Change'));
+    page.click(chip(page, '.help-part', 'Criminal'));
+    await page.waitFor(() => page.text('#sheet-status') === 'Saved' && saved(t).background === 'Criminal');
+    let sheet = saved(t);
+    assert.equal(sheet.skills.religion, undefined, "Acolyte's skills went");
+    assert.equal(sheet.skills.stealth, 'proficient', "Criminal's came");
+    assert.doesNotMatch(sheet.features, /Acolyte/);
+    assert.match(sheet.features, /Criminal Contact/);
+    page.click(button(head(), 'Clear'));
+    await page.waitFor(() => page.text('#sheet-status') === 'Saved' && saved(t).background === '');
+    sheet = saved(t);
+    assert.equal(sheet.skills.stealth, undefined);
+    assert.doesNotMatch(sheet.features, /Criminal/);
+    assert.equal(String(sheet.equipment).trim(), '');
   });
 });

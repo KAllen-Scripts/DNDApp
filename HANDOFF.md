@@ -28,7 +28,7 @@ Where the project stands, what to do next, open questions, decisions and lessons
 
 **Live:** https://thepartyledger.fyi when the server runs on the owner's PC (Cloudflare Tunnel `thepartyledger` → `127.0.0.1:4400`, `cloudflared` as a Windows service, https forced). Merged PRs aren't live until his checkout is pulled and restarted (`npm run restart`); the permission check in a Remote Control session blocks that unless he says so in words. On 2026-10-28 `.env` had `DATA_SET=example` (the live server ran on the example data); take it out to go back to the real data. `API_key` in the repo root holds the Cloudflare token (git-ignored; never print or commit it). No player guide yet.
 
-**Installs:** the owner's PC (the server; `data/` holds the admin login "admin" and Kenny's player account; the database upgrades itself on start). His laptop (Node 24.19, `data/` with only the admin login). His Remote Control folder is `D:\Code` (checkout `D:\Code\DNDApp`). His Galaxy A20e in Termux is the host now, with the PC off ([docs/hosting.md](docs/hosting.md), 2026-11-08 change log): checkout `~/DNDApp` on the `claude/phone-host` branch until PR #154 is merged, the example data active, start and stop with `bash scripts/termux/start.sh` / `stop.sh` (`~/dndapp-start.sh` runs it). The PC's `data/` is a copy from 2026-11-05.
+**Installs:** the owner's PC (the server; `data/` holds the admin login "admin" and Kenny's player account; the database upgrades itself on start). His laptop (Node 24.19, `data/` with only the admin login). His Remote Control folder is `D:\Code` (checkout `D:\Code\DNDApp`). His Galaxy A20e in Termux is the host now, with the PC off ([docs/hosting.md](docs/hosting.md), 2026-11-08 change log): checkout `~/DNDApp` on the `claude/phone-host` branch until PR #154 is merged, the real data active since 2026-11-08 (`data-example/` beside it), start and stop with `bash scripts/termux/start.sh` / `stop.sh` (`~/dndapp-start.sh` runs it). The PC's `data/` is a copy from 2026-11-05.
 
 **Not yet tried for real:** a real transcript (the parser is built to an assumed format); the real AI on the map creator's draft, handout pictures, real maps (reading, walls, heights, stat blocks), Find online, picture descriptions, sheets and map events reaching the archivist, the book tools with every book, the wiki's AI, Review sheet, Ask's timings; Discord on a real call; most page features on a real phone or GPU (only jsdom and headless Chromium). Each has a line in [docs/vscode-checks.md](docs/vscode-checks.md).
 
@@ -177,6 +177,12 @@ Don't pursue these unless the owner raises them again.
 ## Change log
 
 Newest first. Older entries: [docs/archive/changelog.md](docs/archive/changelog.md).
+
+### 2026-11-08: The phone runs the real data; Help making a character in tabs, with Change and Clear
+
+- **Real data on the phone:** `DATA_SET=example` taken out of the phone's `.env` and the server restarted; it serves `data/` now (the example data stays in `data-example/`).
+- **Help making a character** (owner: "looks kinda shit", and a race couldn't be unpicked): three tabs (Class, Race/Species, Background) instead of three uneven columns, the chosen part full width, and Change / Clear on each pick; changing or clearing a background takes off what it filled in (`removeBackground`). Design in docs/spec/sheets.md. Not seen in a real browser (none on the phone): a line in docs/vscode-checks.md.
+- **Tests on the phone:** the full regression run times out on unrelated map, dice and server-timing tests under load (a different set each run; they pass alone), and `web/test/sheet.test.js` runs out of memory at Node's default heap (passes with `NODE_OPTIONS=--max-old-space-size=3072`). Run the suite on the PC.
 
 ### 2026-11-08: The phone is the host (Termux); sheet replay fix; admins need a password on the example data
 
