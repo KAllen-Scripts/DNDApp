@@ -907,6 +907,37 @@ test('regression: a player\'s fog follows their token while it is dragged, and s
   });
 });
 
+// Dropped past a wall, the token was shown where it was dropped (and the fog drawn from there) until the server
+// said no: a moment's look at what's behind the wall (owner, 2026-11-09).
+test('regression: a player\'s token dropped past a wall goes back before their fog is drawn from there', async () => {
+  await withPage({
+    setup: { llm: mapLLM() },
+    before: async (t) => {
+      const map = await importMap(t, { patch: SHOWN });
+      const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+      await addToken(t, map, { kind: 'pc', name: 'Thorin', user_id: t.sam.id, x: 87.5, y: 87.5 });
+      await t.request('PATCH', `${base}/walls`, { body: { add: { x1: 420, y1: 0, x2: 420, y2: 490 } } });
+      await t.request('PATCH', `${base}/fog`, { body: { enabled: true, sight: true } });
+    },
+    page: (t) => ({ as: t.sam }),
+  }, async (page, t) => {
+    await openMapTab(page);
+    const sight = async () => JSON.stringify((await fogShapes(page)).find((s) => s.points)?.points);
+    const before = await sight();
+    const moves = page.requests.length;
+    page.pointer(tokenEl(page, 'Thorin'), 'pointerdown', { clientX: 87, clientY: 87 });
+    page.pointer('#map-view', 'pointermove', { clientX: 300, clientY: 300 });
+    page.pointer('#map-view', 'pointermove', { clientX: 500, clientY: 300 });
+    page.pointer('#map-view', 'pointerup', { clientX: 500, clientY: 300 });
+    await new Promise((r) => setTimeout(r, 40)); // a frame: the fog is drawn again
+    assert.equal(await sight(), before, 'the fog never sees from past the wall');
+    assert.match(page.text('#map-status'), /wall in the way/);
+    assert.equal(page.requests.slice(moves).filter((r) => r.method === 'PATCH').length, 0, "no move sent: it's known to be refused");
+    const token = t.maps.list(t.campaign.id)[0].tokens.find((x) => x.name === 'Thorin');
+    assert.deepEqual([token.x, token.y], [87.5, 87.5]);
+  });
+});
+
 test('doors: drawn as doors; the DM clicks one to open, close, lock and unlock it', async () => {
   await withPage({
     setup: { llm: mapLLM() },

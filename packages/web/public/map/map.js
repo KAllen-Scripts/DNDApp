@@ -411,8 +411,13 @@ function drawFog(canvas, image, shapes, alpha) {
  * The map as a player's fog sees it: while they drag one of their own
  * tokens, that token where it would land, unless a wall is in the way
  * (the server would refuse the move, so it still sees from where it was).
+ * Once dropped, it sees from where it was until the server takes the move
+ * (`landing`): a refused move must never show, even for a moment, what's
+ * past the wall.
  */
 function fogView(map) {
+  const landing = state.landing;
+  if (landing) map = { ...map, tokens: map.tokens.map((t) => (t.id === landing.id ? { ...t, x: landing.x, y: landing.y } : t)) };
   const drag = state.drag;
   const token = drag?.moved && map.tokens.find((t) => t.id === drag.id && t.user_id === state.userId);
   if (!token) return map;
@@ -2032,15 +2037,28 @@ async function tokenUp(e) {
   const map = state.current;
   const token = map.tokens.find((t) => t.id === drag.id);
   if (!drag.moved || !token) return select(drag.id);
-  // Show it where it will land straight away; the server's answer (and everyone else's screens) follow.
-  Object.assign(token, snapToken(map, token, drag.x, drag.y));
+  const end = snapToken(map, token, drag.x, drag.y);
+  // A player can't go through a wall (the server says no): back it goes, before anything is drawn there.
+  const route = [drag.start, ...drag.waypoints, end];
+  if (!state.canEdit && route.some((p, i) => i > 0 && wallBetween(map, route[i - 1], p))) {
+    Object.assign(token, drag.start);
+    renderTokens();
+    queueFog();
+    return report(new Error("There's a wall in the way."));
+  }
+  // Show the token where it will land straight away; a player's fog waits for the server to take the move.
+  if (!state.canEdit) state.landing = { id: token.id, ...drag.start };
+  Object.assign(token, end);
   renderTokens();
   queueFog();
   try {
     const path = drag.waypoints.map((p) => [p.x, p.y]);
     const res = await state.guarded(() => api('PATCH', `${base()}/${map.id}/tokens/${token.id}`, { x: drag.x, y: drag.y, ...(path.length && { path }) }));
+    if (state.landing?.id === token.id) state.landing = null;
     if (res) onMap(res.map);
+    else queueFog();
   } catch (err) {
+    if (state.landing?.id === token.id) state.landing = null;
     Object.assign(token, drag.start);
     renderTokens();
     queueFog();

@@ -178,6 +178,10 @@ Don't pursue these unless the owner raises them again.
 
 Newest first. Older entries: [docs/archive/changelog.md](docs/archive/changelog.md).
 
+### 2026-11-09: A token dropped past a wall no longer flashes the view from there
+
+- The owner, as a player: dropping his token past a wall briefly showed the map from there. The page moved the token and redrew the fog before the server refused. Now a drop past a wall goes back at once (no move sent), and after any drop a player's fog waits for the server to take the move. docs/spec/maps.md; a regression test. On the phone, `web/test/map.test.js`'s "the DM imports a picture" fails with or without this (jsdom: "Failed to construct 'File' … SharedArrayBuffer"); unchecked on the PC.
+
 ### 2026-11-08: The phone runs the real data; Help making a character in tabs, with Change and Clear
 
 - **Real data on the phone:** `DATA_SET=example` taken out of the phone's `.env` and the server restarted; it serves `data/` now (the example data stays in `data-example/`).

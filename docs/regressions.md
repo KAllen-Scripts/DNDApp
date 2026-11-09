@@ -92,6 +92,7 @@ Every bug that was found and fixed, and the test that keeps it fixed. The **regr
 | 2026-10-16 | Importing a map started the AI reading it automatically; the owner wants that only when asked. | `server/test/maps.test.js`: regression: importing a map does not start the AI reading it; the DM asks for that |
 | 2026-10-04 | An upload with a bad speaker link was archived before the link was checked, leaving a permanent orphan session. | `server/test/api.test.js`: an upload with a bad speaker link is refused before anything is archived |
 | 2026-10-03 | Q&A answers streamed nothing and never closed over a real connection (the server listened for the request closing, not the reply). `app.inject` didn't show it, so the test uses real HTTP. | `server/test/api.test.js`: Q&A streams over a real HTTP connection and closes when done |
+| 2026-11-09 | A player's token dropped past a wall was shown, and their fog drawn, from where it was dropped until the server refused the move: a glimpse of what's behind the wall. | `web/test/map.test.js`: regression: a player's token dropped past a wall goes back before their fog is drawn from there |
 | 2026-10-03 | The host's claude.ai connectors (Gmail, Calendar, Drive) leaked into Claude Code runs; an answer told a player to authorise them. | `server/test/llm.test.js`: claude-code: the host's claude.ai connectors, synced skills and other MCP servers stay out of runs |
 
 **Past fixes not yet covered by a tagged regression test:** none. Every fix in the HANDOFF change log up to 2026-10-13 has one.
