@@ -182,7 +182,7 @@ Newest first. Older entries: [docs/archive/changelog.md](docs/archive/changelog.
 
 - **Real data on the phone:** `DATA_SET=example` taken out of the phone's `.env` and the server restarted; it serves `data/` now (the example data stays in `data-example/`).
 - **Help making a character** (owner: "looks kinda shit", and a race couldn't be unpicked): three tabs (Class, Race/Species, Background) instead of three uneven columns, the chosen part full width, and Change / Clear on each pick; changing or clearing a background takes off what it filled in (`removeBackground`). Design in docs/spec/sheets.md. Not seen in a real browser (none on the phone): a line in docs/vscode-checks.md.
-- **Tests on the phone:** the full regression run times out on unrelated map, dice and server-timing tests under load (a different set each run; they pass alone), and `web/test/sheet.test.js` runs out of memory at Node's default heap (passes with `NODE_OPTIONS=--max-old-space-size=3072`). Run the suite on the PC.
+- **Tests on the phone** (2026-11-09): the regression run failed there. One was real: drawing a made map still held the server's thread about 0.7 s (Sharp starting its WebP encode), now done in the drawing thread with the upload resizing. The rest were page tests giving up after 5 s with seven files sharing the phone; `settle`/`waitFor` wait 20 s now. All 200 regression tests pass on the phone. `web/test/sheet.test.js` outgrows Node's default heap there (docs/testing.md has the command). The owner says the phone is a stopgap host, so nothing else is tuned for it.
 
 ### 2026-11-08: The phone is the host (Termux); sheet replay fix; admins need a password on the example data
 
