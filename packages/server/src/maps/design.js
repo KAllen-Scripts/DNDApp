@@ -1,11 +1,10 @@
 /**
  * Drawing a map made in the creator (SPEC §6.6 "Making a map"): the design is
  * drawn on a native canvas with the same code the page's creator previews
- * with (shared/map-art.js), in a worker thread (design-draw.js), and saved
- * as WebP, the map's picture.
+ * with (shared/map-art.js) and saved as WebP, the map's picture, all in a
+ * worker thread (design-draw.js).
  */
 import { Worker } from 'node:worker_threads';
-import sharp from 'sharp';
 import { config } from '../config.js';
 import { designCell, uploadedRefs } from '@dndapp/shared/map-design.js';
 
@@ -17,12 +16,12 @@ function drawer() {
   if (worker) return worker;
   worker = new Worker(new URL('./design-draw.js', import.meta.url));
   worker.unref();
-  worker.on('message', ({ id, pixels, error }) => {
+  worker.on('message', ({ id, webp, error }) => {
     const job = waiting.get(id);
     waiting.delete(id);
     if (!waiting.size) worker?.unref();
     if (error) job?.reject(new Error(error));
-    else job?.resolve(Buffer.from(pixels.buffer, pixels.byteOffset, pixels.length));
+    else job?.resolve(Buffer.from(webp.buffer, webp.byteOffset, webp.length));
   });
   const fail = (e) => {
     for (const job of waiting.values()) job.reject(e instanceof Error ? e : new Error(`the drawing thread stopped (${e})`));
@@ -33,7 +32,7 @@ function drawer() {
   worker.on('exit', (code) => code && fail(code));
   return worker;
 }
-function drawPixels(msg) {
+function drawPicture(msg) {
   const w = drawer();
   const id = nextId++;
   return new Promise((resolve, reject) => {
@@ -42,8 +41,6 @@ function drawPixels(msg) {
     w.postMessage({ id, ...msg });
   });
 }
-
-const ASSET_PX = 768; // an uploaded asset is drawn from a copy at most this big on each side
 
 /**
  * @param {object} design  a normalised design
@@ -55,17 +52,10 @@ export async function renderDesign(design, { assetFile, cell = designCell(design
   const uploads = [];
   for (const ref of uploadedRefs(design)) {
     const file = assetFile(ref.slice(2));
-    if (!file) continue;
-    try {
-      uploads.push([ref, await sharp(file).rotate().resize({ width: ASSET_PX, height: ASSET_PX, fit: 'inside', withoutEnlargement: true }).png().toBuffer()]);
-    } catch {
-      // unreadable: drawn as a dashed box
-    }
+    if (file) uploads.push([ref, file]); // an unreadable one is drawn as a dashed box
   }
   const width = design.cols * cell;
   const height = design.rows * cell;
-  const pixels = await drawPixels({ design, cell, webDir: config.webDir, uploads });
-  // Sharp makes the WebP (the canvas's own took seconds over photo textures).
-  const buf = await sharp(pixels, { raw: { width, height, channels: 4 } }).webp({ quality: 85, effort: 2 }).toBuffer();
+  const buf = await drawPicture({ design, cell, webDir: config.webDir, uploads });
   return { buf, ext: 'webp', type: 'image/webp', width, height, cell };
 }

@@ -49,6 +49,10 @@ let current = null;
  * media queries match ({ 'prefers-reduced-motion: reduce': true }); `path` is
  * the address opened (e.g. '/?view=sheet&campaign=1').
  */
+// How long settle and waitFor wait before failing. Generous: a passing test never waits it out, and with the
+// whole suite running on a slow machine (the owner's phone, 2026-11-09) 5 s wasn't enough for a page to load.
+const WAIT_MS = 20_000;
+
 export async function openPage(t, { as = null, campaign = null, storage = {}, answers = {}, media = {}, path = '/', settle = true } = {}) {
   if (current) throw new Error('openPage: close the previous page first');
   globalThis.__diceBox ??= { thrown: [], fail: false }; // what the fake 3D dice were asked to roll
@@ -160,7 +164,7 @@ export async function openPage(t, { as = null, campaign = null, storage = {}, an
       return el;
     },
     /** Wait until no request is waiting for its response and the page has had time to draw. */
-    async settle({ timeout = 5000 } = {}) {
+    async settle({ timeout = WAIT_MS } = {}) {
       const end = Date.now() + timeout;
       let quiet = 0;
       while (quiet < 10) {
@@ -171,7 +175,7 @@ export async function openPage(t, { as = null, campaign = null, storage = {}, an
       await t.jobs.idle();
     },
     /** Wait until check() returns something truthy (and return it). */
-    async waitFor(check, { timeout = 5000, what = String(check) } = {}) {
+    async waitFor(check, { timeout = WAIT_MS, what = String(check) } = {}) {
       const end = Date.now() + timeout;
       for (;;) {
         const value = typeof check === 'string' ? page.$(check) : check();

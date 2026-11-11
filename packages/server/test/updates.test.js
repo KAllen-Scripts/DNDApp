@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { setup, createFakeLLM, defaultArchivist, SAMPLE, terrain } from './helpers.js';
 import { sheetChanges, sheetText, localTime } from '../src/kb/updates.js';
 import { emptySheet, normalizeSheet } from '@dndapp/shared/sheet.js';
+import { applyJson, replaySheet } from '../src/sheets/store.js';
 
 const archivistCalls = (t) => t.llm.calls.filter((c) => c.purpose.startsWith('archivist:'));
 const updateCalls = (t) => t.llm.calls.filter((c) => c.purpose === 'archivist:updates');
@@ -53,6 +54,18 @@ test('sheetChanges: turning the point buy calculator on or choosing its rules is
     { version: 3, saved_at: at(31), changes: [{ p: ['point_buy', 'choice', '2024', 'str'], v: 2 }, { p: ['abilities', 'str'], v: 12 }] },
   ];
   assert.deepEqual(sheetChanges(entries, { since: at(10), until: at(200) }).changes.map((c) => c.field), ['abilities.str']);
+});
+
+// Used to throw "Cannot set properties of undefined (setting 'on')": the first archived line predated point_buy.
+test('regression: replaying archived changes to a part the first line lacked (point_buy) makes that part instead of throwing', () => {
+  const at = (min) => new Date(Date.UTC(2026, 9, 8, 12, min)).toISOString();
+  const entries = [
+    { version: 1, saved_at: at(0), changes: [{ p: [], v: { name: 'A' } }] },
+    { version: 2, saved_at: at(30), changes: [{ p: ['point_buy', 'on'], v: true }] },
+  ];
+  assert.equal(replaySheet(entries).sheet.point_buy.on, true);
+  assert.doesNotThrow(() => sheetChanges(entries, { since: at(10), until: at(200) }));
+  assert.deepEqual(applyJson({ name: 'A' }, [{ p: ['point_buy', 'choice', 'str'], d: true }]), { name: 'A' });
 });
 
 test('sheetText: what the player entered plus the numbers worked out from it', () => {

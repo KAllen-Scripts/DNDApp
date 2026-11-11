@@ -165,15 +165,17 @@ export function createAuth({ db, archive, loginDays = 30, maxFailedLogins = 10, 
      * @returns {{ name: string, is_admin: boolean, plays: string[] }[]}
      */
     pickableAccounts() {
-      const users = db.prepare('SELECT id, name, is_admin FROM users WHERE revoked_at IS NULL ORDER BY is_admin, name COLLATE NOCASE').all();
+      // Admin accounts need their password even here: the admin screen manages logins (owner, 2026-11-08).
+      const users = db.prepare('SELECT id, name, is_admin FROM users WHERE revoked_at IS NULL AND is_admin = 0 ORDER BY name COLLATE NOCASE').all();
       const plays = db.prepare("SELECT CASE WHEN role = 'dm' THEN 'DM' ELSE COALESCE(character_name, 'player') END AS play FROM memberships WHERE user_id = ? ORDER BY campaign_id");
       return users.map((u) => ({ name: u.name, is_admin: !!u.is_admin, plays: plays.all(u.id).map((m) => m.play) }));
     },
 
     /** Log in as an account by name alone (the example data's login picker). */
     loginWithoutPassword(name) {
-      const row = db.prepare('SELECT id FROM users WHERE name = ? COLLATE NOCASE AND revoked_at IS NULL').get(cleanName(name));
+      const row = db.prepare('SELECT id, is_admin FROM users WHERE name = ? COLLATE NOCASE AND revoked_at IS NULL').get(cleanName(name));
       if (!row) throw new AuthError('No such account', 404);
+      if (row.is_admin) throw new AuthError('An admin account needs its password.', 403);
       return startLogin(row.id);
     },
 

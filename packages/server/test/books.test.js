@@ -317,3 +317,19 @@ test("books: the campaign's edition picks between a 2014 and a 2024 book that bo
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// On the phone, Android refused the books folder on shared storage at boot, and the error crashed the whole server.
+test("regression: a books folder that can't be read means no books, not a crashed server", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dndapp-books-'));
+  const notAFolder = path.join(tmp, 'books'); // exists, but listing it fails, like a folder without permission
+  fs.writeFileSync(notAFolder, '');
+  const warnings = [];
+  const books = createBooks({ dir: notAFolder, log: { warn: (m) => warnings.push(m) } });
+  try {
+    await books.load();
+    assert.deepEqual(books.status().books, []);
+    assert.match(warnings.join('\n'), /Couldn't read the books folder/);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
