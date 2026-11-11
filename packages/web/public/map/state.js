@@ -27,6 +27,7 @@ export const state = {
   fitted: false,
   selected: null, // token id
   drag: null, // a token being moved: { id, start, pointer, x, y, moved }
+  landing: null, // a player's token just dropped: { id, x, y } where their fog still sees from until the server takes the move
   pointers: new Map(), // pointers down on the background (panning, pinching)
   draftGrid: undefined, // grid being edited in the settings dialog (shown live)
   fogMode: null, // DM drawing fog: 'reveal' | 'cover'

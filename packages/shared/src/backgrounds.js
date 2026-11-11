@@ -242,3 +242,34 @@ export function applyBackground(sheet, b) {
   if (/choice|choose|one type|one kind|any/i.test(`${b.tools} ${b.languages}`)) notes.push('Pick the tools and languages it lets you choose, and write them in Other proficiencies & languages.');
   return { sheet: out, changes, notes };
 }
+
+/**
+ * Take a background back off a sheet (the help's Clear, or a different
+ * background picked): its name is emptied and the lines `applyBackground`
+ * added are removed where they're still word for word as it wrote them, so
+ * nothing the player typed or changed goes. `ticked` (the skills applying it
+ * ticked) are unticked unless they've since become expertise; `gold` sets the
+ * purse back to empty if it still holds just the background's gold.
+ */
+export function removeBackground(sheet, b, { ticked = [], gold = false } = {}) {
+  const out = structuredClone(sheet);
+  out.background = '';
+  if (!b) return out;
+  const drop = (box, lines) => {
+    const want = new Set(lines.filter(Boolean));
+    return String(box ?? '').split('\n').filter((l) => !want.has(l.trim())).join('\n').trim();
+  };
+  out.features = drop(out.features, [
+    b.feature ? `${b.feature.name} (${b.name} background). ${b.feature.text}`.trim() : null,
+    b.feat ? `${b.edition === '2024' || b.custom ? 'Origin feat' : 'Feat'}: ${b.feat} (${b.name} background).` : null,
+  ]);
+  out.proficiencies_languages = drop(out.proficiencies_languages, [
+    b.tools ? `Tools: ${b.tools} (${b.name}).` : null,
+    b.languages ? `Languages: ${b.languages} (${b.name}).` : null,
+  ]);
+  if (b.equipment && String(out.equipment ?? '').trim() === `${b.equipment} (${b.name} background).`) out.equipment = '';
+  for (const k of ticked) if (out.skills?.[k] === 'proficient') delete out.skills[k];
+  const purse = out.coins ?? {};
+  if (gold && Number(purse.gp) === Number(b.gold) && !['cp', 'sp', 'ep', 'pp'].some((c) => Number(purse[c]) > 0)) out.coins = { ...purse, gp: 0 };
+  return out;
+}

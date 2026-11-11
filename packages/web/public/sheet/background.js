@@ -7,10 +7,10 @@
  * Equipment and gold only where they're empty. It says what changed, with
  * Undo, and what the background gives.
  */
-import { applyBackground, backgroundSummary, backgroundsFor, findBackground } from '/shared/backgrounds.js';
+import { applyBackground, backgroundSummary, backgroundsFor, findBackground, removeBackground } from '/shared/backgrounds.js';
 import { h } from '../page/dom.js';
 
-// What was last applied, kept across redraws of the sheet: { name, changes, notes, before }.
+// What was last applied, kept across redraws of the sheet: { name, changes, notes, before, ticked, gold }.
 let applied = null;
 
 const editionOf = (state) => state.settings?.edition || state.edition || '2014';
@@ -32,11 +32,33 @@ export function forgetApplied() {
  * the Help panel): what changed shows under the Background box, with Undo.
  */
 export function pickBackground({ state, changed, redraw }, b) {
+  const old = sheetBackground(state); // typed in the box, it's already the new one: nothing to take off
+  if (old && old.name !== b.name) takeOff(state, old);
   const before = structuredClone(state.sheet);
   state.sheet.background = b.name;
   const res = applyBackground(state.sheet, b);
-  applied = { name: b.name, changes: res.changes, notes: res.notes, before: res.changes.length ? before : null };
+  const ticked = (b.skills ?? []).filter((k) => !before.skills?.[k]);
+  const gold = res.sheet.coins?.gp !== before.coins?.gp;
+  applied = { name: b.name, changes: res.changes, notes: res.notes, before: res.changes.length ? before : null, ticked, gold };
   if (res.changes.length) Object.assign(state.sheet, res.sheet);
+  redraw();
+  changed();
+}
+
+// Take a background back off the sheet (what it filled in that's still as it wrote it).
+function takeOff(state, b) {
+  if (!b) return;
+  const mine = applied?.name === b.name ? applied : {};
+  const out = removeBackground(state.sheet, b, { ticked: mine.ticked ?? [], gold: !!mine.gold });
+  for (const k of Object.keys(state.sheet)) delete state.sheet[k];
+  Object.assign(state.sheet, out);
+  applied = null;
+}
+
+/** Clear the background (the Help panel's Clear): its name and what it filled in go. */
+export function clearBackground({ state, changed, redraw }) {
+  takeOff(state, sheetBackground(state));
+  state.sheet.background = '';
   redraw();
   changed();
 }

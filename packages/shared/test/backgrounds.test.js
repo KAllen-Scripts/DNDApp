@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { emptySheet, normalizeSheet, SKILLS, ABILITIES } from '../src/sheet.js';
-import { BOOK_BACKGROUNDS, applyBackground, backgroundAbilities, backgroundSummary, backgroundsFor, findBackground, normalizeCustomBackgrounds } from '../src/backgrounds.js';
+import { BOOK_BACKGROUNDS, applyBackground, removeBackground, backgroundAbilities, backgroundSummary, backgroundsFor, findBackground, normalizeCustomBackgrounds } from '../src/backgrounds.js';
 
 test('backgrounds: every book background has two real skills; 2024 ones three abilities and a feat; 2014 ones a feature', () => {
   for (const b of BOOK_BACKGROUNDS) {
@@ -67,4 +67,24 @@ test("backgrounds: applying one ticks skills, adds its feature, tools and langua
   assert.equal(after.sheet.coins.gp, 0);
   assert.match(after.sheet.features, /Origin feat: Savage Attacker \(Soldier background\)/);
   assert.match(after.notes[0], /Raise Strength, Dexterity and Constitution/);
+});
+
+test("backgrounds: taking one back off removes only what it added and what's still as it wrote it", () => {
+  const acolyte = findBackground('Acolyte', { edition: '2014' });
+  const s = normalizeSheet({ ...emptySheet(), skills: { insight: 'proficient' }, features: 'Darkvision' });
+  const { sheet } = applyBackground(s, acolyte);
+  sheet.background = 'Acolyte';
+  const off = removeBackground(sheet, acolyte, { ticked: ['religion'], gold: true });
+  assert.equal(off.background, '');
+  assert.equal(off.features, 'Darkvision');
+  assert.equal(off.proficiencies_languages, '');
+  assert.equal(off.equipment, '');
+  assert.equal(off.coins.gp, 0);
+  assert.deepEqual(off.skills, { insight: 'proficient' }, 'a skill it found ticked stays');
+  // What the player changed since stays.
+  const edited = { ...sheet, equipment: `${sheet.equipment} And a lute.`, skills: { ...sheet.skills, religion: 'expertise' }, coins: { ...sheet.coins, gp: 40 } };
+  const kept = removeBackground(edited, acolyte, { ticked: ['religion'], gold: true });
+  assert.match(kept.equipment, /lute/);
+  assert.equal(kept.skills.religion, 'expertise');
+  assert.equal(kept.coins.gp, 40);
 });

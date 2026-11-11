@@ -28,7 +28,7 @@ Where the project stands, what to do next, open questions, decisions and lessons
 
 **Live:** https://thepartyledger.fyi when the server runs on the owner's PC (Cloudflare Tunnel `thepartyledger` → `127.0.0.1:4400`, `cloudflared` as a Windows service, https forced). Merged PRs aren't live until his checkout is pulled and restarted (`npm run restart`); the permission check in a Remote Control session blocks that unless he says so in words. On 2026-10-28 `.env` had `DATA_SET=example` (the live server ran on the example data); take it out to go back to the real data. `API_key` in the repo root holds the Cloudflare token (git-ignored; never print or commit it). No player guide yet.
 
-**Installs:** the owner's PC (the server; `data/` holds the admin login "admin" and Kenny's player account; the database upgrades itself on start). His laptop (Node 24.19, `data/` with only the admin login). His Remote Control folder is `D:\Code` (checkout `D:\Code\DNDApp`).
+**Installs:** the owner's PC (the server; `data/` holds the admin login "admin" and Kenny's player account; the database upgrades itself on start). His laptop (Node 24.19, `data/` with only the admin login). His Remote Control folder is `D:\Code` (checkout `D:\Code\DNDApp`). His Galaxy A20e in Termux is the host now, with the PC off ([docs/hosting.md](docs/hosting.md), 2026-11-08 change log): checkout `~/DNDApp` on the `claude/phone-host` branch until PR #154 is merged, the real data active since 2026-11-08 (`data-example/` beside it), start and stop with `bash scripts/termux/start.sh` / `stop.sh` (`~/dndapp-start.sh` runs it). The PC's `data/` is a copy from 2026-11-05.
 
 **Not yet tried for real:** a real transcript (the parser is built to an assumed format); the real AI on the map creator's draft, handout pictures, real maps (reading, walls, heights, stat blocks), Find online, picture descriptions, sheets and map events reaching the archivist, the book tools with every book, the wiki's AI, Review sheet, Ask's timings; Discord on a real call; most page features on a real phone or GPU (only jsdom and headless Chromium). Each has a line in [docs/vscode-checks.md](docs/vscode-checks.md).
 
@@ -178,6 +178,9 @@ Don't pursue these unless the owner raises them again.
 
 Newest first. Older entries: [docs/archive/changelog.md](docs/archive/changelog.md).
 
+### 2026-11-11: The phone host's work merged; old branches deleted
+- The owner: the phone had pushed `claude/phone-host-fixes` (PR #154's work plus three fixes) after main moved on. It's merged onto the split-up main (PR #156): `fogView`'s change went into `map/fog.js`, and `map/map.js` imports `wallBetween`. Every other branch's work was already in main (squash-merged PRs, superseded PR #33, or the example pictures main has in smaller copies), so all branches but `main` were deleted.
+
 ### 2026-11-11: Code review and tidy-up (no behaviour change)
 - The owner: "Look through the whole codebase. What's redundant? What's not good enough? Get it tidied up without losing any functionality."
 - **Dead code gone:** 23 exported functions and constants nothing called (found by checking every export against every import, tests and `page.module` included), 7 unused variables (ESLint `no-unused-vars`), and the `prism-media` dependency (it still comes in through `@discordjs/voice`). No TODOs, swallowed errors or stale doc paths turned up; jscpd had already been run on 2026-11-02.
@@ -185,6 +188,26 @@ Newest first. Older entries: [docs/archive/changelog.md](docs/archive/changelog.
 - **Shared cleaners:** `shared/src/clean.js` (`str`, `int`, `newId`) replaces the copies in sheet, gear, class-features, wild-shape, companions and item-actions.
 - **Big files split** (each read whole cost 25 to 30k tokens), code moved word for word: the Map tab `map/map.js` (2,372 → about 1,380 lines) into `fog.js`, `walls.js`, `pins.js`, `signals.js`, `ruler.js`; the Sheet `sheet/sheet.js` (2,250 → 1,520) into `inventory.js`, `spells.js`; `shared/src/map.js` (2,333 → about 1,000) into `map-world.js`, `map-sight.js`, `map-height.js`, which `map.js` re-exports (importers unchanged); `routes/maps.js` (1,530) with tokens and pins in `routes/map-tokens.js` (`registerMapTokens`, right after `registerMaps`). SPEC §3.1 lists the new files and the shared modules it was missing.
 - Tests: no new ones (nothing was found broken; a suspected stale wiki layer on the map turned out fine); all 939 tests and the 198 regression tests pass.
+
+### 2026-11-09: A token dropped past a wall no longer flashes the view from there
+
+- The owner, as a player: dropping his token past a wall briefly showed the map from there. The page moved the token and redrew the fog before the server refused. Now a drop past a wall goes back at once (no move sent), and after any drop a player's fog waits for the server to take the move. docs/spec/maps.md; a regression test. On the phone, `web/test/map.test.js`'s "the DM imports a picture" fails with or without this (jsdom: "Failed to construct 'File' … SharedArrayBuffer"); unchecked on the PC.
+
+### 2026-11-08: The phone runs the real data; Help making a character in tabs, with Change and Clear
+
+- **Real data on the phone:** `DATA_SET=example` taken out of the phone's `.env` and the server restarted; it serves `data/` now (the example data stays in `data-example/`).
+- **Help making a character** (owner: "looks kinda shit", and a race couldn't be unpicked): three tabs (Class, Race/Species, Background) instead of three uneven columns, the chosen part full width, and Change / Clear on each pick; changing or clearing a background takes off what it filled in (`removeBackground`). Design in docs/spec/sheets.md. Not seen in a real browser (none on the phone): a line in docs/vscode-checks.md.
+- **Tests on the phone** (2026-11-09): the regression run failed there. One was real: drawing a made map still held the server's thread about 0.7 s (Sharp starting its WebP encode), now done in the drawing thread with the upload resizing. The rest were page tests giving up after 5 s with seven files sharing the phone; `settle`/`waitFor` wait 20 s now. All 200 regression tests pass on the phone. `web/test/sheet.test.js` outgrows Node's default heap there (docs/testing.md has the command). The owner says the phone is a stopgap host, so nothing else is tuned for it.
+
+### 2026-11-08: The phone is the host (Termux); sheet replay fix; admins need a password on the example data
+
+- **Hosting:** the owner's Galaxy A20e (Termux debug build, so `adb shell run-as com.termux` works) hosts the site with the PC off. The tunnel runs there; the PC's `cloudflared` service is stopped and set to Manual. The server, `npm run restart`/`server:start`/`server:stop` and config work out when they're on Android (`process.platform === 'android'`); Windows is unchanged. Phone scripts are in `scripts/termux/` (setup, install, claude, watchdog, start, stop, whisper); the design is in docs/hosting.md. `CLAUDE_CODE_PATH` is new. All on PR #154.
+- **Checked on the phone:** a clean install from `install.sh`; the data copied from the PC (checksums match); search through ONNX's WebAssembly build (0.74 s for 3 sentences, about 670 MB); a real AI call with a tool (Haiku, 23.6 s, mostly proot start-up); Remote Control connected; the public site from outside; the watchdog bringing the server back within a minute; `npm run restart`.
+- **Transcription on the phone:** whisper.cpp v1.9.5 with `base.en` (`scripts/termux/whisper.sh`), the Android default. Through the server's engine: 1.74 s per second of speech at 4 threads; 6 threads (the Android default now) 1.38 s, 8 threads 1.28 s. So a session takes several hours to transcribe after it ends. `@discordjs/voice` and its Android `davey` build load; a real Discord recording on the phone is untried (no bot key set yet).
+- **Fix:** `applyJson` (`sheets/store.js`) threw replaying a sheet whose archive began before `point_buy` existed (saves are diffed against the normalised sheet), which broke the archivist's sheet-updates job on the real data. A set now makes missing parents. The real archive now replays to exactly the database's sheets. Regression test in `updates.test.js`.
+- **Example data:** the passwordless picker leaves out admin accounts and refuses them by name (403) (owner, 2026-11-08). The phone runs the example data now (`DATA_SET=example` in its `.env`); its real data is next to it.
+- **Tests:** three login tests now choose their data set instead of reading the host's `.env` (`DATA_SET=example` there failed them). 941 pass.
+- **Not yet:** Termux:Boot (nothing starts after a reboot until Termux is opened and `bash ~/dndapp-start.sh` is run).
 
 ### 2026-11-02: Discord bot key per campaign
 - The owner: "You've got the discord bot setup so we add the key in the server. But a DM may be in multiple servers. This should be set at the campaign level."

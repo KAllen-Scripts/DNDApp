@@ -3,6 +3,9 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '../../..');
+// A phone (Termux): some programs differ there (docs/hosting.md, scripts/termux/). Settings in .env still win.
+const isAndroid = process.platform === 'android';
+const termuxHome = process.env.HOME || '';
 
 // Load .env from the repo root if present (Node's built-in loader).
 try {
@@ -67,6 +70,8 @@ export const config = {
     // (CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC). Measured 2026-10-21: ~2.9 s -> ~0.65 s to start
     // (docs/notes/ask-speed.md). CLAUDE_CODE_QUIET_START=off to turn it off.
     quietStart: env.CLAUDE_CODE_QUIET_START !== 'off',
+    // Claude Code only: the program to run, where the SDK has no build of its own. On Android, Claude Code in Debian (scripts/termux/claude.sh).
+    claudeCodePath: env.CLAUDE_CODE_PATH || (isAndroid ? path.join(repoRoot, 'scripts/termux/claude.sh') : ''),
     // Per-task model + effort. All tasks use the same model unless overridden.
     tasks: {
       archivist: { model: env.MODEL_ARCHIVIST || DEFAULT_MODEL, effort: env.EFFORT_ARCHIVIST || 'high' },
@@ -196,15 +201,18 @@ export const config = {
   transcribe: {
     // Always on this PC (owner, 2026-10-29: "We won't take it off server"): 'local' (Whisper through
     // transformers.js, nothing to set up) or 'whisper-cpp' (whisper.cpp's program: much faster with an NVIDIA card).
-    engine: env.TRANSCRIBE_ENGINE || 'local',
+    // On Android, whisper.cpp built by scripts/termux/whisper.sh: 'local' is far too slow and big for a phone.
+    engine: env.TRANSCRIBE_ENGINE || (isAndroid ? 'whisper-cpp' : 'local'),
     language: env.TRANSCRIBE_LANGUAGE || 'en',
     localModel: env.TRANSCRIBE_LOCAL_MODEL || 'onnx-community/whisper-large-v3-turbo',
     localDtype: env.TRANSCRIBE_LOCAL_DTYPE || 'q8',
     // 'cpu', or 'dml' for the graphics card through DirectX on Windows, 'cuda' on Linux.
     localDevice: env.TRANSCRIBE_LOCAL_DEVICE || 'cpu',
-    whisperCppBin: env.WHISPER_CPP_BIN || '',
-    whisperCppModel: env.WHISPER_CPP_MODEL || '',
-    threads: num(env.TRANSCRIBE_THREADS, 0),
+    whisperCppBin: env.WHISPER_CPP_BIN || (isAndroid ? path.join(termuxHome, 'whisper.cpp/build/bin/whisper-cli') : ''),
+    whisperCppModel: env.WHISPER_CPP_MODEL || (isAndroid ? path.join(termuxHome, 'whisper.cpp/models/ggml-base.en.bin') : ''),
+    // 0: whisper.cpp's own choice (4). On Android, 6 of the phone's 8 cores (measured on a Galaxy A20e: 1.38 s per
+    // second of speech, against 1.84 with 4 and 1.28 with 8), leaving some for the site.
+    threads: num(env.TRANSCRIBE_THREADS, isAndroid ? 6 : 0),
   },
 
   // Applies to the API provider only (Claude Code runs on the subscription).

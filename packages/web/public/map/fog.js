@@ -90,8 +90,13 @@ function drawFog(canvas, image, shapes, alpha) {
  * The map as a player's fog sees it: while they drag one of their own
  * tokens, that token where it would land, unless a wall is in the way
  * (the server would refuse the move, so it still sees from where it was).
+ * Once dropped, it sees from where it was until the server takes the move
+ * (`landing`): a refused move must never show, even for a moment, what's
+ * past the wall.
  */
 function fogView(map) {
+  const landing = state.landing;
+  if (landing) map = { ...map, tokens: map.tokens.map((t) => (t.id === landing.id ? { ...t, x: landing.x, y: landing.y } : t)) };
   const drag = state.drag;
   const token = drag?.moved && map.tokens.find((t) => t.id === drag.id && t.user_id === state.userId);
   if (!token) return map;

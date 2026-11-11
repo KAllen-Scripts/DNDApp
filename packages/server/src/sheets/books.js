@@ -184,7 +184,13 @@ export function createBooks({ dir, log = console }) {
   /** Read every PDF in the folder (once). Safe to call repeatedly. */
   function load() {
     loading ??= (async () => {
-      const files = dir && fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.pdf$/i.test(f)).sort() : [];
+      let files = [];
+      try {
+        files = dir && fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.pdf$/i.test(f)).sort() : [];
+      } catch (err) {
+        // A folder that can't be read (a phone's shared storage without the permission) means no books, not a crashed server.
+        log.warn?.(`Couldn't read the books folder ${dir}: ${err.message}`);
+      }
       for (const file of files) {
         try {
           const { pages: texts, outline } = await readPdf(fs.readFileSync(path.join(dir, file)), { outline: true });

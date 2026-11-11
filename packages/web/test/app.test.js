@@ -10,7 +10,7 @@ import { withPage, addAccount, upload, createFakeLLM, SAMPLE, PASSWORD } from '.
 // ---------- logging in ----------
 
 test('login: no saved login shows the login form; a wrong password says so; the right one enters the campaign', async () => {
-  await withPage({}, async (page, t) => {
+  await withPage({ setup: { config: { dataSet: 'real' } } }, async (page, t) => { // whatever the host's .env says
     assert.ok(page.visible('#login-view'));
     assert.ok(!page.visible('#app-view'));
 
@@ -43,7 +43,8 @@ test('login: on the example data, pick who to log in as from a list, with no pas
     assert.ok(!page.visible('#login-form [name=name]'));
     assert.ok(!page.visible('#login-form [name=password]'));
     const options = [...page.$('#login-form [name=pick]').options].map((o) => o.textContent);
-    assert.deepEqual(options, ['Alex (Lyra)', 'Sam (Thorin)', 'Kenny (server admin)']);
+    // The admin (Kenny) logs in with a password even on the example data.
+    assert.deepEqual(options, ['Alex (Lyra)', 'Sam (Thorin)']);
 
     page.type('#login-form [name=pick]', 'Sam');
     page.submit('#login-form');
@@ -54,7 +55,7 @@ test('login: on the example data, pick who to log in as from a list, with no pas
 });
 
 test('regression: on the real data, the login page shows the name and password form and no account list', async () => {
-  await withPage({}, async (page) => {
+  await withPage({ setup: { config: { dataSet: 'real' } } }, async (page) => { // whatever the host's .env says
     assert.ok(page.visible('#login-form [name=name]'));
     assert.ok(page.visible('#login-form [name=password]'));
     assert.ok(!page.visible('#login-form [name=pick]'));
