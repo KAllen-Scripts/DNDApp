@@ -18,6 +18,7 @@ import { normalizeCombat } from './attack-extras.js';
 import { subclassOf } from './subclass-features.js';
 import { normalizeCompanions } from './companions.js';
 import { d20Rule, featsOf } from './feats.js';
+import { str, int, newId } from './clean.js';
 
 export { WEAPONS };
 
@@ -68,9 +69,6 @@ export const CLASSES = {
 export const RACES = [
   'Dragonborn', 'Hill Dwarf', 'Mountain Dwarf', 'High Elf', 'Wood Elf', 'Dark Elf (Drow)', 'Forest Gnome', 'Rock Gnome',
   'Half-Elf', 'Half-Orc', 'Lightfoot Halfling', 'Stout Halfling', 'Human', 'Variant Human', 'Tiefling',
-];
-export const BACKGROUNDS = [
-  'Acolyte', 'Charlatan', 'Criminal', 'Entertainer', 'Folk Hero', 'Guild Artisan', 'Hermit', 'Noble', 'Outlander', 'Sage', 'Sailor', 'Soldier', 'Urchin',
 ];
 export const ALIGNMENTS = [
   'Lawful Good', 'Neutral Good', 'Chaotic Good', 'Lawful Neutral', 'True Neutral', 'Chaotic Neutral', 'Lawful Evil', 'Neutral Evil', 'Chaotic Evil',
@@ -159,13 +157,7 @@ export function raceSpeed(race, edition = '2014') {
   return 30;
 }
 
-const str = (v, max) => (v == null ? '' : String(v)).slice(0, max);
-const int = (v, { min = -999, max = 999, fallback = null } = {}) => {
-  const n = typeof v === 'number' ? v : parseInt(String(v ?? '').replace(/^\s*\+/, ''), 10);
-  return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.trunc(n))) : fallback;
-};
 const bool = (v) => v === true || v === 'true' || v === 1;
-const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
 // ---------- the sheet ----------
 

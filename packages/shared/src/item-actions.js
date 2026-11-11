@@ -15,6 +15,7 @@
  *
  * Plain JS like gear.js: the server and the page use it.
  */
+import { str, int as cleanInt } from './clean.js';
 
 export const ACTION_KINDS = ['summon', 'spell', 'attack', 'heal', 'other'];
 export const ACTION_SOURCES = ['rules', 'text', 'ai', 'manual'];
@@ -22,11 +23,7 @@ export const ACTION_NEEDS = ['', 'equipped', 'attuned'];
 export const MAX_ACTIONS = 8;
 const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
 
-const str = (v, max) => (v == null ? '' : String(v)).slice(0, max);
-const int = (v, { min = 0, max = 999, fallback = null } = {}) => {
-  const n = typeof v === 'number' ? v : parseInt(String(v ?? '').replace(/^\s*\+/, ''), 10);
-  return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.trunc(n))) : fallback;
-};
+const int = (v, { min = 0, max = 999, fallback = null } = {}) => cleanInt(v, { min, max, fallback });
 /** Dice or a number ("2d4+2", "3", "d8"); '' for anything else. */
 const DICE_RE = /^(\d{0,2}d\d{1,3}([+-]\d{1,3})?|\d{1,3})$/i;
 const dice = (v) => {

@@ -144,9 +144,6 @@ export function featsOf(sheet, { edition = '2014' } = {}) {
   return [...general, ...racial];
 }
 
-/** Whether the character has a feat, by id ('feat_alert', 'feat_elven_accuracy'...). */
-export const hasFeat = (sheet, id, opts) => featsOf(sheet, opts).some((f) => f.id === id);
-
 /**
  * What every d20 the character rolls gets, as notation for the d20 term:
  * 'ro1' for a halfling's Luck (a 1 is rolled again), '' otherwise.

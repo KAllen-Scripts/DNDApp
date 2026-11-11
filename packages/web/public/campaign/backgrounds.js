@@ -4,7 +4,7 @@
  * so they're archived with them and reach every player's sheet live, where
  * the Background box suggests them beside the books' ones.
  */
-import { ABILITIES, ABILITY_NAMES, SKILLS } from '/shared/sheet.js';
+import { ABILITY_NAMES, SKILLS } from '/shared/sheet.js';
 import { MAX_CUSTOM_BACKGROUNDS, backgroundSummary } from '/shared/backgrounds.js';
 import { h } from '../page/dom.js';
 

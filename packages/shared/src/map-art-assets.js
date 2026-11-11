@@ -20,9 +20,6 @@ import { ART_SHIPS } from './map-art-ships.js';
 import { ART_TEMPLE } from './map-art-temple.js';
 import { ART_FARM } from './map-art-farm.js';
 
-/** The shared pieces, for drawings made elsewhere. */
-export const PIECES = { shadow, lit, canopy, stone, planks, fire, candle, coin, band, wheel, book, crystals };
-
 
 // ---------- the drawings ----------
 

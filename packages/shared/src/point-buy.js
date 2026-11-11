@@ -11,7 +11,7 @@
  *   chooses where (the background's three abilities, when it's a PHB 2024 one or one of the DM's own).
  */
 import { ABILITIES, ABILITY_NAMES, POINT_BUY_RULES, normalizePointBuy } from './sheet.js';
-import { BOOK_BACKGROUNDS, backgroundAbilities } from './backgrounds.js';
+import { backgroundAbilities } from './backgrounds.js';
 
 export { POINT_BUY_RULES, normalizePointBuy };
 
@@ -41,9 +41,6 @@ const RACES_2014 = [
   [/halfling/i, { fixed: { dex: 2 } }],
   [/tiefling/i, { fixed: { cha: 2, int: 1 } }],
 ];
-
-/** The 2024 Player's Handbook backgrounds and the three abilities each can raise (from backgrounds.js). */
-export const BACKGROUNDS_2024 = Object.fromEntries(BOOK_BACKGROUNDS.filter((b) => b.edition === '2024').map((b) => [b.name.toLowerCase(), b.abilities]));
 
 /** A race's 2014 bonuses: { fixed, choose, not, known }. A race not in the list: the player chooses them all. */
 export function raceBonuses2014(race) {

@@ -58,11 +58,15 @@ Hard design problems:
 ```
 DNDApp/
   packages/
-    shared/src/   plain JS used by both the server and the page (the page loads them from /shared/<file>, so these stay in one
-                  folder: a module's imports of its neighbours must work at that address too):
+    shared/src/   plain JS used by both the server and the page (the server serves every file here at /shared/<file> and the
+                  page loads them from there, so these stay in one folder: a module's imports of its neighbours must work at that
+                  address too; the package exports ./* for the server). clean.js (the str/int/newId cleaners the sheet modules share),
                   transcript.js (transcript parser), citations.js (the [S12 01:23:45] citation format),
                   sheet.js (character sheet rules), dice.js (dice notation and rolling),
-                  map.js (map documents, snapping, distances, line of sight, templates, lights),
+                  map.js (map documents: tokens, pins, fog, initiative, templates, snapping and distances) re-exporting map-world.js
+                           (places, maps inside maps, journeys, travel times, roads, random encounters), map-sight.js (walls and doors,
+                           line of sight, lights, the players' fog mask) and map-height.js (raised areas, stairs, bridges, seeing over
+                           edges, what moving across levels and difficult terrain costs),
                   map-design.js (maps made in the creator: the design, what can be in it (floors, walls, assets, paths, labels, the look),
                            the tools' changes, what a design gives the map),
                   map-art.js (drawing a design: floors, paths, walls, the look, lights, labels) with map-art-library.js and map-art-files.js (the CC0 art pictures), map-art-assets.js,
@@ -81,9 +85,15 @@ DNDApp/
                   subclass-features.js (the Player's Handbook's subclasses and their rows for the same box: Superiority Dice, Portent, Combat Wild Shape...),
                   subclass-features-books.js (other books' subclasses: Xanathar's, Tasha's, Fizban's, DMG 2014, Glory of the Giants),
                   race-features.js (racial traits with uses or numbers, and Xanathar's racial feats, for the same box),
-                  settings.js (a campaign's settings: the weight rule, the rules edition, attacks from the map),
+                  settings.js (a campaign's settings: the weight rule, the rules edition, attacks from the map), calendar.js (the
+                           campaign's calendar), level-up.js (levelling up), spell-slots.js (spending and giving back slots),
+                  class-traits.js and subclass-traits.js (every class and subclass feature with a summary and how the sheet handles it),
+                  feats.js (feats that change the sheet's numbers or rolls), attack-extras.js (what class features add to an attack
+                           or spell: Weapon Mastery, Sneak Attack, Smite, Rage...), item-names.js (names the Inventory suggests),
+                  bestiary.js (the DM's creatures: a kind of creature or a person, type and challenge),
                   attacks.js (attacks and area spells from the map: a sheet's and a stat block's actions and spells, the DM's own (custom), defenses, advantage, rolling, the log players get) with attack-riders.js (extra damage on a hit, like Sneak Attack) and spell-effects.js (what a spell does besides damage: conditions, how long it lasts, difficult terrain, targets; spells in play on a map and how they end),
-                  wiki.js (wiki text: `:::for` / `:::dm` blocks, [[links]], who a part is available to)
+                  wiki.js (wiki text: `:::for` / `:::dm` blocks, [[links]], who a part is available to), wiki-time.js (in-game times
+                           read and written), wiki-templates.js (the starter templates)
     server/
       src/
         index.js          start-up
@@ -94,7 +104,7 @@ DNDApp/
                           sessions, notes, corrections, the archivist's questions, jobs, Q&A, usage),
                           characters.js (sheets, character pictures), table.js (dice rolls, handouts, the campaign live stream),
                           rests.js (hit dice, short and long rests), level-up.js (levelling up; the DM giving levels),
-                          maps.js (maps, tokens, fog, walls, lights, terrain, variants, links, pins, pings), attacks.js (attacks and area spells from the map),
+                          maps.js (maps, fog, walls, lights, terrain, variants, links, places, travel, pings) with map-tokens.js (tokens and their pictures, pins), attacks.js (attacks and area spells from the map),
                           map-creator.js (maps made in the creator, starting maps, the AI draft, levels, the DM's own assets and stamps),
                           combat.js (initiative, spell templates), creatures.js (the DM's creatures, Find online),
                           companions.js (companions on the sheet), item-actions.js (Use on an item's action),
@@ -150,21 +160,26 @@ DNDApp/
       public/     the web page, served by the server at / (no build step). index.html and icon.svg, then a folder per part:
                   page/       the frame every tab sits in: app.js (login, password, campaign picker, tabs, Ask, Notes), api.js (requests,
                               live streams, the login token), dom.js (making elements: h, svg, $; status-line messages), markdown.js (AI
-                              text to safe HTML), look.js + page/look-boot.js (the Look dialog, applied before first paint), phone.js (the phone
+                              text to safe HTML), look.js + page/look-boot.js (the Look dialog, applied before first paint), pick-login.js (Log in as,
+                              on the example data), phone.js (the phone
                               layout's ☰ and ⋯ menus), page/topbar-fit.js, side-panel.js (a panel beside the map, Sheet window), page/pan-zoom.js, page/mini-views.js
                   styles/     style.css, themes.css, mobile.css (the phone layout)
                   admin/      admin.js (the admin screen)
                   campaign/   settings.js (the DM's Campaign settings) with backgrounds.js, calendar.js and levels.js; sessions.js (the DM's
                               Sessions tab: recording from Discord, transcript uploads); archivist.js (the DM's Archivist tab); table.js (the
                               campaign live stream: others' rolls, rests, the Handouts tab); rests.js (the DM's Rest dialog, rests arriving)
-                  sheet/      sheet.js (Sheet tab) with characters.js (the player's characters above it), creation-help.js, background.js,
+                  sheet/      sheet.js (Sheet tab) with inventory.js (the Inventory tab), spells.js (the Spells box), characters.js (the
+                              player's characters above it), creation-help.js, background.js,
                               traits.js, attacks.js, class-features.js, wild-shape.js, companions.js, item-actions.js, level-up.js, fold.js
                               (options that open when asked)
                   items/      items.js (the DM's Items, shown in the wiki's space), merchants.js (the DM's Merchants and the shop players buy
                               from), item-card.js (an item's card)
                   creatures/  creatures.js (the DM's Bestiary tab), creatures/stat-block.js (the stat block dialog)
                   dice/       dice.js (tray, rolls) with deluxe.js, physics.js, shapes.js (the Deluxe roller) and effects.js
-                  map/        map.js (Map tab) with state.js (shared state), dm-tools.js (the DM's tools), combat.js (turn order),
+                  map/        map.js (Map tab: loading, drawing, tokens, selection, panning and zooming) with state.js (shared state),
+                              fog.js (fog of war and the DM's fog tools), walls.js (walls, doors, terrain, raised areas, stairs, lights,
+                              AI walls), pins.js, signals.js (pings and quick drawings), ruler.js (measuring), dm-tools.js (the DM's
+                              tools), combat.js (turn order),
                               companions.js (a player's companions and summons), spell-templates.js, attacks.js (attacks and area spells:
                               the picker, targeting, the cards, the Attack log), full-screen.js, places.js (the world: places, the breadcrumb,
                               who sees a map or a place), world.js, travel.js, wiki-layers.js, wiki-link.js;
@@ -180,7 +195,7 @@ DNDApp/
   example/        the example campaign (owner, 2026-10-28): campaign/ (its data as JS: accounts, settings, sheets, creatures, items, merchants, maps, wiki),
                   pictures/ (public domain or CC0, credits.json), transcripts/ (four sessions to feed in, with a README), ask-checks.md, README.md
   docs/notes/     design notes, research and checklists from the first Claude project (README.md lists them)
-  scripts/        restart-server.js (npm run restart); browser.js (real-browser checks: Playwright with the installed Chrome on a throwaway copy of data/, fake AI); art/ (build.js, picks.js, render-props.js: the map creator's CC0 art, see §6.6 Map art)
+  scripts/        restart-server.js (npm run restart); class-features-audit.js (writes docs/notes/class-features-audit.md); browser.js (real-browser checks: Playwright with the installed Chrome on a throwaway copy of data/, fake AI); art/ (build.js, picks.js, render-props.js: the map creator's CC0 art, see §6.6 Map art)
   docs/regressions.md  every bug found and fixed, and the `regression: …` test that keeps it fixed
   docs/hosting.md, features.md, api.md, testing.md  the detail behind the short README: setup and hosting, each feature for its users, the API, tests
   .claude/        Claude Code set-up: agents/regression-keeper.md (the worker that writes and checks regression tests),

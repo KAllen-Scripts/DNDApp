@@ -6,7 +6,6 @@
 
 export const COIN_VALUES = { cp: 1, sp: 10, ep: 50, gp: 100, pp: 1000 };
 export const COINS = ['cp', 'sp', 'ep', 'gp', 'pp'];
-export const PRICE_UNITS = ['cp', 'sp', 'gp', 'pp'];
 
 /** A purse's worth in copper. */
 export const totalCp = (coins = {}) => COINS.reduce((sum, c) => sum + Math.max(0, Math.trunc(Number(coins[c]) || 0)) * COIN_VALUES[c], 0);

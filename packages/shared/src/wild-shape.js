@@ -24,18 +24,13 @@
  * cast spells while in a form.
  */
 import { ABILITIES, SKILLS, abilityMod, classKey } from './sheet.js';
+import { str, int, newId } from './clean.js';
 
 export const MAX_FORMS = 30;
 export const FORM_SIZES = ['tiny', 'small', 'medium', 'large', 'huge', 'gargantuan'];
 const SPEEDS = ['walk', 'fly', 'swim', 'climb', 'burrow'];
 const FORM_SOURCES = ['srd', 'book', 'ai', 'manual'];
 
-const str = (v, max) => (v == null ? '' : String(v)).slice(0, max);
-const int = (v, { min = -999, max = 999, fallback = null } = {}) => {
-  const n = typeof v === 'number' ? v : parseInt(String(v ?? '').replace(/^\s*\+/, ''), 10);
-  return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.trunc(n))) : fallback;
-};
-const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
 /** "1/4" → 0.25, "2" → 2; null if it isn't a challenge rating. */
 export function crValue(cr) {

@@ -27,7 +27,6 @@ export const EMBED_RE = /\[\[!([^\]|\n]+)\]\]/g;
  * Live embeds (stage 9a): `[[creature:Goblin boss]]`, `[[item:…]]`, `[[merchant:…]]`, `[[handout:…]]`,
  * `[[map:…]]` show the app's own thing, live, by its name. They're never links to wiki pages.
  */
-export const APP_EMBED_KINDS = ['creature', 'item', 'merchant', 'handout', 'map'];
 export const APP_EMBED_RE = /\[\[(creature|item|merchant|handout|map):([^\]|\n]+)\]\]/gi;
 const isAppEmbed = (name) => /^(creature|item|merchant|handout|map):/i.test(String(name).trim());
 
@@ -140,7 +139,6 @@ export const wikiKey = (s) => String(s ?? '').trim().toLowerCase().replace(/\s+/
  * players get, goes only where the text around it goes.
  */
 export const PICTURE_RE = /!\[([^\]\n]*)\]\(picture:([a-f0-9]{10})\)/g;
-export const PICTURE_PLACES = ['left', 'right', 'wide', 'small'];
 export const isPictureId = (id) => /^[a-f0-9]{10}$/.test(String(id ?? ''));
 
 /** A picture's alt text as { caption, place } ("Mill|right" -> { caption: 'Mill', place: 'right' }). */

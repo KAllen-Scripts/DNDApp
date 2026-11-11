@@ -138,12 +138,6 @@ export function expireMapSpells(m) {
   return due.map((sp) => endMapSpell(m, sp.id)).filter(Boolean);
 }
 
-/** Rounds left of a spell in play in the fight, or null (no fight, or it isn't counted). */
-export function roundsLeft(sp, combat) {
-  if (!sp?.ends || !combat) return null;
-  return Math.max(0, sp.ends.round - combat.round);
-}
-
 /**
  * Spells in play as one viewer may see them. The DM: all. A player: ones they cast, or whose caster or an
  * affected token they can see, or whose area they get; the caster is "someone you can't see" when they

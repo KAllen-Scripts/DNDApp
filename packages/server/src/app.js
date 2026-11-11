@@ -20,6 +20,7 @@ import { registerCampaign } from './routes/campaign.js';
 import { registerCharacters } from './routes/characters.js';
 import { registerTable } from './routes/table.js';
 import { registerMaps } from './routes/maps.js';
+import { registerMapTokens } from './routes/map-tokens.js';
 import { registerCombat } from './routes/combat.js';
 import { registerAttacks } from './routes/attacks.js';
 import { registerCreatures } from './routes/creatures.js';
@@ -94,57 +95,17 @@ const CONTENT_TYPES = {
   '.woff2': 'font/woff2',
 };
 
-// Modules the page imports from packages: the character sheet rules (shared with the server, so the page can
-// show automatic values as players type), dice notation, map geometry (snapping and measuring while dragging),
-// the citation format, markdown + HTML sanitising, and the 3D dice (Three.js and the physics are bundled into that one file).
+// Modules the page imports from packages: every module of the shared rules (packages/shared/src, at
+// /shared/<file>: the sheet rules, dice notation, map geometry... shared with the server, so the page can show
+// automatic values as players type and snap while dragging), markdown + HTML sanitising, and the 3D dice
+// (Three.js and the physics are bundled into that one file).
+const SHARED_DIR = path.dirname(fileURLToPath(import.meta.resolve('@dndapp/shared')));
 const WEB_MODULES = {
-  '/shared/sheet.js': '@dndapp/shared/sheet.js',
-  '/shared/calendar.js': '@dndapp/shared/calendar.js',
-  '/shared/wiki-time.js': '@dndapp/shared/wiki-time.js',
-  '/shared/wiki-templates.js': '@dndapp/shared/wiki-templates.js',
-  '/shared/wild-shape.js': '@dndapp/shared/wild-shape.js',
-  '/shared/companions.js': '@dndapp/shared/companions.js',
-  '/shared/class-features.js': '@dndapp/shared/class-features.js',
-  '/shared/subclass-features.js': '@dndapp/shared/subclass-features.js',
-  '/shared/subclass-features-books.js': '@dndapp/shared/subclass-features-books.js',
-  '/shared/race-features.js': '@dndapp/shared/race-features.js',
-  '/shared/citations.js': '@dndapp/shared/citations.js',
-  '/shared/dice.js': '@dndapp/shared/dice.js',
-  '/shared/rolls.js': '@dndapp/shared/rolls.js',
-  '/shared/attack-extras.js': '@dndapp/shared/attack-extras.js',
-  '/shared/spell-slots.js': '@dndapp/shared/spell-slots.js',
-  '/shared/class-traits.js': '@dndapp/shared/class-traits.js',
-  '/shared/level-up.js': '@dndapp/shared/level-up.js',
-  '/shared/subclass-traits.js': '@dndapp/shared/subclass-traits.js',
-  '/shared/feats.js': '@dndapp/shared/feats.js',
-  '/shared/gear.js': '@dndapp/shared/gear.js',
-  '/shared/item-actions.js': '@dndapp/shared/item-actions.js',
-  '/shared/item-names.js': '@dndapp/shared/item-names.js',
-  '/shared/point-buy.js': '@dndapp/shared/point-buy.js',
-  '/shared/backgrounds.js': '@dndapp/shared/backgrounds.js',
-  '/shared/bestiary.js': '@dndapp/shared/bestiary.js',
-  '/shared/creation-help.js': '@dndapp/shared/creation-help.js',
-  '/shared/settings.js': '@dndapp/shared/settings.js',
-  '/shared/map.js': '@dndapp/shared/map.js',
-  '/shared/map-design.js': '@dndapp/shared/map-design.js',
-  '/shared/map-paint.js': '@dndapp/shared/map-paint.js',
-  '/shared/map-art.js': '@dndapp/shared/map-art.js',
-  '/shared/map-art-library.js': '@dndapp/shared/map-art-library.js',
-  '/shared/map-art-files.js': '@dndapp/shared/map-art-files.js',
-  '/shared/map-art-assets.js': '@dndapp/shared/map-art-assets.js',
-  '/shared/map-art-outdoors.js': '@dndapp/shared/map-art-outdoors.js',
-  '/shared/map-art-dungeon.js': '@dndapp/shared/map-art-dungeon.js',
-  '/shared/map-art-furniture.js': '@dndapp/shared/map-art-furniture.js',
-  '/shared/map-art-ships.js': '@dndapp/shared/map-art-ships.js',
-  '/shared/map-art-pieces.js': '@dndapp/shared/map-art-pieces.js',
-  '/shared/map-art-temple.js': '@dndapp/shared/map-art-temple.js',
-  '/shared/map-art-farm.js': '@dndapp/shared/map-art-farm.js',
-  '/shared/coins.js': '@dndapp/shared/coins.js',
-  '/shared/wiki.js': '@dndapp/shared/wiki.js',
+  ...Object.fromEntries(fs.readdirSync(SHARED_DIR).filter((f) => f.endsWith('.js')).sort().map((f) => [`/shared/${f}`, `@dndapp/shared/${f}`])),
   '/vendor/marked.js': 'marked',
   '/vendor/purify.js': 'dompurify',
   '/vendor/dice/dice-box.js': '@3d-dice/dice-box-threejs',
-  };
+};
 /**
  * A fingerprint of the page's files (the page itself and the modules it
  * imports), sent as X-Page-Version with every response. A page that was
@@ -160,28 +121,44 @@ export function pageVersion(dir) {
   return hash.digest('base64url').slice(0, 16);
 }
 
+/** Send a file as it is now on disk. */
+const sendFile = (file, type) => async (request, reply) =>
+  reply.type(type).header('Cache-Control', 'no-cache').header('X-Content-Type-Options', 'nosniff').send(fs.readFileSync(file));
+
 /**
- * Serve the web page's files (no build step). Each file gets its own public
- * route, so nothing outside the folder can be requested; "/" is index.html.
+ * Send a file that doesn't change while the server runs (the map art, the libraries): read once, with an
+ * ETag, so a browser that has it gets "304 Not Modified" instead of downloading it again. `compress`
+ * (scripts): brotli or gzip, made once (a few MB of 3D dice libraries become a fraction of that).
  */
-/**
- * The map creator's art (shared/map-art-library.js): big pictures that only
- * change with an update, so each has an ETag and a browser that has it gets
- * "304 Not Modified" instead of downloading it again.
- */
-function sendArt(file, type) {
+function sendCached(file, type, { compress = false } = {}) {
   let cached = null;
   return async (request, reply) => {
     cached ??= (() => {
       const body = fs.readFileSync(file);
-      return { body, etag: `"${crypto.createHash('sha1').update(body).digest('base64url')}"` };
+      return { body, etag: `"${crypto.createHash('sha1').update(body).digest('base64url')}"`, br: null, gzip: null };
     })();
     reply.type(type).header('Cache-Control', 'no-cache').header('X-Content-Type-Options', 'nosniff').header('ETag', cached.etag);
+    if (compress) reply.header('Vary', 'Accept-Encoding');
     if (request.headers['if-none-match'] === cached.etag) return reply.code(304).send();
+    const accepts = compress ? String(request.headers['accept-encoding'] ?? '') : '';
+    if (/\bbr\b/.test(accepts)) {
+      cached.br ??= zlib.brotliCompressSync(cached.body, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9 } });
+      return reply.header('Content-Encoding', 'br').send(cached.br);
+    }
+    if (/\bgzip\b/.test(accepts)) {
+      cached.gzip ??= zlib.gzipSync(cached.body, { level: 9 });
+      return reply.header('Content-Encoding', 'gzip').send(cached.gzip);
+    }
     return reply.send(cached.body);
   };
 }
 
+/**
+ * Serve the web page's files (no build step). Each file gets its own public
+ * route, so nothing outside the folder can be requested; "/" is index.html.
+ * The page's own files are read on each request; the map art (shared/map-art-library.js)
+ * is big and only changes with an update, so it's cached.
+ */
 function serveWebPage(app, dir) {
   if (!dir || !fs.existsSync(dir)) return;
   for (const name of fs.readdirSync(dir, { recursive: true })) {
@@ -190,47 +167,20 @@ function serveWebPage(app, dir) {
     if (!type || !fs.statSync(file).isFile()) continue;
     const url = '/' + name.split(path.sep).join('/');
     if (url.startsWith('/art/')) {
-      app.get(url, { config: { public: true } }, sendArt(file, type));
+      app.get(url, { config: { public: true } }, sendCached(file, type));
       continue;
     }
-    const send = async (request, reply) =>
-      reply.type(type).header('Cache-Control', 'no-cache').header('X-Content-Type-Options', 'nosniff').send(fs.readFileSync(file));
+    const send = sendFile(file, type);
     app.get(url, { config: { public: true } }, send);
     if (url === '/index.html') app.get('/', { config: { public: true } }, send);
   }
-  const sendFile = (file, type) => async (request, reply) =>
-    reply.type(type).header('Cache-Control', 'no-cache').header('X-Content-Type-Options', 'nosniff').send(fs.readFileSync(file));
-  // Library files don't change while the server runs: each is compressed once (brotli or gzip, a few
-  // MB of 3D dice libraries become a fraction of that) and has an ETag, so a browser that has it gets
-  // "304 Not Modified" instead of downloading it again.
-  const sendLibrary = (file) => {
-    let cached = null;
-    return async (request, reply) => {
-      cached ??= (() => {
-        const body = fs.readFileSync(file);
-        return { body, etag: `"${crypto.createHash('sha1').update(body).digest('base64url')}"`, br: null, gzip: null };
-      })();
-      reply.type(CONTENT_TYPES['.js']).header('Cache-Control', 'no-cache').header('X-Content-Type-Options', 'nosniff').header('ETag', cached.etag).header('Vary', 'Accept-Encoding');
-      if (request.headers['if-none-match'] === cached.etag) return reply.code(304).send();
-      const accepts = String(request.headers['accept-encoding'] ?? '');
-      if (/\bbr\b/.test(accepts)) {
-        cached.br ??= zlib.brotliCompressSync(cached.body, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9 } });
-        return reply.header('Content-Encoding', 'br').send(cached.br);
-      }
-      if (/\bgzip\b/.test(accepts)) {
-        cached.gzip ??= zlib.gzipSync(cached.body, { level: 9 });
-        return reply.header('Content-Encoding', 'gzip').send(cached.gzip);
-      }
-      return reply.send(cached.body);
-    };
-  };
   for (const [url, spec] of Object.entries(WEB_MODULES)) {
-    app.get(url, { config: { public: true } }, sendLibrary(fileURLToPath(import.meta.resolve(spec))));
+    app.get(url, { config: { public: true } }, sendCached(fileURLToPath(import.meta.resolve(spec)), CONTENT_TYPES['.js'], { compress: true }));
   }
   // The Deluxe dice (dice-deluxe.js): Three.js (its module imports three.core.js next to it) and the
   // cannon-es physics, both as ES modules. Loaded only when someone uses that roller.
   for (const [url, file] of Object.entries(VENDOR_FILES)) {
-    app.get(url, { config: { public: true } }, sendLibrary(file()));
+    app.get(url, { config: { public: true } }, sendCached(file(), CONTENT_TYPES['.js'], { compress: true }));
   }
   // The map label fonts (maps/fonts.js), so the creator's preview writes labels like the server's picture.
   for (const font of LABEL_FONT_FILES) {
@@ -448,6 +398,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   registerCharacters(app, r);
   registerTable(app, r);
   registerMaps(app, r);
+  registerMapTokens(app, r);
   registerCombat(app, r);
   registerAttacks(app, r);
   registerCreatures(app, r);

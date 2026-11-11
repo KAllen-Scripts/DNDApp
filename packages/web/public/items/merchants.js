@@ -65,9 +65,6 @@ export function merchantChanged(id) {
   }, 300);
 }
 
-/** The merchants as last loaded (map/dm-tools.js offers them). */
-export const merchantList = () => state.list;
-
 function upsert(m) {
   const i = state.list.findIndex((x) => x.id === m.id);
   if (i >= 0) state.list[i] = m;

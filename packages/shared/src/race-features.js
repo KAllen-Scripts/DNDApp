@@ -24,7 +24,6 @@
  */
 
 const step = (table, level) => table.reduce((v, [from, n]) => (level >= from ? n : v), table[0][1]);
-const atLeast1 = (n) => Math.max(1, n);
 const dc = (c, a) => 8 + c.pb + c.mod(a);
 const castWith = (c) => Math.max(c.mod('int'), c.mod('wis'), c.mod('cha'));
 
@@ -423,12 +422,6 @@ export const RACIAL_FEATS = [
     note: () => 'Longstrider and Pass without Trace, each once per long rest without a slot (Wisdom). You know a druid cantrip.',
   },
 ].map((f) => ({ ...f, match: new RegExp(`\\b${f.feat.replace(/ /g, '\\s+')}\\b`, 'i') }));
-
-/** The racial feats the sheet's features text names (whatever the race): ['Elven Accuracy']. */
-export function featsNamed(sheet) {
-  const text = `${sheet?.features ?? ''}\n${sheet?.additional_features ?? ''}`;
-  return RACIAL_FEATS.filter((f) => f.match.test(text));
-}
 
 /** More names for the sheet's race suggestions (the Player's Handbook's are in sheet.js). */
 export const MORE_RACES = [
