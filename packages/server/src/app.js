@@ -20,6 +20,7 @@ import { registerCampaign } from './routes/campaign.js';
 import { registerCharacters } from './routes/characters.js';
 import { registerTable } from './routes/table.js';
 import { registerMaps } from './routes/maps.js';
+import { registerMapTokens } from './routes/map-tokens.js';
 import { registerCombat } from './routes/combat.js';
 import { registerAttacks } from './routes/attacks.js';
 import { registerCreatures } from './routes/creatures.js';
@@ -397,6 +398,7 @@ export function buildApp({ db, store, auth, jobs, pipeline, qa, kb, search, shee
   registerCharacters(app, r);
   registerTable(app, r);
   registerMaps(app, r);
+  registerMapTokens(app, r);
   registerCombat(app, r);
   registerAttacks(app, r);
   registerCreatures(app, r);

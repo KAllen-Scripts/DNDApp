@@ -9,7 +9,9 @@ import { api } from '../page/api.js';
 import { CONDITIONS, ownToken } from '/shared/map.js';
 import { campaignSettings } from '../campaign/settings.js';
 import { base, report, state, status } from './state.js';
-import { onMap, renderMeasureTools, renderPinTool, renderRuler, renderTokens, setTool } from './map.js';
+import { onMap, renderTokens, setTool } from './map.js';
+import { renderMeasureTools, renderRuler } from './ruler.js';
+import { renderPinTool } from './pins.js';
 import { hideRollResult, nextD20Mode, showRolls } from '../dice/dice.js';
 import { $, h } from '../page/dom.js';
 

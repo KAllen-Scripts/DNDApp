@@ -2,7 +2,9 @@
  * Spell templates on the map (areas of effect anyone can place): the Template dialog, placing,
  * moving and turning them, and who they catch.
  */
-import { onMap, render, renderMeasureTools, renderPinTool, renderPins, renderRuler, renderSelection, renderTokens, setTool, svgEl, toImage } from './map.js';
+import { onMap, render, renderSelection, renderTokens, setTool, svgEl, toImage } from './map.js';
+import { renderMeasureTools, renderRuler } from './ruler.js';
+import { renderPinTool, renderPins } from './pins.js';
 import { LoggedOut, api } from '../page/api.js';
 import { TEMPLATE_COLOR, TEMPLATE_SHAPES, TEMPLATE_SHAPE_NAMES, snapTemplatePoint, spellArea, templateShape, tokensInTemplate } from '/shared/map.js';
 import { base, report, state, status } from './state.js';

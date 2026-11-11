@@ -12,13 +12,12 @@
 import { api, fileUrl, storage } from '../page/api.js';
 import {
   ABILITIES, ABILITY_NAMES, SKILLS, CLASSES, RACES, ALIGNMENTS, SCHOOLS,
-  WEAPONS, classKey, computeSheet, coerceDerived, formatBonus, newAttack, normalizeSheet, normalizeSpell, hitDice as hitDiceOf, rollDisadvantage,
+  WEAPONS, classKey, computeSheet, coerceDerived, formatBonus, newAttack, normalizeSheet, hitDice as hitDiceOf, rollDisadvantage,
   rollAdvantage, checkNotation,
 } from '/shared/sheet.js';
 import { d20Plus } from '/shared/dice.js';
 import { attackRolls, gearRolls } from '/shared/rolls.js';
-import { EFFECT_TARGETS, MAX_EFFECTS, attackWeapon, attunementLimit, carriedWeight, classProficient, inventoryGroups, itemStats, newUnownedWeaponAttacks, normalizeGear, normalizeInventory, ownsWeapon } from '/shared/gear.js';
-import { WEIGHT_RULES } from '/shared/settings.js';
+import { attackWeapon, itemStats, newUnownedWeaponAttacks, ownsWeapon } from '/shared/gear.js';
 import { markdownEditor } from '../page/markdown.js';
 import { POINT_BUY, POINT_COST, changePointBuy, pointBuy, stepPointBuy } from '/shared/point-buy.js';
 import { roll, rollModeFromEvent, modeButtons, D20_ICON } from '../dice/dice.js';
@@ -26,7 +25,7 @@ import { wildShapeBox, wildShapeBanner } from './wild-shape.js';
 import { classFeaturesBox } from './class-features.js';
 import { companionsBox } from './companions.js';
 import { itemActionsBox } from './item-actions.js';
-import { actionSummary, knownItem } from '/shared/item-actions.js';
+import { knownItem } from '/shared/item-actions.js';
 import { subclassNames } from '/shared/subclass-features.js';
 import { featureRows } from '/shared/class-features.js';
 import { MORE_RACES } from '/shared/race-features.js';
@@ -34,21 +33,17 @@ import { loadCharacters, refreshCharacters, nameTyped } from './characters.js';
 import { traitsList } from './traits.js';
 import { offhandWeapon } from '/shared/attack-extras.js';
 import { withD20Rule } from '/shared/feats.js';
-import { castLevels } from '/shared/spell-slots.js';
-import { attackPlan, combatBar, extrasLine, inventoryMastery, rollAttackPlan, rollDamagePlan, spellPlan } from './attacks.js';
+import { attackPlan, combatBar, extrasLine, rollAttackPlan, rollDamagePlan } from './attacks.js';
 import { backgroundBox, backgroundNames, forgetApplied } from './background.js';
 import { helpPanel } from './creation-help.js';
-import { fold, isOpen, setOpen } from './fold.js';
 import { itemNames } from '/shared/item-names.js';
-import { GEAR_KINDS, effectText, gearCard } from '../items/item-card.js';
+import { GEAR_KINDS } from '../items/item-card.js';
 import { levelUpBanner } from './level-up.js';
-import { $, cap, h, note, readBase64, setChildren } from '../page/dom.js';
+import { $, cap, h, readBase64, setChildren } from '../page/dom.js';
+import { addGear, closePreview, gearStatus, inventoryTab, kindFields, previewGear, reopen } from './inventory.js';
+import { spells } from './spells.js';
 
-const LEVEL_NAMES = ['Cantrips', '1st level', '2nd level', '3rd level', '4th level', '5th level', '6th level', '7th level', '8th level', '9th level'];
-const SPELL_DETAILS = ['name', 'level', 'school', 'casting_time', 'range', 'components', 'material', 'duration', 'concentration', 'ritual', 'description', 'higher_levels', 'attack', 'save', 'damage', 'damage_mod', 'higher_damage', 'source', 'source_note'];
-const SOURCE_LABELS = { srd: 'SRD', book: 'Your book', ai: 'AI memory', import: 'Your sheet', manual: 'Typed in', custom: 'Your own' };
-
-const state = {
+export const state = {
   campaignId: null,
   userId: null,
   pictures: { token: null, picture: null }, // this player's token and full picture: { key, width, height } each
@@ -73,7 +68,7 @@ const state = {
   timer: null,
 };
 
-const base = () => `/campaigns/${state.campaignId}`;
+export const base = () => `/campaigns/${state.campaignId}`;
 const getPath = (obj, path) => path.split('.').reduce((o, k) => o?.[k], obj);
 const setPath = (obj, path, v) => {
   const keys = path.split('.');
@@ -117,7 +112,7 @@ async function showCharacter(res) {
 const channel = (() => {
   try { return window.BroadcastChannel ? new window.BroadcastChannel('dndapp.sheet') : null; } catch { return null; }
 })();
-const announce = () => channel?.postMessage({ campaignId: String(state.campaignId), userId: String(state.userId), version: state.version, number: state.number });
+export const announce = () => channel?.postMessage({ campaignId: String(state.campaignId), userId: String(state.userId), version: state.version, number: state.number });
 channel?.addEventListener('message', async (e) => {
   const { campaignId, userId, version, number } = e.data ?? {};
   // Newer: a later save, or another character made active there.
@@ -137,7 +132,7 @@ export function setSheetSettings(settings) {
   if (state.sheet && $('#sheet').childElementCount) render();
 }
 
-function useSheet(sheet, version, number = state.number) {
+export function useSheet(sheet, version, number = state.number) {
   // Another character (or campaign): the Background box's Undo was for the last one.
   if ((number ?? 1) !== state.number || !state.sheet) forgetApplied();
   state.sheet = normalizeSheet(sheet);
@@ -148,14 +143,14 @@ function useSheet(sheet, version, number = state.number) {
   status(version ? 'Saved' : 'Not saved yet: fill something in to start');
 }
 
-function status(text, error = false) {
+export function status(text, error = false) {
   const el = $('#sheet-status');
   el.textContent = text;
   el.classList.toggle('error', error);
 }
 
 /** Something changed: update automatic values now, save soon. */
-function changed() {
+export function changed() {
   refresh();
   nameTyped(state.number, state.sheet.name);
   state.dirty = true;
@@ -237,7 +232,7 @@ window.addEventListener('beforeunload', (e) => {
 /** The rules edition the campaign plays by: the DM's setting, else the server's. */
 const editionNow = () => state.settings?.edition || state.edition || '2014';
 
-function refresh() {
+export function refresh() {
   state.calc = computeSheet(state.sheet, { ...state.settings, edition: editionNow() });
   for (const r of state.renders) r();
 }
@@ -251,7 +246,7 @@ const show = (key, kind) => {
  * A box with an automatic value. Typing a value makes it the player's own
  * (kept until ↺ is clicked); clearing the box goes back to automatic.
  */
-function auto(key, { kind = 'int', label, cls = '' } = {}) {
+export function auto(key, { kind = 'int', label, cls = '' } = {}) {
   const input = h('input', { type: 'text', class: 'auto-input', 'aria-label': label, inputMode: kind === 'text' ? 'text' : 'numeric', autocomplete: 'off' });
   const reset = h('button', { type: 'button', class: 'reset', hidden: true }, '↺');
   const wrap = h('span', { class: `auto ${cls}` }, input, reset);
@@ -312,7 +307,7 @@ function autoCheck(key, label) {
 // ---------- plain fields ----------
 
 /** An input bound to a path in the sheet. kind: text | int | number (decimals) | longtext */
-function field(path, { label, kind = 'text', placeholder = '', list, cls = '', nullable = false, rows = 4, onChange } = {}) {
+export function field(path, { label, kind = 'text', placeholder = '', list, cls = '', nullable = false, rows = 4, onChange } = {}) {
   const value = getPath(state.sheet, path);
   const el =
     kind === 'longtext'
@@ -340,14 +335,14 @@ function field(path, { label, kind = 'text', placeholder = '', list, cls = '', n
 }
 
 /** A long text bound to the sheet, shown formatted as Markdown until it's clicked to edit (page/markdown.js). */
-const markdownField = (path, opts) => markdownEditor(field(path, { ...opts, kind: 'longtext' }), { cls: 'sheet-md' }).el;
+export const markdownField = (path, opts) => markdownEditor(field(path, { ...opts, kind: 'longtext' }), { cls: 'sheet-md' }).el;
 
 /**
  * Round tick boxes counting up to a number kept at `path` (death saves, spell
  * slots used): ticking the third sets 3, unticking it sets 2. `count` is a
  * number or a function, so the boxes follow the automatic slot count.
  */
-function pips(path, label, count, max = 20) {
+export function pips(path, label, count, max = 20) {
   const wrap = h('span', { class: 'pips' });
   state.renders.push(() => {
     const n = Math.max(0, Math.min(max, Number(typeof count === 'function' ? count() : count) || 0));
@@ -375,18 +370,18 @@ function pips(path, label, count, max = 20) {
 
 const lbl = (text) => h('span', { class: 'lbl' }, text);
 /** A field with its label underneath, like the printed sheet. */
-const labelled = (text, control, cls = '') => h('label', { class: `fld ${cls}` }, control, lbl(text));
+export const labelled = (text, control, cls = '') => h('label', { class: `fld ${cls}` }, control, lbl(text));
 /** A titled box. */
-const box = (title, cls, ...children) => h('section', { class: `sh-box ${cls}` }, title && h('h3', {}, title), ...children);
+export const box = (title, cls, ...children) => h('section', { class: `sh-box ${cls}` }, title && h('h3', {}, title), ...children);
 /** A value with its label underneath (armour class, hit points, spell save DC...); the label rolls it if get is given. */
-const stat = (control, label, cls = '', get) => h('label', { class: `stat ${cls}` }, control, get ? rollButton(label, get, 'lbl') : lbl(label));
+export const stat = (control, label, cls = '', get) => h('label', { class: `stat ${cls}` }, control, get ? rollButton(label, get, 'lbl') : lbl(label));
 /** A one-line box, lined up with the save and skill lists: a value, then what it is. */
 const line = (control, label, cls = '') => h('label', { class: `sh-line ${cls}` }, h('span'), h('span', { class: 'line-val' }, control), lbl(label));
 const col = (...blocks) => h('div', { class: 'sh-col' }, blocks);
-const row = (name, ...children) => h('div', { class: `sh-row row-${name}` }, children);
+export const row = (name, ...children) => h('div', { class: `sh-row row-${name}` }, children);
 const section = (title, ...content) => h('details', { class: 'sh-section', open: true }, h('summary', {}, title), ...content);
-const removeButton = (title, onclick) => h('button', { type: 'button', class: 'icon-x', title, 'aria-label': title, onclick }, '×');
-const addButton = (text, onclick) => h('button', { type: 'button', class: 'add-row', onclick }, `+ ${text}`);
+export const removeButton = (title, onclick) => h('button', { type: 'button', class: 'icon-x', title, 'aria-label': title, onclick }, '×');
+export const addButton = (text, onclick) => h('button', { type: 'button', class: 'add-row', onclick }, `+ ${text}`);
 
 /**
  * A name you click to roll (a save, skill, ability...). get() gives
@@ -407,7 +402,7 @@ function rollButton(content, get, cls = '') {
  * the sheet (heavy armour, weight) and advantage from class features (Feral Instinct on initiative). A skill
  * the character is proficient in rolls 1d20min10 with Reliable Talent.
  */
-const check = (key, label, why = {}) => () => ({
+export const check = (key, label, why = {}) => () => ({
   notation: why.skill ? checkNotation(state.calc, state.sheet, why.skill, state.calc.values[key]) : d20Plus(state.calc.values[key]),
   label: why.skill && state.calc.reliable && state.sheet.skills?.[why.skill] ? `${label} (Reliable Talent)` : label,
   disadvantage: rollDisadvantage(state.calc, why),
@@ -692,7 +687,7 @@ const vitals = () =>
   );
 
 /** What the gear does to speed and rolls: too heavy, armour without the Strength for it, noisy armour. */
-function loadNote(cls) {
+export function loadNote(cls) {
   const el = h('p', { class: `${cls} small`, role: 'note' });
   const paint = () => {
     const { load, tooHeavy, disadvantage } = state.calc;
@@ -906,7 +901,7 @@ function attacks() {
 }
 
 /** What sheet/attacks.js needs from the sheet. */
-const attackCtx = () => ({ state, changed, render, status });
+export const attackCtx = () => ({ state, changed, render, status });
 
 const ATTACK_ABILITY_NAMES = { '': 'As written', ...ABILITY_NAMES, finesse: 'Finesse (Str or Dex)', spell: 'Spellcasting ability' };
 const ABBR = (a) => (a ? cap(a) : '');
@@ -1054,339 +1049,6 @@ function gearAttackRow(g, { offhand = false } = {}) {
   );
 }
 
-// ---------- the Inventory tab (players): items carried, looked up by name, equipped ----------
-
-const firstClassKey = () => classKey(state.sheet.classes.find((c) => c.name.trim())?.name);
-/** How many items this character can be attuned to (3; artificers more). */
-const attuneLimit = () => attunementLimit(state.sheet.classes.filter((c) => classKey(c.name) === 'artificer').reduce((n, c) => n + (Number(c.level) || 0), 0));
-const lb = (n) => `${Math.round(n * 100) / 100} lb`;
-
-/** The inventory changed: clean it (one armour, one shield), update the sheet and save soon. */
-function gearChanged(latest = null) {
-  const before = new Map(state.sheet.inventory.map((g) => [g.id, g.equipped]));
-  state.sheet.inventory = normalizeInventory(state.sheet.inventory, { latest, attuneMax: attuneLimit() });
-  const off = state.sheet.inventory.filter((g) => before.get(g.id) && !g.equipped).map((g) => g.name);
-  changed();
-  for (const d of state.gearDraws) d();
-  if (off.length) gearStatus(`Took off ${off.join(' and ')}: you can wear one armour and one shield.`);
-}
-
-function gearStatus(text, error = false) {
-  note($('#gear-status'), text, error);
-}
-
-/** A new line in the inventory, with Proficient ticked if the character's class is (they can change it). */
-function addGear(item) {
-  const g = normalizeGear(item);
-  g.proficient = classProficient(firstClassKey(), g) ?? true;
-  state.sheet.inventory.push(g);
-  gearChanged();
-  return g;
-}
-
-let previewing = 0;
-const closePreview = () => {
-  previewing += 1;
-  const box = $('#gear-preview');
-  if (box) { box.hidden = true; box.replaceChildren(); }
-};
-
-/** Look an item up and show its card under the add form, with Add and Cancel: nothing goes in the inventory until Add. */
-async function previewGear(name) {
-  if (!name || !state.sheet) return;
-  const box = $('#gear-preview');
-  const ask = ++previewing;
-  gearStatus(`Looking up ${name}…`);
-  try {
-    const res = await state.guarded(() => api('GET', `${base()}/gear/lookup?name=${encodeURIComponent(name)}`));
-    if (!res || ask !== previewing) return;
-    const item = normalizeGear(res.item);
-    const have = state.sheet.inventory.filter((g) => g.name.toLowerCase() === item.name.toLowerCase()).reduce((n, g) => n + g.qty, 0);
-    const from = res.from === 'ai' ? "From the AI's memory: check it against the book." : res.from === 'book' ? `From ${item.source}.` : res.from === 'srd' ? "From the Player's Handbook tables." : '';
-    const add = h('button', { type: 'button', class: 'primary', onclick: () => {
-      closePreview();
-      const g = addGear(res.item);
-      $('#gear-name').value = '';
-      gearStatus(`Added ${g.name}${res.from === 'ai' ? " (from the AI's memory: check it)" : res.from === 'book' ? ` (${g.source})` : ''}.`);
-    } }, `Add ${item.name}`);
-    const cancel = h('button', { type: 'button', class: 'ghost', onclick: () => { closePreview(); gearStatus(''); } }, 'Cancel');
-    box.replaceChildren(gearCard(item, { actions: [cancel, add], note: [from, have ? `You have ${have} already.` : ''].filter(Boolean).join(' ') }));
-    box.hidden = false;
-    gearStatus('');
-    add.focus({ preventScroll: true });
-  } catch (err) {
-    if (ask !== previewing) return;
-    gearStatus(err.status === 404 ? `${err.message}` : `Couldn't look up ${name}: ${err.message}`, true);
-  }
-}
-
-function inventoryTab() {
-  const list = $('#inventory');
-  if (!list) return;
-  const draw = () => {
-    const gear = state.sheet.inventory;
-    // Sorted by kind (weapons, armour, magic items, potions...), each under its heading; the saved order stays.
-    list.replaceChildren(gear.length
-      ? h('div', { class: 'gear-list' }, inventoryGroups(gear).map((grp) => h('section', { class: 'gear-group', 'data-kind': grp.kind },
-        h('h4', {}, grp.label, h('span', { class: 'muted small' }, ` · ${grp.items.reduce((n, g) => n + g.qty, 0)}`)),
-        grp.items.map(gearRow))))
-      : h('p', { class: 'muted' }, 'Nothing here yet. Add what your character carries above: weapons and armour fill in their numbers, and anything bought from a merchant shows up here. Equip weapons to attack with them from your sheet; equip armour and a shield to set your AC.'));
-  };
-  draw();
-  state.gearDraws.push(draw);
-  state.renders.push(() => list.querySelectorAll('.gear-sum').forEach((el) => el.__paint?.()));
-  // Above the list: weight carried against the campaign's limit, and attunement.
-  const summary = h('p', { class: 'gear-summary small' });
-  const paint = () => {
-    const carried = carriedWeight(state.sheet.inventory, state.sheet.coins);
-    const load = state.calc.load;
-    const rule = state.settings.weight;
-    const weight = !load
-      ? `Carrying ${lb(carried)} (${WEIGHT_RULES.ignore.toLowerCase()}: this campaign has none).`
-      : rule === 'variant'
-        ? `Carrying ${lb(carried)}: encumbered over ${load.encumbered} lb, heavily over ${load.heavy} lb, at most ${load.capacity} lb.`
-        : `Carrying ${lb(carried)} of ${load.capacity} lb.`;
-    const attuned = state.sheet.inventory.filter((g) => g.attuned).length;
-    summary.replaceChildren(h('span', {}, weight), ' ', h('span', {}, `Attuned to ${attuned} of ${attuneLimit()}.`), ' ', h('span', { class: 'muted' }, 'Coins weigh 1 lb per 50.'));
-  };
-  paint();
-  state.renders.push(paint);
-  const note = loadNote('gear-warn');
-  const old = $('#tab-inventory .gear-top');
-  const top = h('div', { class: 'gear-top' }, summary, note);
-  if (old) old.replaceWith(top);
-  else list.before(top);
-}
-
-/** Ask for the pictures of the DM's items in the inventory that haven't been asked for; redraw when there are new ones. */
-function loadItemPictures() {
-  if (state.itemPicturesLoading) return;
-  const cid = state.campaignId;
-  const ids = state.sheet.inventory.map((g) => g.item_id).filter((id) => id && !state.itemPictures.has(id));
-  if (!ids.length) return;
-  state.itemPicturesLoading = state.guarded(() => api('GET', `${base()}/gear/pictures`))
-    .then((res) => {
-      if (!res || state.campaignId !== cid) return;
-      for (const id of ids) state.itemPictures.set(id, res.pictures[id] ?? null);
-      for (const [id, key] of Object.entries(res.pictures)) state.itemPictures.set(id, key);
-      if (ids.some((id) => state.itemPictures.get(id))) for (const d of state.gearDraws) d();
-    })
-    .catch(() => { for (const id of ids) state.itemPictures.set(id, null); })
-    .finally(() => { if (state.campaignId === cid) state.itemPicturesLoading = null; });
-}
-
-/** The picture of one of the DM's items (the merchant's), or nothing. */
-function gearPicture(g) {
-  if (!g.item_id) return null;
-  if (!state.itemPictures.has(g.item_id)) {
-    loadItemPictures();
-    return null;
-  }
-  const key = state.itemPictures.get(g.item_id);
-  if (!key) return null;
-  const img = h('img', { class: 'gear-picture', alt: '' });
-  const cache = `item:${g.item_id}:${key}`;
-  if (state.pictureUrls.has(cache)) img.src = state.pictureUrls.get(cache);
-  else {
-    fileUrl(`${base()}/gear/items/${g.item_id}/picture?v=${encodeURIComponent(key)}`).then((u) => {
-      state.pictureUrls.set(cache, u);
-      img.src = u;
-    }).catch(() => img.remove());
-  }
-  return img;
-}
-
-function gearRow(g) {
-  const at = () => state.sheet.inventory.indexOf(g);
-  const p = () => `inventory.${at()}`;
-  const tick = (label, checked, onchange, title = '') => h('label', { class: 'check', title }, h('input', { type: 'checkbox', checked, 'aria-label': `${label}: ${g.name}`, onchange: (e) => onchange(e.target.checked, e.target) }), label);
-  const wearable = !!(g.weapon || g.armor || g.attunement || g.kind === 'magic' || g.kind === 'other' || g.kind === 'gear');
-  // Weapons: as many equipped as you have (two daggers); armour and the rest: on or off.
-  const equip = !wearable ? null : g.weapon && g.qty > 1
-    ? labelled('Equipped', (() => {
-      const el = h('input', { type: 'number', min: '0', max: String(g.qty), value: String(g.equipped), class: 'num', 'aria-label': `How many equipped: ${g.name}` });
-      el.addEventListener('change', () => { g.equipped = Math.max(0, Math.min(g.qty, parseInt(el.value, 10) || 0)); gearChanged(g.id); });
-      return el;
-    })(), 'inline')
-    : tick('Equipped', !!g.equipped, (on) => { g.equipped = on ? 1 : 0; gearChanged(g.id); });
-  const sum = h('span', { class: 'muted small gear-sum' });
-  sum.__paint = () => {
-    if (g.weapon && state.calc) {
-      const r = gearRolls(g, state.calc);
-      sum.textContent = `${formatBonus(r.bonus)} to hit · ${r.damage ?? r.flat ?? '–'}${r.type ? ` ${r.type}` : ''}${r.damage2 ? ` (${r.damage2} with both hands)` : ''}`;
-    } else if (g.armor) {
-      sum.textContent = g.armor.type === 'shield' ? `+${g.armor.base + g.magic} AC` : `AC ${g.armor.base + g.magic}${g.armor.type === 'light' ? ' + Dex' : g.armor.type === 'medium' ? ' + Dex (max 2)' : ''}${g.armor.strength ? ` · Str ${g.armor.strength}` : ''}${g.armor.stealth ? ' · Stealth disadvantage' : ''}`;
-    } else sum.textContent = '';
-    const effects = g.effects.map(effectText).join(', ');
-    if (effects) sum.textContent += `${sum.textContent ? ' · ' : ''}${effects}${g.attunement && !g.attuned ? ' (when attuned)' : !g.equipped ? ' (when equipped)' : ''}`;
-    if (g.weight != null) sum.textContent += `${sum.textContent ? ' · ' : ''}${lb(g.weight * g.qty)}`;
-  };
-  sum.__paint();
-  const details = h('details', { class: 'gear-details' }, h('summary', {}, 'Details'));
-  details.addEventListener('toggle', () => {
-    if (!details.open || details.childElementCount > 1) return;
-    const select = (label, value, options, set) => {
-      const el = h('select', { 'aria-label': `${label}: ${g.name}` }, Object.entries(options).map(([v, n]) => new Option(n, v)));
-      el.value = value;
-      // Saving redraws the list: keep these details open.
-      el.addEventListener('change', () => { set(el.value); gearChanged(); reopen(g); });
-      return el;
-    };
-    details.append(h('div', { class: 'spell-fields' },
-      labelled('Name', field(`${p()}.name`, { label: 'Item name', onChange: () => (row.querySelector('.gear-title').textContent = g.name) })),
-      labelled('Kind', select('Kind', g.kind, GEAR_KINDS, (v) => {
-        Object.assign(g, kindFields(v, g));
-      })),
-      g.weapon ? labelled('Damage', field(`${p()}.weapon.damage`, { label: 'Weapon damage', placeholder: 'e.g. 1d8 slashing', onChange: () => { sum.__paint(); for (const d of state.attackDraws) d(); } })) : null,
-      g.weapon ? labelled('Uses', select('Ability', g.weapon.ability, { str: 'Strength', dex: 'Dexterity', finesse: 'Finesse (Str or Dex)' }, (v) => (g.weapon.ability = v))) : null,
-      g.armor ? labelled('Type', select('Armour type', g.armor.type, { light: 'Light (+ Dex)', medium: 'Medium (+ Dex, max 2)', heavy: 'Heavy', shield: 'Shield' }, (v) => (g.armor.type = v))) : null,
-      g.armor ? labelled(g.armor.type === 'shield' ? 'AC bonus' : 'Base AC', field(`${p()}.armor.base`, { label: 'Armour class', kind: 'int', onChange: () => sum.__paint() })) : null,
-      g.kind === 'potion' || g.heal ? labelled('Heals', field(`${p()}.heal`, { label: 'What it heals', placeholder: 'e.g. 2d4+2', onChange: () => gearChanged() })) : null,
-      g.weapon || g.armor ? labelled('Magic bonus', field(`${p()}.magic`, { label: 'Magic bonus', kind: 'int', onChange: () => { sum.__paint(); for (const d of state.attackDraws) d(); } })) : null,
-      labelled('Weight (lb, each)', field(`${p()}.weight`, { label: 'Weight in pounds', kind: 'number', nullable: true, onChange: () => { sum.__paint(); refresh(); } })),
-      labelled('Charges', (() => {
-        const el = h('input', { type: 'number', min: '0', max: '999', class: 'num', value: g.charges ? String(g.charges.max) : '', 'aria-label': `Charges: ${g.name}`, placeholder: 'none' });
-        el.addEventListener('change', () => {
-          const max = parseInt(el.value, 10);
-          g.charges = max > 0 ? { max, used: Math.min(g.charges?.used ?? 0, max), recharge: g.charges?.recharge ?? '', when: g.charges?.when ?? 'dawn' } : null;
-          gearChanged();
-        });
-        return el;
-      })()),
-      g.charges ? labelled('They come back', field(`${p()}.charges.recharge`, { label: 'Charges regained', placeholder: '1d6+1, 3 or all', onChange: () => gearChanged() })) : null,
-      h('div', { class: 'flags' }, tick('Needs attunement', g.attunement, (on) => { g.attunement = on; gearChanged(); })),
-    ),
-    effectsEditor(g),
-    g.actions?.length ? h('div', { class: 'gear-actions-list' },
-      h('span', { class: 'lbl' }, 'What it can do (Use it under Item actions)'),
-      h('ul', {}, g.actions.map((a) => h('li', {}, h('strong', {}, a.name), ` ${actionSummary(a)}`, a.source === 'ai' ? h('span', { class: 'tag ai-tag' }, 'AI: check it') : null)))) : '',
-    labelled('Description', markdownField(`${p()}.text`, { label: 'Item description', rows: 5 }), 'wide'),
-    g.source ? h('p', { class: 'muted small' }, `Source: ${g.source}`) : '');
-  });
-  const qty = field(`${p()}.qty`, { label: `How many: ${g.name}`, kind: 'int', cls: 'num' });
-  qty.addEventListener('change', () => gearChanged()); // more than one weapon: choose how many are equipped
-  const row = h('div', { class: `gear-row${g.equipped ? ' equipped' : ''}`, 'data-id': g.id },
-    h('div', { class: 'gear-head' },
-      gearPicture(g),
-      h('strong', { class: 'gear-title' }, g.name),
-      h('span', { class: 'tag' }, g.armor?.type === 'shield' ? 'Shield' : GEAR_KINDS[g.kind] ?? 'Other'),
-      g.rarity ? h('span', { class: 'tag rarity' }, cap(g.rarity)) : null,
-      labelled('Qty', qty, 'inline'),
-      equip,
-      g.weapon || g.armor ? tick('Proficient', g.proficient, (on) => { g.proficient = on; gearChanged(); }, 'Are you proficient with it? Ticked for you when your class is; change it if not.') : null,
-      g.attunement ? tick('Attuned', g.attuned, (on, box) => {
-        if (on && state.sheet.inventory.filter((x) => x.attuned).length >= attuneLimit()) {
-          box.checked = false;
-          return gearStatus(`You can be attuned to ${attuneLimit()} items at most. Stop being attuned to one first.`, true);
-        }
-        g.attuned = on;
-        gearChanged(g.id);
-      }, 'Needs attunement: its magic only works while you are attuned (at most three items, more for an artificer).') : null,
-      g.charges ? chargesControl(g) : null,
-      g.heal ? h('button', { type: 'button', class: 'ghost small', 'aria-label': `Drink ${g.name}`, title: `Heals ${g.heal}: the server rolls it and adds the hit points; one ${g.name} is used up`, onclick: () => drink(g) }, 'Drink') : null,
-      sum,
-      g.weapon ? inventoryMastery(attackCtx(), g) : null,
-      removeButton(`Remove ${g.name}`, () => {
-        if (!confirm(`Remove ${g.name} from your inventory?`)) return;
-        state.sheet.inventory.splice(at(), 1);
-        gearChanged();
-      }),
-    ),
-    details,
-  );
-  return row;
-}
-
-/** What a line needs when it becomes a kind: a weapon's numbers, armour's, a potion's healing (the rest go). */
-function kindFields(kind, g = {}) {
-  return {
-    kind,
-    weapon: kind === 'weapon' ? g.weapon ?? { damage: '', ability: 'str', category: 'simple', properties: [] } : null,
-    armor: kind === 'armor' ? g.armor ?? { base: 11, type: 'light', strength: 0, stealth: false } : null,
-    magic: kind === 'weapon' || kind === 'armor' ? g.magic ?? 0 : 0,
-    heal: kind === 'potion' ? g.heal ?? '' : '',
-  };
-}
-
-/** Open a line's details (after it's redrawn), so the fields for its kind are there to fill in. */
-function reopen(g) {
-  const details = $(`#inventory .gear-row[data-id="${String(g.id).replace(/["\\]/g, '\\$&')}"] details`);
-  if (details) details.open = true;
-}
-
-/** Drink a potion: the server rolls what it heals (the dice show it), adds the hit points and takes one away. */
-async function drink(g) {
-  await flush();
-  await roll('', {
-    label: `${g.name}: healing`,
-    path: `${base()}/sheet/gear/drink`,
-    body: { id: g.id },
-    onServer: (res) => {
-      useSheet(res.sheet, res.version, res.number);
-      announce();
-      gearStatus(`Drank ${g.name}: ${res.healed ? `regained ${res.healed} hit point${res.healed === 1 ? '' : 's'}` : 'no hit points regained'}.`);
-    },
-  });
-}
-
-/** What a magic item does to the sheet while equipped (and attuned): read from its description, changeable here. */
-function effectsEditor(g) {
-  const list = h('div', { class: 'effects' });
-  const draw = () => {
-    setChildren(list,
-      h('span', { class: 'lbl' }, 'What it does to your sheet (while equipped, and attuned if it needs it)'),
-      ...g.effects.map((e, i) => {
-        const target = h('select', { 'aria-label': `Effect ${i + 1}: ${g.name}` }, Object.entries(EFFECT_TARGETS).map(([v, n]) => new Option(n, v)));
-        target.value = e.target;
-        target.addEventListener('change', () => { e.target = target.value; gearChanged(); draw(); });
-        const value = h('input', { type: 'number', class: 'num', value: String(e.value), 'aria-label': `Effect ${i + 1} amount: ${g.name}` });
-        value.addEventListener('change', () => {
-          e.value = parseInt(value.value, 10) || 0;
-          if (!e.value) g.effects.splice(i, 1);
-          gearChanged();
-          draw();
-        });
-        return h('div', { class: 'effect' }, target, value, removeButton(`Remove this effect of ${g.name}`, () => { g.effects.splice(i, 1); gearChanged(); draw(); }));
-      }),
-      g.effects.length < MAX_EFFECTS ? addButton('Add an effect', () => { g.effects.push({ target: 'ac', value: 1 }); gearChanged(); draw(); }) : null,
-    );
-  };
-  draw();
-  return list;
-}
-
-/** Charges left, with Use and Recharge (rolled when it's dice, like a wand's 1d6+1). */
-function chargesControl(g) {
-  const left = () => g.charges.max - g.charges.used;
-  const text = h('span', { class: 'charges-left' });
-  const paint = () => (text.textContent = `${left()} of ${g.charges.max} charges`);
-  paint();
-  const use = h('button', { type: 'button', class: 'ghost small', 'aria-label': `Use a charge: ${g.name}`, onclick: () => {
-    if (!left()) return gearStatus(`${g.name} has no charges left.`, true);
-    g.charges.used += 1;
-    gearChanged();
-  } }, 'Use 1');
-  const back = h('button', { type: 'button', class: 'ghost small', 'aria-label': `Recharge: ${g.name}`, title: g.charges.recharge ? `Regains ${g.charges.recharge}${g.charges.when ? ` at ${g.charges.when}` : ''}` : 'All charges back', onclick: async () => {
-    const r = g.charges.recharge;
-    if (!r || r === 'all') {
-      g.charges.used = 0;
-      gearChanged();
-      return gearStatus(`${g.name}: all ${g.charges.max} charges back.`);
-    }
-    if (/^\d+$/.test(r)) {
-      g.charges.used = Math.max(0, g.charges.used - Number(r));
-      gearChanged();
-      return gearStatus(`${g.name}: ${r} charges back.`);
-    }
-    await roll(r, { label: `${g.name}: charges regained`, onServer: (res) => {
-      g.charges.used = Math.max(0, g.charges.used - (Number(res.total) || 0));
-      gearChanged();
-      gearStatus(`${g.name}: ${res.total} charges back.`);
-    } });
-  } }, 'Recharge');
-  return h('span', { class: 'charges' }, text, use, back);
-}
-
 // Everything else.
 
 const COIN_NAMES = { cp: 'Copper', sp: 'Silver', ep: 'Electrum', gp: 'Gold', pp: 'Platinum' };
@@ -1397,7 +1059,7 @@ const equipment = () =>
   );
 
 /** A box that's just a titled text area. */
-const text = (key, title, rows, cls = '') => box(title, cls, field(key, { label: title, kind: 'longtext', rows }));
+export const text = (key, title, rows, cls = '') => box(title, cls, field(key, { label: title, kind: 'longtext', rows }));
 
 const TRAITS = { personality: 'Personality traits', ideals: 'Ideals', bonds: 'Bonds', flaws: 'Flaws' };
 const traits = () => h('div', { class: 'traits' }, Object.entries(TRAITS).map(([k, title]) => text(k, title, 3)));
@@ -1405,7 +1067,7 @@ const traits = () => h('div', { class: 'traits' }, Object.entries(TRAITS).map(([
 const features = () => box('Features & traits', '', traitsList({ state, changed, render }), markdownField('features', { label: 'Features & traits', rows: 12 }));
 const proficiencies = () => text('proficiencies_languages', 'Other proficiencies & languages', 5);
 
-function details() {
+export function details() {
   return h('div', { class: 'sh-details' },
     h('section', { class: 'sh-box looks' }, ['age', 'height', 'weight', 'eyes', 'skin', 'hair'].map((k) => labelled(cap(k), field(k, { label: cap(k) })))),
     h('div', { class: 'details-grid' },
@@ -1719,400 +1381,6 @@ function render() {
   );
   inventoryTab();
   refresh();
-}
-
-// ---------- spells ----------
-
-const ORDINALS = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];
-
-function spells() {
-  const classPick = h('select', { 'aria-label': 'Spellcasting class' });
-  const paintClassPick = () => {
-    const names = [...new Set(state.sheet.classes.map((c) => c.name.trim()).filter(Boolean))];
-    const current = state.sheet.spellcasting.class;
-    const first = state.calc.casters[0]?.name;
-    classPick.replaceChildren(
-      new Option(first ? `Automatic (${first})` : 'Automatic', ''),
-      ...names.map((n) => new Option(n, n)),
-      ...(current && !names.includes(current) ? [new Option(current, current)] : []),
-    );
-    classPick.value = current;
-  };
-  classPick.addEventListener('change', () => { state.sheet.spellcasting.class = classPick.value; changed(); });
-  state.renders.push(() => document.activeElement !== classPick && paintClassPick());
-
-  const abilityPick = h('select', { 'aria-label': 'Spellcasting ability' }, new Option('', ''), ABILITIES.map((a) => new Option(ABILITY_NAMES[a], a)));
-  const abilityReset = h('button', { type: 'button', class: 'reset', hidden: true, onclick: () => { delete state.sheet.overrides.spell_ability; changed(); } }, '↺');
-  abilityPick.addEventListener('change', () => { state.sheet.overrides.spell_ability = abilityPick.value; changed(); });
-  const abilityWrap = h('span', { class: 'auto-select' }, abilityPick, abilityReset);
-  state.renders.push(() => {
-    const mine = 'spell_ability' in state.sheet.overrides;
-    abilityPick.value = state.calc.values.spell_ability ?? '';
-    abilityWrap.classList.toggle('mine', mine);
-    abilityReset.hidden = !mine;
-    abilityReset.title = 'You chose this yourself. Click to use the automatic one.';
-  });
-
-  const slotTile = (n) => {
-    const tile = h('div', { class: 'slot' },
-      h('span', { class: 'slot-level' }, ORDINALS[n]),
-      auto(`slots.${n}`, { label: `${LEVEL_NAMES[n]} slots` }),
-      pips(`spellcasting.slots_used.${n}`, `${LEVEL_NAMES[n]} slot used`, () => state.calc.values[`slots.${n}`]),
-    );
-    state.renders.push(() => tile.classList.toggle('none', !state.calc.values[`slots.${n}`]));
-    return tile;
-  };
-  const pact = h('div', { class: 'slot pact' },
-    h('span', { class: 'slot-level' }, 'Pact magic'),
-    h('div', { class: 'pact-nums' }, stat(auto('pact_slots', { label: 'Pact Magic slots' }), 'Slots'), stat(auto('pact_level', { label: 'Pact slot level' }), 'Slot level')),
-    pips('spellcasting.pact_used', 'Pact slot used', () => state.calc.values.pact_slots, 10),
-  );
-  state.renders.push(() => (pact.hidden = !state.calc.values.pact_slots && !('pact_slots' in state.sheet.overrides)));
-
-  // Levels with no slots are hidden until asked for (to type a number in one the rules don't give).
-  const slots = h('div', { class: 'slots' }, [1, 2, 3, 4, 5, 6, 7, 8, 9].map(slotTile), pact);
-  const slotHelp = h('span', {}, 'Slots per long rest are worked out for you (type a number to change one). Tick a circle when you use a slot. ');
-  const allLevels = h('button', { type: 'button', class: 'link slot-levels', onclick: () => {
-    setOpen('slot-levels', !isOpen('slot-levels'));
-    paintLevels();
-  } });
-  const paintLevels = () => {
-    const all = isOpen('slot-levels');
-    const none = [1, 2, 3, 4, 5, 6, 7, 8, 9].filter((n) => !state.calc.values[`slots.${n}`]).length;
-    slots.classList.toggle('only-used', !all);
-    allLevels.hidden = !none;
-    // A sheet with no slots at all (no spellcasting class yet) needs only the button.
-    slotHelp.hidden = none === 9 && slots.querySelector('.pact').hidden && !all;
-    allLevels.textContent = all ? 'Hide levels with no slots' : `Show all levels (${none} with no slots)`;
-  };
-  state.renders.push(paintLevels);
-
-  const list = h('div', { class: 'spell-list' });
-  const drawList = () => list.replaceChildren(...spellGroups(drawList));
-  drawList();
-
-  return h('div', { class: 'sh-spells' },
-    h('div', { class: 'spell-head' },
-      stat(classPick, 'Spellcasting class', 'pick'),
-      stat(abilityWrap, 'Spellcasting ability', 'pick'),
-      stat(auto('spell_dc', { label: 'Spell save DC' }), 'Spell save DC', 'big'),
-      stat(auto('spell_attack', { kind: 'bonus', label: 'Spell attack bonus' }), 'Spell attack bonus', 'big', check('spell_attack', 'Spell attack')),
-    ),
-    slots,
-    h('p', { class: 'muted small slot-help' }, slotHelp, allLevels),
-    addSpell(drawList, list),
-    list,
-  );
-}
-
-function addSpell(drawList, list) {
-  const input = h('input', { type: 'text', placeholder: 'Spell name, e.g. Shield', list: 'dl-spells', autocomplete: 'off', 'aria-label': 'Spell to add' });
-  const suggestions = h('datalist', { id: 'dl-spells' });
-  const note = h('span', { class: 'muted small' });
-  let timer;
-  input.addEventListener('input', () => {
-    clearTimeout(timer);
-    timer = setTimeout(async () => {
-      const q = input.value.trim();
-      if (q.length < 2) return;
-      const names = await state.guarded(() => api('GET', `${base()}/spells?q=${encodeURIComponent(q)}`)).catch(() => []);
-      suggestions.replaceChildren(...(names ?? []).map((s) => h('option', { value: s.name }, s.source === 'book' ? `${s.name} (${s.book})` : s.name)));
-    }, 200);
-  });
-  const add = async (e) => {
-    e.preventDefault();
-    const name = input.value.trim();
-    if (!name) return;
-    const spell = normalizeSpell({ name, source: 'manual' });
-    state.sheet.spells.push(spell);
-    input.value = '';
-    changed();
-    drawList();
-    note.textContent = `Looking up ${name}…`;
-    note.textContent = (await lookupInto(spell)) ? '' : `Couldn't find details for ${name}. Type them in below.`;
-    drawList();
-  };
-  // A spell of the player's own (homebrew, or one the books and the AI don't know): never looked up, opened to fill in.
-  const custom = () => {
-    const name = input.value.trim();
-    if (!name) {
-      note.textContent = 'Type the name of your spell first, then press Make my own.';
-      return input.focus();
-    }
-    const spell = normalizeSpell({ name, source: 'custom', attack: '' });
-    state.sheet.spells.push(spell);
-    input.value = '';
-    note.textContent = `Added ${name}: fill in its level, details and how it rolls below.`;
-    changed();
-    drawList();
-    const card = [...list.querySelectorAll('details.spell')].find((c) => c.__spell === spell);
-    if (card) {
-      card.open = true;
-      card.dispatchEvent(new Event('toggle'));
-      card.querySelector('[aria-label="Spell level"]')?.focus();
-    }
-  };
-  // Custom spells are never looked up, so they're never "missing details".
-  const unfilled = () => state.sheet.spells.filter((s) => !s.description.trim() && s.source !== 'custom');
-  const fill = h('button', { type: 'button', class: 'ghost fill-missing', onclick: async () => {
-    const todo = unfilled();
-    for (const [i, s] of todo.entries()) {
-      note.textContent = `Looking up ${s.name} (${i + 1} of ${todo.length})…`;
-      await lookupInto(s);
-      drawList();
-    }
-    note.textContent = unfilled().length ? `Couldn't find: ${unfilled().map((s) => s.name).join(', ')}.` : 'Done.';
-  } }, 'Fill in missing details');
-  state.renders.push(() => {
-    const n = unfilled().length;
-    fill.hidden = !n;
-    fill.textContent = `Fill in missing details (${n})`;
-  });
-  const form = h('form', { class: 'add-spell', onsubmit: add }, suggestions, input,
-    h('button', { type: 'submit', class: 'primary', title: 'Add it with its details from the SRD, your books or the AI' }, 'Add spell'),
-    h('button', { type: 'button', class: 'ghost', title: 'Your own spell (homebrew, or one nobody knows): typed in by you, never looked up', onclick: custom }, 'Make my own'));
-  // Adding a spell opens when asked (open to start with on a sheet with none); filling in and messages stay in view.
-  return h('div', { class: 'add-spell-wrap' },
-    fold('spell-add', '+ Add a spell', form, { open: !state.sheet.spells.length, cls: 'spell-fold' }),
-    h('div', { class: 'add-spell-foot' }, fill, note));
-}
-
-/**
- * Fill a spell's details from the server (SRD, the group's books, or the AI).
- * Only called when the player asks (adding a spell, "Look up", "Fill in"),
- * so typed details are never replaced without them knowing.
- */
-async function lookupInto(spell) {
-  try {
-    const found = await state.guarded(() => api('GET', `${base()}/spells/lookup?name=${encodeURIComponent(spell.name)}`));
-    if (!found) return false;
-    for (const k of SPELL_DETAILS) spell[k] = found[k];
-    changed();
-    return true;
-  } catch (err) {
-    if (err.status !== 404) alert(`Couldn't look up ${spell.name}: ${err.message}`);
-    return false;
-  }
-}
-
-function spellGroups(drawList) {
-  const spells = state.sheet.spells;
-  if (!spells.length) return [h('p', { class: 'muted' }, 'No spells yet. Add one above: its details are filled in from the SRD, your books, or the AI, and you can change anything. For a spell of your own, type its name and press Make my own.')];
-  const groups = new Map();
-  for (const s of [...spells].sort((a, b) => (a.level ?? 99) - (b.level ?? 99) || a.name.localeCompare(b.name))) {
-    const key = s.level ?? 'unknown';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(s);
-  }
-  return [...groups].map(([level, list]) =>
-    h('section', { class: 'spell-group' },
-      h('h4', {}, level === 'unknown' ? 'Level not set' : LEVEL_NAMES[level], level !== 0 && level !== 'unknown' ? h('span', { class: 'muted small' }, ` · ${list.filter((s) => s.prepared).length} prepared`) : null),
-      list.map((s) => spellCard(s, drawList)),
-    ),
-  );
-}
-
-function spellCard(spell, drawList) {
-  const path = () => `spells.${state.sheet.spells.indexOf(spell)}`;
-  const meta = [spell.casting_time, spell.range, spell.duration].filter(Boolean).join(' · ');
-  const tags = [spell.concentration && 'C', spell.ritual && 'R'].filter(Boolean);
-  const prepared = h('input', { type: 'checkbox', checked: spell.prepared, title: 'Prepared', 'aria-label': `${spell.name} prepared`, onclick: (e) => e.stopPropagation() });
-  prepared.addEventListener('change', () => { spell.prepared = prepared.checked; changed(); });
-  const body = h('div', { class: 'spell-body' });
-  const card = h('details', { class: 'spell' },
-    h('summary', {},
-      spell.level ? prepared : h('span', { class: 'prep-space' }),
-      h('strong', {}, spell.name),
-      tags.length ? h('span', { class: 'tags' }, tags.map((t) => h('span', { class: 'tag', title: t === 'C' ? 'Concentration' : 'Ritual' }, t))) : null,
-      h('span', { class: 'muted small spell-meta' }, meta),
-      spellRollButtons(spell),
-      h('span', { class: `source source-${spell.source}`, title: spell.source_note }, SOURCE_LABELS[spell.source] ?? ''),
-    ),
-    body,
-  );
-  card.__spell = spell;
-  // Fields are built when opened, so a long list stays light.
-  card.addEventListener('toggle', () => {
-    if (!card.open || body.childElementCount) return;
-    const p = path();
-    const levelPick = h('select', { 'aria-label': 'Spell level' }, new Option('Not set', ''), LEVEL_NAMES.map((n, i) => new Option(i === 0 ? 'Cantrip' : n, i)));
-    levelPick.value = spell.level ?? '';
-    levelPick.addEventListener('change', () => { spell.level = levelPick.value === '' ? null : Number(levelPick.value); changed(); drawList(); });
-    const flag = (k, label) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: spell[k], onchange: (e) => { spell[k] = e.target.checked; changed(); } }), label);
-    body.append(
-      h('div', { class: 'spell-fields' },
-        labelled('Name', field(`${p}.name`, { label: 'Spell name' })),
-        labelled('Level', levelPick),
-        labelled('School', field(`${p}.school`, { label: 'School', list: 'dl-schools' })),
-        labelled('Casting time', field(`${p}.casting_time`, { label: 'Casting time' })),
-        labelled('Range', field(`${p}.range`, { label: 'Range' })),
-        labelled('Components', field(`${p}.components`, { label: 'Components' })),
-        labelled('Duration', field(`${p}.duration`, { label: 'Duration' })),
-        labelled('Material', field(`${p}.material`, { label: 'Material component' }), 'wide'),
-        h('div', { class: 'flags' }, flag('concentration', 'Concentration'), flag('ritual', 'Ritual')),
-      ),
-      labelled('Description', markdownField(`${p}.description`, { label: 'Description', rows: 8 }), 'wide'),
-      labelled('At higher levels', markdownField(`${p}.higher_levels`, { label: 'At higher levels', rows: 2 }), 'wide'),
-      spellRollFields(spell, p),
-      h('p', { class: 'muted small' }, spell.source_note ? `Source: ${spell.source_note}` : ''),
-      h('div', { class: 'spell-actions' },
-        h('button', { type: 'button', class: 'ghost', onclick: async (e) => {
-          if (spell.description.trim() && !confirm(`Replace the details of ${spell.name} with the looked-up ones? What's written now will be lost.`)) return;
-          e.target.disabled = true;
-          e.target.textContent = 'Looking up…';
-          if (!(await lookupInto(spell))) alert(`Couldn't find details for "${spell.name}".`);
-          drawList();
-        } }, 'Look up details'),
-        h('button', { type: 'button', class: 'ghost danger', onclick: () => {
-          if (!confirm(`Remove ${spell.name} from your sheet?`)) return;
-          state.sheet.spells.splice(state.sheet.spells.indexOf(spell), 1);
-          changed();
-          drawList();
-        } }, 'Remove spell'),
-      ),
-    );
-    // Typing in these fields only changes the sheet; the summary refreshes when the list is redrawn.
-    body.addEventListener('focusout', () => setTimeout(() => !card.contains(document.activeElement) && refreshSummary(card, spell)));
-  });
-  return card;
-}
-
-/**
- * A spell's buttons in its row: to hit (a spell attack, then its damage
- * offered), damage (or healing), and Cast for a spell with nothing to roll
- * (Entangle). A spell of 1st level or higher has a slot list (with how many
- * are left) and casting it spends that slot through the server: the to-hit
- * roll for an attack, the damage roll for anything else, or Cast. With no
- * slot left the player can still roll (a scroll, an item, a free casting).
- */
-function spellRollButtons(spell) {
-  const wrap = h('span', { class: 'spell-rolls' });
-  const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
-  let slot = null;
-  const paintSlots = () => {
-    if (!slot) return;
-    const { levels, first } = castLevels(state.sheet, state.calc, spell.level);
-    const keep = slot.value ? Number(slot.value) : null;
-    slot.replaceChildren(...levels.map((l) => new Option(`${ORDINALS[l.level]} (${l.left} left${l.pact ? ', pact' : ''})`, l.level)));
-    // The level the player picked stays picked (with none left, casting asks); at first, the lowest with one left.
-    slot.value = String(keep && levels.some((l) => l.level === keep) ? keep : first);
-  };
-  state.renders.push(paintSlots);
-  const draw = () => {
-    wrap.replaceChildren();
-    const leveled = spell.level >= 1;
-    if (!spell.attack && !spell.damage.trim() && !leveled) return;
-    slot = leveled ? h('select', { 'aria-label': `${spell.name} slot level`, title: 'Cast with a slot of this level', onclick: (e) => e.stopPropagation() }) : null;
-    const rolls = () => spellPlan(state, spell, slot ? Number(slot.value) : spell.level, `spell:${spell.id}`);
-    const at = () => (slot && Number(slot.value) > spell.level ? ` at ${ORDINALS[slot.value]} level` : '');
-    const cast = () => castSpell(spell, slot ? Number(slot.value) : null);
-    const heal = /heal/i.test(spell.damage);
-    if (slot) {
-      wrap.append(slot);
-      paintSlots();
-    }
-    if (spell.attack === 'attack') {
-      const hit = h('button', { type: 'button', class: 'icon-roll', title: `Spell attack${leveled ? ': spends the slot' : ''} (Shift: advantage, Alt: disadvantage)`, 'aria-label': `Roll ${spell.name} to hit` });
-      hit.innerHTML = D20_ICON;
-      hit.addEventListener('click', async (e) => {
-        stop(e);
-        const mode = rollModeFromEvent(e);
-        const r = rolls();
-        if (!(await cast())) return;
-        roll(r.hit, { label: `${spell.name}: to hit${at()}`, mode, then: r.damage && { label: `${spell.name}: damage${at()}${withExtras(r)}`, notation: r.damage, crit: r.crit, notes: r.notes } });
-      });
-      wrap.append(hit);
-    } else if (spell.attack === 'save') {
-      const r = rolls();
-      wrap.append(h('span', { class: 'muted small spell-dc', title: 'Targets make this saving throw' }, `DC ${r.dc ?? '?'}${r.save ? ` ${cap(r.save)}` : ''}`));
-    }
-    if (spell.damage.trim()) {
-      // An attack's damage follows its to-hit roll, which already spent the slot.
-      const casts = spell.attack !== 'attack';
-      wrap.append(h('button', { type: 'button', class: 'icon-roll dmg-roll', title: `${heal ? 'Roll healing' : 'Roll damage'}${casts && leveled ? ': spends the slot' : ''}`, 'aria-label': `Roll ${spell.name} ${heal ? 'healing' : 'damage'}`, onclick: async (e) => {
-        stop(e);
-        const r = rolls();
-        if (!r.damage) return alert(`Type the dice for ${spell.name} first, like 8d6 fire.`);
-        if (casts && !(await cast())) return;
-        const dc = r.kind === 'save' ? ` (DC ${r.dc}${r.save ? ` ${cap(r.save)}` : ''} save)` : '';
-        roll(r.damage, { label: `${spell.name}: ${heal ? 'healing' : 'damage'}${at()}${dc}${withExtras(r)}` });
-      } }, heal ? 'Heal' : 'Dmg'));
-    } else if (leveled && spell.attack !== 'attack') {
-      wrap.append(h('button', { type: 'button', class: 'small cast-spell', title: 'Cast it: spends the slot', 'aria-label': `Cast ${spell.name}`, onclick: async (e) => {
-        stop(e);
-        if (await cast()) status(`Cast ${spell.name}${at()}.`);
-      } }, 'Cast'));
-    }
-  };
-  draw();
-  wrap.redraw = draw;
-  return wrap;
-}
-
-/**
- * Cast a spell of 1st level or higher: the server spends a slot of `slot`
- * (shared/attacks.js castWithSlot) and the slot boxes follow. With none left
- * the player can go on without one (a scroll, an item, a free casting).
- * Cantrips need nothing. Returns false when the player stops.
- */
-async function castSpell(spell, slot) {
-  if (!(spell.level >= 1)) return true;
-  await flush();
-  try {
-    const res = await state.guarded(() => api('POST', `${base()}/sheet/spells/cast`, { id: spell.id, ...(slot && { slot }) }));
-    if (!res) return false;
-    // Only the slots changed on the server: take them, and leave anything typed since alone.
-    const sc = normalizeSheet(res.sheet).spellcasting;
-    for (const s of [state.sheet, state.savedSheet]) {
-      if (!s) continue;
-      s.spellcasting.slots_used = structuredClone(sc.slots_used);
-      s.spellcasting.pact_used = sc.pact_used;
-    }
-    state.version = res.version;
-    refresh();
-    announce();
-    return true;
-  } catch (err) {
-    return confirm(`${err.message}\n\nRoll anyway without spending a slot (a scroll, an item, a free casting)?`);
-  }
-}
-
-/** " (with Agonizing Blast +3)": a spell's class feature extras, for its roll's label. */
-const withExtras = (r) => {
-  const on = (r.extras ?? []).filter((x) => x.on);
-  return on.length ? ` (with ${on.map((x) => `${x.name} ${x.detail}`).join(', ')})` : '';
-};
-
-/** How a spell rolls, in its details: read from its description, and the player can change it. */
-function spellRollFields(spell, p) {
-  const select = (key, label, options) => {
-    const el = h('select', { 'aria-label': label }, Object.entries(options).map(([v, n]) => new Option(n, v)));
-    el.value = spell[key];
-    el.addEventListener('change', () => { spell[key] = el.value; changed(); paintSave(); redrawRolls(spell); });
-    return el;
-  };
-  const saveBox = labelled('Save', select('save', 'Spell saving throw', { '': '–', ...ABILITY_NAMES }));
-  const paintSave = () => (saveBox.hidden = spell.attack !== 'save');
-  paintSave();
-  return h('div', { class: 'spell-fields spell-roll-fields' },
-    labelled('Roll', select('attack', 'Spell roll', { '': 'No attack or save', attack: 'Spell attack', save: 'Saving throw' })),
-    saveBox,
-    labelled('Damage / healing', field(`${p}.damage`, { label: 'Spell damage', placeholder: 'e.g. 8d6 fire', onChange: () => redrawRolls(spell) })),
-    labelled(spell.level === 0 ? 'More at 5th/11th/17th' : 'More per slot level', field(`${p}.higher_damage`, { label: 'More damage when cast higher', placeholder: 'e.g. 1d6', onChange: () => redrawRolls(spell) })),
-    h('div', { class: 'flags' }, h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: spell.damage_mod, 'aria-label': 'Add spellcasting modifier', onchange: (e) => { spell.damage_mod = e.target.checked; changed(); } }), `+ spellcasting modifier`)),
-  );
-}
-
-/** Redraw a spell's roll buttons after its damage changed (without closing its details). */
-function redrawRolls(spell) {
-  for (const card of document.querySelectorAll('#sheet details.spell')) {
-    if (card.__spell === spell) card.querySelector('.spell-rolls')?.redraw();
-  }
-}
-
-function refreshSummary(card, spell) {
-  card.querySelector('summary strong').textContent = spell.name;
-  card.querySelector('.spell-meta').textContent = [spell.casting_time, spell.range, spell.duration].filter(Boolean).join(' · ');
 }
 
 // ---------- review ----------

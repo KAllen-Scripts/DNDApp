@@ -18,13 +18,13 @@ Where the project stands, what to do next, open questions, decisions and lessons
 
 ---
 
-## Current state (2026-11-02)
+## Current state (2026-11-11)
 
 **What's built:** SPEC §6.1 is the list and docs/spec/ has each design. In short: transcript upload (or recording from Discord) → attendance → the archivist (an AI that owns the knowledge base) → per-player Q&A with privacy; notes; character sheets (several characters, Inventory, class/subclass/race features, Wild Shape, companions, item actions, level up, Review sheet); server-rolled 3D dice; maps (fog, walls, line of sight, heights, lights, combat, attacks and spells from the map, the world and travel, the map creator with realistic CC0 art); the DM's Bestiary, items and merchants; handouts, rests, campaign settings; the DM's wiki as its own space (stages 0 to 11), with a filtered Wiki tab for players; the phone layout; example data (`DATA_SET=example`).
 
-**Most recent work** (2026-10-28 to 2026-11-02, see the change log): docs compacted and split; pick who to log in as on the example data; code in feature folders; Discord recording; the DM's own effects and NPC spells; spells that aren't attacks; casting from the sheet spends slots; the Bestiary; Items and Merchants moved into the wiki; level up; a shorter sheet; Ask's faster model (`MODEL_QA_FAST`).
+**Most recent work** (2026-10-28 to 2026-11-11, see the change log): a code review and tidy-up (dead code out, big files split, one list of shared modules); docs compacted and split; pick who to log in as on the example data; code in feature folders; Discord recording; the DM's own effects and NPC spells; spells that aren't attacks; casting from the sheet spends slots; the Bestiary; Items and Merchants moved into the wiki; level up; a shorter sheet; Ask's faster model (`MODEL_QA_FAST`).
 
-**Numbers** (2026-11-02): schema **v21**, `PIPELINE_VERSION` **39**. Tests are offline and free (fake AI; the page in jsdom against a real test server). **938 tests** (server 370, shared 322, web 246; all pass 2026-11-02, including the example-data login picker's). There's no CI: `npm test` is the check, `npm run test:regressions` the quick one.
+**Numbers** (2026-11-11): schema **v21**, `PIPELINE_VERSION` **39**. Tests are offline and free (fake AI; the page in jsdom against a real test server). **939 tests** (server 371, shared 246, web 322; all pass 2026-11-11, after the tidy-up). There's no CI: `npm test` is the check, `npm run test:regressions` the quick one.
 
 **Live:** https://thepartyledger.fyi when the server runs on the owner's PC (Cloudflare Tunnel `thepartyledger` → `127.0.0.1:4400`, `cloudflared` as a Windows service, https forced). Merged PRs aren't live until his checkout is pulled and restarted (`npm run restart`); the permission check in a Remote Control session blocks that unless he says so in words. On 2026-10-28 `.env` had `DATA_SET=example` (the live server ran on the example data); take it out to go back to the real data. `API_key` in the repo root holds the Cloudflare token (git-ignored; never print or commit it). No player guide yet.
 
@@ -177,6 +177,14 @@ Don't pursue these unless the owner raises them again.
 ## Change log
 
 Newest first. Older entries: [docs/archive/changelog.md](docs/archive/changelog.md).
+
+### 2026-11-11: Code review and tidy-up (no behaviour change)
+- The owner: "Look through the whole codebase. What's redundant? What's not good enough? Get it tidied up without losing any functionality."
+- **Dead code gone:** 23 exported functions and constants nothing called (found by checking every export against every import, tests and `page.module` included), 7 unused variables (ESLint `no-unused-vars`), and the `prism-media` dependency (it still comes in through `@discordjs/voice`). No TODOs, swallowed errors or stale doc paths turned up; jscpd had already been run on 2026-11-02.
+- **One list of the shared modules:** `app.js` serves every `.js` file in `packages/shared/src` at `/shared/<file>` and `shared/package.json` exports `./*`, instead of two hand-kept lists of 49 entries (a new shared module needs no wiring now). `sendArt`/`sendLibrary` are one `sendCached`; the page's files and fonts share one `sendFile`.
+- **Shared cleaners:** `shared/src/clean.js` (`str`, `int`, `newId`) replaces the copies in sheet, gear, class-features, wild-shape, companions and item-actions.
+- **Big files split** (each read whole cost 25 to 30k tokens), code moved word for word: the Map tab `map/map.js` (2,372 → about 1,380 lines) into `fog.js`, `walls.js`, `pins.js`, `signals.js`, `ruler.js`; the Sheet `sheet/sheet.js` (2,250 → 1,520) into `inventory.js`, `spells.js`; `shared/src/map.js` (2,333 → about 1,000) into `map-world.js`, `map-sight.js`, `map-height.js`, which `map.js` re-exports (importers unchanged); `routes/maps.js` (1,530) with tokens and pins in `routes/map-tokens.js` (`registerMapTokens`, right after `registerMaps`). SPEC §3.1 lists the new files and the shared modules it was missing.
+- Tests: no new ones (nothing was found broken; a suspected stale wiki layer on the map turned out fine); all 939 tests and the 198 regression tests pass.
 
 ### 2026-11-02: Discord bot key per campaign
 - The owner: "You've got the discord bot setup so we add the key in the server. But a DM may be in multiple servers. This should be set at the campaign level."
