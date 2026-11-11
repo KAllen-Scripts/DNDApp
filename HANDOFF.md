@@ -178,6 +178,9 @@ Don't pursue these unless the owner raises them again.
 
 Newest first. Older entries: [docs/archive/changelog.md](docs/archive/changelog.md).
 
+### 2026-11-11: The phone host's work merged; old branches deleted
+- The owner: the phone had pushed `claude/phone-host-fixes` (PR #154's work plus three fixes) after main moved on. It's merged onto the split-up main (PR #156): `fogView`'s change went into `map/fog.js`, and `map/map.js` imports `wallBetween`. Every other branch's work was already in main (squash-merged PRs, superseded PR #33, or the example pictures main has in smaller copies), so all branches but `main` were deleted.
+
 ### 2026-11-11: Code review and tidy-up (no behaviour change)
 - The owner: "Look through the whole codebase. What's redundant? What's not good enough? Get it tidied up without losing any functionality."
 - **Dead code gone:** 23 exported functions and constants nothing called (found by checking every export against every import, tests and `page.module` included), 7 unused variables (ESLint `no-unused-vars`), and the `prism-media` dependency (it still comes in through `@discordjs/voice`). No TODOs, swallowed errors or stale doc paths turned up; jscpd had already been run on 2026-11-02.
