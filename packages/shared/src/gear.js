@@ -9,6 +9,7 @@
  * do (summon, cast, attack, heal) is in item-actions.js.
  */
 import { itemActions, knownItem, normalizeActions } from './item-actions.js';
+import { str, int, newId } from './clean.js';
 
 /** Weapons: damage, the ability it uses (finesse = the better of Str and Dex), simple or martial, properties. */
 const WEAPON_ROWS = [
@@ -138,12 +139,6 @@ const CLASS_GEAR = {
   wizard: { weapons: ['dagger', 'dart', 'sling', 'quarterstaff', 'light crossbow'], armor: [] },
 };
 
-const str = (v, max) => (v == null ? '' : String(v)).slice(0, max);
-const int = (v, { min, max, fallback }) => {
-  const n = typeof v === 'number' ? v : parseInt(String(v ?? '').replace(/^\s*\+/, ''), 10);
-  return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.trunc(n))) : fallback;
-};
-const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
 /** "+1 Longsword", "Longsword +1", "Longsword, +1" → { base: "longsword", magic: 1 }. */
 export function magicName(name) {

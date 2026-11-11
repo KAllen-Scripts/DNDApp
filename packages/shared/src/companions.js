@@ -15,17 +15,13 @@
  */
 import { normalizeForm } from './wild-shape.js';
 import { classKey } from './sheet.js';
+import { str, int as cleanInt, newId } from './clean.js';
 
 export const MAX_SHEET_COMPANIONS = 20;
 export const COMPANION_KINDS = { familiar: 'Familiar', pet: 'Pet', mount: 'Mount', summon: 'Summon', sidekick: 'Sidekick', companion: 'Animal companion' };
 export const COMPANION_FROM = ['', 'spell', 'feature', 'item'];
 
-const str = (v, max) => (v == null ? '' : String(v)).slice(0, max);
-const int = (v, { min = -9999, max = 9999, fallback = null } = {}) => {
-  const n = typeof v === 'number' ? v : parseInt(String(v ?? '').replace(/^\s*\+/, ''), 10);
-  return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.trunc(n))) : fallback;
-};
-const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+const int = (v, { min = -9999, max = 9999, fallback = null } = {}) => cleanInt(v, { min, max, fallback });
 
 /**
  * One companion, cleaned up: { id, name, kind, form (its stat block),

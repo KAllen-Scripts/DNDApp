@@ -31,6 +31,7 @@ import { activeForm, formHasHp, setFormHp, wildShapeRules } from './wild-shape.j
 import { SUBCLASS_BY_KEY, SUBCLASS_FEATURES } from './subclass-features.js';
 import { RACE_BY_KEY, RACE_FEATURES, RACIAL_FEATS, racesOf } from './race-features.js';
 import { GENERAL_FEATS, featsOf } from './feats.js';
+import { str, int, newId } from './clean.js';
 
 export const FEATURE_KINDS = ['uses', 'pool', 'info'];
 export const MAX_ROLLED = 3;
@@ -43,12 +44,6 @@ export const RECHARGE_NAMES = {
 };
 export const MAX_CUSTOM = 30;
 
-const str = (v, max) => (v == null ? '' : String(v)).slice(0, max);
-const int = (v, { min = -999, max = 999, fallback = null } = {}) => {
-  const n = typeof v === 'number' ? v : parseInt(String(v ?? '').replace(/^\s*\+/, ''), 10);
-  return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.trunc(n))) : fallback;
-};
-const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
 /** A number from a table by level: step([[1, 2], [3, 3], [6, 4]], 5) → 3. */
 const step = (table, level) => table.reduce((v, [from, n]) => (level >= from ? n : v), table[0][1]);
