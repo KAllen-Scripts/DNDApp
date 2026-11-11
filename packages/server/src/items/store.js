@@ -13,7 +13,6 @@ import { normalizeItemStats } from '@dndapp/shared/gear.js';
 import { normalizeActions } from '@dndapp/shared/item-actions.js';
 
 export const ITEM_KINDS = ['weapon', 'armor', 'gear', 'tool', 'potion', 'scroll', 'magic', 'other'];
-export const ITEM_KIND_NAMES = { weapon: 'Weapon', armor: 'Armour', gear: 'Adventuring gear', tool: 'Tool', potion: 'Potion', scroll: 'Scroll', magic: 'Magic item', other: 'Other' };
 export const RARITIES = ['', 'common', 'uncommon', 'rare', 'very rare', 'legendary', 'artifact'];
 export const ITEM_SOURCES = ['dm', 'book', 'ai', 'web'];
 export const MAX_ITEMS = 1000;

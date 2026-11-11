@@ -2,7 +2,7 @@ import { createUsage } from './common.js';
 import { createApiProvider } from './api.js';
 import { createClaudeCodeProvider } from './claude-code.js';
 
-export { LLMError, SpendingCapError, toOutputSchema } from './common.js';
+export { LLMError, SpendingCapError } from './common.js';
 
 /**
  * Pick the LLM provider from config.llm.provider:

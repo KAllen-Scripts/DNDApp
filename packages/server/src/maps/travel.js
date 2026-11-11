@@ -5,7 +5,6 @@
  * clock moves on (random encounters, forced marches), for the DM to run.
  */
 import { MARCH_HOURS, PACES, TRAVEL_BY, journeyAt, milesPerPx, onTheRoadAt, pointInPolygon, travelMinutes } from '@dndapp/shared/map.js';
-import { clockText } from '@dndapp/shared/settings.js';
 import { parseRoll, rollDice } from '@dndapp/shared/dice.js';
 
 const round = (n, places) => Math.round(n * 10 ** places) / 10 ** places;
@@ -278,6 +277,3 @@ export function onTheWay(maps, from, to, { random, stop = true, encounters = tru
   }
   return { until, notes };
 }
-
-/** "Day 2, 03:00: …" for a note. */
-export const noteText = (n, calendar = null) => `${clockText(n.at, calendar)}: ${n.text}`;

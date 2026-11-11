@@ -485,13 +485,6 @@ export const TRAVEL_BY = {
 /** Past this many hours on the road a day, a march is forced: a Constitution save each hour or exhaustion (Player's Handbook). */
 export const MARCH_HOURS = 8;
 
-/** Miles between two points on a map with a scale, or null without one. */
-export function milesBetween(map, a, b) {
-  const per = unitsPerPx(map);
-  if (per == null) return null;
-  return Math.hypot(b.x - a.x, b.y - a.y) * per * (IN_MILES[map.scale.unit] ?? 1);
-}
-
 /** How many miles one image pixel is on this map, or null without a scale. */
 export function milesPerPx(map) {
   const per = unitsPerPx(map);
@@ -1348,9 +1341,6 @@ export function playerFogMask(view, userId) {
   const explored = view.fog.explored ?? [];
   return [...fogMask(view, { polygons, explored }), ...heightShadows(view, userId, polygons, explored)];
 }
-
-/** Mask colours: white is fully fogged, black is clear, grey is the dim view of places seen before. */
-export const FOG_MASK_FILL = { cover: '#ffffff', dim: '#999999', glimpse: '#5a5a5a', clear: '#000000' };
 
 /** The nearest wall within `maxDist` of a point (for clicking on one), or null. */
 export function nearestWall(map, p, maxDist) {

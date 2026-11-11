@@ -33,11 +33,6 @@ function ring(web) {
   return { ...web, nodes, lines: web.lines.filter((l) => ids.has(l.from) && ids.has(l.to)), bubbles: [] };
 }
 
-/** The address's page in the middle (`#/web/<id>`), or the whole web. */
-export function webRoute() {
-  return `#/web${state.webAround ? `/${state.webAround}` : ''}`;
-}
-
 /** Draw the Web into the wiki's main area. */
 export async function drawWebView(main) {
   const frame = h('div', { class: 'wiki-web-frame' });

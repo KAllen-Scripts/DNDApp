@@ -823,7 +823,7 @@ export const ART_FURNITURE = {
     circle(ctx, w * 0.33, h * 0.26, m * 0.045, '#c8bfae');
   },
   water_butt(g) {
-    const { ctx, m, rnd } = g;
+    const { ctx, m } = g;
     shadow(g, 'round', m * 0.46, m * 0.46, 1.1);
     // Staves round the rim, an iron hoop.
     circle(ctx, 0, 0, m * 0.47, '#4a3019');
@@ -983,7 +983,7 @@ export const ART_FURNITURE = {
     rrect(ctx, -m * 0.42, py - m * 0.035, m * 0.84, m * 0.07, m * 0.035, pole, '#3a2410', lw);
   },
   bread(g) {
-    const { ctx, m, rnd } = g;
+    const { ctx, m } = g;
     shadow(g, 'round', m * 0.44, m * 0.44, 0.7);
     const lw = Math.max(0.5, m * 0.02);
     // The wicker basket.

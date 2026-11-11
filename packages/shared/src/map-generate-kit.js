@@ -10,7 +10,6 @@ export const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 export const r2 = (v) => Math.round(v * 100) / 100;
 /** The way an asset whose back is drawn at its top faces, against each wall of a room. */
 export const ROT = { N: 0, E: 90, S: 180, W: 270 };
-export const OPENINGS = new Set(['door', 'secret', 'arch', 'window']);
 
 /**
  * A design being made: a floor of characters, an area id per square (walls go

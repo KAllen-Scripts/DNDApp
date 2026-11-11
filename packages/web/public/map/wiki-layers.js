@@ -52,12 +52,6 @@ export function setWikiLayers({ forced = layer.forced, as = layer.as, at = layer
   renderWikiLayers();
 }
 
-/** The pages changed (a save in the wiki): fetch the layers again next time. */
-export function wikiLayersStale() {
-  layer.data = null;
-  if (on()) renderWikiLayers();
-}
-
 async function load(map) {
   const key = keyOf(map);
   if (layer.data?.key === key) return layer.data.layers;

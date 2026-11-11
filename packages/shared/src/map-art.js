@@ -15,7 +15,6 @@ import { drawBuiltIn } from './map-art-assets.js';
 import { artRef, floorArt, propArt, wallArt } from './map-art-library.js';
 
 export { drawBuiltIn };
-export const VOID_COLOUR = LOOK.void;
 
 const clampInt = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const isNatural = (ch) => FLOORS[ch]?.blend !== undefined;

@@ -69,9 +69,6 @@ export const RACES = [
   'Dragonborn', 'Hill Dwarf', 'Mountain Dwarf', 'High Elf', 'Wood Elf', 'Dark Elf (Drow)', 'Forest Gnome', 'Rock Gnome',
   'Half-Elf', 'Half-Orc', 'Lightfoot Halfling', 'Stout Halfling', 'Human', 'Variant Human', 'Tiefling',
 ];
-export const BACKGROUNDS = [
-  'Acolyte', 'Charlatan', 'Criminal', 'Entertainer', 'Folk Hero', 'Guild Artisan', 'Hermit', 'Noble', 'Outlander', 'Sage', 'Sailor', 'Soldier', 'Urchin',
-];
 export const ALIGNMENTS = [
   'Lawful Good', 'Neutral Good', 'Chaotic Good', 'Lawful Neutral', 'True Neutral', 'Chaotic Neutral', 'Lawful Evil', 'Neutral Evil', 'Chaotic Evil',
 ];

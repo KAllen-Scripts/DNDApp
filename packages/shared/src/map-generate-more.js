@@ -7,7 +7,7 @@
  */
 import { ASSETS, hullShape, newDesignId } from './map-design.js';
 import { noise } from './map-paint.js';
-import { biggestRegion, caveWalls, centre, clamp, dress, furnishHouse, ground, house, overlaps, r2, torches, wander, woods } from './map-generate-kit.js';
+import { biggestRegion, caveWalls, centre, clamp, furnishHouse, ground, house, overlaps, r2, torches, wander, woods } from './map-generate-kit.js';
 
 /** What these make, with their default size in squares. */
 export const MORE_GENERATORS = {

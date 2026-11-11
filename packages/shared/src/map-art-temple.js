@@ -872,7 +872,7 @@ export const ART_TEMPLE = {
     line(ctx, w * 0.05, h * 0.36, w * 0.09, h * 0.47, shade(t, -0.25), Math.max(0.8, m * 0.04), 'butt');
   },
   wizard_desk(g) {
-    const { ctx, w, h, m, t, rnd } = g;
+    const { ctx, w, h, m } = g;
     shadow(g, 'rect', w * 0.48, h * 0.46, 0.9);
     planks(g, -w * 0.48, -h * 0.45, w * 0.96, h * 0.9, '#5e3b1f', 3, true);
     rect(ctx, -w * 0.48, -h * 0.45, w * 0.96, h * 0.9, null, '#2e1d0d', Math.max(1, m * 0.045));

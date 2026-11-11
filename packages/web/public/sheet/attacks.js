@@ -15,7 +15,6 @@ import {
   ACTIVE, MASTERY_PROPERTIES, WEAPON_MASTERY, masteryChoices, masteryLimit, normalizeCombat, planAttack, planSpell, spendForAttack, weaponMastery, weaponName,
 } from '/shared/attack-extras.js';
 import { featureRow, restText } from '/shared/class-features.js';
-import { rollDisadvantage } from '/shared/sheet.js';
 import { h } from '../page/dom.js';
 
 const editionOf = (state) => state.settings?.edition || state.edition || '2014';
@@ -138,7 +137,6 @@ export function extrasLine(ctx, { key, name = '', plan: getPlan, onPick }) {
 export function spellPlan(state, spell, slot, key) {
   return planSpell(state.sheet, state.calc, spell, { edition: editionOf(state), slot, picks: picksFor(key) });
 }
-export const spellPicks = picksFor;
 
 /**
  * The top of the Attacks box: what's going on now (Raging, Hunter's Mark,
@@ -257,8 +255,5 @@ export function inventoryMastery(ctx, g) {
   });
   return h('label', { class: 'check small gear-mastery', title: m.text }, box, ` Mastery: ${m.name}`, h('span', { class: 'muted' }, ` · ${m.text}`));
 }
-
-/** Whether a roll from an attack has disadvantage from the sheet (heavy armour without the Strength...). */
-export const attackDisadvantage = (state, ability) => rollDisadvantage(state.calc, { ability: ability === 'finesse' ? 'dex' : ability });
 
 const ordinal = (n) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
