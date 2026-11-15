@@ -112,7 +112,7 @@ export function inventoryTab() {
   paint();
   state.renders.push(paint);
   const note = loadNote('gear-warn');
-  const old = $('#tab-inventory .gear-top');
+  const old = $('#inventory-pane .gear-top');
   const top = h('div', { class: 'gear-top' }, summary, note);
   if (old) old.replaceWith(top);
   else list.before(top);

@@ -2,7 +2,7 @@
  * Looks: themes, layouts, text size, chat styles, sheet styles and sheet layouts.
  * Chosen in the Look dialog (look.js), applied by look-boot.js:
  *   <html data-theme data-scheme data-layout data-density>
- *   #tab-ask[data-chat]   #tab-sheet[data-sheet-style][data-sheet-layout]
+ *   #tab-ask[data-chat]   #tab-sheet[data-sheet-style]
  * Theme colours are set on [data-theme] (not just :root) so a preview card can
  * carry its own theme. Same for [data-chat] and [data-sheet-style].
  * Only system fonts: nothing is loaded from outside the server.
@@ -505,55 +505,157 @@
 [data-sheet-style] .sheet .auto.mine input { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
 
 /* =====================================================================
-   6. Character sheet layouts (#tab-sheet[data-sheet-layout])
-   sheet.js arranges the blocks into rows (.row-*) of columns; these set
-   the columns, and how they fold up as the sheet gets narrower. Widths are
-   the sheet's own (the "sheet" container), so the page layout doesn't matter.
+   6. The character sheet's layout (sheet.js, the 2026-11 redesign: one layout)
+   The header stays at the top; under it the stats (left) beside the tabs. On
+   a narrow sheet (a phone, beside the map) the stats are a tab of their own
+   and the tab bar sits at the bottom. Widths are the sheet's own ("sheet"
+   container), so the page layout doesn't matter.
    ===================================================================== */
 
-.row-classic, .row-combat { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr); }
-.row-stats { grid-template-columns: minmax(0, 1.25fr) minmax(0, 2fr); }
-.row-stats .traits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.row-vitals { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); }
-.row-abilities { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.row-strip .abilities { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-.row-tabs { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr); }
-
-@container sheet (max-width: 1000px) {
-  .row-classic, .row-combat { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); }
-  .row-stats { grid-template-columns: minmax(0, 1.4fr) minmax(0, 2fr); }
-  .row-vitals, .row-abilities, .row-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .row-tabs > .sh-col:last-child { grid-column: 1 / -1; }
-  .row-strip .abilities { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* The header: kept in view while the sheet scrolls. */
+.sh-header {
+  position: sticky; top: 0; z-index: 5; display: flex; flex-direction: column; gap: 0.45rem;
+  padding: 0.55rem 0.7rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
 }
-/* Two columns: the first column down the left; on the right the second and
-   third (or, in three columns, the second plus the traits, with features
-   across the bottom, which keeps the two sides about the same height). */
-@container sheet (min-width: 641px) and (max-width: 860px) {
-  .row-classic, .row-combat, .row-stats { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
-  :is(.row-classic, .row-combat) > .sh-col:first-child { grid-row: span 2; }
-  .row-stats .traits { grid-template-columns: minmax(0, 1fr); }
-  .row-classic > .sh-col:nth-child(3) { display: contents; }
-  .row-classic > .sh-col:nth-child(3) > .traits { grid-column: 2; }
-  .row-classic > .sh-col:nth-child(3) > :last-child { grid-column: 1 / -1; }
+.sh-header-top { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 0.9rem; }
+.sh-who { display: flex; align-items: center; gap: 0.6rem; min-width: 12rem; flex: 1 1 14rem; }
+.sh-portrait { width: 3rem; height: 3rem; border-radius: 50%; object-fit: cover; flex: none; border: 2px solid var(--accent); }
+.sh-portrait.none { display: grid; place-items: center; background: var(--surface-2); font: 700 1.3rem var(--font-head); color: var(--muted); }
+.sh-who-text { display: flex; flex-direction: column; min-width: 0; }
+.sheet .sh-who input.big {
+  height: auto; padding: 0 0.1rem; font: 700 1.35rem/1.2 var(--font-head); color: var(--head-color);
+  background: transparent; border-width: 0 0 2px; border-radius: 0;
 }
-@container sheet (max-width: 640px) {
-  :is(.row-classic, .row-combat, .row-stats, .row-abilities, .row-tabs) { grid-template-columns: minmax(0, 1fr); }
+.sh-who .summary { margin: 0.1rem 0 0; font-size: 0.82rem; color: var(--muted); }
+.sh-who .summary:empty { display: none; }
+.sh-who :is(.level-up-banner, .ws-banner) { margin: 0.2rem 0 0; }
+
+.sh-hp { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.35rem 0.55rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+.sh-hp.down { border-color: var(--danger, #b33a3a); }
+.hp-line { display: flex; align-items: center; gap: 0.6rem; }
+.hp-now { display: flex; align-items: baseline; gap: 0.15rem; }
+.sheet .hp-now input.hp-current { width: 3.6rem; height: 2.2rem; font-size: 1.35rem; font-weight: 700; text-align: center; }
+.sheet .hp-max-wrap input { width: 3.2rem; text-align: center; }
+.hp-temp-wrap { display: flex; align-items: center; gap: 0.25rem; }
+.sheet .hp-temp-wrap input { width: 3rem; text-align: center; }
+.hp-bar { height: 0.35rem; border-radius: 1rem; background: var(--border); overflow: hidden; }
+.hp-bar i { display: block; height: 100%; background: #3f7a52; transition: width 0.2s; }
+.hp-bar[data-level="half"] i { background: #b98a2a; }
+.hp-bar[data-level="low"] i, .hp-bar[data-level="down"] i { background: var(--danger, #b33a3a); }
+.hp-change { display: flex; align-items: center; gap: 0.3rem; }
+.sheet .hp-change input { width: 3.4rem; text-align: center; }
+.hp-change button { padding: 0.2rem 0.55rem; }
+
+.sh-numbers { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.sh-numbers .stat { padding: 0.25rem 0.45rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); min-width: 4.2rem; }
+.sh-numbers .stat .auto input { width: 3.2rem; height: 2rem; font-size: 1.2rem; font-weight: 700; text-align: center; }
+.sh-numbers .stat.inspiration { justify-content: center; }
+.sh-header-buttons { display: flex; gap: 0.35rem; margin-left: auto; }
+.sh-header-status { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.8rem; }
+.sh-header-status .sheet-warn { margin: 0; }
+.sh-conditions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+.sh-conditions .chip { display: inline-flex; align-items: center; gap: 0.2rem; padding: 0.05rem 0.2rem 0.05rem 0.55rem; border-radius: 1rem; border: 1px solid var(--border); font-size: 0.8rem; background: var(--surface-2); }
+.sh-conditions .chip.cond { border-color: #b98a2a; background: color-mix(in srgb, #b98a2a 14%, var(--surface)); }
+.sh-conditions .chip.conc { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.chip-x { border: none; background: none; padding: 0 0.3rem; font-size: 0.95rem; line-height: 1; cursor: pointer; color: inherit; }
+.sheet .sh-conditions select.cond-add { height: 1.7rem; padding: 0 0.4rem; font-size: 0.8rem; border-radius: 1rem; width: auto; }
+.sh-header > .death { margin: 0; }
+.sh-rest { border-top: 1px solid var(--border); padding-top: 0.5rem; }
+.sh-rest header { display: flex; align-items: center; gap: 0.5rem; }
+.sh-rest header h3 { margin: 0; flex: 1; text-align: left; }
+.rest-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap); }
+.rest-cols h4 { margin: 0.3rem 0; }
+
+/* Stats beside the tabs. */
+.sh-a { display: grid; grid-template-columns: minmax(24rem, 1.2fr) minmax(0, 2fr); gap: var(--gap); align-items: start; }
+.sh-stats { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--gap); align-items: start; }
+.sh-stats .abilities { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
+.sh-a .sh-tabs { min-width: 0; }
+.sh-tabbar button { display: inline-flex; align-items: center; gap: 0.3rem; }
+.sh-tabbar .tab-icon { display: none; }
+.sh-tabbar [data-key="stats"] { display: none; }
+.sh-tabpanel[hidden] { display: none; }
+.passive-more { margin: 0.3rem 0; }
+.passive-more span + span { margin-left: 0.6rem; }
+.senses textarea { margin-top: 0.3rem; }
+
+/* Actions: the Spend list, attacks, spells by casting time. */
+.spend { gap: 0.35rem; }
+.spend-group h4 { margin: 0.35rem 0 0.15rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.spend-row { display: flex; align-items: center; gap: 0.5rem; min-height: var(--row); }
+.spend-name { min-width: 6rem; font-weight: 600; }
+.spend-count { display: inline-flex; align-items: center; gap: 0.3rem; font-variant-numeric: tabular-nums; }
+@container (min-width: 520px) { .spend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 1rem; } .spend > h3 { grid-column: 1 / -1; } }
+.action-spells { display: flex; flex-direction: column; gap: 0.5rem; padding: var(--pad); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.action-group h4 { margin: 0 0 0.25rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.action-row { display: flex; align-items: center; gap: 0.45rem; min-height: var(--row); border-bottom: 1px dashed var(--border); }
+.action-row:last-child { border-bottom: none; }
+.action-row .spell-meta { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.action-row .tag, .sh-tabpanel .tag { font-size: 0.7rem; padding: 0 0.35rem; border-radius: 4px; background: var(--surface-2); color: var(--muted); }
+.standard-actions { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.8rem; margin: 0.4rem 0 0; }
+.standard-actions dt { font-weight: 600; }
+.standard-actions dd { margin: 0; color: var(--muted); }
+.spell-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.spell-filters .chip { padding: 0.15rem 0.6rem; border-radius: 1rem; border: 1px solid var(--border); background: var(--surface); font-size: 0.82rem; }
+.spell-filters .chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.sheet .spell-filters input { flex: 1; min-width: 9rem; }
+
+/* Play and Edit: in Play the worked-out numbers and scores read as text, and the details for Edit hide. */
+.sheet[data-mode="play"] :is(.auto-input, input.edit-only, .edit-only input):read-only { border-color: transparent; background: transparent; box-shadow: none; }
+.sheet[data-mode="play"] :is(.info-box, .point-buy, .reset) { display: none; }
+.sheet[data-mode="play"] .sh-who input.big { border-bottom-color: transparent; }
+
+/* Narrow: the stats are a tab, the tab bar is at the bottom with icons. */
+@container sheet (max-width: 860px) {
+  .sh-a { grid-template-columns: minmax(0, 1fr); }
+  .sh-tabbar [data-key="stats"] { display: inline-flex; }
+  .sh-a:not([data-open="stats"]) > .sh-stats { display: none; }
+  .sh-a[data-open="stats"] .sh-tabpanel { display: none; }
+  .sh-a .sh-tabs { display: flex; flex-direction: column; }
+  .sh-tabbar {
+    order: 2; position: sticky; bottom: 0; z-index: 5; justify-content: space-around; gap: 0; overflow-x: auto;
+    background: var(--surface); border-top: 1px solid var(--border); border-bottom: none; margin-top: var(--gap);
+  }
+  .sh-tabbar button { flex-direction: column; gap: 0.05rem; padding: 0.35rem 0.3rem 0.45rem; font-size: 0.7rem; border-bottom: none; border-top: 2px solid transparent; }
+  .sh-tabbar button[aria-selected="true"] { border-top-color: var(--accent); }
+  .sh-tabbar .tab-icon { display: block; font-size: 1.05rem; }
+  .sh-header-buttons { margin-left: 0; }
+  .sh-who { flex-basis: 100%; }
 }
-@container sheet (max-width: 420px) {
-  .row-vitals { grid-template-columns: minmax(0, 1fr); }
+@container sheet (max-width: 1100px) and (min-width: 861px) {
+  .sh-a { grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr); }
+  .sh-stats { grid-template-columns: minmax(0, 1fr); }
 }
-
-/* Combat first: the fight numbers, big. */
-[data-sheet-layout="combat"] .row-combat .stat.big .auto input { width: 5.4rem; height: 3.1rem; font-size: 2.2rem; }
-[data-sheet-layout="combat"] .row-combat .hp-current input { height: 3.1rem; font-size: 2.1rem; }
-[data-sheet-layout="combat"] .row-combat :is(.vitals .stat, .hp) { border-color: var(--accent); }
-
-/* By ability: INT, WIS and CHA share the column's spare room. */
-.row-abilities > .sh-col:nth-child(2) > .ability-group { flex-grow: 1; }
-
-/* One column: easy to scroll through, e.g. on a tablet at the table. */
-[data-sheet-layout="single"] .sheet { width: 100%; max-width: 46rem; margin: 0 auto; }
+/* A phone: a short header (it stays in view), everything on as few lines as fits. */
+@container sheet (max-width: 560px) {
+  .sh-header { gap: 0.3rem; padding: 0.4rem 0.5rem; }
+  .sh-header-top { gap: 0.35rem; position: relative; }
+  .sh-who { gap: 0.4rem; min-width: 0; padding-right: 6.5rem; }
+  .sh-portrait { width: 2.1rem; height: 2.1rem; }
+  .sheet .sh-who input.big { font-size: 1.05rem; }
+  .sh-who .summary { font-size: 0.72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sh-who .level-up-banner { margin: 0; }
+  .sh-header-buttons { position: absolute; top: 0; right: 0; }
+  .sh-header-buttons button { padding: 0.15rem 0.45rem; font-size: 0.8rem; }
+  .sh-header-buttons .btn-text { display: none; }
+  .sh-who { padding-right: 5rem; }
+  .sh-hp { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.4rem; padding: 0.25rem 0.4rem; flex: 1 1 100%; }
+  .hp-bar { order: 3; flex: 1 1 100%; }
+  .sheet .hp-now input.hp-current { width: 2.8rem; height: 1.8rem; font-size: 1.1rem; }
+  .hp-temp-wrap .muted { display: none; }
+  .sheet .hp-change input { width: 2.6rem; height: 1.8rem; }
+  .hp-change button { padding: 0.1rem 0.35rem; font-size: 0.78rem; }
+  .sh-numbers { flex-wrap: nowrap; overflow-x: auto; gap: 0.25rem; flex: 1 1 100%; scrollbar-width: none; }
+  .sh-numbers .stat { min-width: 3rem; padding: 0.1rem 0.25rem; }
+  .sh-numbers .stat .auto input { width: 2.4rem; height: 1.45rem; font-size: 1rem; }
+  .sh-numbers .stat .lbl { font-size: 0.52rem; }
+  .sh-stats { grid-template-columns: minmax(0, 1fr); }
+  .rest-cols { grid-template-columns: minmax(0, 1fr); }
+  .sh-numbers .stat { min-width: 3.4rem; }
+  .sh-numbers .stat .auto input { width: 2.6rem; }
+  .sh-hp { flex: 1 1 100%; }
+}
 
 /* =====================================================================
    7. The Look dialog and its previews
@@ -729,3 +831,11 @@
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after { animation: none !important; transition: none !important; }
 }
+
+/* The abilities' short names where the tiles are narrow. */
+.ability .ab-short { display: none; }
+@container (max-width: 380px) { .sh-stats .ability .ab-long { display: none; } .sh-stats .ability .ab-short { display: inline; } }
+/* The character strip above the sheet: just the Characters button (the header names who is played). */
+.sheet-characters:has(+ .sheet-review + .sheet .sh-header) { border: none; background: none; padding: 0; margin: 0.3rem 0 0; }
+.sheet-characters .chars-strip { justify-content: flex-end; }
+#tab-sheet .sheet-characters .chars-now { display: none; }

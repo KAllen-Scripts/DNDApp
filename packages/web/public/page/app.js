@@ -7,7 +7,7 @@
  */
 import { api, stream, storage, getToken, setToken, LoggedOut } from './api.js';
 import { showAdmin } from '../admin/admin.js';
-import { loadSheet, initSheetActions, flush as flushSheet } from '../sheet/sheet.js';
+import { loadSheet, initSheetActions, flush as flushSheet, placeInventory } from '../sheet/sheet.js';
 import { markdownFragment } from './markdown.js';
 import { CITATION_RE } from '/shared/citations.js';
 import { initLook } from './look.js';
@@ -355,6 +355,9 @@ function showTab(name, { push = true } = {}) {
     $(`#tab-${t.dataset.tab}`).hidden = !(on || t.dataset.tab === beside);
   }
   placeBeside(beside);
+  // The Inventory's form and list show in the page's Inventory tab or in the sheet's own Inventory tab (sheet/sheet.js).
+  if (name === 'inventory') placeInventory($('#tab-inventory'));
+  else if (name === 'sheet' || beside === 'sheet') placeInventory($('#sheet .sh-inventory'));
   if (beside === 'handouts') handoutsOpened();
   // The sheet and maps need more room than Ask and Notes.
   $('#app-view').classList.toggle('wide', name === 'sheet' || name === 'inventory' || name === 'map' || name === 'creatures' || name === 'wiki');

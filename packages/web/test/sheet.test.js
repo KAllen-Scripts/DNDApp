@@ -1,6 +1,6 @@
 /**
  * The Sheet tab (sheet.js): automatic values while typing, the player's own
- * values, autosave and conflicts, rolling from the sheet, spells, layouts,
+ * values, autosave and conflicts, rolling from the sheet, spells, the layout,
  * upload and download.
  */
 import { test, mock } from 'node:test';
@@ -726,34 +726,75 @@ test('sheet: the point buy calculator is off until turned on, follows the scores
   });
 });
 
-test('sheet: the layouts chosen under Look draw the same sheet; the Tabs layout remembers its tab', async () => {
+test('sheet: one layout: the header stays, the tabs remember the one open, Edit and Done editing', async () => {
   await withPage(sheetPage(), async (page) => {
     page.click('[data-tab=sheet]');
     page.type(byLabel(page, 'Character name'), 'Lyra');
-    for (const layout of ['combat', 'abilities', 'tabs', 'single', 'classic']) {
-      page.$('#tab-sheet').dataset.sheetLayout = layout;
-      await page.waitFor(() => page.$(`#sheet .row-${layout === 'tabs' ? 'strip' : layout === 'abilities' ? 'abilities' : layout}`), { what: `the ${layout} layout` });
-      assert.equal(byLabel(page, 'Character name').value, 'Lyra', layout);
-      assert.equal(page.$$('#sheet [aria-label="Strength score"]').length, 1, layout);
-      assert.equal(page.$$('#sheet .pb-toggle').length, 1, layout);
-      assert.ok(page.$('#sheet [aria-label="Armour class"]'), layout);
-    }
-
-    page.$('#tab-sheet').dataset.sheetLayout = 'tabs';
-    await page.waitFor('#sheet .sh-tabbar');
-    const selected = () => page.$('#sheet .sh-tabbar [aria-selected=true]').textContent;
-    assert.equal(selected(), 'Actions');
-    page.click(page.$$('#sheet .sh-tabbar button').find((b) => b.textContent === 'Spells'));
-    assert.equal(selected(), 'Spells');
+    assert.equal(page.$$('#sheet [aria-label="Strength score"]').length, 1);
+    assert.ok(page.$('#sheet .sh-header [aria-label="Armour class"]'));
+    const selected = () => page.$('#sheet .sh-tabbar [aria-selected=true]').dataset.key;
+    assert.equal(selected(), 'actions');
+    page.click('#sheet-tab-spells-button');
+    assert.equal(selected(), 'spells');
     assert.ok(!page.$('#sheet-tab-spells').hidden);
     assert.ok(page.$('#sheet-tab-actions').hidden);
     page.key('#sheet .sh-tabbar', 'ArrowRight');
-    assert.equal(selected(), 'Inventory');
-    page.key('#sheet .sh-tabbar', 'ArrowLeft');
-    page.key('#sheet .sh-tabbar', 'ArrowLeft');
-    page.key('#sheet .sh-tabbar', 'ArrowLeft');
-    assert.equal(selected(), 'Background', 'wraps around');
-    assert.equal(page.window.localStorage.getItem('dndapp.sheetTab'), 'background');
+    assert.equal(selected(), 'inventory');
+    assert.ok(page.$('#sheet .sh-inventory #inventory-pane'), 'the inventory form is inside the sheet');
+    for (let i = 0; i < 4; i++) page.key('#sheet .sh-tabbar', 'ArrowLeft');
+    assert.equal(selected(), 'about', 'wraps around');
+    assert.equal(page.window.localStorage.getItem('dndapp.sheetTab'), 'about');
+    // The page's own Inventory tab takes the inventory back.
+    page.click('[data-tab=inventory]');
+    assert.ok(page.$('#tab-inventory #inventory-pane'));
+
+    // No class yet: Edit mode. Done editing makes the scores read-only (Play); it's remembered.
+    page.click('[data-tab=sheet]');
+    assert.equal(page.$('#sheet').dataset.mode, 'edit');
+    assert.equal(byLabel(page, 'Strength score').readOnly, false);
+    page.click('#sheet .mode-toggle');
+    assert.equal(page.$('#sheet').dataset.mode, 'play');
+    assert.equal(byLabel(page, 'Strength score').readOnly, true);
+    assert.equal(page.window.localStorage.getItem('dndapp.sheetMode'), 'play');
+    page.click('#sheet .mode-toggle');
+    assert.equal(byLabel(page, 'Strength score').readOnly, false);
+  });
+});
+
+test('sheet: the header: Damage takes temporary hit points first, Heal stops at the maximum; conditions and exhaustion are kept', async () => {
+  await withPage(sheetPage(), async (page, t) => {
+    page.click('[data-tab=sheet]');
+    page.type(byLabel(page, 'Class'), 'Fighter');
+    page.type(byLabel(page, 'Level'), '1');
+    page.type(byLabel(page, 'Constitution score'), '14');
+    assert.equal(byLabel(page, 'Hit point maximum').value, '12');
+    const amount = (n) => page.type(byLabel(page, 'Hit points to take or give'), String(n));
+    amount(5);
+    page.click('#sheet .hp-give-temp');
+    assert.equal(byLabel(page, 'Temporary hit points').value, '5');
+    amount(8);
+    page.click('#sheet .hp-damage');
+    assert.equal(byLabel(page, 'Temporary hit points').value, '');
+    assert.equal(byLabel(page, 'Current hit points').value, '9');
+    amount(20);
+    page.click('#sheet .hp-heal');
+    assert.equal(byLabel(page, 'Current hit points').value, '12');
+
+    page.type(byLabel(page, 'Add a condition'), 'poisoned');
+    assert.equal(page.$('#sheet .sh-conditions .chip.cond span').textContent, 'Poisoned');
+    page.type(byLabel(page, 'Add a condition'), 'exhaustion');
+    assert.match(page.text('#sheet .sh-conditions .exhaustion'), /Exhaustion 1/);
+    await saved(page);
+    let { sheet } = await serverSheet(t);
+    assert.deepEqual(sheet.conditions, ['poisoned']);
+    assert.equal(sheet.exhaustion, 1);
+    assert.equal(sheet.hp.current, 12);
+    page.click(byLabel(page, 'End Poisoned'));
+    page.click(byLabel(page, 'One less level of exhaustion'));
+    assert.equal(page.$('#sheet .sh-conditions .chip'), null);
+    await saved(page);
+    ({ sheet } = await serverSheet(t));
+    assert.deepEqual([sheet.conditions, sheet.exhaustion], [[], 0]);
   });
 });
 

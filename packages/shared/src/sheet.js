@@ -19,6 +19,7 @@ import { subclassOf } from './subclass-features.js';
 import { normalizeCompanions } from './companions.js';
 import { d20Rule, featsOf } from './feats.js';
 import { str, int, newId } from './clean.js';
+import { conditionEffects, normalizeConditions } from './conditions.js';
 
 export { WEAPONS };
 
@@ -111,7 +112,7 @@ export const DERIVED = {
 
 export const TEXT_FIELDS = {
   name: 100, player_name: 100, race: 100, background: 100, alignment: 60, xp: 30,
-  equipment: 20_000, proficiencies_languages: 10_000, features: 40_000,
+  equipment: 20_000, proficiencies_languages: 10_000, features: 40_000, defenses: 2000,
   personality: 5000, ideals: 5000, bonds: 5000, flaws: 5000,
   age: 30, height: 30, weight: 30, eyes: 30, skin: 30, hair: 30,
   appearance: 10_000, allies: 20_000, backstory: 40_000, treasure: 10_000, additional_features: 40_000,
@@ -200,6 +201,9 @@ export function emptySheet({ name = '', player_name = '' } = {}) {
     combat: normalizeCombat(), // weapons with mastery, fighting styles and other choices, raging / Hunter's Mark / Hex now (attack-extras.js)
     point_buy: normalizePointBuy(), // the point buy calculator (point-buy.js): off until the player turns it on
     levels_granted: 0, // levels the DM has given that the player hasn't taken yet (level-up.js); only the server changes it
+    conditions: [], // conditions the character has now (conditions.js SHEET_CONDITIONS)
+    exhaustion: 0, // exhaustion level, 0 to 6
+    concentration: '', // the spell the character is concentrating on, '' for none
     level_log: [], // each level up taken with Level up: { class, level, die, hp (the die rolled, null: the average), asi, feat, at } (level-up.js)
     overrides: {},
   };
@@ -342,6 +346,7 @@ export function normalizeSheet(input = {}) {
   out.companions = normalizeCompanions(s.companions);
   out.class_features = normalizeClassFeatures(s.class_features);
   out.combat = normalizeCombat(s.combat);
+  Object.assign(out, normalizeConditions(s));
   // Sheets from before the class features box kept Wild Shape uses spent with the forms.
   const oldUses = int(s.wild_shape?.uses_spent, { min: 0, max: 20, fallback: 0 });
   if (oldUses && s.class_features?.spent?.wild_shape == null) out.class_features.spent.wild_shape = oldUses;
@@ -480,6 +485,8 @@ export function longRest(sheet, { edition = '2014' } = {}) {
     if (d.spent - take) spent[d.die] = d.spent - take;
   }
   out.hit_dice_spent = spent;
+  // A long rest takes away one level of exhaustion (both editions; the DM decides about food and water).
+  out.exhaustion = Math.max(0, (out.exhaustion ?? 0) - 1);
   return { sheet: out, rested: true, regained: { hp: (out.hp.current ?? before) - before, hit_dice: regained } };
 }
 
@@ -632,6 +639,11 @@ export function computeSheet(sheet, { weight = 'capacity', edition = '2014' } = 
   const load = encumbrance(carriedWeight(sheet.inventory, sheet.coins), scores.str, weight, { bigger: POWERFUL_BUILD.test(sheet.race ?? '') });
   let speed = raceSpeed(sheet.race, ed) + monkSpeed + fast + sum('speed') - (tooHeavy ? 10 : 0);
   if (load) speed = load.speed == null ? 5 : speed + load.speed;
+  // Conditions and exhaustion (conditions.js): speed 0 (grappled, restrained...), halved, or less.
+  const cond = conditionEffects(sheet, ed);
+  if (cond.speed.zero) speed = 0;
+  else if (cond.speed.half) speed = Math.floor(speed / 2);
+  else if (cond.speed.minus) speed -= cond.speed.minus;
   set('speed', Math.max(0, speed));
 
   // Rolls made with disadvantage: Stealth in noisy armour; Strength, Dexterity and Constitution when heavily encumbered.
@@ -639,6 +651,7 @@ export function computeSheet(sheet, { weight = 'capacity', edition = '2014' } = 
   const noisy = (sheet.inventory ?? []).find((g) => g.equipped && g.armor?.stealth);
   if (noisy) disadvantage.push({ why: noisy.name, skills: ['stealth'], abilities: [] });
   if (load?.disadvantage) disadvantage.push({ why: load.level === 'over' ? 'over your carrying capacity' : 'heavily encumbered', skills: [], abilities: ['str', 'dex', 'con'] });
+  disadvantage.push(...cond.disadvantage);
 
   // HP: max hit die at 1st level, then the fixed average per level; Constitution each level; Dwarven
   // Toughness (2014 hill dwarves, 2024 all dwarves) and Draconic Resilience: 1 more each level.
@@ -665,7 +678,8 @@ export function computeSheet(sheet, { weight = 'capacity', edition = '2014' } = 
   }
   // Tough: 2 more each level.
   if (feat('feat_tough')) hp += 2 * Math.min(20, classes.reduce((n, c) => n + c.level, 0));
-  set('hp_max', classes.length ? hp : null);
+  // Exhaustion 4 (2014): the maximum is halved.
+  set('hp_max', classes.length ? (cond.hpMaxHalved ? Math.max(1, Math.floor(hp / 2)) : hp) : null);
   set('hit_dice', [...dice].sort((x, y) => y[0] - x[0]).map(([die, n]) => `${n}d${die}`).join(' + '));
 
   // Spellcasting: the chosen spellcasting class, else the first class that casts.
@@ -690,15 +704,17 @@ export function computeSheet(sheet, { weight = 'capacity', edition = '2014' } = 
   // Reliable Talent (rogue 11; 2024 rogue 7): a d20 of 9 or lower counts as 10 on a check you're proficient in.
   const reliable = levelIn('rogue') >= (ed === '2024' ? 7 : 11);
 
-  return { auto, values, overridden: new Set(Object.keys(overrides).filter((k) => k in auto)), level, casters, scores, effects, load, tooHeavy, disadvantage, advantage, reliable, edition: ed, feats: [...feats], d20: d20Rule(sheet) };
+  return { auto, values, overridden: new Set(Object.keys(overrides).filter((k) => k in auto)), level, casters, scores, effects, load, tooHeavy, disadvantage, advantage, reliable, edition: ed, feats: [...feats], d20: d20Rule(sheet), conditions: cond };
 }
 
 /**
  * Why a roll has disadvantage from the sheet ('' if it doesn't): pass the
  * ability it uses (str, dex... for checks, saves and attacks) and the skill, if any.
  */
-export function rollDisadvantage(calc, { ability = '', skill = '' } = {}) {
-  const hit = (calc?.disadvantage ?? []).find((d) => d.skills.includes(skill) || d.abilities.includes(ability));
+export function rollDisadvantage(calc, { ability = '', skill = '', kind = '', initiative = false } = {}) {
+  // An entry with `kinds` (conditions) counts only for those rolls: check, save, attack, initiative (a check too).
+  const fits = (d) => !d.kinds || d.kinds.includes(kind) || (initiative && (d.kinds.includes('initiative') || d.kinds.includes('check')));
+  const hit = (calc?.disadvantage ?? []).find((d) => fits(d) && (d.skills.includes(skill) || d.abilities.includes(ability) || (d.all && (kind || initiative))));
   return hit ? hit.why : '';
 }
 

@@ -80,7 +80,24 @@ export function spells() {
   state.renders.push(paintLevels);
 
   const list = h('div', { class: 'spell-list' });
-  const drawList = () => list.replaceChildren(...spellGroups(drawList));
+  const drawList = () => { list.replaceChildren(...spellGroups(drawList)); filterList(); };
+  // Filters: which spells show (prepared and cantrips, all, rituals, concentration) and a search by name.
+  const FILTERS = { all: 'All', prepared: 'Prepared', ritual: 'Ritual', concentration: 'Concentration' };
+  const search = h('input', { type: 'search', placeholder: 'Find a spell…', 'aria-label': 'Find a spell on your sheet', autocomplete: 'off' });
+  const chips = Object.entries(FILTERS).map(([k, label]) => h('button', { type: 'button', class: 'chip', 'data-filter': k, 'aria-pressed': 'false', onclick: () => { setOpen('spell-filter', k); filterList(); } }, label));
+  const filterList = () => {
+    const f = isOpen('spell-filter', 'all');
+    const q = search.value.trim().toLowerCase();
+    chips.forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.filter === f)));
+    for (const card of list.querySelectorAll('details.spell')) {
+      const sp = card.__spell;
+      const show = (!q || sp.name.toLowerCase().includes(q)) && (f === 'all' || (f === 'prepared' && (sp.prepared || !sp.level)) || (f === 'ritual' && sp.ritual) || (f === 'concentration' && sp.concentration));
+      card.hidden = !show;
+    }
+    for (const g of list.querySelectorAll('.spell-group')) g.hidden = ![...g.querySelectorAll('details.spell')].some((c) => !c.hidden);
+  };
+  search.addEventListener('input', filterList);
+  const filters = h('div', { class: 'spell-filters' }, chips, search);
   drawList();
 
   return h('div', { class: 'sh-spells' },
@@ -93,6 +110,7 @@ export function spells() {
     slots,
     h('p', { class: 'muted small slot-help' }, slotHelp, allLevels),
     addSpell(drawList, list),
+    state.sheet.spells.length > 4 ? filters : null,
     list,
   );
 }
@@ -277,7 +295,9 @@ function spellCard(spell, drawList) {
  * roll for an attack, the damage roll for anything else, or Cast. With no
  * slot left the player can still roll (a scroll, an item, a free casting).
  */
-function spellRollButtons(spell) {
+export function spellRollButtons(spell, { where = '' } = {}) {
+  // The same buttons can show twice (the Spells tab and Actions): the second copy's labels say where it is.
+  const at_ = where ? ` (${where})` : '';
   const wrap = h('span', { class: 'spell-rolls' });
   const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
   let slot = null;
@@ -294,7 +314,7 @@ function spellRollButtons(spell) {
     wrap.replaceChildren();
     const leveled = spell.level >= 1;
     if (!spell.attack && !spell.damage.trim() && !leveled) return;
-    slot = leveled ? h('select', { 'aria-label': `${spell.name} slot level`, title: 'Cast with a slot of this level', onclick: (e) => e.stopPropagation() }) : null;
+    slot = leveled ? h('select', { 'aria-label': `${spell.name} slot level${at_}`, title: 'Cast with a slot of this level', onclick: (e) => e.stopPropagation() }) : null;
     const rolls = () => spellPlan(state, spell, slot ? Number(slot.value) : spell.level, `spell:${spell.id}`);
     const at = () => (slot && Number(slot.value) > spell.level ? ` at ${ORDINALS[slot.value]} level` : '');
     const cast = () => castSpell(spell, slot ? Number(slot.value) : null);
@@ -304,7 +324,7 @@ function spellRollButtons(spell) {
       paintSlots();
     }
     if (spell.attack === 'attack') {
-      const hit = h('button', { type: 'button', class: 'icon-roll', title: `Spell attack${leveled ? ': spends the slot' : ''} (Shift: advantage, Alt: disadvantage)`, 'aria-label': `Roll ${spell.name} to hit` });
+      const hit = h('button', { type: 'button', class: 'icon-roll', title: `Spell attack${leveled ? ': spends the slot' : ''} (Shift: advantage, Alt: disadvantage)`, 'aria-label': `Roll ${spell.name} to hit${at_}` });
       hit.innerHTML = D20_ICON;
       hit.addEventListener('click', async (e) => {
         stop(e);
@@ -321,7 +341,7 @@ function spellRollButtons(spell) {
     if (spell.damage.trim()) {
       // An attack's damage follows its to-hit roll, which already spent the slot.
       const casts = spell.attack !== 'attack';
-      wrap.append(h('button', { type: 'button', class: 'icon-roll dmg-roll', title: `${heal ? 'Roll healing' : 'Roll damage'}${casts && leveled ? ': spends the slot' : ''}`, 'aria-label': `Roll ${spell.name} ${heal ? 'healing' : 'damage'}`, onclick: async (e) => {
+      wrap.append(h('button', { type: 'button', class: 'icon-roll dmg-roll', title: `${heal ? 'Roll healing' : 'Roll damage'}${casts && leveled ? ': spends the slot' : ''}`, 'aria-label': `Roll ${spell.name} ${heal ? 'healing' : 'damage'}${at_}`, onclick: async (e) => {
         stop(e);
         const r = rolls();
         if (!r.damage) return alert(`Type the dice for ${spell.name} first, like 8d6 fire.`);
@@ -330,7 +350,7 @@ function spellRollButtons(spell) {
         roll(r.damage, { label: `${spell.name}: ${heal ? 'healing' : 'damage'}${at()}${dc}${withExtras(r)}` });
       } }, heal ? 'Heal' : 'Dmg'));
     } else if (leveled && spell.attack !== 'attack') {
-      wrap.append(h('button', { type: 'button', class: 'small cast-spell', title: 'Cast it: spends the slot', 'aria-label': `Cast ${spell.name}`, onclick: async (e) => {
+      wrap.append(h('button', { type: 'button', class: 'small cast-spell', title: 'Cast it: spends the slot', 'aria-label': `Cast ${spell.name}${at_}`, onclick: async (e) => {
         stop(e);
         if (await cast()) status(`Cast ${spell.name}${at()}.`);
       } }, 'Cast'));
@@ -363,10 +383,23 @@ async function castSpell(spell, slot) {
     state.version = res.version;
     refresh();
     announce();
+    concentrateOn(spell);
     return true;
   } catch (err) {
     return confirm(`${err.message}\n\nRoll anyway without spending a slot (a scroll, an item, a free casting)?`);
   }
+}
+
+/**
+ * Casting a concentration spell: the header shows it (sheet.concentration). Already concentrating on
+ * another: casting this one ends that one (5e), said in the status line.
+ */
+export function concentrateOn(spell) {
+  if (!spell.concentration || state.sheet.concentration === spell.name) return;
+  const before = state.sheet.concentration;
+  state.sheet.concentration = spell.name;
+  changed();
+  status(before ? `Concentrating on ${spell.name} now: ${before} has ended.` : `Concentrating on ${spell.name}.`);
 }
 
 /** " (with Agonizing Blast +3)": a spell's class feature extras, for its roll's label. */
@@ -405,4 +438,38 @@ function redrawRolls(spell) {
 function refreshSummary(card, spell) {
   card.querySelector('summary strong').textContent = spell.name;
   card.querySelector('.spell-meta').textContent = [spell.casting_time, spell.range, spell.duration].filter(Boolean).join(' · ');
+}
+
+const TIME_GROUPS = [['action', 'Action'], ['bonus', 'Bonus action'], ['reaction', 'Reaction'], ['other', 'Longer to cast']];
+const timeGroup = (t) => (/bonus/i.test(t) ? 'bonus' : /reaction/i.test(t) ? 'reaction' : /^\s*1\s*action/i.test(t) || !t.trim() ? 'action' : 'other');
+
+/**
+ * The spells to cast in a fight, for the Actions tab: cantrips and prepared spells (all of them for a
+ * class that doesn't prepare), grouped by casting time (action, bonus action, reaction, longer), each with
+ * its roll and cast buttons (the same as in Spells). Their labels say "(Actions)".
+ */
+export function actionSpells() {
+  const el = h('div', { class: 'action-spells' });
+  let drawn = '';
+  const draw = () => {
+    const usable = state.sheet.spells.filter((sp) => !sp.level || sp.prepared || !state.sheet.spells.some((x) => x.prepared));
+    // Redrawn only when the list changes (not on every keystroke elsewhere).
+    const key = JSON.stringify(usable.map((sp) => [sp.id, sp.name, sp.level, sp.casting_time, sp.attack, sp.damage, sp.concentration, sp.range]));
+    if (key === drawn) return;
+    drawn = key;
+    const groups = TIME_GROUPS.map(([k, title]) => [title, usable.filter((sp) => timeGroup(sp.casting_time) === k)]).filter(([, l]) => l.length);
+    el.replaceChildren(...(groups.length ? groups.map(([title, l]) => h('section', { class: 'action-group' },
+      h('h4', {}, `Spells: ${title.toLowerCase()}`),
+      l.sort((a, b) => (a.level ?? 0) - (b.level ?? 0) || a.name.localeCompare(b.name)).map((sp) => h('div', { class: 'action-row' },
+        h('strong', {}, sp.name),
+        h('span', { class: 'tag' }, sp.level ? ORDINALS[sp.level] : 'cantrip'),
+        sp.concentration ? h('span', { class: 'tag', title: 'Concentration' }, 'C') : null,
+        h('span', { class: 'muted small spell-meta' }, [sp.range, sp.damage].filter(Boolean).join(' · ')),
+        spellRollButtons(sp, { where: 'Actions' }),
+      )))) : []));
+    el.hidden = !groups.length;
+  };
+  draw();
+  state.renders.push(draw);
+  return el;
 }

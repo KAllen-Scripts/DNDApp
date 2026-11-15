@@ -178,6 +178,9 @@ Don't pursue these unless the owner raises them again.
 
 Newest first. Older entries: [docs/archive/changelog.md](docs/archive/changelog.md).
 
+### 2026-11-15: The character sheet redesigned, stage 1: one layout
+- The owner picked Option A of the redesign (research and sketches in the project files, `research/character-sheet/`). The five sheet layouts under Look are gone: a header that stays at the top (hit points with Damage, Heal and Temp; AC, initiative, speed; conditions, exhaustion and concentration; a Rest panel), the stats on the left, tabs for Actions (with the new Spend list and spells by casting time), Spells (filters), Inventory (moved in), Features, Companions, About. Play and Edit modes; the sheet bar's buttons under ⋯ More. Conditions apply to the sheet's own rolls and speed (`shared/src/conditions.js`). Spec: docs/spec/sheets.md "Layout", "Conditions on the sheet". Tests: `shared/test/conditions.test.js`, two new sheet tests in place of the layouts test.
+
 ### 2026-11-11: The phone host's work merged
 - The owner: the phone had pushed `claude/phone-host-fixes` (PR #154's work plus three fixes) after main moved on. It's merged onto the split-up main (PR #156): `fogView`'s change went into `map/fog.js`, and `map/map.js` imports `wallBetween`. Every other branch's work was already in main (squash-merged PRs, superseded PR #33, or the example pictures main has in smaller copies), so the other branches can be deleted; a cloud session can't delete branches (GitHub refuses with 403), so they were left for the owner.
 

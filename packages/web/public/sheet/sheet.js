@@ -1,7 +1,7 @@
 /**
  * The Sheet tab: the player's character sheet. The parts of the sheet are
- * built as blocks, and the layout chosen under Look arranges them (like the
- * official 5e sheet by default; see LAYOUTS).
+ * built as blocks under one layout: a header, the stats, and tabs (see
+ * "the layout" below).
  *
  * Automatic values come from the shared rules (./shared/sheet.js, the same
  * code the server uses). Anything the player types into an automatic box is
@@ -40,8 +40,11 @@ import { itemNames } from '/shared/item-names.js';
 import { GEAR_KINDS } from '../items/item-card.js';
 import { levelUpBanner } from './level-up.js';
 import { $, cap, h, readBase64, setChildren } from '../page/dom.js';
+import { fold } from './fold.js';
 import { addGear, closePreview, gearStatus, inventoryTab, kindFields, previewGear, reopen } from './inventory.js';
-import { spells } from './spells.js';
+import { actionSpells, spells } from './spells.js';
+import { applyMode, sheetHeader, sheetMode } from './header.js';
+import { spendBox } from './spend.js';
 
 export const state = {
   campaignId: null,
@@ -59,7 +62,6 @@ export const state = {
   calc: null,
   settings: { weight: 'capacity' }, // the campaign's (campaign/settings.js)
   edition: '2014', // the rules edition the campaign plays by, from the server (when the DM hasn't chosen one in settings)
-  layout: null, // the layout the sheet was last drawn in
   renders: [], // functions that refresh automatic values
   gearDraws: [], // functions that redraw what shows the inventory (the Inventory tab, equipped weapons in Attacks)
   attackDraws: [], // the Attacks boxes (equipped weapons show there)
@@ -377,10 +379,8 @@ export const box = (title, cls, ...children) => h('section', { class: `sh-box ${
 /** A value with its label underneath (armour class, hit points, spell save DC...); the label rolls it if get is given. */
 export const stat = (control, label, cls = '', get) => h('label', { class: `stat ${cls}` }, control, get ? rollButton(label, get, 'lbl') : lbl(label));
 /** A one-line box, lined up with the save and skill lists: a value, then what it is. */
-const line = (control, label, cls = '') => h('label', { class: `sh-line ${cls}` }, h('span'), h('span', { class: 'line-val' }, control), lbl(label));
-const col = (...blocks) => h('div', { class: 'sh-col' }, blocks);
+export const line = (control, label, cls = '') => h('label', { class: `sh-line ${cls}` }, h('span'), h('span', { class: 'line-val' }, control), lbl(label));
 export const row = (name, ...children) => h('div', { class: `sh-row row-${name}` }, children);
-const section = (title, ...content) => h('details', { class: 'sh-section', open: true }, h('summary', {}, title), ...content);
 export const removeButton = (title, onclick) => h('button', { type: 'button', class: 'icon-x', title, 'aria-label': title, onclick }, '×');
 export const addButton = (text, onclick) => h('button', { type: 'button', class: 'add-row', onclick }, `+ ${text}`);
 
@@ -403,31 +403,22 @@ function rollButton(content, get, cls = '') {
  * the sheet (heavy armour, weight) and advantage from class features (Feral Instinct on initiative). A skill
  * the character is proficient in rolls 1d20min10 with Reliable Talent.
  */
-export const check = (key, label, why = {}) => () => ({
-  notation: why.skill ? checkNotation(state.calc, state.sheet, why.skill, state.calc.values[key]) : d20Plus(state.calc.values[key]),
-  label: why.skill && state.calc.reliable && state.sheet.skills?.[why.skill] ? `${label} (Reliable Talent)` : label,
-  disadvantage: rollDisadvantage(state.calc, why),
-  advantage: rollAdvantage(state.calc, why),
-});
+export const check = (key, label, why = {}) => () => {
+  // 2024 exhaustion: −2 a level on every d20 test (conditions.js). why.kind: check (the default), save.
+  const penalty = state.calc.conditions?.d20Penalty || 0;
+  const value = (Number(state.calc.values[key]) || 0) + penalty;
+  const fails = why.kind === 'save' && state.calc.conditions?.failSaves?.abilities.includes(why.ability) ? state.calc.conditions.failSaves.why : '';
+  const notes = [why.skill && state.calc.reliable && state.sheet.skills?.[why.skill] ? 'Reliable Talent' : '', penalty ? `exhaustion ${penalty}` : '', fails ? `fails automatically: ${fails}` : ''].filter(Boolean);
+  return {
+    notation: why.skill ? checkNotation(state.calc, state.sheet, why.skill, value) : d20Plus(value),
+    label: notes.length ? `${label} (${notes.join(', ')})` : label,
+    disadvantage: rollDisadvantage(state.calc, { kind: 'check', ...why }),
+    advantage: rollAdvantage(state.calc, why),
+  };
+};
 
 function datalist(id, options) {
   return h('datalist', { id }, options.map((o) => h('option', { value: o })));
-}
-
-// Header: name, classes and the other details at the top of the sheet.
-
-function header() {
-  // "High Elf · Wizard 5 / Fighter 1 · Level 6", under the name.
-  const summary = h('p', { class: 'summary' });
-  state.renders.push(() => {
-    const classes = state.sheet.classes.filter((c) => c.name.trim()).map((c) => `${c.name.trim()} ${c.level}`).join(' / ');
-    summary.textContent = [state.sheet.race.trim(), classes, `Level ${state.calc.level}`].filter(Boolean).join(' · ');
-  });
-  return h('header', { class: 'sh-head' },
-    h('section', { class: 'sh-box name-box' }, field('name', { label: 'Character name', cls: 'big' }), lbl('Character name'), summary, wildShapeBanner({ state }),
-      levelUpBanner({ state, base, flush, status, edition: editionNow, adopt: (res) => { useSheet(res.sheet, res.version, res.number); announce(); } })),
-    infoBox(),
-  );
 }
 
 /** The subclass box suggests the Player's Handbook's subclasses for the class typed beside it. */
@@ -464,7 +455,7 @@ function infoBox() {
   const level = h('output', { class: 'readout', title: 'Worked out from your class levels' });
   state.renders.push(() => (level.textContent = state.calc.level));
   const bg = backgroundBox({ state, input: field('background', { label: 'Background', list: 'dl-backgrounds' }), changed, redraw: render });
-  return h('section', { class: 'sh-box info-box' },
+  return h('section', { class: 'sh-box info-box edit-only' },
     classes,
     h('div', { class: 'info-grid' },
       labelled('Background', bg.box),
@@ -489,7 +480,7 @@ function abilityTiles() {
   return h('div', { class: 'abilities' },
     ABILITIES.map((a) =>
       h('div', { class: 'ability' },
-        rollButton(ABILITY_NAMES[a], check(`mod.${a}`, `${ABILITY_NAMES[a]} check`, { ability: a }), 'lbl'),
+        rollButton([h('span', { class: 'ab-long' }, ABILITY_NAMES[a]), h('span', { class: 'ab-short', 'aria-hidden': 'true' }, a.toUpperCase())], check(`mod.${a}`, `${ABILITY_NAMES[a]} check`, { ability: a, kind: 'check' }), 'lbl'),
         auto(`mod.${a}`, { kind: 'bonus', label: `${ABILITY_NAMES[a]} modifier`, cls: 'mod' }),
         scoreField(a),
         itemScore(a),
@@ -498,26 +489,11 @@ function abilityTiles() {
   );
 }
 
-/** One ability with its saving throw and skills underneath (like the 2024 sheet). */
-function abilityGroup(a) {
-  const score = scoreField(a);
-  score.title = 'Score';
-  return h('section', { class: 'sh-box ability-group' },
-    h('div', { class: 'ability-head' },
-      h('h3', {}, rollButton(ABILITY_NAMES[a], check(`mod.${a}`, `${ABILITY_NAMES[a]} check`, { ability: a }))),
-      auto(`mod.${a}`, { kind: 'bonus', label: `${ABILITY_NAMES[a]} modifier`, cls: 'mod' }),
-      score,
-      itemScore(a),
-    ),
-    h('ul', { class: 'checklist' }, saveRow(a, 'Saving throw'), SKILLS_BY_ABILITY[a].map((k) => skillRow(k, false))),
-  );
-}
-
 function saveRow(a, name = ABILITY_NAMES[a]) {
   return h('li', {},
     autoCheck(`save_prof.${a}`, `Proficient in ${ABILITY_NAMES[a]} saves`),
     auto(`save.${a}`, { kind: 'bonus', label: `${ABILITY_NAMES[a]} save` }),
-    rollButton(name, check(`save.${a}`, `${ABILITY_NAMES[a]} save`, { ability: a }), 'row-name'),
+    rollButton(name, check(`save.${a}`, `${ABILITY_NAMES[a]} save`, { ability: a, kind: 'save' }), 'row-name'),
   );
 }
 
@@ -538,7 +514,7 @@ function itemScore(a) {
 
 /** An ability score box. It follows the sheet, so the point buy calculator's buttons show in it. */
 function scoreField(a) {
-  const el = field(`abilities.${a}`, { label: `${ABILITY_NAMES[a]} score`, kind: 'int', cls: 'score' });
+  const el = field(`abilities.${a}`, { label: `${ABILITY_NAMES[a]} score`, kind: 'int', cls: 'score edit-only' });
   state.renders.push(() => {
     if (document.activeElement !== el) el.value = state.sheet.abilities[a];
   });
@@ -659,33 +635,14 @@ function skillRow(k, withAbility = true) {
 
 const saves = () => box('Saving throws', 'saves', h('ul', { class: 'checklist' }, ABILITIES.map((a) => saveRow(a))));
 const skills = () => box('Skills', 'skills', h('ul', { class: 'checklist' }, Object.keys(SKILLS).map((k) => skillRow(k))), h('div', { class: 'list-foot' }, legend(), jack()));
-/** The skill marks explained, and Jack of All Trades (for layouts without a Skills box). */
-const skillNotes = () => box(null, 'skill-notes', legend(), jack());
-
 const legend = () =>
   h('p', { class: 'legend' }, ['none', 'proficient', 'expertise'].map((p) => h('span', {}, h('i', { class: 'mark', 'data-prof': p }), p)));
 const jack = () =>
   h('label', { class: 'jack' }, autoCheck('jack_of_all_trades', 'Jack of All Trades'), h('span', {}, 'Jack of All Trades: half proficiency on other checks'));
 
-function inspiration() {
-  const tick = h('input', { type: 'checkbox', checked: state.sheet.inspiration, onchange: (e) => { state.sheet.inspiration = e.target.checked; changed(); } });
-  return line(tick, 'Inspiration', 'inspiration');
-}
-const proficiency = () => line(auto('proficiency_bonus', { kind: 'bonus', label: 'Proficiency bonus' }), 'Proficiency bonus');
 const passive = () => line(auto('passive_perception', { label: 'Passive Wisdom (Perception)' }), 'Passive Wisdom (Perception)');
 
-/** Ability tiles beside inspiration, proficiency, saves and skills: the left of the official sheet. */
-const core = () => [h('div', { class: 'core' }, abilityTiles(), h('div', { class: 'core-stack' }, inspiration(), proficiency(), saves(), skills())), pointBuyBox()];
-
 // Combat.
-
-const vitals = () =>
-  h('div', { class: 'vitals' },
-    stat(auto('ac', { label: 'Armour class' }), 'Armour class', 'big'),
-    stat(auto('initiative', { kind: 'bonus', label: 'Initiative' }), 'Initiative', 'big', () => ({ ...check('initiative', 'Initiative', { ability: 'dex' })(), advantage: rollAdvantage(state.calc, { initiative: true }), initiative: true })),
-    stat(auto('speed', { label: 'Speed (feet)' }), 'Speed', 'big'),
-    loadNote('sheet-warn'),
-  );
 
 /** What the gear does to speed and rolls: too heavy, armour without the Strength for it, noisy armour. */
 export function loadNote(cls) {
@@ -706,15 +663,6 @@ export function loadNote(cls) {
   state.renders.push(paint);
   return el;
 }
-
-const hp = () =>
-  box('Hit points', 'hp',
-    h('div', { class: 'tiles' },
-      stat(field('hp.current', { label: 'Current hit points', kind: 'int', nullable: true }), 'Current', 'hp-current'),
-      stat(auto('hp_max', { label: 'Hit point maximum' }), 'Maximum'),
-      stat(field('hp.temp', { label: 'Temporary hit points', kind: 'int', nullable: true }), 'Temporary'),
-    ),
-  );
 
 /**
  * Hit dice: the total (automatic, or typed), then a row per die size with a
@@ -879,7 +827,6 @@ const deathSaves = () =>
     h('button', { type: 'button', class: 'ghost ds-roll', onclick: (e) => roll(withD20Rule('1d20', state.calc.d20), { label: 'Death save', mode: rollModeFromEvent(e) }) }, 'Roll a death save'),
   );
 
-const combat = () => h('div', { class: 'combat' }, vitals(), hp(), h('div', { class: 'pair' }, hitDice(), deathSaves()));
 
 function attacks() {
   const list = h('div', { class: 'sh-table attacks' });
@@ -984,7 +931,7 @@ function attackRow(i, draw) {
   hit.innerHTML = D20_ICON;
   hit.addEventListener('click', (e) => {
     const title = a.name.trim() || 'Attack';
-    rollAttackPlan(attackCtx(), { key: key(), title, plan: plan(), mode: rollModeFromEvent(e), disadvantage: rollDisadvantage(state.calc, { ability: a.ability === 'finesse' ? 'dex' : a.ability }) });
+    rollAttackPlan(attackCtx(), { key: key(), title, plan: plan(), mode: rollModeFromEvent(e), disadvantage: rollDisadvantage(state.calc, { ability: a.ability === 'finesse' ? 'dex' : a.ability, kind: 'attack' }) });
   });
   const damage = h('button', { type: 'button', class: 'icon-roll dmg-roll', title: 'Roll damage', 'aria-label': 'Roll damage' }, 'Dmg');
   damage.addEventListener('click', () => {
@@ -1022,7 +969,7 @@ function gearAttackRow(g, { offhand = false } = {}) {
   const hit = h('button', { type: 'button', class: 'icon-roll', title: 'Roll to hit (Shift: advantage, Alt: disadvantage)', 'aria-label': `Roll ${title} to hit` });
   hit.innerHTML = D20_ICON;
   hit.addEventListener('click', (e) => {
-    rollAttackPlan(attackCtx(), { key, title, plan: plan(), mode: rollModeFromEvent(e), disadvantage: rollDisadvantage(state.calc, { ability: g.weapon.ability === 'finesse' ? 'dex' : g.weapon.ability }) });
+    rollAttackPlan(attackCtx(), { key, title, plan: plan(), mode: rollModeFromEvent(e), disadvantage: rollDisadvantage(state.calc, { ability: g.weapon.ability === 'finesse' ? 'dex' : g.weapon.ability, kind: 'attack' }) });
   });
   const damage = (two) => h('button', { type: 'button', class: 'icon-roll dmg-roll', title: two ? 'Roll damage with both hands (versatile)' : 'Roll damage', 'aria-label': `Roll ${title} damage${two ? ' with both hands' : ''}`, onclick: () => {
     const now = plan(two);
@@ -1087,7 +1034,7 @@ export function details() {
 // AI describes into the Appearance box.
 
 /** Show a picture once it's fetched (it needs the login, so an <img> can't fetch it itself). */
-function pictureImg(kind, cls) {
+export function pictureImg(kind, cls) {
   const entry = state.pictures[kind];
   const img = h('img', { class: cls, alt: kind === 'token' ? 'Your token' : 'Your character' });
   const url = kind === 'token' ? `${base()}/members/${state.userId}/token` : `${base()}/character/picture/image`;
@@ -1228,13 +1175,6 @@ async function removePicture(kind, draw) {
   }
 }
 
-// ---------- layouts ----------
-//
-// Chosen under Look (data-sheet-layout on #tab-sheet). Each returns the rows
-// below the header; the column widths and how they fold up on narrow
-// screens are in themes.css. Every column stretches to the tallest one in its
-// row, and its last block grows to fill, so the bottoms line up.
-
 /**
  * Class features (sheet/class-features.js): Rage, Second Wind, Ki... for this
  * character's classes, and the player's own rows. Druids get their Wild Shape
@@ -1272,93 +1212,108 @@ async function useItem(g, a, extra = 0) {
   await roll('', { label, path, body, onServer: done, then: damage });
 }
 
-const pages = () => [section('Character details', details()), section('Spells', spells())];
+// ---------- the layout ----------
+//
+// One layout (the 2026-11 redesign, Option A; docs/spec/sheets.md "Layout"): the header (sheet/header.js)
+// stays at the top; under it the stats (abilities, saves, senses, proficiencies, skills) on the left, and
+// tabs for the rest: Actions, Spells, Inventory, Features, Companions, About. On a narrow sheet (a phone,
+// beside the map) the stats become a tab too and the tab bar sits at the bottom (themes.css).
 
-const LAYOUTS = {
-  // The official 2014 sheet: three columns, then details and spells.
-  classic: () => [
-    row('classic', col(core(), passive(), proficiencies()), col(combat(), attacks(), itemActions(), classFeatures(), companions(), equipment()), col(traits(), features())),
-    ...pages(),
-  ],
-  // What you need in a fight across the top.
-  combat: () => [
-    row('combat', col(combat()), col(attacks(), itemActions(), classFeatures(), companions()), col(equipment())),
-    row('stats', col(core(), passive(), proficiencies()), col(traits(), features())),
-    ...pages(),
-  ],
-  // Like the 2024 sheet: each ability holds its saving throw and skills.
-  abilities: () => [
-    row('vitals', vitals(), hp(), hitDice(), deathSaves()),
-    row('abilities',
-      col(proficiency(), inspiration(), pointBuyBox(), ...['str', 'dex', 'con'].map((a) => abilityGroup(a)), skillNotes(), passive(), proficiencies()),
-      col(...['int', 'wis', 'cha'].map((a) => abilityGroup(a))),
-      col(attacks(), itemActions(), classFeatures(), companions(), features()),
-      col(traits(), equipment()),
-    ),
-    ...pages(),
-  ],
-  // Like the sheets in apps: abilities and vitals across the top, the rest in tabs.
-  tabs: () => [
-    row('strip', abilityTiles()),
-    row('point-buy', pointBuyBox()),
-    row('vitals', vitals(), hp(), hitDice(), deathSaves()),
-    row('tabs',
-      col(proficiency(), inspiration(), saves(), passive(), proficiencies()),
-      col(skills()),
-      col(tabbed([
-        ['actions', 'Actions', () => [attacks(), itemActions(), classFeatures(), companions()]],
-        ['spells', 'Spells', spells],
-        ['inventory', 'Inventory', equipment],
-        ['features', 'Features & traits', features],
-        ['background', 'Background', () => [traits(), details()]],
-      ])),
-    ),
-  ],
-  // Everything in one scrolling column.
-  single: () => [
-    row('single', col(core(), passive(), combat(), attacks(), itemActions(), classFeatures(), companions(), equipment(), proficiencies(), traits(), features())),
-    ...pages(),
-  ],
-};
+/** Senses and defences: passive scores worked out, and the player's own notes (darkvision, resistances...). */
+function senses() {
+  const passives = h('div', { class: 'passives' });
+  state.renders.push(() => {
+    const p = (k) => 10 + (Number(state.calc.values[`skill.${k}`]) || 0);
+    passives.replaceChildren(
+      h('span', {}, 'Insight ', h('strong', {}, String(p('insight')))),
+      h('span', {}, 'Investigation ', h('strong', {}, String(p('investigation')))));
+  });
+  return box('Senses & defences', 'senses', passive(), h('p', { class: 'small muted passive-more' }, 'Passive ', passives),
+    field('defenses', { label: 'Senses and defences', kind: 'longtext', rows: 3, placeholder: 'Darkvision 60 ft; resistant to poison; advantage against being charmed…' }));
+}
 
-const currentLayout = () => {
-  const layout = $('#tab-sheet')?.dataset.sheetLayout;
-  return Object.hasOwn(LAYOUTS, layout) ? layout : 'classic';
-};
+/** Standard actions anyone can take, folded away. */
+const STANDARD_ACTIONS = [
+  ['Attack', 'Make a weapon attack (more with Extra Attack).'], ['Cast a spell', 'One with a casting time of 1 action.'],
+  ['Dash', 'Extra movement equal to your speed.'], ['Disengage', "Your movement doesn't provoke opportunity attacks this turn."],
+  ['Dodge', 'Attacks against you have disadvantage; Dexterity saves with advantage.'], ['Help', 'Give an ally advantage on a check or their next attack.'],
+  ['Hide', 'A Dexterity (Stealth) check.'], ['Ready', 'Pick a trigger and the action you take when it happens (a reaction).'],
+  ['Search', 'A Wisdom (Perception) or Intelligence (Investigation) check.'], ['Use an object', 'Interact with a second object, or one that needs an action.'],
+  ['Grapple or shove', 'In place of one attack: a Strength (Athletics) check, or the 2024 save.'], ['Opportunity attack', 'A reaction when a creature you can see leaves your reach.'],
+];
+const standardActions = () => fold('standard-actions', 'Standard actions', h('dl', { class: 'standard-actions small' }, STANDARD_ACTIONS.flatMap(([n, t]) => [h('dt', {}, n), h('dd', {}, t)])), { cls: 'sh-box' });
+
+/** The Inventory tab's form and list (index.html #inventory-pane) live in whichever of the two tabs shows them: the sheet's Inventory tab or the page's Inventory tab. */
+export function placeInventory(where) {
+  const pane = $('#inventory-pane');
+  if (pane && where && pane.parentElement !== where) where.append(pane);
+}
 
 const TAB_KEY = 'dndapp.sheetTab';
+const SHEET_TABS = [
+  ['stats', 'Stats', '◈'], ['actions', 'Actions', '⚔'], ['spells', 'Spells', '✦'], ['inventory', 'Inventory', '⛨'],
+  ['features', 'Features', '❖'], ['companions', 'Companions', '🐾'], ['about', 'About', '☰'],
+];
 
-/** Tabs: [key, title, build] each. The open tab is remembered in this browser. */
-function tabbed(tabs) {
-  let current = storage.get(TAB_KEY);
-  if (!tabs.some(([key]) => key === current)) current = tabs[0][0];
+/**
+ * The sheet under the header: the stats pane, and the tabs. The open tab is remembered in this browser.
+ * "Stats" is a tab only on a narrow sheet (on a wide one the stats are always beside the tabs).
+ */
+function sheetBody() {
+  const statsPane = h('div', { class: 'sh-stats', 'data-panel': 'stats', id: 'sheet-tab-stats', role: 'tabpanel', 'aria-labelledby': 'sheet-tab-stats-button' },
+    h('div', { class: 'sh-col' }, h('section', { class: 'sh-box abilities-box' }, h('h3', {}, 'Abilities'), abilityTiles()), pointBuyBox(), saves(), senses(), proficiencies()),
+    h('div', { class: 'sh-col' }, skills()),
+  );
+  const inventoryPanel = h('div', { class: 'sh-inventory' });
+  const build = {
+    actions: () => [spendBox({ state, changed, edition: editionNow }), attacks(), actionSpells(), itemActions(), classFeatures(), standardActions()],
+    spells: () => [spells()],
+    inventory: () => [inventoryPanel, equipment()],
+    features: () => [features(), box('Additional features & traits', 'd-additional', markdownField('additional_features', { label: 'Additional features & traits', rows: 5 }))],
+    companions: () => [companions()],
+    about: () => [infoBox(), traits(), details()],
+  };
+  const body = h('div', { class: 'sh-a' });
   const buttons = [];
-  const panels = [];
+  const panels = { stats: statsPane };
+  for (const [key] of SHEET_TABS) {
+    if (key === 'stats') continue;
+    panels[key] = h('div', { class: 'sh-tabpanel', 'data-panel': key, role: 'tabpanel', id: `sheet-tab-${key}`, 'aria-labelledby': `sheet-tab-${key}-button` }, build[key]());
+  }
+  let current = storage.get(TAB_KEY);
+  if (!SHEET_TABS.some(([k]) => k === current)) current = 'actions';
   const select = (key, focus = false) => {
     current = key;
     storage.set(TAB_KEY, key);
-    tabs.forEach(([k], i) => {
+    body.dataset.open = key;
+    SHEET_TABS.forEach(([k], i) => {
       buttons[i].setAttribute('aria-selected', String(k === key));
       buttons[i].tabIndex = k === key ? 0 : -1;
-      panels[i].hidden = k !== key;
       if (k === key && focus) buttons[i].focus();
+      if (k !== 'stats') panels[k].hidden = k !== key && !(key === 'stats' && k === 'actions');
     });
+    if (key === 'inventory') placeInventory(inventoryPanel);
   };
-  for (const [key, title, build] of tabs) {
-    const id = `sheet-tab-${key}`;
-    buttons.push(h('button', { type: 'button', role: 'tab', id: `${id}-button`, 'aria-controls': id, onclick: () => select(key) }, title));
-    panels.push(h('div', { class: 'sh-tabpanel', role: 'tabpanel', id, 'aria-labelledby': `${id}-button` }, build()));
-  }
+  SHEET_TABS.forEach(([key, title, icon]) => buttons.push(h('button', { type: 'button', role: 'tab', id: `sheet-tab-${key}-button`, 'aria-controls': `sheet-tab-${key}`, 'data-key': key, onclick: () => select(key) },
+    h('span', { class: 'tab-icon', 'aria-hidden': 'true' }, icon), h('span', {}, title))));
   const bar = h('div', { class: 'sh-tabbar', role: 'tablist', 'aria-label': 'Sheet sections' }, buttons);
   bar.addEventListener('keydown', (e) => {
     const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
     if (!step) return;
     e.preventDefault();
-    const i = tabs.findIndex(([k]) => k === current);
-    select(tabs[(i + step + tabs.length) % tabs.length][0], true);
+    const i = SHEET_TABS.findIndex(([k]) => k === current);
+    select(SHEET_TABS[(i + step + SHEET_TABS.length) % SHEET_TABS.length][0], true);
   });
+  body.append(statsPane, h('div', { class: 'sh-tabs' }, bar, Object.entries(panels).filter(([k]) => k !== 'stats').map(([, p]) => p)));
   select(current);
-  return h('div', { class: 'sh-tabs' }, bar, panels);
+  // The Inventory pane comes into the sheet unless the page's own Inventory tab is showing it.
+  if ($('#tab-inventory')?.hidden !== false) placeInventory(inventoryPanel);
+  return body;
+}
+
+/** Open one of the sheet's tabs (the page's Inventory button, a link). */
+export function showSheetTab(key) {
+  $(`#sheet-tab-${key}-button`)?.click();
 }
 
 // ---------- the sheet ----------
@@ -1368,7 +1323,9 @@ function render() {
   state.gearDraws = [];
   state.attackDraws = [];
   state.calc = computeSheet(state.sheet, { ...state.settings, edition: editionNow() });
-  state.layout = currentLayout();
+  // The Inventory pane is kept (it isn't redrawn with the sheet): take it out before the sheet is replaced.
+  const pane = $('#inventory-pane');
+  if (pane && $('#sheet')?.contains(pane)) $('#tab-inventory').append(pane);
   $('#sheet').replaceChildren(
     datalist('dl-races', [...RACES, ...MORE_RACES]),
     datalist('dl-classes', Object.values(CLASSES).map((c) => c.name)),
@@ -1376,12 +1333,18 @@ function render() {
     datalist('dl-backgrounds', backgroundNames(state)),
     datalist('dl-alignments', ALIGNMENTS),
     datalist('dl-schools', SCHOOLS),
-    header(),
+    sheetHeader({
+      state, changed, auto, field, stat, check, rollAdvantage, roll, status, refresh, edition: editionNow,
+      picture: () => (state.pictures?.token ? pictureImg('token', 'sh-portrait') : h('span', { class: 'sh-portrait none', 'aria-hidden': 'true' }, (state.sheet.name.trim()[0] ?? '?').toUpperCase())),
+      banners: () => [wildShapeBanner({ state }), levelUpBanner({ state, base, flush, status, edition: editionNow, adopt: (res) => { useSheet(res.sheet, res.version, res.number); announce(); } })],
+      hitDice, deathSaves, loadNote: () => loadNote('sheet-warn'), shortRest: takeShortRest,
+    }),
     helpPanel({ state, changed, redraw: render }),
-    ...LAYOUTS[state.layout](),
+    sheetBody(),
   );
   inventoryTab();
   refresh();
+  applyMode(sheetMode(state));
 }
 
 // ---------- review ----------
@@ -1433,9 +1396,6 @@ function showReview(res) {
 // ---------- upload and download ----------
 
 export function initSheetActions() {
-  // A new layout chosen under Look: draw the sheet again in it.
-  new MutationObserver(() => state.sheet && currentLayout() !== state.layout && render())
-    .observe($('#tab-sheet'), { attributes: true, attributeFilter: ['data-sheet-layout'] });
 
   const fileInput = $('#sheet-file');
   $('#sheet-upload').addEventListener('click', () => {

@@ -21,7 +21,6 @@
     density: ['cozy', 'compact', 'roomy'],
     chat: ['bubbles', 'script', 'letters', 'terminal'],
     sheetStyle: ['match', 'official', 'grimoire', 'cards', 'blueprint', 'terminal'],
-    sheetLayout: ['classic', 'combat', 'abilities', 'tabs', 'single'],
     mapBar: ['top', 'bottom', 'left'],
     besideSide: ['right', 'left'],
     tokenLabels: ['always', 'hover', 'never'],
@@ -32,7 +31,7 @@
   var TABS = OPTIONS.startTab;
   var TOOLS = ['grid', 'fit', 'pin', 'measure', 'ping', 'draw', 'template', 'attacks', 'initiative', 'companion', 'fullscreen', 'sheet-window'];
   var DEFAULTS = {
-    theme: 'tavern', layout: 'classic', density: 'cozy', chat: 'bubbles', sheetStyle: 'match', sheetLayout: 'classic',
+    theme: 'tavern', layout: 'classic', density: 'cozy', chat: 'bubbles', sheetStyle: 'match',
     mapBar: 'top', besideSide: 'right', tokenLabels: 'always', phone: 'auto', startTab: 'ask',
     accent: '', tabOrder: TABS.slice(), hiddenTabs: [], hiddenTools: [],
   };
@@ -111,7 +110,6 @@
     if (ask) ask.setAttribute('data-chat', current.chat);
     if (sheet) {
       sheet.setAttribute('data-sheet-style', current.sheetStyle);
-      sheet.setAttribute('data-sheet-layout', current.sheetLayout);
     }
     var nav = document.querySelector('#app-view .tabs');
     if (nav) {
