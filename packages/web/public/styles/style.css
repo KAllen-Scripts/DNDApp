@@ -1149,17 +1149,38 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 .chars-name-form input { flex: 1; min-width: 8rem; }
 .chars-row button.danger { color: var(--error); }
 .chars-message { margin: 0.3rem 0 0; }
-/* Help making a character (sheet/creation-help.js): above the sheet, folded away unless the sheet has no class.
-   Three tabs (class, race, background); the chosen one's part is drawn full width under them. */
-.sh-help { margin: 0.5rem 0; padding: 0.5rem 0.8rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
-.sh-help > summary { cursor: pointer; font-weight: 600; }
-.sh-help > p { margin: 0.3rem 0 0.5rem; }
-.help-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; margin-bottom: 0.6rem; }
-.help-step { display: flex; flex-direction: column; align-items: flex-start; gap: 0.05rem; min-width: 0; padding: 0.35rem 0.6rem; border: 1px solid var(--border); border-radius: var(--radius); background: transparent; color: inherit; cursor: pointer; text-align: left; }
-.help-step-word { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
-.help-step-name { font-size: 0.92rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.help-step:not(.done) .help-step-name { color: var(--muted); font-style: italic; }
-.help-step.on { border-color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+/* The character builder (sheet/builder.js): steps above the sheet's header; the sheet's tabs hide while it's open.
+   Its steps reuse the help-* parts below (sheet/creation-help.js). */
+.sheet.building .sh-a { display: none; }
+.builder { min-width: 0; max-width: 100%; box-sizing: border-box; margin: 0.5rem 0; padding: 0.7rem 0.9rem; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--surface); }
+.build-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 0.4rem 1rem; }
+.build-head h2 { margin: 0; font-size: 1.2rem; }
+.build-head p { margin: 0.1rem 0 0; }
+.build-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.build-intro { margin: 0.5rem 0; font-size: 0.92rem; }
+.build-intro .link { padding: 0; border: 0; background: none; color: var(--accent); text-decoration: underline; cursor: pointer; font: inherit; }
+.build-steps { display: flex; gap: 0.3rem; margin: 0.6rem 0; overflow-x: auto; scrollbar-width: thin; }
+.build-step { display: inline-flex; align-items: center; gap: 0.35rem; flex: 0 0 auto; padding: 0.3rem 0.65rem; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: inherit; cursor: pointer; font-size: 0.88rem; }
+.build-step .build-n { display: inline-grid; place-items: center; width: 1.3rem; height: 1.3rem; border-radius: 50%; background: var(--surface-2); font-size: 0.75rem; font-weight: 700; }
+.build-step.done .build-n { background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--accent); }
+.build-step.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); font-weight: 600; }
+.build-body { min-height: 8rem; }
+.build-foot { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.8rem; padding-top: 0.6rem; border-top: 1px solid var(--border); }
+.build-gear { margin: 0 0 0.6rem; padding: 0.4rem 0.7rem; border: 1px solid var(--border); border-radius: var(--radius); }
+.build-gear legend { font-size: 0.8rem; color: var(--muted); padding: 0 0.3rem; }
+.build-gear ul { margin: 0.35rem 0 0; padding-left: 1.2rem; }
+.build-gear select { width: auto; max-width: 100%; }
+.build-assign .pb-table { width: auto; }
+.build-done { color: var(--accent); font-weight: 600; }
+.build-assign { display: grid; gap: 0.5rem; justify-items: start; margin-top: 0.6rem; }
+.build-score { font-weight: 700; text-align: center; }
+.build-scores { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 0.4rem 0.8rem; margin-top: 0.6rem; }
+.build-scores label, .build-field { display: grid; gap: 0.15rem; font-size: 0.88rem; }
+.build-details { display: grid; gap: 0.5rem; max-width: 40rem; }
+.build-spells ul { list-style: none; margin: 0.2rem 0 0.6rem; padding: 0; columns: 2 16rem; }
+.build-spells li { break-inside: avoid; padding: 0.12rem 0; font-size: 0.9rem; }
+.build-spell-group h5 { margin: 0.4rem 0 0.1rem; font-size: 0.95rem; }
+.builder .point-buy .pb-toggle { display: none; }
 .help-parts { display: grid; gap: 0.8rem; }
 .help-part { min-width: 0; }
 .help-part h4 { margin: 0 0 0.3rem; font-size: 1.05rem; }
@@ -1189,7 +1210,7 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
   .help-line { grid-template-columns: 1fr; gap: 0.05rem; }
   .help-step { padding: 0.3rem 0.45rem; }
 }
-@media print { .sh-help { display: none !important; } }
+@media print { .builder { display: none !important; } .sheet.building .sh-a { display: grid !important; } }
 /* The Background box (sheet-background.js) and the DM's own backgrounds (campaign-backgrounds.js). */
 .bg-box { display: grid; gap: 0.3rem; min-width: 0; }
 .bg-more { display: grid; gap: 0.3rem; margin-top: 0.5rem; }

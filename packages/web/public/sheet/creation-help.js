@@ -1,28 +1,24 @@
 /**
- * Help making a character: a panel above the sheet (folded away unless the
- * sheet has no class yet; remembered per browser) saying what the class,
- * race or species and background give and what to choose, by the campaign's
- * rules edition (shared/creation-help.js, shared/backgrounds.js). Nothing is
- * forced and nothing changes by itself: the player clicks to tick a skill,
- * pick a class, race or background, or put the starting equipment in the
- * Equipment box. SPEC §6.4 "Help making a character".
+ * Help making a character: the character builder's Class, Race (Species) and
+ * Background steps (sheet/builder.js), saying what each gives and what to
+ * choose, by the campaign's rules edition (shared/creation-help.js,
+ * shared/backgrounds.js). Nothing changes by itself: the player clicks to
+ * pick, change or clear. In the builder, skills and equipment have steps of
+ * their own (ctx.inBuilder hides them here). SPEC §6.4 "Character builder".
  */
-import { storage } from '../page/api.js';
 import { CLASSES, SKILLS, abilityMod, classKey } from '/shared/sheet.js';
 import { classHelp, raceHelp, racesFor, skillPicks } from '/shared/creation-help.js';
 import { backgroundSummary, backgroundsFor } from '/shared/backgrounds.js';
 import { clearBackground, pickBackground, sheetBackground } from './background.js';
 import { h } from '../page/dom.js';
 
-const OPEN_KEY = 'dndapp.sheetHelp';
-
-const editionOf = (state) => (state.settings?.edition || state.edition || '2014') === '2024' ? '2024' : '2014';
+export const editionOf = (state) => (state.settings?.edition || state.edition || '2014') === '2024' ? '2024' : '2014';
 
 /** One line: a label and its text. */
 const item = (label, ...text) => h('div', { class: 'help-line' }, h('span', { class: 'help-label' }, label), h('span', {}, ...text));
 
 /** A skill the player can tick or untick from the help (expertise is left alone). */
-function skillChip({ state, changed, redraw }, k, { max = null, count = 0 } = {}) {
+export function skillChip({ state, changed, redraw }, k, { max = null, count = 0 } = {}) {
   const mark = state.sheet.skills?.[k];
   const full = max != null && !mark && count >= max;
   return h('button', {
@@ -53,7 +49,7 @@ export function forgetHelpTab() {
   picking = null;
 }
 
-const WORDS = (ed) => ({ class: 'Class', race: ed === '2024' ? 'Species' : 'Race', background: 'Background' });
+export const WORDS = (ed) => ({ class: 'Class', race: ed === '2024' ? 'Species' : 'Race', background: 'Background' });
 
 /** A part's heading: the name and book, with Change and Clear when something is picked. */
 function head(ctx, part, title, book, { clear } = {}) {
@@ -116,7 +112,7 @@ function classPart(ctx, ed) {
       c.tools ? item('Tools', c.tools) : null,
       c.mastery ? item('Weapon Mastery', `Choose ${c.mastery} kinds of weapon to use the mastery properties of`) : null,
       c.spells ? item('Spellcasting', c.spells) : null,
-      first
+      first && !ctx.inBuilder // the builder has a Skills step
         ? h('div', { class: 'help-line' },
           h('span', { class: 'help-label' }, 'Skills'),
           h('span', {},
@@ -126,7 +122,7 @@ function classPart(ctx, ed) {
           ))
         : null);
     const more = h('div', { class: 'help-col' },
-      first
+      first && !ctx.inBuilder // the builder has an Equipment step
         ? h('div', { class: 'help-line' },
           h('span', { class: 'help-label' }, 'Starting equipment'),
           h('span', {},
@@ -182,8 +178,8 @@ function racePart(ctx, ed) {
     item('Size and speed', `${r.size}, ${r.speed} ft`),
     item('Languages', r.languages),
     item('Traits', h('ul', {}, r.traits.map((t) => h('li', {}, t)))),
-    r.skills.length ? h('div', { class: 'help-line' }, h('span', { class: 'help-label' }, 'Skill'), h('span', { class: 'help-chips' }, r.skills.map((k) => skillChip(ctx, k)))) : null,
-    r.skill_pick ? h('div', { class: 'help-line' }, h('span', { class: 'help-label' }, 'Choose one'), h('span', { class: 'help-chips' }, r.skill_pick.map((k) => skillChip(ctx, k)))) : null,
+    r.skills.length && !ctx.inBuilder ? h('div', { class: 'help-line' }, h('span', { class: 'help-label' }, 'Skill'), h('span', { class: 'help-chips' }, r.skills.map((k) => skillChip(ctx, k)))) : null,
+    r.skill_pick && !ctx.inBuilder ? h('div', { class: 'help-line' }, h('span', { class: 'help-label' }, 'Choose one'), h('span', { class: 'help-chips' }, r.skill_pick.map((k) => skillChip(ctx, k)))) : null,
     r.skill_choice ? item('Skills', `Choose ${r.skill_choice} of any (tick them under Skills)`) : null,
   );
 }
@@ -203,71 +199,9 @@ function backgroundPart(ctx, ed) {
   return h('section', { class: 'help-part', 'data-background': b.name },
     head(ctx, 'background', b.name, `(${b.book})`, { clear: () => clearBackground({ state, redraw: () => {}, changed: () => {} }) }),
     backgroundSummary(b).map((l) => item(l.label, l.text)),
-    b.skills.length ? h('div', { class: 'help-line' }, h('span', { class: 'help-label' }, 'Its skills'), h('span', { class: 'help-chips' }, b.skills.map((k) => skillChip(ctx, k)))) : null,
+    b.skills.length && !ctx.inBuilder ? h('div', { class: 'help-line' }, h('span', { class: 'help-label' }, 'Its skills'), h('span', { class: 'help-chips' }, b.skills.map((k) => skillChip(ctx, k)))) : null,
   );
 }
 
-/** What each tab says is picked: the name, or nothing yet. */
-const chosen = (state) => ({
-  class: state.sheet.classes.filter((c) => c.name.trim()).map((c) => `${c.name.trim()} ${Number(c.level) || 1}`).join(' / '),
-  race: state.sheet.race.trim(),
-  background: state.sheet.background.trim(),
-});
-
-// What the panel shows depends on: when one of these changes as the player types, it's drawn again.
-const shownKey = (state) => JSON.stringify([
-  editionOf(state), state.sheet.classes.map((c) => [c.name, c.level]), state.sheet.race, state.sheet.background,
-  state.sheet.skills, !!String(state.sheet.equipment ?? '').trim(), state.calc?.values?.['mod.con'], state.settings?.backgrounds,
-]);
-
-/**
- * The panel, drawn with the sheet. `redraw` draws the sheet again (after
- * the help changed it); `changed` saves it soon. It redraws itself as the
- * sheet is typed in (through `state.renders`, which the sheet runs on every
- * change), and when a tab or Change is clicked (the sheet doesn't change then).
- */
-export function helpPanel(ctx) {
-  let panel;
-  let key = shownKey(ctx.state);
-  const again = () => {
-    key = shownKey(ctx.state);
-    const next = drawPanel({ ...ctx, again }, panel.open); // stays open or shut as it was
-    panel.replaceWith(next);
-    panel = next;
-  };
-  panel = drawPanel({ ...ctx, again });
-  ctx.state.renders.push(() => {
-    if (shownKey(ctx.state) !== key) again();
-  });
-  return panel;
-}
-
-function drawPanel(ctx, wasOpen = null) {
-  const { state, again } = ctx;
-  const ed = editionOf(state);
-  const stored = storage.get(OPEN_KEY);
-  const open = wasOpen != null ? wasOpen : stored == null ? !state.sheet.classes.some((c) => c.name.trim()) : stored === '1';
-  const picked = chosen(state);
-  const words = WORDS(ed);
-  const parts = { class: classPart, race: racePart, background: backgroundPart };
-  const shown = tab ?? Object.keys(parts).find((k) => !picked[k]) ?? 'class';
-  const panel = h('details', { class: 'sh-help', open },
-    h('summary', {}, `Help making a character (${ed} rules)`),
-    h('p', { class: 'muted small' }, `What your class, ${words.race.toLowerCase()} and background give you, and what to choose. Click to tick a skill or fill something in; nothing is required, and Change or Clear takes a pick back.`),
-    h('div', { class: 'help-steps', role: 'tablist' }, Object.keys(parts).map((k) => h('button', {
-      type: 'button',
-      role: 'tab',
-      class: `help-step${k === shown ? ' on' : ''}${picked[k] ? ' done' : ''}`,
-      'aria-selected': String(k === shown),
-      'data-step': k,
-      onclick: () => {
-        tab = k;
-        if (picking !== k) picking = null;
-        again();
-      },
-    }, h('span', { class: 'help-step-word' }, words[k]), h('span', { class: 'help-step-name' }, picked[k] || 'Not chosen')))),
-    h('div', { class: 'help-parts', role: 'tabpanel' }, parts[shown](ctx, ed)),
-  );
-  panel.addEventListener('toggle', () => storage.set(OPEN_KEY, panel.open ? '1' : '0'));
-  return panel;
-}
+/** The builder's Class, Race and Background steps (sheet/builder.js). */
+export const HELP_PARTS = { class: classPart, race: racePart, background: backgroundPart };

@@ -169,7 +169,7 @@ DNDApp/
                               Sessions tab: recording from Discord, transcript uploads); archivist.js (the DM's Archivist tab); table.js (the
                               campaign live stream: others' rolls, rests, the Handouts tab); rests.js (the DM's Rest dialog, rests arriving)
                   sheet/      sheet.js (Sheet tab) with inventory.js (the Inventory tab), spells.js (the Spells box), characters.js (the
-                              player's characters above it), creation-help.js, background.js,
+                              player's characters above it), header.js (the header), spend.js (the Spend list), builder.js (the character builder) with creation-help.js (its Class, Race and Background steps), background.js,
                               traits.js, attacks.js, class-features.js, wild-shape.js, companions.js, item-actions.js, level-up.js, fold.js
                               (options that open when asked)
                   items/      items.js (the DM's Items, shown in the wiki's space), merchants.js (the DM's Merchants and the shop players buy

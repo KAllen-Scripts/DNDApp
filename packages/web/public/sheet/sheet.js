@@ -35,7 +35,8 @@ import { offhandWeapon } from '/shared/attack-extras.js';
 import { withD20Rule } from '/shared/feats.js';
 import { attackPlan, combatBar, extrasLine, rollAttackPlan, rollDamagePlan } from './attacks.js';
 import { backgroundBox, backgroundNames, forgetApplied } from './background.js';
-import { forgetHelpTab, helpPanel } from './creation-help.js';
+import { forgetHelpTab } from './creation-help.js';
+import { builderButton, builderPanel, openBuilder } from './builder.js';
 import { itemNames } from '/shared/item-names.js';
 import { GEAR_KINDS } from '../items/item-card.js';
 import { levelUpBanner } from './level-up.js';
@@ -528,9 +529,9 @@ const RULES_NAMES = { 2014: '2014: bonuses from your race', 2024: '2024: choose 
  * player turns it on. It reads the scores on the sheet (typing in them
  * updates it) and its − and + buttons change them.
  */
-function pointBuyBox() {
-  const panel = h('div', { class: 'pb-panel', id: 'point-buy' });
-  const toggle = h('button', { type: 'button', class: 'pb-toggle', 'aria-controls': 'point-buy' }, 'Point buy');
+export function pointBuyBox({ id = 'point-buy' } = {}) {
+  const panel = h('div', { class: 'pb-panel', id });
+  const toggle = h('button', { type: 'button', class: 'pb-toggle', 'aria-controls': id }, 'Point buy');
   toggle.addEventListener('click', () => {
     state.sheet.point_buy.on = !state.sheet.point_buy.on;
     changed();
@@ -1318,6 +1319,9 @@ export function showSheetTab(key) {
 
 // ---------- the sheet ----------
 
+/** What the character builder (sheet/builder.js) uses of the sheet. */
+const builderCtx = { state, changed, render: () => render(), field, pointBuyBox: (o) => pointBuyBox(o), roll: (n, o) => roll(n, o), base: () => base() };
+
 function render() {
   state.renders = [];
   state.gearDraws = [];
@@ -1336,10 +1340,11 @@ function render() {
     sheetHeader({
       state, changed, auto, field, stat, check, rollAdvantage, roll, status, refresh, edition: editionNow,
       picture: () => (state.pictures?.token ? pictureImg('token', 'sh-portrait') : h('span', { class: 'sh-portrait none', 'aria-hidden': 'true' }, (state.sheet.name.trim()[0] ?? '?').toUpperCase())),
-      banners: () => [wildShapeBanner({ state }), levelUpBanner({ state, base, flush, status, edition: editionNow, adopt: (res) => { useSheet(res.sheet, res.version, res.number); announce(); } })],
+      banners: () => [wildShapeBanner({ state }), levelUpBanner({ state, base, flush, status, edition: editionNow, openBuilder: (step, opts) => openBuilder(builderCtx, step, opts), adopt: (res) => { useSheet(res.sheet, res.version, res.number); announce(); } })],
       hitDice, deathSaves, loadNote: () => loadNote('sheet-warn'), shortRest: takeShortRest,
+      buttons: [builderButton(builderCtx)],
     }),
-    helpPanel({ state, changed, redraw: render }),
+    builderPanel(builderCtx),
     sheetBody(),
   );
   inventoryTab();

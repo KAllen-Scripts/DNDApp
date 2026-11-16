@@ -239,7 +239,7 @@ export function sheetHeader(ctx) {
       who,
       hpBox,
       numbers,
-      h('div', { class: 'sh-header-buttons' }, restButton, modeToggle),
+      h('div', { class: 'sh-header-buttons' }, ...(ctx.buttons ?? []), restButton, modeToggle),
     ),
     h('div', { class: 'sh-header-status' }, chips, ctx.loadNote()),
     death,
