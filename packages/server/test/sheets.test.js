@@ -440,3 +440,18 @@ test("attacks: a player can't save a typed attack with a weapon that isn't in th
     await t.cleanup();
   }
 });
+
+test('spells for a class: the SRD list up to a spell level, with details, and no AI', async () => {
+  const t = await setup();
+  try {
+    const get = async (q) => (await t.request('GET', `/campaigns/${t.campaign.id}/spells/class?${q}`, { as: t.sam.token })).json();
+    const wizard = await get('name=Wizard&level=1');
+    assert.ok(wizard.some((s) => s.name === 'Magic Missile' && s.level === 1 && s.description));
+    assert.ok(wizard.some((s) => s.level === 0), 'cantrips');
+    assert.ok(wizard.every((s) => s.level <= 1));
+    assert.ok(!wizard.some((s) => s.name === 'Cure Wounds'), 'not on the wizard list');
+    assert.deepEqual((await get('name=Fighter&level=1')), []);
+  } finally {
+    await t.cleanup();
+  }
+});

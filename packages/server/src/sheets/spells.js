@@ -77,6 +77,17 @@ export function createSpells({ books, llm, editions = null }) {
 
   return {
     /** Suggestions while typing: SRD names plus spells found in the books. */
+    /**
+     * The SRD's spells a class can learn, up to a spell level (the character builder's Spells step), with their details.
+     * Classes not in the SRD's lists (an artificer) get none.
+     */
+    forClass(className, maxLevel = 1) {
+      const want = normName(className);
+      return SRD.filter((s) => s.level <= maxLevel && (s.classes ?? []).some((c) => normName(c) === want))
+        .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
+        .map(fromSrd);
+    },
+
     async search(q, limit = 15) {
       const want = normName(q);
       if (!want) return [];

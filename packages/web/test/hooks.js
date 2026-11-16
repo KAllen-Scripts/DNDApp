@@ -25,6 +25,7 @@ const VENDOR_FILES = {
 const MODULES = {
   'shared/sheet.js': '@dndapp/shared/sheet.js',
   'shared/conditions.js': '@dndapp/shared/conditions.js',
+  'shared/starting-gear.js': '@dndapp/shared/starting-gear.js',
   'shared/dice.js': '@dndapp/shared/dice.js',
   'shared/rolls.js': '@dndapp/shared/rolls.js',
   'shared/attack-extras.js': '@dndapp/shared/attack-extras.js',

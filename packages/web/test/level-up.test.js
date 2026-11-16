@@ -73,3 +73,31 @@ test('the DM makes levels theirs to give: the player sees Level up only once giv
     assert.equal((await serverSheet(t)).sheet.levels_granted, 1);
   });
 });
+
+test('a caster who levels up gets the builder on Spells, with the new level\'s spells to tick; Undo takes one back', async () => {
+  const LYRA = { name: 'Lyra', classes: [{ name: 'Wizard', subclass: '', level: 2 }], abilities: { str: 8, dex: 14, con: 12, int: 16, wis: 10, cha: 10 }, hp: { current: 10 } };
+  await withPage({
+    before: (t) => t.request('PUT', `/campaigns/${t.campaign.id}/sheet`, { as: t.sam.token, body: { sheet: LYRA, version: 0 } }),
+    page: (t) => ({ as: t.sam, storage: NO_3D }),
+  }, async (page, t) => {
+    page.click('[data-tab=sheet]');
+    assert.equal(page.$('#sheet .builder'), null, 'a character with a class: no builder by itself');
+    page.click('#sheet .level-up-open');
+    await page.settle();
+    page.click(page.$('#level-up-dialog button[type="submit"]'));
+    await page.settle();
+    assert.match(page.text('#sheet-status'), /Pick your new spells in the builder/);
+    assert.equal(page.$('#sheet .builder .build-body').dataset.step, 'spells');
+    assert.match(page.text('#sheet .builder'), /Wizard 3: tick the spells/);
+    await page.waitFor(() => page.$('#sheet .builder .build-spell-group'), { what: 'the wizard spells' });
+    assert.match(page.text('#sheet .builder .build-body'), /Level 2/, 'second-level spells now');
+    page.click(page.el('#sheet [aria-label="Misty Step on my sheet"]'));
+    await page.waitFor(() => page.text('#sheet-status') === 'Saved');
+    assert.deepEqual((await serverSheet(t)).sheet.spells.map((s) => s.name), ['Misty Step']);
+    page.click('#sheet .builder .build-undo');
+    await page.waitFor(() => page.text('#sheet-status') === 'Saved');
+    const after = (await serverSheet(t)).sheet;
+    assert.deepEqual(after.spells, []);
+    assert.equal(after.classes[0].level, 3, 'the level itself stays');
+  });
+});

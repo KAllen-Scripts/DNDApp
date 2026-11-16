@@ -569,6 +569,7 @@
 
 /* Stats beside the tabs. */
 .sh-a { display: grid; grid-template-columns: minmax(24rem, 1.2fr) minmax(0, 2fr); gap: var(--gap); align-items: start; }
+.sh-a > *, .sh-header > *, .sheet > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
 .sh-stats { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--gap); align-items: start; }
 .sh-stats .abilities { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
 .sh-a .sh-tabs { min-width: 0; }
@@ -639,14 +640,14 @@
   .sh-header-buttons { position: absolute; top: 0; right: 0; }
   .sh-header-buttons button { padding: 0.15rem 0.45rem; font-size: 0.8rem; }
   .sh-header-buttons .btn-text { display: none; }
-  .sh-who { padding-right: 5rem; }
-  .sh-hp { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.4rem; padding: 0.25rem 0.4rem; flex: 1 1 100%; }
+  .sh-who { padding-right: 7.5rem; }
+  .sh-hp { min-width: 0; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.4rem; padding: 0.25rem 0.4rem; flex: 1 1 100%; }
   .hp-bar { order: 3; flex: 1 1 100%; }
   .sheet .hp-now input.hp-current { width: 2.8rem; height: 1.8rem; font-size: 1.1rem; }
   .hp-temp-wrap .muted { display: none; }
   .sheet .hp-change input { width: 2.6rem; height: 1.8rem; }
   .hp-change button { padding: 0.1rem 0.35rem; font-size: 0.78rem; }
-  .sh-numbers { flex-wrap: nowrap; overflow-x: auto; gap: 0.25rem; flex: 1 1 100%; scrollbar-width: none; }
+  .sh-numbers { min-width: 0; flex-wrap: nowrap; overflow-x: auto; gap: 0.25rem; flex: 1 1 100%; scrollbar-width: none; }
   .sh-numbers .stat { min-width: 3rem; padding: 0.1rem 0.25rem; }
   .sh-numbers .stat .auto input { width: 2.4rem; height: 1.45rem; font-size: 1rem; }
   .sh-numbers .stat .lbl { font-size: 0.52rem; }

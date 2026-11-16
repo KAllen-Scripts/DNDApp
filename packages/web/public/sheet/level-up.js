@@ -6,7 +6,8 @@
  * Improvement or a feat at the levels that give one; it shows what the level brings before it's taken.
  */
 import { api } from '../page/api.js';
-import { ABILITIES, ABILITY_NAMES, CLASSES } from '/shared/sheet.js';
+import { ABILITIES, ABILITY_NAMES, CLASSES, classKey } from '/shared/sheet.js';
+import { classHelp } from '/shared/creation-help.js';
 import { levelUp, levelUpChanges, levelUpChoices } from '/shared/level-up.js';
 import { GENERAL_FEATS } from '/shared/feats.js';
 import { roll } from '../dice/dice.js';
@@ -120,7 +121,12 @@ export async function openLevelUp(ctx) {
     const done = (res) => {
       d.close();
       ctx.adopt(res);
-      ctx.status(`Levelled up: ${name} ${res.entry.level}, ${res.gained >= 0 ? '+' : ''}${res.gained} maximum hit points${res.entry.hp != null ? ` (rolled ${res.entry.hp})` : ''}. Add any new spells in Spells.`);
+      const line = `Levelled up: ${name} ${res.entry.level}, ${res.gained >= 0 ? '+' : ''}${res.gained} maximum hit points${res.entry.hp != null ? ` (rolled ${res.entry.hp})` : ''}.`;
+      // A class that casts: the builder's Spells step, to pick the new spells (Undo there takes them back).
+      const row = state.sheet.classes.findIndex((c) => c.name.trim().toLowerCase() === name.toLowerCase());
+      const casts = row >= 0 && classHelp(classKey(name), edition)?.spells;
+      ctx.status(casts ? `${line} Pick your new spells in the builder.` : `${line} Add any new spells in Spells.`);
+      if (casts) ctx.openBuilder?.('spells', { spellClass: row, levelled: `${name} ${res.entry.level}` });
     };
     if (body.hp === 'roll') {
       // The dice tray shows the roll; errors show there too.
