@@ -10,6 +10,11 @@
 #   onnxruntime-node  replaced with onnxruntime-web, the WebAssembly build of the same thing
 set -euo pipefail
 
+# Run from Claude Code (Debian under proot), Termux's own variables aren't set: PREFIX is unset and HOME is /root.
+TERMUX=/data/data/com.termux/files
+export PREFIX="${PREFIX:-$TERMUX/usr}"
+[ "$HOME" = /root ] && [ -d "$TERMUX/home" ] && export HOME="$TERMUX/home"
+
 cd "$(dirname "$(readlink -f "$0")")/../.."
 ROOT=$PWD
 STAMP=node_modules/.termux-install
@@ -26,8 +31,10 @@ npm install --ignore-scripts --force --no-audit --no-fund
 echo "Compiling better-sqlite3 (a few minutes)..."
 (
   cd node_modules/better-sqlite3
+  # Under proot node-gyp can fail tidying up (node_gyp_bins) after the build worked: a fresh .node counts.
   GYP_DEFINES="android_ndk_path=''" JOBS=2 npm_config_nodedir="$PREFIX" \
-    node "$PREFIX/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js" rebuild --release
+    node "$PREFIX/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js" rebuild --release \
+    || [ -f build/Release/better_sqlite3.node ]
 )
 
 # npm leaves these out on Android, so unpack them by hand. sharp's WebAssembly build shares its version.
