@@ -14,6 +14,8 @@ import { shortRest, longRest, formatBonus } from '/shared/sheet.js';
 import { CONDITION_NAMES, CONDITION_TEXT, EXHAUSTION_2014, SHEET_CONDITIONS, changeHp } from '/shared/conditions.js';
 
 const MODE_KEY = 'dndapp.sheetMode';
+/** Whether the Rest panel is open: kept while the sheet redraws (spending a hit die redraws it). */
+let restOpen = false;
 
 /**
  * Play or Edit. Play: worked-out numbers, scores and the character's details are shown, not typed into
@@ -176,13 +178,15 @@ export function sheetHeader(ctx) {
   });
 
   // Rest: what a short rest gives back (and hit dice to spend), and what the DM's long rest will.
-  const restPanel = h('section', { class: 'sh-rest', hidden: true, 'aria-label': 'Rest' });
-  const restButton = h('button', { type: 'button', class: 'ghost rest-open', 'aria-expanded': 'false', onclick: () => {
-    restPanel.hidden = !restPanel.hidden;
-    restButton.setAttribute('aria-expanded', String(!restPanel.hidden));
-    if (!restPanel.hidden) drawRest();
+  const restPanel = h('section', { class: 'sh-rest', hidden: !restOpen, 'aria-label': 'Rest' });
+  const restButton = h('button', { type: 'button', class: 'ghost rest-open', 'aria-expanded': String(restOpen), onclick: () => {
+    restOpen = restPanel.hidden;
+    restPanel.hidden = !restOpen;
+    restButton.setAttribute('aria-expanded', String(restOpen));
+    if (restOpen) drawRest();
   } }, 'Rest');
-  const drawRest = () => {
+  const dice = ctx.hitDice(); // made once: it keeps its own redraw
+  const drawRest = (refresh = true) => {
     const ed = ctx.edition();
     const back = (after) => {
       const rows = featureRows(state.sheet, { edition: ed, values: state.calc.values });
@@ -207,7 +211,7 @@ export function sheetHeader(ctx) {
         h('div', {},
           h('h4', {}, 'Short rest (an hour)'),
           h('p', { class: 'small' }, `Comes back: ${list(shortBack)}. Spend hit dice below to heal.`),
-          ctx.hitDice(),
+          dice,
         ),
         h('div', {},
           h('h4', {}, 'Long rest'),
@@ -216,8 +220,10 @@ export function sheetHeader(ctx) {
         ),
       ),
     );
-    ctx.refresh();
+    if (refresh) ctx.refresh();
   };
+  // Open (kept open through a redraw): what comes back follows the sheet.
+  state.renders.push(() => { if (!restPanel.hidden) drawRest(false); });
 
   const modeToggle = h('button', { type: 'button', class: 'ghost mode-toggle', onclick: () => setSheetMode(document.querySelector('#sheet')?.dataset.mode === 'edit' ? 'play' : 'edit') }, '✎ Edit');
 
