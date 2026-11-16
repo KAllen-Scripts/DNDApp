@@ -1180,6 +1180,8 @@ details.upload > summary { cursor: pointer; font-weight: 600; color: var(--camp)
 .build-spells ul { list-style: none; margin: 0.2rem 0 0.6rem; padding: 0; columns: 2 16rem; }
 .build-spells li { break-inside: avoid; padding: 0.12rem 0; font-size: 0.9rem; }
 .build-spell-group h5 { margin: 0.4rem 0 0.1rem; font-size: 0.95rem; }
+.build-other-spell { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.5rem; margin-top: 0.6rem; }
+.build-other-spell input { min-width: 12rem; }
 .builder .point-buy .pb-toggle { display: none; }
 .help-parts { display: grid; gap: 0.8rem; }
 .help-part { min-width: 0; }

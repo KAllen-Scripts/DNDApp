@@ -11,7 +11,7 @@
  */
 import { h, $ } from '../page/dom.js';
 import { api, storage } from '../page/api.js';
-import { ABILITIES, ABILITY_NAMES, SKILLS, classKey, normalizeSheet } from '/shared/sheet.js';
+import { ABILITIES, ABILITY_NAMES, SKILLS, classKey, normalizeSheet, normalizeSpell } from '/shared/sheet.js';
 import { classHelp, raceHelp, skillPicks } from '/shared/creation-help.js';
 import { changePointBuy, pointBuy } from '/shared/point-buy.js';
 import { equipmentItems, equipmentOptions } from '/shared/starting-gear.js';
@@ -397,7 +397,7 @@ function spellsStep(ctx, ed) {
   const key = `${c.name}:${top}`;
   const list = h('div', { class: 'build-spells' }, spellLists.has(key) ? null : nothing('Finding the spells…'));
   const draw = (spells) => {
-    if (!spells.length) return list.replaceChildren(nothing(`The SRD has no ${c.name.toLowerCase()} spell list: add spells on the Spells tab.`));
+    if (!spells.length) return list.replaceChildren(nothing(top ? `No ${c.name.toLowerCase()} spell list here: find spells by name below.` : `No ${c.name.toLowerCase()} spells at this level yet.`));
     const has = (sp) => state.sheet.spells.some((s) => s.name.toLowerCase() === sp.name.toLowerCase());
     const groups = new Map();
     for (const sp of spells) {
@@ -409,13 +409,17 @@ function spellsStep(ctx, ed) {
       h('ul', {}, group.map((sp) => {
         const box = h('input', { type: 'checkbox', checked: has(sp), 'aria-label': `${sp.name} on my sheet` });
         box.addEventListener('change', () => {
-          if (box.checked) state.sheet.spells.push(structuredClone({ ...sp, prepared: true }));
-          else state.sheet.spells = state.sheet.spells.filter((s) => s.name.toLowerCase() !== sp.name.toLowerCase());
-          ctx.changed();
+          if (box.checked) {
+            const { details, ...spell } = sp;
+            addSpell(ctx, spell, { lookUp: !details, done: () => draw(spells) });
+          } else {
+            state.sheet.spells = state.sheet.spells.filter((x) => x.name.toLowerCase() !== sp.name.toLowerCase());
+            ctx.changed();
+          }
           draw(spells);
         });
         return h('li', {}, h('label', { title: sp.description?.slice(0, 300) ?? '' }, box, ' ', h('strong', {}, sp.name),
-          h('span', { class: 'muted small' }, ` ${[sp.school, sp.casting_time, sp.concentration && 'concentration', sp.ritual && 'ritual'].filter(Boolean).join(' · ')}`)));
+          h('span', { class: 'muted small' }, ` ${[sp.school, sp.casting_time, sp.concentration && 'concentration', sp.ritual && 'ritual', !sp.details && sp.source_note].filter(Boolean).join(' · ')}`)));
       })))));
   };
   if (spellLists.has(key)) draw(spellLists.get(key));
@@ -431,7 +435,59 @@ function spellsStep(ctx, ed) {
     h('p', { class: 'small' }, c.spells),
     top ? null : h('p', { class: 'muted small' }, 'No spell slots yet: just cantrips for now (spells come with a later level).'),
     list,
-    h('p', { class: 'muted small' }, 'From the SRD. Spells from other books: add them on the Spells tab.'));
+    otherSpell(ctx));
+}
+
+/**
+ * Put a spell on the sheet, prepared. One from the Player's Handbook beyond the SRD (or found by name)
+ * has its details looked up (the group's books, else the AI): filling them in is part of the same Undo step.
+ */
+function addSpell(ctx, spell, { lookUp = false, done = () => {}, note = null } = {}) {
+  const { state } = ctx;
+  if (state.sheet.spells.some((x) => x.name.toLowerCase() === spell.name.toLowerCase())) return;
+  const added = normalizeSpell({ ...structuredClone(spell), prepared: true });
+  state.sheet.spells.push(added);
+  ctx.changed();
+  if (!lookUp) return done();
+  if (note) note.textContent = `Looking up ${spell.name}…`;
+  api('GET', `${ctx.base()}/spells/lookup?name=${encodeURIComponent(spell.name)}`).then((found) => {
+    const now = state.sheet.spells.find((x) => x.name.toLowerCase() === spell.name.toLowerCase());
+    if (!found || !now || !build) return;
+    Object.assign(now, { ...found, id: now.id, prepared: now.prepared, level: found.level ?? now.level });
+    build.last = JSON.stringify(state.sheet); // the details join the step that added it
+    if (note) note.textContent = `${found.name}: details from ${found.source_note || found.source || 'the lookup'}.`;
+    ctx.changed();
+    done();
+  }).catch((err) => {
+    if (note) note.textContent = `Added ${spell.name}; its details weren't found (${err.message}): fill them in on the Spells tab.`;
+  });
+}
+
+/** Any other spell, by name: other books (Xanathar's, Tasha's…), found in the group's books or by the AI. */
+function otherSpell(ctx) {
+  const input = h('input', { type: 'text', placeholder: 'Any spell, e.g. Toll the Dead', list: 'dl-build-spells', autocomplete: 'off', 'aria-label': 'Another spell to add (builder)' });
+  const names = h('datalist', { id: 'dl-build-spells' });
+  const note = h('span', { class: 'muted small' });
+  let timer;
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const q = input.value.trim();
+      if (q.length < 2) return;
+      const found = await api('GET', `${ctx.base()}/spells?q=${encodeURIComponent(q)}`).catch(() => []);
+      names.replaceChildren(...(found ?? []).map((x) => h('option', { value: x.name }, x.source === 'book' ? `${x.name} (${x.book})` : x.name)));
+    }, 200);
+  });
+  const add = (e) => {
+    e.preventDefault();
+    const name = input.value.trim();
+    if (!name) return;
+    input.value = '';
+    addSpell(ctx, { name, source: 'manual' }, { lookUp: true, note });
+  };
+  return h('form', { class: 'build-other-spell', onsubmit: add },
+    h('label', {}, h('span', { class: 'small' }, 'A spell from another book (your DM says yes): '), names, input),
+    h('button', { type: 'submit', class: 'ghost small' }, 'Add'), note);
 }
 
 function detailsStep(ctx) {

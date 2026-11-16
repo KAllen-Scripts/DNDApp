@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import { z } from 'zod';
 import { distance } from 'fastest-levenshtein';
 import { normalizeSpell } from '@dndapp/shared/sheet.js';
+import { PHB_EXTRA_SPELLS } from '@dndapp/shared/spell-lists.js';
 import { normName } from './books.js';
 
 const SRD = JSON.parse(fs.readFileSync(new URL('./srd-spells.json', import.meta.url), 'utf8')).spells;
@@ -78,14 +79,18 @@ export function createSpells({ books, llm, editions = null }) {
   return {
     /** Suggestions while typing: SRD names plus spells found in the books. */
     /**
-     * The SRD's spells a class can learn, up to a spell level (the character builder's Spells step), with their details.
-     * Classes not in the SRD's lists (an artificer) get none.
+     * The spells a class can learn, up to a spell level (the character builder's Spells step): the SRD's
+     * with their details, and the rest of the Player's Handbook's by name (`details: false`: looked up when
+     * ticked, from the books or the AI). Classes the Player's Handbook doesn't have (an artificer) get none.
      */
     forClass(className, maxLevel = 1) {
       const want = normName(className);
-      return SRD.filter((s) => s.level <= maxLevel && (s.classes ?? []).some((c) => normName(c) === want))
-        .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
-        .map(fromSrd);
+      const fits = (s) => s.level <= maxLevel && (s.classes ?? []).some((c) => normName(c) === want);
+      const srd = SRD.filter(fits).map((s) => ({ ...fromSrd(s), details: true }));
+      const known = new Set(srd.map((s) => normName(s.name)));
+      const more = PHB_EXTRA_SPELLS.filter((s) => fits(s) && !known.has(normName(s.name)))
+        .map((s) => ({ ...normalizeSpell({ name: s.name, level: s.level, school: s.school, source: 'manual' }), source_note: "Player's Handbook", details: false }));
+      return [...srd, ...more].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
     },
 
     async search(q, limit = 15) {

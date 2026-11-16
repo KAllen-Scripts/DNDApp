@@ -124,3 +124,39 @@ export function changeHp(sheet, max, { kind, amount }) {
   }
   return { sheet: out, concentrationDC, down };
 }
+
+/**
+ * A player character's conditions are kept on their sheet and on their token on maps, the same list
+ * (the owner, 2026-11-16: "Conditions need to sync"). The token's conditions are the map's names
+ * (map.js CONDITIONS): the sheet's fourteen, plus `exhaustion` (any level) and `concentrating`.
+ */
+
+/** The token's conditions as the sheet has them: its own others (none today) kept, the sheet's put on. */
+export function tokenConditionsFromSheet(tokenConditions = [], sheet = {}) {
+  const ours = new Set([...SHEET_CONDITIONS, 'exhaustion', 'concentrating']);
+  return [
+    ...tokenConditions.filter((c) => !ours.has(c)),
+    ...(sheet.conditions ?? []).filter((c) => SHEET_CONDITIONS.includes(c)),
+    ...(Number(sheet.exhaustion) > 0 ? ['exhaustion'] : []),
+    ...(sheet.concentration ? ['concentrating'] : []),
+  ];
+}
+
+/**
+ * The sheet with the token's conditions put on it (a token changed on a map). Exhaustion on the token
+ * with none on the sheet is level 1; off the token, it's 0. Concentrating with nothing named on the sheet
+ * names `spell` (what the map says the character is holding) or "a spell"; off, it ends.
+ * @returns {object|null} the changed sheet, or null when nothing changes
+ */
+export function sheetConditionsFromToken(sheet, tokenConditions = [], spell = '') {
+  const has = new Set(tokenConditions);
+  const conditions = SHEET_CONDITIONS.filter((c) => has.has(c));
+  const exhaustion = has.has('exhaustion') ? Math.max(1, Number(sheet.exhaustion) || 0) : 0;
+  const concentration = has.has('concentrating') ? (sheet.concentration || spell || 'a spell') : '';
+  const same = conditions.length === (sheet.conditions ?? []).length && conditions.every((c) => sheet.conditions.includes(c))
+    && exhaustion === (Number(sheet.exhaustion) || 0) && concentration === (sheet.concentration ?? '');
+  return same ? null : { ...sheet, conditions, exhaustion, concentration };
+}
+
+/** Whether two condition lists hold the same conditions. */
+export const sameConditions = (a = [], b = []) => a.length === b.length && a.every((c) => b.includes(c));

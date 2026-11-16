@@ -441,7 +441,7 @@ test("attacks: a player can't save a typed attack with a weapon that isn't in th
   }
 });
 
-test('spells for a class: the SRD list up to a spell level, with details, and no AI', async () => {
+test('spells for a class: the SRD list and the rest of the PHB up to a spell level, and no AI', async () => {
   const t = await setup();
   try {
     const get = async (q) => (await t.request('GET', `/campaigns/${t.campaign.id}/spells/class?${q}`, { as: t.sam.token })).json();
@@ -451,6 +451,12 @@ test('spells for a class: the SRD list up to a spell level, with details, and no
     assert.ok(wizard.every((s) => s.level <= 1));
     assert.ok(!wizard.some((s) => s.name === 'Cure Wounds'), 'not on the wizard list');
     assert.deepEqual((await get('name=Fighter&level=1')), []);
+    // The Player's Handbook's spells beyond the SRD are listed by name, their details looked up when ticked.
+    const warlock = await get('name=Warlock&level=1');
+    const hex = warlock.find((s) => s.name === 'Hex');
+    assert.deepEqual([hex.level, hex.details, hex.description], [1, false, '']);
+    assert.ok(warlock.find((s) => s.name === 'Eldritch Blast').details);
+    assert.ok(!(await get('name=Wizard&level=1')).some((s) => s.name === 'Hex'));
   } finally {
     await t.cleanup();
   }

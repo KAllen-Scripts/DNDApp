@@ -67,7 +67,7 @@ Log in with `POST /login`; send the token it returns as `Authorization: Bearer <
 | GET | `/campaigns/:cid/sheet/download` | Your sheet as a file (`{format: "dndapp-sheet", sheet}`) that can be uploaded again |
 | GET | `/campaigns/:cid/spells?q=` | Spell name suggestions (SRD and your books) |
 | POST | `/campaigns/:cid/sheet/review` | Review your saved sheet (players): rules checks, then the AI against your books (and the web for what they don't cover) → `{edition, summary, findings: [{severity: problem \| check, area, message, source}], ai, error?, lookups}`. Nothing is saved; the AI part counts towards `SHEET_AI_PER_HOUR` |
-| GET | `/campaigns/:cid/spells/class?name=&level=` | The SRD spells a class can learn, cantrips up to spell `level` (default 1), with their details (the character builder's Spells step; no AI) |
+| GET | `/campaigns/:cid/spells/class?name=&level=` | The spells a class can learn, cantrips up to spell `level` (default 1): the SRD's with their details (`details: true`), the rest of the Player's Handbook's by name (`details: false`) (the character builder's Spells step; no AI) |
 | GET | `/campaigns/:cid/spells/lookup?name=` | A spell's details: SRD, else your books (tidied by the AI), else the AI's memory. 404 if not found; 429 past `SHEET_AI_PER_HOUR` AI calls |
 | GET | `/campaigns/:cid/forms` | The SRD's Wild Shape forms (beasts and the four elementals) for suggestions: `[{ name, cr, type, speed }]` |
 | GET | `/campaigns/:cid/forms/lookup?name=` | A Wild Shape form: SRD, else your books (copied by the AI), else the AI's memory; never the DM's creatures. 404 if not found; 429 past `SHEET_AI_PER_HOUR` AI calls |

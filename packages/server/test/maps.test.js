@@ -954,3 +954,34 @@ test('doors players open, locked doors, obstacles they see over, and what player
     await t.cleanup();
   }
 });
+
+test('tokens: a player character\'s conditions are the same on the map and the sheet, both ways', async () => {
+  const t = await setup({ llm: mapLLM() });
+  try {
+    const map = await importMap(t, await terrain(700, 490, { size: 35 }));
+    const base = `/campaigns/${t.campaign.id}/maps/${map.id}`;
+    await t.request('PATCH', base, { body: { shown: true } });
+    const thorin = (await t.request('POST', `${base}/tokens`, { body: { kind: 'pc', name: 'Thorin', user_id: t.sam.id } })).json().token;
+    const token = () => t.maps.get(t.campaign.id, map.id).tokens.find((x) => x.id === thorin.id);
+    const sheet = () => t.sheets.get(t.campaign.id, t.sam.id).sheet;
+    t.sheets.save(t.campaign.id, t.sam.id, { ...emptySheet({ name: 'Thorin' }), classes: [{ name: 'Fighter', level: 3 }] });
+
+    // On the map: poisoned and exhausted go on the sheet (exhaustion level 1).
+    assert.equal((await t.request('PATCH', `${base}/tokens/${thorin.id}`, { body: { conditions: ['poisoned', 'exhaustion'] }, as: t.sam.token })).statusCode, 200);
+    assert.deepEqual([sheet().conditions, sheet().exhaustion], [['poisoned'], 1]);
+
+    // On the sheet: prone, exhaustion 3, concentrating on Bless go on the token; poisoned comes off.
+    t.sheets.save(t.campaign.id, t.sam.id, { ...sheet(), conditions: ['prone'], exhaustion: 3, concentration: 'Bless' });
+    assert.deepEqual([...token().conditions].sort(), ['concentrating', 'exhaustion', 'prone']);
+    assert.equal(sheet().exhaustion, 3, 'the level stays the sheet\'s');
+
+    // The DM ends concentration on the map: the sheet stops concentrating.
+    await t.request('PATCH', `${base}/tokens/${thorin.id}`, { body: { conditions: ['prone', 'exhaustion'] } });
+    assert.equal(sheet().concentration, '');
+    assert.equal(sheet().exhaustion, 3);
+    t.sheets.save(t.campaign.id, t.sam.id, { ...sheet(), conditions: [], exhaustion: 0 });
+    assert.deepEqual(token().conditions, []);
+  } finally {
+    await t.cleanup();
+  }
+});
