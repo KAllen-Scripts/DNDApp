@@ -1,6 +1,6 @@
 /**
- * The "Look" dialog: themes, layouts, density, chat style, sheet style and
- * sheet layout; an accent colour, the tabs' order, and how the map page is
+ * The "Look" dialog: themes, layouts, density, chat style and sheet style;
+ * an accent colour, the tabs' order, and how the map page is
  * laid out (toolbar, what goes beside it and on which side, token names, which tools show). Choices apply straight away and are kept in this browser
  * (page/look-boot.js applies them on load). Previews reuse the real CSS: a theme
  * preview carries data-theme, a chat preview data-chat, and so on.
@@ -58,13 +58,6 @@ const SHEET_STYLES = {
   terminal: ['Terminal', 'Green phosphor on black.'],
 };
 
-const SHEET_LAYOUTS = {
-  classic: ['Three columns', 'Laid out like the official sheet.'],
-  combat: ['Combat first', 'AC, HP and attacks across the top, big.'],
-  abilities: ['By ability', 'Like the 2024 sheet: each ability holds its save and skills.'],
-  tabs: ['Tabs', 'Like the apps: stats up top, the rest in tabs.'],
-  single: ['One column', 'Everything in a single scrolling column.'],
-};
 
 const MAP_BARS = {
   top: ['Above the map', 'The tools along the top.'],
@@ -256,7 +249,6 @@ function build() {
     tabsSection(),
     section('ask', 'Chat style', 'How questions and answers are shown on the Ask tab.', 'chat', CHATS, chatPreview),
     section('sheet', 'Character sheet style', null, 'sheetStyle', SHEET_STYLES, sheetPreview),
-    section('sheet', 'Character sheet layout', null, 'sheetLayout', SHEET_LAYOUTS, (k) => diagram('sheet', k), 'small-cards'),
     section('map', 'Toolbar', 'Where the map’s tools go.', 'mapBar', MAP_BARS, (k) => diagram('mapbar', k), 'small-cards'),
     besideSection(),
     section('map', 'Token names', null, 'tokenLabels', TOKEN_LABELS, (k) => diagram('labels', k), 'small-cards'),

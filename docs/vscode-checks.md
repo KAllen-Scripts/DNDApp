@@ -105,3 +105,4 @@ Things to try for real that were listed under Next steps rather than above (move
    - **Archivist between sessions:** fill in a sheet with real Claude Code running, wait 10 minutes, check what the archivist made of it; again after a level-up. Process a session played with a map and check it used `<map_events>`.
    - **Dice:** Deluxe and Classic on a real GPU and a phone (Safari and Firefox untested). Deluxe is the default now; the owner can change it with `DICE_ROLLER`.
    - **Look:** show the players; see which themes, layouts and layout options they use, then prune (owner's call).
+- **The redesigned sheet** (2026-11-15): open the Sheet tab on the PC, on a phone and beside the map; check the header stays at the top, the bottom tab bar on a phone, Damage/Heal/Temp, adding and ending conditions, the Rest panel, Play and Edit, and printing (only jsdom and headless Chromium have seen it).

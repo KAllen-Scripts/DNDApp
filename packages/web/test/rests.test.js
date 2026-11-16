@@ -28,6 +28,7 @@ test('hit dice: a row per die size with ticks for spent dice; Spend rolls it on 
   try {
     await withPage({ before: (t) => giveSheet(t), page: (t) => ({ as: t.sam, storage: NO_3D }) }, async (page, t) => {
       page.click('[data-tab=sheet]');
+      page.click('#sheet .rest-open'); // the hit dice are under Rest in the header
       const rows = page.$$('#sheet .hd-row');
       assert.deepEqual(rows.map((r) => r.querySelector('.hd-die').textContent), ['d10', 'd8']);
       assert.equal(rows[0].querySelectorAll('.pips input').length, 3);

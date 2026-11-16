@@ -251,12 +251,17 @@
     <section id="tab-sheet" class="panel sheet-panel" hidden>
       <div class="sheet-bar">
         <span id="sheet-status" class="muted small" role="status"></span>
-        <button id="sheet-review" class="ghost" title="Check the sheet is valid for its level, classes and race: the rules, then the AI with your books (and the web for what they don't cover)">Review sheet</button>
-        <button id="sheet-upload" class="ghost">Upload a sheet</button>
-        <input id="sheet-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.json,.txt,application/pdf,image/*" hidden>
-        <button id="sheet-download" class="ghost">Download</button>
-        <button id="sheet-print" class="ghost">Print</button>
-        <button id="sheet-popout" class="ghost" title="Open your character sheet in its own window (to keep it open beside the map, or on another screen)">Pop out</button>
+        <details class="sheet-more">
+          <summary title="Review, upload, download, print or pop out the sheet">⋯ More</summary>
+          <div class="sheet-more-menu">
+            <button id="sheet-review" class="ghost" title="Check the sheet is valid for its level, classes and race: the rules, then the AI with your books (and the web for what they don't cover)">Review sheet</button>
+            <button id="sheet-upload" class="ghost">Upload a sheet</button>
+            <input id="sheet-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.json,.txt,application/pdf,image/*" hidden>
+            <button id="sheet-download" class="ghost">Download</button>
+            <button id="sheet-print" class="ghost">Print</button>
+            <button id="sheet-popout" class="ghost" title="Open your character sheet in its own window (to keep it open beside the map, or on another screen)">Pop out</button>
+          </div>
+        </details>
       </div>
       <!-- The player's characters: who they play now, and the list to switch, make, rename or delete (sheet-characters.js). -->
       <div id="sheet-characters" class="sheet-characters" role="region" aria-label="Your characters" hidden></div>
@@ -266,6 +271,7 @@
 
     <!-- A player's inventory (sheet.js): items carried, looked up by name, equipped. Part of the sheet. -->
     <section id="tab-inventory" class="panel sheet-panel" hidden>
+      <div id="inventory-pane" class="inventory-pane">
       <form id="gear-add" class="creatures-bar gear-add">
         <select id="gear-kind" aria-label="Kind of item" title="What kind of item: the names suggested are of this kind, and Add by hand makes one"></select>
         <input id="gear-name" type="search" list="dl-gear" placeholder="Name: Longsword, Bag of Holding, Potion of Healing…" aria-label="Item to add" autocomplete="off">
@@ -276,6 +282,7 @@
       </form>
       <div id="gear-preview" class="gear-preview" hidden></div>
       <div id="inventory" class="inventory"></div>
+      </div>
     </section>
 
     <!-- The DM's bestiary and people (creatures.js): kinds of creature and NPCs saved once, placed on any map. -->
