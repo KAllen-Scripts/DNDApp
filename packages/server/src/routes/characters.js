@@ -194,9 +194,9 @@ export function registerCharacters(app, r) {
 
   /** The SRD spells a class can learn, cantrips up to `level`, with their details (the character builder's Spells step). */
   app.get('/campaigns/:cid/spells/class', async (request) => {
-    access(request);
+    const { cid } = access(request);
     const { name, level } = z.object({ name: z.string().trim().min(1).max(40), level: z.coerce.number().int().min(0).max(9).default(1) }).parse(request.query);
-    return spells.forClass(name, level);
+    return spells.forClass(name, level, await editions.of(cid));
   });
 
   /** A spell's details by name: the SRD, else the group's books, else the AI's memory. 404 if nobody knows it. */
