@@ -457,6 +457,16 @@ test('spells for a class: the SRD list and the rest of the PHB up to a spell lev
     assert.deepEqual([hex.level, hex.details, hex.description], [1, false, '']);
     assert.ok(warlock.find((s) => s.name === 'Eldritch Blast').details);
     assert.ok(!(await get('name=Wizard&level=1')).some((s) => s.name === 'Hex'));
+    assert.ok(!(await get('name=Paladin&level=1')).some((s) => s.name === 'Divine Smite'), '2014: a class feature, not a spell');
+    // Under 2024 rules the 2024 Player's Handbook's spells join the lists; none of the 2014 ones go.
+    await t.request('PATCH', `/campaigns/${t.campaign.id}/settings`, { body: { edition: '2024' } });
+    const paladin = await get('name=Paladin&level=2');
+    assert.ok(paladin.some((s) => s.name === 'Divine Smite' && s.level === 1 && !s.details));
+    assert.ok(paladin.some((s) => s.name === 'Shining Smite' && s.level === 2));
+    assert.ok(paladin.some((s) => s.name === 'Searing Smite'), 'the 2014 list stays');
+    const cleric = await get('name=Cleric&level=0');
+    assert.ok(cleric.some((s) => s.name === 'Toll the Dead'));
+    assert.equal(new Set(cleric.map((s) => s.name)).size, cleric.length, 'no spell twice');
   } finally {
     await t.cleanup();
   }

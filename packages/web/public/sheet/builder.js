@@ -394,7 +394,7 @@ function spellsStep(ctx, ed) {
   }, x.c.name))) : null;
   const values = state.calc.values;
   const top = Math.max(0, ...[1, 2, 3, 4, 5, 6, 7, 8, 9].filter((n) => Number(values[`slots.${n}`]) > 0), Number(values.pact_slots) > 0 ? Number(values.pact_level) || 0 : 0);
-  const key = `${c.name}:${top}`;
+  const key = `${editionOf(ctx.state)}:${c.name}:${top}`;
   const list = h('div', { class: 'build-spells' }, spellLists.has(key) ? null : nothing('Finding the spells…'));
   const draw = (spells) => {
     if (!spells.length) return list.replaceChildren(nothing(top ? `No ${c.name.toLowerCase()} spell list here: find spells by name below.` : `No ${c.name.toLowerCase()} spells at this level yet.`));
@@ -435,6 +435,7 @@ function spellsStep(ctx, ed) {
     h('p', { class: 'small' }, c.spells),
     top ? null : h('p', { class: 'muted small' }, 'No spell slots yet: just cantrips for now (spells come with a later level).'),
     list,
+    ed === '2024' ? h('p', { class: 'muted small' }, "The 2024 Player's Handbook's new spells are on these lists by name; which classes get them hasn't been checked against the book yet.") : null,
     otherSpell(ctx));
 }
 

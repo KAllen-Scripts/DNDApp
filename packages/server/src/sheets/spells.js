@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import { z } from 'zod';
 import { distance } from 'fastest-levenshtein';
 import { normalizeSpell } from '@dndapp/shared/sheet.js';
-import { PHB_EXTRA_SPELLS } from '@dndapp/shared/spell-lists.js';
+import { PHB_EXTRA_SPELLS, PHB2024_EXTRA_SPELLS } from '@dndapp/shared/spell-lists.js';
 import { normName } from './books.js';
 
 const SRD = JSON.parse(fs.readFileSync(new URL('./srd-spells.json', import.meta.url), 'utf8')).spells;
@@ -81,15 +81,24 @@ export function createSpells({ books, llm, editions = null }) {
     /**
      * The spells a class can learn, up to a spell level (the character builder's Spells step): the SRD's
      * with their details, and the rest of the Player's Handbook's by name (`details: false`: looked up when
-     * ticked, from the books or the AI). Classes the Player's Handbook doesn't have (an artificer) get none.
+     * ticked, from the books or the AI). Under 2024 rules the 2024 Player's Handbook's additions come too.
+     * Classes the Player's Handbook doesn't have (an artificer) get none.
      */
-    forClass(className, maxLevel = 1) {
+    forClass(className, maxLevel = 1, edition = '2014') {
       const want = normName(className);
       const fits = (s) => s.level <= maxLevel && (s.classes ?? []).some((c) => normName(c) === want);
       const srd = SRD.filter(fits).map((s) => ({ ...fromSrd(s), details: true }));
       const known = new Set(srd.map((s) => normName(s.name)));
-      const more = PHB_EXTRA_SPELLS.filter((s) => fits(s) && !known.has(normName(s.name)))
-        .map((s) => ({ ...normalizeSpell({ name: s.name, level: s.level, school: s.school, source: 'manual' }), source_note: "Player's Handbook", details: false }));
+      const more = [];
+      const add = (list, note) => {
+        for (const s of list) {
+          if (!fits(s) || known.has(normName(s.name))) continue;
+          known.add(normName(s.name));
+          more.push({ ...normalizeSpell({ name: s.name, level: s.level, school: s.school, source: 'manual' }), source_note: note, details: false });
+        }
+      };
+      add(PHB_EXTRA_SPELLS, "Player's Handbook");
+      if (edition === '2024') add(PHB2024_EXTRA_SPELLS, "Player's Handbook (2024)");
       return [...srd, ...more].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
     },
 

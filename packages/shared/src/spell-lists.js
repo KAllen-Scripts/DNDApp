@@ -51,3 +51,40 @@ const ROWS = [
 export const PHB_EXTRA_SPELLS = ROWS.map(([name, level, school, classes]) => ({
   name, level, school, classes: classes.split(' ').map((c) => c[0].toUpperCase() + c.slice(1)),
 }));
+
+/**
+ * Spells the Player's Handbook (2024) adds to the class lists, on top of the 2014 lists above and the SRD's:
+ * its new spells and the ones it took in from Xanathar's and Tasha's. Only additions: nothing is taken off a
+ * 2014 list. Written from Claude's knowledge, not yet checked line by line against the PDF.
+ */
+const ROWS_2024 = [
+  ['Elementalism', 0, 'Transmutation', 'druid sorcerer wizard'],
+  ['Mind Sliver', 0, 'Enchantment', 'sorcerer warlock wizard'],
+  ['Sorcerous Burst', 0, 'Evocation', 'sorcerer'],
+  ['Starry Wisp', 0, 'Evocation', 'bard druid'],
+  ['Toll the Dead', 0, 'Necromancy', 'cleric warlock wizard'],
+  ['Divine Smite', 1, 'Evocation', 'paladin'],
+  ['Ice Knife', 1, 'Conjuration', 'druid sorcerer wizard'],
+  ['Arcane Vigor', 2, 'Abjuration', 'sorcerer wizard'],
+  ['Mind Spike', 2, 'Divination', 'sorcerer warlock wizard'],
+  ['Shining Smite', 2, 'Transmutation', 'paladin'],
+  ['Summon Beast', 2, 'Conjuration', 'druid ranger'],
+  ['Summon Fey', 3, 'Conjuration', 'druid ranger warlock wizard'],
+  ['Summon Undead', 3, 'Necromancy', 'warlock wizard'],
+  ['Fount of Moonlight', 4, 'Evocation', 'bard druid'],
+  ['Summon Aberration', 4, 'Conjuration', 'warlock wizard'],
+  ['Summon Construct', 4, 'Conjuration', 'wizard'],
+  ['Summon Elemental', 4, 'Conjuration', 'druid ranger wizard'],
+  ["Jallarzi's Storm of Radiance", 5, 'Evocation', 'warlock wizard'],
+  ['Summon Celestial', 5, 'Conjuration', 'cleric paladin'],
+  ['Summon Dragon', 5, 'Conjuration', 'wizard'],
+  ["Yolande's Regal Presence", 5, 'Enchantment', 'bard wizard'],
+  ["Tasha's Bubbling Cauldron", 6, 'Conjuration', 'warlock wizard'],
+  ['Summon Fiend', 6, 'Conjuration', 'warlock wizard'],
+  ['Power Word Fortify', 7, 'Enchantment', 'bard cleric'],
+];
+
+/** The 2024 additions, in the same shape as PHB_EXTRA_SPELLS. */
+export const PHB2024_EXTRA_SPELLS = ROWS_2024.map(([name, level, school, classes]) => ({
+  name, level, school, classes: classes.split(' ').map((c) => c[0].toUpperCase() + c.slice(1)),
+}));

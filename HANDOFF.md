@@ -36,7 +36,7 @@ Where the project stands, what to do next, open questions, decisions and lessons
 
 ## Next steps
 
-1. **Sheet redesign follow-ups** (2026-11-16): the old point-buy toggle and background notice still sit on the sheet beside the builder's versions; the builder's class lists are the 2014 PHB's (2024 and other books' spells are added by name). Kenny to try the new sheet and builder on his phone (docs/vscode-checks.md).
+1. **Sheet redesign follow-ups** (2026-11-16): the old point-buy toggle and background notice still sit on the sheet beside the builder's versions; under 2024 rules the builder's spell lists add the 2024 PHB's spells from Claude's knowledge (check which classes get them against the PDF on Kenny's PC). Kenny to try the new sheet and builder on his phone (docs/vscode-checks.md).
 2. **The owner tries what's built** ([docs/vscode-checks.md](docs/vscode-checks.md)), most urgently: Discord recording (make the bot, paste its key on the campaign's Sessions tab, then pick the speech-to-text engine by speed on his card: `local` on CPU is likely hours for a 4-hour session, `whisper-cpp`'s NVIDIA build minutes; watch for gaps when someone joins or leaves, discord.js issue #11441); feeding the example transcripts in (`example/transcripts/README.md`, `example/ask-checks.md`); Ask's timings with the faster model (send the `Ask answered` log lines; tune `qa/route.js` from the log's `why`); the wiki's AI on his campaign (tune `src/wiki/ai.js`, bump `PIPELINE_VERSION`); thorough archiving with the real AI (raise `ARCHIVIST_MAX_TOOL_CALLS` if a run hits 500; a rebuild re-archives past sessions).
 3. **Waiting on his calls** (defaults in place): map attacks on by default with damage applied straight away; item charges never recharging by themselves (a Recharge at dawn button could follow); should a summon's "until" also run out on the clock; Sonnet's answers good enough (`MODEL_QA_FAST=off` undoes it). Also "Open questions" below.
 4. **Not built yet, if wanted** (by feature; designs in docs/spec/):
@@ -178,6 +178,9 @@ Don't pursue these unless the owner raises them again.
 ## Change log
 
 Newest first. Older entries: [docs/archive/changelog.md](docs/archive/changelog.md).
+
+### 2026-11-16: 2024 class spell lists in the builder
+- Under 2024 rules the builder's Spells step (`GET /spells/class`, edition from the campaign) adds the 2024 PHB's spells (`PHB2024_EXTRA_SPELLS` in `shared/src/spell-lists.js`: Divine Smite, Shining Smite, Elementalism, Toll the Dead, the Summon spells…) to the 2014 lists; nothing is removed. From Claude's knowledge, not checked against the PDF. Spec: docs/spec/sheets.md. Test: the spell-list server test.
 
 ### 2026-11-16: Conditions synced between sheets and tokens; every spell in the builder
 - A player character's conditions are one list on their sheet and their token (map changes go on the sheet, sheet changes on the tokens; exhaustion and concentration included, ending concentration on the sheet ends the spell on the map). The builder's Spells step lists each class's whole PHB list (the SRD's plus `shared/src/spell-lists.js`, looked up when ticked) and adds any other spell by name. Spec: docs/spec/sheets.md. Tests: a maps test, the spell-list server test, builder test.
