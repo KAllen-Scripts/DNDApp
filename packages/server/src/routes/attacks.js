@@ -228,11 +228,16 @@ export function registerAttacks(app, r) {
     return true;
   };
 
-  /** Save the sheets an attack changed: each once, with every reason. */
+  /**
+   * Save the sheets an attack changed: each once, with every reason. Their conditions are the sheet's as it
+   * is now: the map's change (a spell's restrained, the caster's concentration) went on it already.
+   */
   const saveSheets = (cid, later) => {
     for (const uid of new Set(later.map((l) => l.user_id))) {
       const mine = later.filter((l) => l.user_id === uid);
-      sheets.save(cid, uid, mine.at(-1).sheet, { by: mine[0].by, reason: mine.map((l) => l.reason).join('; ') });
+      const { sheet: now } = sheets.get(cid, uid);
+      const { conditions, exhaustion, concentration } = now;
+      sheets.save(cid, uid, { ...mine.at(-1).sheet, conditions, exhaustion, concentration }, { by: mine[0].by, reason: mine.map((l) => l.reason).join('; ') });
     }
   };
 

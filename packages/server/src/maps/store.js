@@ -19,7 +19,8 @@ import { computeSheet } from '@dndapp/shared/sheet.js';
 import { activeForm, formHasHp, setFormHp } from '@dndapp/shared/wild-shape.js';
 import { companionTokenStats, setCompanionHp } from '@dndapp/shared/companions.js';
 import { attackLogFor } from '@dndapp/shared/attacks.js';
-import { mapSpellsFor } from '@dndapp/shared/spell-effects.js';
+import { endConcentration, mapSpellsFor } from '@dndapp/shared/spell-effects.js';
+import { sameConditions, sheetConditionsFromToken, tokenConditionsFromSheet } from '@dndapp/shared/conditions.js';
 import { createSight } from './sight.js';
 import { mapEvents, mapJourneys } from './events.js';
 import { diffJson, applyJson } from '../sheets/store.js';
@@ -124,7 +125,27 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
     }
     const map = fromRow(row(campaignId, id));
     events.emit('update', map);
+    if (!created) conditionsToSheets(campaignId, before.doc, after, by);
     return map;
+  }
+
+  /**
+   * A player character's token whose conditions changed on a map (by hand, a spell, an attack): the
+   * same conditions go on the player's sheet (its active character), and back the other way in
+   * sheetChanged. Exhaustion on the token is level 1 on a sheet with none; concentrating names the spell
+   * the map says they hold.
+   */
+  function conditionsToSheets(campaignId, beforeDoc, after, by) {
+    if (!sheets) return;
+    const was = new Map((beforeDoc?.tokens ?? []).map((t) => [t.id, t.conditions ?? []]));
+    for (const t of after.tokens ?? []) {
+      if (t.kind !== 'pc' || t.user_id == null || !was.has(t.id) || sameConditions(was.get(t.id), t.conditions)) continue;
+      const { sheet, version } = sheets.get(campaignId, t.user_id);
+      if (!version) continue;
+      const spell = (after.spells ?? []).find((x) => x.caster === t.id && x.concentration)?.name ?? '';
+      const next = sheetConditionsFromToken(sheet, t.conditions, spell);
+      if (next) sheets.save(campaignId, t.user_id, next, { by, reason: 'conditions changed on the map' });
+    }
   }
 
   const journeyCache = new Map(); // the Timeline's journeys, per campaign and viewer
@@ -470,6 +491,22 @@ export function createMaps({ db, archive, store, pictures = null, sheets = null 
      */
     sheetChanged(campaignId, userId) {
       const { sheet, version } = sheets.get(campaignId, userId);
+      // The sheet's conditions go on the character's tokens (ending concentration there ends the spell held).
+      if (version) {
+        for (const r of db.prepare('SELECT * FROM maps WHERE campaign_id = ?').all(campaignId)) {
+          const map = fromRow(r);
+          if (map.removed) continue;
+          const stale = (t) => t.kind === 'pc' && t.user_id === userId && !sameConditions(t.conditions, tokenConditionsFromSheet(t.conditions, sheet));
+          if (!map.tokens.some(stale)) continue;
+          maps.change(campaignId, map.id, (m) => {
+            for (const t of m.tokens.filter(stale)) {
+              const held = t.conditions.includes('concentrating');
+              t.conditions = tokenConditionsFromSheet(t.conditions, sheet);
+              if (held && !t.conditions.includes('concentrating')) endConcentration(m, t.id);
+            }
+          }, { by: userId, reason: 'conditions changed on the sheet' });
+        }
+      }
       const values = version ? computeSheet(sheet, store.getSettings(campaignId)).values : {};
       // Companions kept on the sheet show its name, stat block and hit points on their tokens.
       const companions = (sheet.companions ?? []).map((c) => [c.id, c.name, c.hp, c.form]);

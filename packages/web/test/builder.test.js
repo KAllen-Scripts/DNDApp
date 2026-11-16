@@ -112,6 +112,15 @@ test('builder: ability scores from the standard array or rolled on the server, w
       await page.waitFor(() => page.text('#sheet-status') === 'Saved' && saved(t).spells.length === 1);
       assert.equal(saved(t).spells[0].level, 1);
       assert.ok(saved(t).spells[0].prepared);
+      // A Player's Handbook spell beyond the SRD: on the list too, added with its level (details looked up).
+      page.click(byLabel(page, 'Chromatic Orb on my sheet'));
+      await page.waitFor(() => page.text('#sheet-status') === 'Saved' && saved(t).spells.length === 2);
+      assert.equal(saved(t).spells.find((s) => s.name === 'Chromatic Orb').level, 1);
+      // Any other spell by name.
+      page.type(byLabel(page, 'Another spell to add (builder)'), 'Shield');
+      page.submit('#sheet .build-other-spell');
+      await page.waitFor(() => page.text('#sheet-status') === 'Saved' && saved(t).spells.length === 3);
+      assert.ok(saved(t).spells.some((s) => s.name === 'Shield'));
     });
   } finally {
     mock.restoreAll();
