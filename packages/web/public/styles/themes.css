@@ -915,3 +915,13 @@
   .sh-header-buttons { position: static; }
   .sh-who { padding-right: 0; }
 }
+
+/* The sheet uses the window's width, like the mock-up (up to 1600px). */
+#app-view:has(> #tab-sheet:not([hidden])) { --page-width: 1600px; }
+/* Features in Actions read as rows of the list, not boxes: what they do on one line, uses on the right. */
+.actions-list .class-features > h3 { margin-bottom: 0.2rem; }
+.actions-list .cf-rows { gap: 0; }
+.actions-list .cf-row { border: none; border-bottom: 1px dashed var(--border); border-radius: 0; padding: 0.25rem 0; gap: 0.1rem; }
+.actions-list .cf-row:last-child { border-bottom: none; }
+.actions-list .cf-subclass h4 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-top: 0.4rem; }
+.actions-list .cf-rules { display: none; }
