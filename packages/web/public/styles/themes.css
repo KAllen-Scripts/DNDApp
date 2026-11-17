@@ -840,3 +840,78 @@
 .sheet-characters:has(+ .sheet-review + .sheet .sh-header) { border: none; background: none; padding: 0; margin: 0.3rem 0 0; }
 .sheet-characters .chars-strip { justify-content: flex-end; }
 #tab-sheet .sheet-characters .chars-now { display: none; }
+
+/* =====================================================================
+   7. The mock-up's look (2026-11-17, Option A as drawn): a one-row header,
+   the stats as plain lists, and the Actions tab as one list in one card.
+   ===================================================================== */
+@container sheet (min-width: 561px) {
+  .sh-who { flex: 0 1 auto; min-width: 11rem; }
+  .sh-who .summary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 15rem; }
+  .sh-portrait { width: 2.6rem; height: 2.6rem; }
+  .sheet .sh-who input.big { font-size: 1.2rem; }
+  .sh-numbers { gap: 0.3rem; flex-wrap: nowrap; }
+  .sh-numbers .stat { min-width: 3.3rem; padding: 0.15rem 0.35rem; }
+  .sh-numbers .stat .auto input { width: 2.6rem; height: 1.6rem; font-size: 1.1rem; }
+  .sh-numbers .stat .lbl { font-size: 0.58rem; }
+  .sh-header-end { display: flex; flex: 1 1 24rem; align-items: center; justify-content: space-between; gap: 0.4rem 0.8rem; flex-wrap: wrap; min-width: 0; }
+  .sh-header-buttons { flex-wrap: wrap; align-items: center; justify-content: flex-end; }
+  .sh-header-buttons .level-up-banner { margin: 0; display: inline-flex; align-items: center; gap: 0.3rem; }
+  .sh-header-buttons .level-up-banner > span:empty { display: none; }
+  .sh-header-status:not(:has(> :not([hidden]):not(:empty))) { display: none; }
+  .sh-hp { padding: 0.25rem 0.45rem; gap: 0.2rem; }
+  .sheet .hp-now input.hp-current { height: 1.9rem; font-size: 1.2rem; width: 3.2rem; }
+  .sheet .hp-change input { height: 1.7rem; }
+  .hp-change button { padding: 0.1rem 0.45rem; font-size: 0.8rem; }
+  .sh-header-buttons > button, .sh-header-buttons .level-up-banner button { padding: 0.3rem 0.65rem; font-size: 0.85rem; }
+}
+.sh-header-end { display: flex; flex: 1 1 auto; align-items: center; justify-content: space-between; gap: 0.3rem 0.8rem; flex-wrap: wrap; min-width: 0; }
+.sh-header-buttons .level-up-banner { margin: 0; display: inline-flex; align-items: center; gap: 0.3rem; }
+.sh-header-buttons .level-up-banner > span:empty { display: none; }
+.sh-header-status:not(:has(> :not([hidden]):not(:empty))) { display: none; }
+
+/* The stats: headings to the left, rows closer together. */
+.sh-a .sh-stats h3, .sh-a .sh-tabpanel h3 { text-align: left; }
+.sh-stats .checklist li { min-height: 1.45rem; }
+
+/* Actions: one card; the parts inside are plain sections divided by a line. */
+.actions-list { display: flex; flex-direction: column; padding: var(--pad); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.actions-list > :is(.sh-box, .action-spells) { border: none; border-radius: 0; background: none; box-shadow: none; padding: 0.55rem 0 0.4rem; border-top: 1px solid var(--border); }
+.actions-list > .actions-filters { padding-bottom: 0.45rem; }
+.actions-list > .actions-filters + * { border-top: none; }
+.actions-list > :is(.sh-box, .action-spells) > h3 { margin-bottom: 0.3rem; }
+.actions-list .action-group h4 { font-size: 0.7rem; }
+.actions-list .attacks .tr.th { display: none; }
+.actions-list[data-filter="attacks"] > [data-kind]:not([data-kind="attacks"]),
+.actions-list[data-filter="spells"] > [data-kind]:not([data-kind="spells"]),
+.actions-list[data-filter="features"] > [data-kind]:not([data-kind="features"]),
+.actions-list[data-filter="items"] > [data-kind]:not([data-kind="items"]) { display: none; }
+/* Spend sits at the bottom as short lines: slots, features' uses, hit dice, charges. */
+.actions-list > .spend { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 1.4rem; }
+.actions-list > .spend > h3 { display: none; }
+.actions-list > .spend .spend-group { display: flex; flex-wrap: wrap; align-items: center; gap: 0.1rem 0.6rem; }
+.actions-list > .spend .spend-group h4 { margin: 0; font-size: 0.8rem; text-transform: none; letter-spacing: 0; color: var(--text); font-weight: 700; }
+.actions-list > .spend .spend-row { min-height: 0; gap: 0.3rem; }
+.actions-list > .spend .spend-name { min-width: 0; font-weight: 400; }
+.actions-list > .standard-actions, .actions-list > .sh-fold { border-top: 1px solid var(--border); }
+.sh-numbers .stat.inspiration { min-width: 0; }
+@container sheet (min-width: 561px) {
+  .actions-list .attacks .tr { grid-template-columns: minmax(0, 1fr) 3.4rem minmax(0, 11rem) var(--ctl) auto var(--ctl); row-gap: 0; }
+}
+.actions-list .attacks .atk-extras { padding: 0 0 0.25rem; }
+.actions-list .attacks .atk-extras label, .actions-list .attacks .atk-extras button { font-size: 0.75rem; }
+.actions-list .action-row button, .actions-list .item-action button { padding: 0.15rem 0.55rem; font-size: 0.82rem; }
+.actions-list .action-row select { height: 1.7rem; font-size: 0.8rem; }
+
+/* The bar above the sheet and the Characters button on one line. */
+@media (min-width: 700px) {
+  #tab-sheet:not([hidden]) { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: start; }
+  #tab-sheet > * { grid-column: 1 / -1; }
+  #tab-sheet > .sheet-bar { grid-column: 1; grid-row: 1; }
+  #tab-sheet > .sheet-characters:not(:has(.chars-list)) { grid-column: 2; grid-row: 1; margin: 0; padding: 0; border: none; background: none; }
+}
+/* A phone: the header's buttons sit on the Condition line (Level up made the corner too crowded). */
+@container sheet (max-width: 560px) {
+  .sh-header-buttons { position: static; }
+  .sh-who { padding-right: 0; }
+}

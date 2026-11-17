@@ -846,7 +846,7 @@ function attacks() {
   draw();
   state.gearDraws.push(draw);
   state.attackDraws.push(draw);
-  return box('Attacks & spellcasting', 'attacks-box', combatBar(attackCtx()), list, names);
+  return box('Attacks', 'attacks-box', combatBar(attackCtx()), list, names);
 }
 
 /** What sheet/attacks.js needs from the sheet. */
@@ -1244,6 +1244,28 @@ const STANDARD_ACTIONS = [
 ];
 const standardActions = () => fold('standard-actions', 'Standard actions', h('dl', { class: 'standard-actions small' }, STANDARD_ACTIONS.flatMap(([n, t]) => [h('dt', {}, n), h('dd', {}, t)])), { cls: 'sh-box' });
 
+/**
+ * The Actions tab (the mock-up's one list): filter chips (All, Attacks, Spells, Features, Items) over the
+ * attacks, the spells to cast grouped by casting time, the items' actions and the class features with uses,
+ * then the Spend line (slots, hit dice, charges) and the standard actions. The chip picked is remembered.
+ */
+const ACTION_FILTERS = [['all', 'All'], ['attacks', 'Attacks'], ['spells', 'Spells'], ['features', 'Features'], ['items', 'Items']];
+function actionsList() {
+  const parts = [[attacks(), 'attacks'], [actionSpells(), 'spells'], [itemActions(), 'items'], [classFeatures(), 'features']];
+  parts.forEach(([el, kind]) => (el.dataset.kind = kind));
+  const list = h('div', { class: 'actions-list' });
+  const chips = ACTION_FILTERS.map(([key, title]) => h('button', { type: 'button', class: 'chip', 'data-filter': key, 'aria-pressed': 'false', onclick: () => pick(key) }, title));
+  const pick = (key) => {
+    storage.set('dndapp.actionsFilter', key);
+    list.dataset.filter = key;
+    chips.forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.filter === key)));
+  };
+  list.append(h('div', { class: 'spell-filters actions-filters', role: 'group', 'aria-label': 'Show in Actions' }, chips),
+    ...parts.map(([el]) => el), spendBox({ state, changed, edition: editionNow }), standardActions());
+  pick(ACTION_FILTERS.some(([k]) => k === storage.get('dndapp.actionsFilter')) ? storage.get('dndapp.actionsFilter') : 'all');
+  return list;
+}
+
 /** The Inventory tab's form and list (index.html #inventory-pane) live in whichever of the two tabs shows them: the sheet's Inventory tab or the page's Inventory tab. */
 export function placeInventory(where) {
   const pane = $('#inventory-pane');
@@ -1267,7 +1289,7 @@ function sheetBody() {
   );
   const inventoryPanel = h('div', { class: 'sh-inventory' });
   const build = {
-    actions: () => [spendBox({ state, changed, edition: editionNow }), attacks(), actionSpells(), itemActions(), classFeatures(), standardActions()],
+    actions: () => [actionsList()],
     spells: () => [spells()],
     inventory: () => [inventoryPanel, equipment()],
     features: () => [features(), box('Additional features & traits', 'd-additional', markdownField('additional_features', { label: 'Additional features & traits', rows: 5 }))],
