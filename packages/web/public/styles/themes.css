@@ -872,7 +872,7 @@
 
 /* The stats: headings to the left, rows closer together. */
 .sh-a .sh-stats h3, .sh-a .sh-tabpanel h3 { text-align: left; }
-.sh-stats .checklist li { min-height: 1.45rem; }
+.sh-stats .checklist li { min-height: 0; height: 1.6rem; }
 
 /* Actions: one card; the parts inside are plain sections divided by a line. */
 .actions-list { display: flex; flex-direction: column; padding: var(--pad); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
@@ -916,8 +916,8 @@
   .sh-who { padding-right: 0; }
 }
 
-/* The sheet uses the window's width, like the mock-up (up to 1600px). */
-#app-view:has(> #tab-sheet:not([hidden])) { --page-width: 1600px; }
+/* The sheet uses the whole window's width, like the mock-up. */
+#app-view:has(> #tab-sheet:not([hidden])) { --page-width: none; }
 /* Features in Actions read as rows of the list, not boxes: what they do on one line, uses on the right. */
 .actions-list .class-features > h3 { margin-bottom: 0.2rem; }
 .actions-list .cf-rows { gap: 0; }
@@ -925,3 +925,35 @@
 .actions-list .cf-row:last-child { border-bottom: none; }
 .actions-list .cf-subclass h4 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-top: 0.4rem; }
 .actions-list .cf-rules { display: none; }
+
+/* Everything lines up (owner, 2026-11-17: "everything is different heights"): the header's boxes are one
+   height, the two stats columns and the tabs reach the same bottom, and every list row is the same height. */
+@container sheet (min-width: 861px) {
+  .sh-header-top { align-items: stretch; }
+  .sh-header-top > .sh-who, .sh-header-end { align-self: center; }
+  .sh-numbers { align-items: stretch; }
+  .sh-numbers .stat { justify-content: center; }
+  .sh-a { align-items: stretch; }
+  .sh-stats { align-items: stretch; }
+  .sh-stats > .sh-col > :last-child { flex-grow: 1; }
+  .sh-a .sh-tabs { display: flex; flex-direction: column; }
+  .sh-tabpanel:not([hidden]) { flex: 1 1 auto; }
+  .sh-tabpanel > :only-child, .actions-list { flex-grow: 1; }
+  .actions-list > .spend { margin-top: auto; }
+  .actions-list :is(.action-row, .cf-head) { min-height: 2rem; }
+  .actions-list .attacks .tr.gear-attack, .actions-list .attacks .tr:not(.th) { min-height: 2rem; align-items: center; }
+}
+/* An attack from the inventory on one line, like the other rows: name, to hit, damage, its extras, buttons. */
+@container sheet (min-width: 861px) {
+  .actions-list .attacks .tr.gear-attack { display: flex; align-items: center; gap: 0.5rem; padding: 0.15rem 0; }
+  .actions-list .attacks .gear-attack > .gear-name { flex: 1 1 auto; min-width: 8rem; }
+  .actions-list .attacks .gear-attack > .gear-num { flex: 0 0 2.6rem; text-align: right; }
+  .actions-list .attacks .gear-attack > .gear-dmg { flex: 0 0 9rem; }
+  .actions-list .attacks .gear-attack > .atk-extras { order: 1; flex: 0 1 auto; padding: 0; }
+  .actions-list .attacks .gear-attack > :is(.icon-roll, .gear-dmg-pair) { order: 2; }
+  .actions-list .attacks .gear-attack > span:empty { display: none; }
+}
+@container sheet (min-width: 861px) {
+  .actions-list :is(.icon-roll, .dmg-roll) { height: 1.75rem; min-width: 1.75rem; padding: 0 0.3rem; }
+  .actions-list :is(.attacks .tr.gear-attack, .action-row, .item-action, .cf-head) { min-height: 2.1rem; }
+}
