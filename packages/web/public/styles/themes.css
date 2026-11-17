@@ -957,3 +957,32 @@
   .actions-list :is(.icon-roll, .dmg-roll) { height: 1.75rem; min-width: 1.75rem; padding: 0 0.3rem; }
   .actions-list :is(.attacks .tr.gear-attack, .action-row, .item-action, .cf-head) { min-height: 2.1rem; }
 }
+
+/* The sheet fits the window on a wide screen (owner, 2026-11-17: switching tabs shouldn't change the page's
+   height; long tabs scroll). The header stays; the stats columns and the open tab each scroll on their own.
+   Beside the map, on a phone, and while the builder is open, the page scrolls as before. */
+@media screen and (min-width: 900px) {
+  :root:not([data-phone]) #app-view:not(.beside) > #tab-sheet:not([hidden]) { overflow: hidden; grid-template-rows: auto auto auto minmax(0, 1fr); row-gap: 0.5rem; padding-bottom: 0.75rem; }
+  :root:not([data-phone]) #app-view:not(.beside) > #tab-sheet > .sheet-characters:has(.chars-list) { grid-row: 2; }
+  :root:not([data-phone]) #app-view:not(.beside) > #tab-sheet > .sheet-review { grid-row: 3; }
+  :root:not([data-phone]) #app-view:not(.beside) > #tab-sheet > .sheet { grid-row: 4; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; padding-bottom: 0; }
+  :root:not([data-phone]) #app-view:not(.beside) > #tab-sheet > .sheet:not(.building) > .sh-a { flex: 1 1 0; min-height: 0; }
+}
+@container sheet (min-width: 861px) {
+  .sheet:not(.building) > .sh-a { grid-template-rows: minmax(0, 1fr); }
+  .sh-a > .sh-stats { min-height: 0; overflow-y: auto; }
+  .sh-a .sh-tabs { min-height: 0; }
+  .sh-a .sh-tabbar { flex: none; }
+  .sh-a .sh-tabpanel:not([hidden]) { min-height: 0; overflow-y: auto; }
+}
+@container sheet (min-width: 1101px) {
+  .sh-a > .sh-stats { overflow: visible; grid-template-rows: minmax(0, 1fr); }
+  .sh-stats > .sh-col { min-height: 0; overflow-y: auto; }
+}
+/* The header's numbers: every box the same width, the number (or inspiration's circle) on one line, the label under it. */
+@container sheet (min-width: 561px) {
+  .sh-numbers .stat { flex: 0 0 4.6rem; width: 4.6rem; min-width: 0; padding: 0.2rem 0.2rem; display: grid; grid-template-rows: 1.8rem auto; place-items: center; align-content: center; gap: 0.15rem; }
+  .sh-numbers .stat .auto, .sh-numbers .stat .auto input { width: 100%; }
+  .sh-numbers .stat.inspiration input { width: 1.1rem; height: 1.1rem; margin: 0; align-self: center; }
+  .sh-numbers .stat .lbl { white-space: nowrap; font-size: 0.56rem; }
+}
