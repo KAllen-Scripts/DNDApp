@@ -29,6 +29,9 @@ test('item actions: Use on Bag of Tricks pulls out a creature that joins Compani
 
     page.click(box().querySelector('[aria-label="Use Bag of Tricks (Rust): Pull out a fuzzy ball"]'));
     await page.waitFor(() => page.$('#sheet .companions .companion'), { what: 'the creature in Companions' });
+    // The Companions tab opens on it (it was out of sight behind Actions, so it seemed to go nowhere).
+    await page.waitFor(() => !page.$('#sheet-tab-companions').hidden, { what: 'the Companions tab open' });
+    assert.match(page.$('#sheet-status').textContent, /in your Companions tab/);
     const sheet = t.sheets.get(t.campaign.id, t.sam.id).sheet;
     assert.equal(sheet.companions.length, 1);
     assert.equal(page.$('#sheet .companions .companion-name').textContent, sheet.companions[0].name);

@@ -179,6 +179,9 @@ Don't pursue these unless the owner raises them again.
 
 Newest first. Older entries: [docs/archive/changelog.md](docs/archive/changelog.md).
 
+### 2026-11-17: A Bag of Tricks creature says where it went
+- Kenny used a Bag of Tricks and couldn't see the creature. It worked, but went into the sheet's Companions tab out of sight (he was on Actions), and onto the map only if his character's token is on one. Now the message says where it went (Companions, the map by name, or that the character isn't on a map yet) and the sheet opens Companions. Regression test in server/test/item-actions.test.js.
+
 ### 2026-11-17: The sheet made to look like the Option A mock-up
 - Kenny: the built sheet "does not look like what you showed me". The header is one compact row (short AC/Prof labels, Level up with the buttons, conditions and buttons wrap together); the Actions tab is one card with All/Attacks/Spells/Features/Items chips and the Spend lines at the bottom; stats headings left; the bar above the sheet and Characters share a line. Narrow (pop-out, beside the map) and phone layouts checked in a real browser. CSS in themes.css §7, `actionsList` in sheet.js. Then: the Sheet tab the window's full width, the header's boxes one height, both stats columns and the tabs ending at the same bottom, list rows one height, inventory attacks on one line; on a wide screen the sheet fits the window and each tab and stats column scrolls on its own (switching tabs keeps the page height); the header's number boxes one width, features in Actions as plain rows. Cloudflare keeps old CSS/JS in browsers for 4 h (Ctrl+Shift+R).
 
