@@ -172,6 +172,13 @@ export function registerItemActions(app, r) {
         out.message += ` ${err.message}`;
       }
     }
+    // Say where it went: the sheet's Companions tab always, the map only if the character is on one.
+    if (summons.length) {
+      const [it, is] = summons.length > 1 ? ['They', "They're"] : ['It', "It's"];
+      if (out.placed) out.message += ` ${is} in your Companions tab, and on ${map.name} next to your character.`;
+      else if (!map) out.message += ` ${is} in your Companions tab. Your character isn't on a map yet, so ${it.toLowerCase()} can't go on one: use Put on the map there once the DM puts you on a map.`;
+      else out.message += ` ${is} in your Companions tab.`;
+    }
     const latest = sheets.get(a.cid, a.userId);
     return { ...(main ?? {}), ...out, rolls: all.map((x) => ({ notation: x.notation, total: x.total, label: x.roll?.label ?? '' })), used: { item: line.name, action: act.name }, sheet: latest.sheet, version: latest.version ?? saved.version };
   });

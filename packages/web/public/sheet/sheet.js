@@ -1197,6 +1197,8 @@ async function useItem(g, a, extra = 0) {
   const done = (res) => {
     useSheet(res.sheet, res.version);
     announce();
+    // A summon (Bag of Tricks) joined Companions: show it there, not left out of sight behind Actions.
+    if (res.summoned?.length) showSheetTab('companions');
     status(res.message || `${g.name}: ${a.name}.`);
   };
   const rolls = a.kind !== 'other' && (a.table.length || /d/i.test(a.count) || a.damage || a.heal || a.kind === 'attack' || a.crumble);

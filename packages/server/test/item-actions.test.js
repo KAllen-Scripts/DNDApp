@@ -120,6 +120,26 @@ test('regression: a Bag of Tricks weasel (1 hit point in the SRD) gets its stat 
   }
 });
 
+// Kenny pulled a creature out and couldn't see it anywhere: the message only named it, not where it went.
+test('regression: a Bag of Tricks creature\'s message says where it went (Companions, and the map or why not)', async () => {
+  const t = await setup({ llm: createFakeLLM({ structured: () => readOut() }) });
+  try {
+    // Not on a map: Companions only, and why it isn't on a map.
+    let [bag] = withItems(t, ['Bag of Tricks (Gray)']);
+    let out = (await use(t, { id: bag.id, action: 'pull' })).json();
+    assert.equal(out.placed, null);
+    assert.match(out.message, /in your Companions tab\. Your character isn't on a map yet/);
+    // On a map: Companions and the map, by name.
+    await cave(t);
+    [bag] = withItems(t, ['Bag of Tricks (Gray)']);
+    out = (await use(t, { id: bag.id, action: 'pull' })).json();
+    assert.ok(out.placed);
+    assert.match(out.message, new RegExp(`in your Companions tab, and on ${out.placed.map_name} next to your character`));
+  } finally {
+    await t.cleanup();
+  }
+});
+
 test('item actions: the 2024 bag\'s creature vanishes at 0 hit points on the map, and the rest at dawn on the campaign clock', async () => {
   const t = await setup({ llm: createFakeLLM({ structured: () => readOut() }) });
   try {
