@@ -76,7 +76,9 @@ export function sheetHeader(ctx) {
     summary.textContent = [state.sheet.race.trim(), classes, `Level ${state.calc.level}`].filter(Boolean).join(' · ');
   });
   const name = field('name', { label: 'Character name', cls: 'big edit-only', placeholder: 'Character name' });
-  const who = h('div', { class: 'sh-who' }, ctx.picture(), h('div', { class: 'sh-who-text' }, name, summary, ...ctx.banners()));
+  // Wild Shape's line stays under the name; Level up sits with the header's buttons.
+  const [wildShapeLine, levelUpLine] = ctx.banners();
+  const who = h('div', { class: 'sh-who' }, ctx.picture(), h('div', { class: 'sh-who-text' }, name, summary, wildShapeLine));
 
   // Hit points: current of maximum (temporary beside), a bar, and a number with Damage, Heal and Temp.
   const amount = h('input', { type: 'text', inputMode: 'numeric', class: 'hp-amount', placeholder: '0', 'aria-label': 'Hit points to take or give', autocomplete: 'off' });
@@ -136,10 +138,10 @@ export function sheetHeader(ctx) {
   const dc = stat(auto('spell_dc', { label: 'Spell save DC' }), 'Spell DC', 'spell-dc');
   state.renders.push(() => (dc.hidden = state.calc.values.spell_dc == null && !('spell_dc' in state.sheet.overrides)));
   const numbers = h('div', { class: 'sh-numbers' },
-    stat(auto('ac', { label: 'Armour class' }), 'Armour class', 'big'),
+    stat(auto('ac', { label: 'Armour class' }), 'AC', 'big'),
     stat(auto('initiative', { kind: 'bonus', label: 'Initiative' }), 'Initiative', 'big', () => ({ ...check('initiative', 'Initiative', { ability: 'dex', initiative: true })(), advantage: ctx.rollAdvantage(state.calc, { initiative: true }), initiative: true })),
     stat(auto('speed', { label: 'Speed (feet)' }), 'Speed', 'big'),
-    stat(auto('proficiency_bonus', { kind: 'bonus', label: 'Proficiency bonus' }), 'Proficiency', 'big'),
+    stat(auto('proficiency_bonus', { kind: 'bonus', label: 'Proficiency bonus' }), 'Prof', 'big'),
     dc,
     h('label', { class: 'stat inspiration', title: 'Inspiration: spend it for advantage' }, inspiration, h('span', { class: 'lbl' }, 'Inspiration')),
   );
@@ -234,14 +236,18 @@ export function sheetHeader(ctx) {
     death.hidden = !(max > 0 && now <= 0) && !state.sheet.death_saves.successes && !state.sheet.death_saves.failures;
   });
 
+  // One row on a wide sheet (the mock-up): who, hit points, the numbers, conditions, then the buttons.
+  const loadNote = ctx.loadNote();
+  const status = h('div', { class: 'sh-header-status' }, loadNote);
   return h('header', { class: 'sh-header' },
     h('div', { class: 'sh-header-top' },
       who,
       hpBox,
       numbers,
-      h('div', { class: 'sh-header-buttons' }, ...(ctx.buttons ?? []), restButton, modeToggle),
+      // Conditions and buttons move to a second line together when the row is full.
+      h('div', { class: 'sh-header-end' }, chips, h('div', { class: 'sh-header-buttons' }, levelUpLine, ...(ctx.buttons ?? []), restButton, modeToggle)),
     ),
-    h('div', { class: 'sh-header-status' }, chips, ctx.loadNote()),
+    status,
     death,
     restPanel,
   );
